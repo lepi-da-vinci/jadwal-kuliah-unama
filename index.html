@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Jadwal Kuliah</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5em;
+            color: #2c3e50;
+        }
+
+        .stats-small {
+            display: flex;
+            gap: 15px;
+        }
+
+        .stat-badge {
+            background: #ecf0f1;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #2c3e50;
+            border: 1px solid #bdc3c7;
+        }
+
+        .stat-badge.tm {
+            border-left: 4px solid #3498db;
+        }
+
+        .stat-badge.ol {
+            border-left: 4px solid #e74c3c;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .filter-group label {
+            font-size: 0.85em;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .filter-group select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #2c3e50;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+            color: white;
+        }
+
+        .badge.tm {
+            background-color: #3498db;
+        }
+
+        .badge.ol {
+            background-color: #e74c3c;
+        }
+
+        .badge.default {
+            background-color: #95a5a6;
+        }
+
+        .alert {
+            padding: 15px;
+            background-color: #fff3cd;
+            color: #856404;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #ffeeba;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Dashboard Jadwal Kuliah</h1>
+            <div class="stats-small" id="stat-container">
+                <div class="stat-badge">Memuat statistik...</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Waktu & Hari</label>
+                    <select id="filter-waktu">
+                        <option value="sekarang">Jadwal Saat Ini (Otomatis)</option>
+                        <option value="semua" selected>Semua Waktu</option>
+                        <!-- Options lain akan di-generate via JS -->
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Metode Pembelajaran</label>
+                    <select id="filter-metode">
+                        <option value="semua">Semua Metode</option>
+                        <option value="TM">Tatap Muka (TM)</option>
+                        <option value="OL">Online (OL)</option>
+                        <option value="OL">Cencel (CC)</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Ruangan / Labor</label>
+                    <select id="filter-ruangan">
+                        <option value="semua">Semua Ruangan</option>
+                        <!-- Options akan di-generate via JS -->
+                    </select>
+                </div>
+            </div>
+
+            <div id="info-jadwal-sekarang" class="alert" style="display: none;">
+                Menampilkan jadwal yang sedang berlangsung (berdasarkan jam sekarang).
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table id="jadwal-table">
+                    <thead>
+                        <tr>
+                            <th width="15%">Waktu</th>
+                            <th width="25%">Mata Kuliah</th>
+                            <th width="20%">Dosen</th>
+                            <th width="20%">Ruangan</th>
+                            <th width="10%">Status</th>
+                            <th width="10%">Metode</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="6" style="text-align: center;">Memuat data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+        let allJadwal = []; // Menyimpan semua data jadwal
+
+        // Elements
+        const tbody = document.querySelector('#jadwal-table tbody');
+        const filterWaktu = document.getElementById('filter-waktu');
+        const filterMetode = document.getElementById('filter-metode');
+        const filterRuangan = document.getElementById('filter-ruangan');
+        const infoSekarang = document.getElementById('info-jadwal-sekarang');
+
+        // 1. Ambil Statistik
+        fetch(`${API_BASE_URL}/api/statistik/metode-belajar`)
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('stat-container');
+                if (data.status === 'success' && data.data.length > 0) {
+                    container.innerHTML = '';
+                    data.data.forEach(item => {
+                        const type = item.metode_pembelajaran.toLowerCase();
+                        container.innerHTML += `
+                        <div class="stat-badge ${type}">
+                            ${item.metode_pembelajaran}: ${item.total} Kelas
+                        </div>
+                    `;
+                    });
+                }
+            });
+
+        // 2. Ambil Semua Jadwal
+        fetch(`${API_BASE_URL}/api/jadwal`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    allJadwal = data.data;
+                    populateFilters();
+
+                    // Set default to "Semua" for the first load if "Sekarang" is empty
+                    applyFilters();
+                }
+            });
+
+        // Isi Dropdown Dinamis
+        function populateFilters() {
+            const ruanganSet = new Set();
+            const waktuSet = new Set();
+
+            allJadwal.forEach(item => {
+                if (item.nama_ruangan) ruanganSet.add(item.nama_ruangan);
+                if (item.jam) waktuSet.add(item.jam);
+            });
+
+            // Waktu Options
+            const sortedWaktu = Array.from(waktuSet).sort();
+            sortedWaktu.forEach(waktu => {
+                const opt = document.createElement('option');
+                opt.value = waktu;
+                opt.textContent = `Pukul ${waktu}`;
+                filterWaktu.appendChild(opt);
+            });
+
+            // Ruangan Options
+            const sortedRuangan = Array.from(ruanganSet).sort();
+            sortedRuangan.forEach(ruang => {
+                const opt = document.createElement('option');
+                opt.value = ruang;
+                opt.textContent = ruang;
+                filterRuangan.appendChild(opt);
+            });
+        }
+
+        // Fungsi Render Tabel
+        function renderTable(data) {
+            tbody.innerHTML = '';
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Tidak ada jadwal yang sesuai dengan filter.</td></tr>';
+                return;
+            }
+
+            data.forEach(item => {
+                const badgeClass = item.metode_pembelajaran === 'TM' ? 'tm' : (item.metode_pembelajaran === 'OL' ? 'ol' : 'default');
+                const row = `
+                <tr>
+                    <td><strong>${item.jam}</strong><br><small>${item.hari}, ${item.tanggal}</small></td>
+                    <td>${item.nama_mk || '-'}</td>
+                    <td>${item.nama_dosen || '-'}</td>
+                    <td>${item.nama_ruangan || '-'}</td>
+                    <td>${item.status_jadwal}</td>
+                    <td><span class="badge ${badgeClass}">${item.metode_pembelajaran}</span></td>
+                </tr>
+            `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Fungsi Filter Data
+        function applyFilters() {
+            const fw = filterWaktu.value;
+            const fm = filterMetode.value;
+            const fr = filterRuangan.value;
+
+            let filtered = allJadwal;
+
+            infoSekarang.style.display = 'none';
+
+            // Filter Waktu Khusus (Otomatis Sekarang)
+            if (fw === 'sekarang') {
+                infoSekarang.style.display = 'block';
+
+                // Dapatkan Jam Sekarang
+                const now = new Date();
+                const currentHour = now.getHours();
+                const currentMin = now.getMinutes();
+                const currentTime = currentHour * 60 + currentMin; // dalam menit
+
+                // Cari jadwal yang "sedang berlangsung"
+                // Kita asumsikan 1 kelas berlangsung selama 90 menit atau cari jam terdekat ke bawah
+                // Karena kita hanya punya jam mulai, kita akan cari jam yang paling relevan dengan waktu sekarang
+                filtered = filtered.filter(item => {
+                    if (!item.jam) return false;
+                    const parts = item.jam.split(':');
+                    const startHour = parseInt(parts[0], 10);
+                    const startMin = parseInt(parts[1], 10);
+                    const startTime = startHour * 60 + startMin;
+
+                    // Misal kelas berlangsung selama 2 Jam 15 menit (135 menit)
+                    return (currentTime >= startTime) && (currentTime <= startTime + 135);
+                });
+            }
+            else if (fw !== 'semua') {
+                filtered = filtered.filter(item => item.jam === fw);
+            }
+
+            // Filter Metode
+            if (fm !== 'semua') {
+                filtered = filtered.filter(item => item.metode_pembelajaran === fm);
+            }
+
+            // Filter Ruangan
+            if (fr !== 'semua') {
+                filtered = filtered.filter(item => item.nama_ruangan === fr);
+            }
+
+            renderTable(filtered);
+        }
+
+        // Event Listeners untuk Dropdown
+        filterWaktu.addEventListener('change', applyFilters);
+        filterMetode.addEventListener('change', applyFilters);
+        filterRuangan.addEventListener('change', applyFilters);
+
+    </script>
+
+</body>
+
+</html>
