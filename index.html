@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Jadwal Kuliah</title>
+    <!-- Google Fonts: Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -12,17 +17,22 @@
 
     <div class="container">
         <div class="header">
-            <h1>Dashboard Jadwal Kuliah</h1>
-            <div style="display: flex; gap: 15px; align-items: center;">
+            <h1>Jadwal Kuliah</h1>
+            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+
                 <button id="clear-db-btn"
-                    style="padding: 8px 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🗑️
+                    style="padding: 8px 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold; box-shadow: var(--shadow-sm); transition: all 0.2s;">🗑️
                     Bersihkan DB</button>
                 <button id="sync-btn"
-                    style="padding: 8px 12px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔄
+                    style="padding: 8px 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold; box-shadow: var(--shadow-sm); transition: all 0.2s;">🔄
                     Sinkron</button>
                 <div class="stats-small" id="stat-container">
                     <div class="stat-badge">Memuat statistik...</div>
                 </div>
+                <button id="theme-toggle" class="btn-theme" title="Ubah Tema"
+                    style="padding: 8px 12px; background-color: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 1.1em; box-shadow: var(--shadow-sm); transition: all 0.3s;">
+                    🌙
+                </button>
             </div>
         </div>
 
@@ -91,19 +101,23 @@
             <!-- Modal Notifikasi Lab -->
             <div id="lab-modal" class="modal-overlay">
                 <div class="modal-content">
-                    <div class="modal-title">🔔 Waktunya Buka Lab, Ges!</div>
+                    <div class="modal-title">🔔 We Buka Lab, Ges!</div>
                     <div id="lab-modal-body" class="modal-body">
                         <!-- Pesan akan diisi via JS -->
                     </div>
-                    <button class="modal-btn" onclick="document.getElementById('lab-modal').style.display='none'">Oke, Gas!</button>
+                    <button class="modal-btn" onclick="document.getElementById('lab-modal').style.display='none'">Oke,
+                        Gas!</button>
                 </div>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 5px 0;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 5px 0;">
                 <div id="hasil-pencarian" style="font-size: 0.95em; color: #555; font-weight: bold;">
                     Hasil Pencarian: 0 jadwal
                 </div>
-                <button onclick="testNotification()" style="padding: 6px 12px; background-color: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔔 Test Notif</button>
+                <button onclick="testNotification()"
+                    style="padding: 6px 12px; background-color: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔔
+                    Test Notif</button>
             </div>
 
             <div style="overflow-x: auto;">
@@ -191,13 +205,13 @@
             const fk = document.getElementById('filter-kategori-ruang').value;
             const fKampus = document.getElementById('filter-kampus').value;
             const ruanganSet = new Set();
-            
+
             allJadwal.forEach(item => {
                 if (!item.nama_ruangan) return;
-                
+
                 // Cek Kampus
                 if (fKampus !== 'semua' && item.kampus && item.kampus.trim() !== fKampus) return;
-                
+
                 // Cek Kategori
                 if (fk === 'labor') {
                     if (isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan);
@@ -462,18 +476,18 @@
         document.getElementById('sync-btn').addEventListener('click', () => {
             syncData(filterTanggal.value);
         });
-        
+
         document.getElementById('clear-db-btn').addEventListener('click', async () => {
             if (confirm("Yakin ingin menghapus SELURUH data jadwal dari database? Tindakan ini tidak bisa dibatalkan.")) {
                 try {
                     const btn = document.getElementById('clear-db-btn');
                     btn.innerHTML = '⏳ Menghapus...';
                     btn.disabled = true;
-                    
+
                     const response = await fetch(`${API_BASE_URL}/api/jadwal`, {
                         method: 'DELETE'
                     });
-                    
+
                     const result = await response.json();
                     if (result.status === 'success') {
                         alert(result.message);
@@ -481,7 +495,7 @@
                     } else {
                         alert("Gagal menghapus database: " + result.message);
                     }
-                    
+
                     btn.innerHTML = '🗑️ Bersihkan DB';
                     btn.disabled = false;
                 } catch (e) {
@@ -522,22 +536,22 @@
         function playDefaultTone() {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
+
                 function playTone(freq, startTime, duration) {
                     const oscillator = audioCtx.createOscillator();
                     const gainNode = audioCtx.createGain();
-                    
+
                     oscillator.type = 'sine';
                     oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime + startTime);
-                    
+
                     // Efek fade in dan fade out agar suaranya lembut (tidak terputus kasar)
                     gainNode.gain.setValueAtTime(0, audioCtx.currentTime + startTime);
                     gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + startTime + 0.02);
                     gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + startTime + duration);
-                    
+
                     oscillator.connect(gainNode);
                     gainNode.connect(audioCtx.destination);
-                    
+
                     oscillator.start(audioCtx.currentTime + startTime);
                     oscillator.stop(audioCtx.currentTime + startTime + duration);
                 }
@@ -593,7 +607,7 @@
 
             if (labToNotify.length > 0) {
                 const modalBody = document.getElementById('lab-modal-body');
-                modalBody.innerHTML = '<p>Buka labor ini sekarang ges, kelas bentar lagi mulai:</p>' +
+                modalBody.innerHTML = '<p>Buka labor ni sekarang, kelas entar lagi mulai:</p>' +
                     '<ul style="text-align: left;">' +
                     labToNotify.map(l => `<li style="margin-bottom: 8px;">${l}</li>`).join('') +
                     '</ul>';
@@ -610,13 +624,36 @@
         // Fungsi manual untuk ngetes pop up notifikasi
         function testNotification() {
             const modalBody = document.getElementById('lab-modal-body');
-            modalBody.innerHTML = '<p>Buka labor ini sekarang ges, kelas bentar lagi mulai:</p>' +
+            modalBody.innerHTML = '<p>Buka labor ni sekarang ges, kelas bentar lagi mulai:</p>' +
                 '<ul style="text-align: left;">' +
                 '<li style="margin-bottom: 8px;"><b>Laboratorium Uji Coba (Kampus Dummy)</b> buat matkul <b>Pemrograman Web</b> (Mulai jam 10:00) - <i>Gass buka dalam 30 menit!</i></li>' +
                 '</ul>';
             document.getElementById('lab-modal').style.display = 'flex';
             playNotificationSound();
         }
+
+        // --- 4. Logic Dark Mode Toggle ---
+        const themeToggleBtn = document.getElementById('theme-toggle');
+
+        // Cek preferensi awal di Local Storage
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        if (currentTheme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeToggleBtn.textContent = '☀️';
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            if (current === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+                themeToggleBtn.textContent = '🌙';
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+                themeToggleBtn.textContent = '☀️';
+            }
+        });
 
     </script>
 
