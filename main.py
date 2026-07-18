@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import mysql.connector
 from pydantic import BaseModel
 from typing import Optional
@@ -24,22 +25,7 @@ def get_db():
         database="db_jadwal_kuliah"
     )
 
-@app.get("/", response_class=HTMLResponse)
-def read_root():
-    return """
-    <html>
-        <head>
-            <title>Jadwal Kuliah API</title>
-        </head>
-        <body>
-            <h1>Selamat Datang di API Jadwal Kuliah</h1>
-            <ul>
-                <li><a href="/api/statistik/metode-belajar">/api/statistik/metode-belajar</a> - Statistik TM vs OL</li>
-                <li><a href="/api/jadwal">/api/jadwal</a> - Semua Jadwal</li>
-            </ul>
-        </body>
-    </html>
-    """
+
 
 @app.get("/api/statistik/metode-belajar")
 def get_statistik_metode():
@@ -171,3 +157,7 @@ def sync_html_data(req: SyncHtmlRequest):
             return {"status": "success", "message": "Tidak ada data jadwal ditemukan dalam HTML.", "count": 0}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# MENGABUNGKAN FRONTEND & BACKEND UNTUK NGROK
+# Semua file di folder ini (index.html, style.css, dll) akan dilayani oleh FastAPI di rute "/"
+app.mount("/", StaticFiles(directory=".", html=True), name="static")

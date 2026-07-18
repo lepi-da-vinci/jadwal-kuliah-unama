@@ -143,7 +143,8 @@
     </div>
 
     <script>
-        const API_BASE_URL = 'http://127.0.0.1:8000';
+        // Gunakan alamat asal (origin) tempat HTML ini dibuka agar otomatis menyesuaikan dengan domain Ngrok/VPS
+        const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
         let allJadwal = []; // Menyimpan semua data jadwal
 
         // Elements
@@ -424,7 +425,7 @@
         // Update Panel Setiap Menit
         setInterval(updateActiveLabPanel, 60000);
 
-        // Logika Sinkronisasi Data via Ekstensi Chrome
+        // Logika Sinkronisasi Data via Ekstensi Chrome (Harus pakai ini karena Cloudflare memblokir backend Python)
         async function syncData(tanggal) {
             const syncBtn = document.getElementById('sync-btn');
             const originalText = syncBtn.innerHTML;
@@ -446,7 +447,7 @@
                 const checkInterval = setInterval(async () => {
                     if (syncWindow.closed) {
                         clearInterval(checkInterval);
-                        syncBtn.innerHTML = '⏳ Render...';
+                        syncBtn.innerHTML = '⏳ Merender...';
 
                         // Tab tertutup, berarti data sudah disinkronisasikan ke database lokal
                         // Kita panggil ulang API lokal kita untuk mengambil data terbaru
