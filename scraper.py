@@ -30,6 +30,16 @@ def fetch_and_parse(target_date=None):
         print("Membaca data default dari website ...")
         
     try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("ALTER TABLE jadwal ADD COLUMN kelas VARCHAR(50) AFTER kode_mk")
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass # Column might already exist
+        
+    try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
         }
@@ -66,13 +76,14 @@ def parse_html_content(html_content):
         dosen_spans = cols[2].find_all('span', class_='font-weight-bold')
         nama_dosen = ", ".join([span.text.strip() for span in dosen_spans])
         
-        kode_mk, nama_mk = "", ""
+        kode_mk, nama_mk, kelas = "", "", ""
         divs = cols[2].find_all('div', recursive=False)
         if len(divs) >= 2:
             course_text = divs[1].get_text(" ", strip=True)
             if "::" in course_text:
                 kode_mk, nama_mk = [x.strip() for x in course_text.split("::", 1)]
-            
+                kelas = kode_mk # Karena kode di web ternyata adalah nama kelasnya (contoh: 05PT4)
+        
         # 3. Parsing Kolom RUANG (Kampus Kobar, Labor 1.9)
         ruang_raw = cols[3].text.strip()
         kampus, nama_ruangan = "", ""
@@ -88,6 +99,9 @@ def parse_html_content(html_content):
         if match_status:
             status_jadwal = match_status.group(1).strip()
             metode = match_status.group(2).strip()
+        elif "cancel" in status_raw.lower():
+            status_jadwal = "Cancel"
+            metode = "CC"
 
         hasil_scraping.append({
             "hari": hari,
@@ -96,6 +110,7 @@ def parse_html_content(html_content):
             "dosen": nama_dosen,
             "kode_mk": kode_mk,
             "nama_mk": nama_mk,
+            "kelas": kelas,
             "kampus": kampus,
             "ruangan": nama_ruangan,
             "status": status_jadwal,
@@ -104,11 +119,15 @@ def parse_html_content(html_content):
         
     return hasil_scraping
 
-def save_to_db(data):
+def save_to_db(data, target_date=None):
     try:
         conn = get_db()
         cursor = conn.cursor()
         
+        # Hapus data jadwal yang sudah ada untuk tanggal ini agar tidak duplikat
+        if target_date:
+            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s", (target_date,))
+            
         for item in data:
             # Insert atau ignore dosen
             if item['dosen']:
@@ -134,7 +153,7 @@ def save_to_db(data):
 
             # Insert atau ignore ruangan
             if item['ruangan']:
-                cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s", (item['ruangan'],))
+                cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s AND kampus = %s", (item['ruangan'], item['kampus']))
                 res = cursor.fetchone()
                 if not res:
                     cursor.execute("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", (item['kampus'], item['ruangan']))
@@ -148,12 +167,12 @@ def save_to_db(data):
             # Skip jika tanggal/jam kosong untuk mencegah error
             if item['tanggal'] and item['jam']:
                 query_jadwal = """
-                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, id_ruangan, status_jadwal, metode_pembelajaran)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(query_jadwal, (
                     item['tanggal'], item['hari'], item['jam'], 
-                    id_dosen, kode_mk, id_ruangan, 
+                    id_dosen, kode_mk, item['kelas'], id_ruangan, 
                     item['status'], item['metode']
                 ))
 
@@ -169,7 +188,8 @@ def save_to_db(data):
 
 if __name__ == "__main__":
     print("Memulai proses scraping...")
-    data = fetch_and_parse()
+    target_date = "2026-07-18" # Contoh default, atau ambil dari argv
+    data = fetch_and_parse(target_date)
     print(f"Ditemukan {len(data)} baris data jadwal.")
     print("Menyimpan ke database...")
-    save_to_db(data)
+    save_to_db(data, target_date)

@@ -77,6 +77,8 @@ def get_semua_jadwal():
                 j.jam, 
                 d.nama_dosen, 
                 mk.nama_mk, 
+                j.kelas,
+                r.kampus,
                 r.nama_ruangan, 
                 j.status_jadwal, 
                 j.metode_pembelajaran
@@ -92,11 +94,43 @@ def get_semua_jadwal():
         # Format date and time for JSON serialization
         for item in hasil:
             if item['tanggal']:
-                item['tanggal'] = str(item['tanggal'])
+                # Create formatted date for display (e.g. 18/07/2026)
+                item['tanggal_format'] = item['tanggal'].strftime('%d/%m/%Y')
+                item['tanggal'] = str(item['tanggal']) # keep original format for filtering
+            
             if item['jam']:
-                item['jam'] = str(item['jam'])
+                # Format jam from timedelta to HH:MM
+                total_seconds = int(item['jam'].total_seconds())
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                item['jam'] = f"{hours:02d}:{minutes:02d}"
+                
+            if item['nama_ruangan'] and item['kampus']:
+                # Append Kampus name to make it explicitly distinct
+                item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
                 
         return {"status": "success", "data": hasil}
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/jadwal")
+def clear_jadwal():
+    """Menghapus seluruh data dari database dan mereset ID ke 1"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+        cursor.execute("TRUNCATE TABLE jadwal")
+        cursor.execute("TRUNCATE TABLE dosen")
+        cursor.execute("TRUNCATE TABLE ruangan")
+        cursor.execute("TRUNCATE TABLE mata_kuliah")
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        conn.commit()
+        return {"status": "success", "message": "Seluruh database berhasil dibersihkan dan ID telah direset ke 1."}
     except mysql.connector.Error as err:
         return {"status": "error", "message": str(err)}
     finally:
@@ -118,7 +152,7 @@ def sync_data(req: SyncRequest):
         # Panggil fungsi scraper
         data = scraper.fetch_and_parse(req.tanggal)
         if len(data) > 0:
-            scraper.save_to_db(data)
+            scraper.save_to_db(data, req.tanggal)
             return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal.", "count": len(data)}
         else:
             return {"status": "success", "message": "Tidak ada data jadwal ditemukan untuk tanggal ini.", "count": 0}
@@ -131,7 +165,7 @@ def sync_html_data(req: SyncHtmlRequest):
     try:
         data = scraper.parse_html_content(req.html)
         if len(data) > 0:
-            scraper.save_to_db(data)
+            scraper.save_to_db(data, req.tanggal)
             return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi.", "count": len(data)}
         else:
             return {"status": "success", "message": "Tidak ada data jadwal ditemukan dalam HTML.", "count": 0}
