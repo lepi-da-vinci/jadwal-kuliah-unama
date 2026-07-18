@@ -6,7 +6,8 @@ import mysql.connector
 from pydantic import BaseModel
 from typing import Optional
 import scraper
-
+import webbrowser
+import asyncio
 app = FastAPI(title="API Analitik Jadwal Kuliah")
 
 # Mengizinkan Frontend mengakses API
@@ -132,16 +133,25 @@ class SyncHtmlRequest(BaseModel):
     tanggal: Optional[str] = None
 
 @app.post("/api/sync")
-def sync_data(req: SyncRequest):
-    """Sinkronisasi data langsung dari web"""
+async def sync_data(req: SyncRequest):
+    """Sinkronisasi data dengan memerintahkan browser lokal (PC) membuka tab"""
     try:
-        # Panggil fungsi scraper
-        data = scraper.fetch_and_parse(req.tanggal)
-        if len(data) > 0:
-            scraper.save_to_db(data, req.tanggal)
-            return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal.", "count": len(data)}
-        else:
-            return {"status": "success", "message": "Tidak ada data jadwal ditemukan untuk tanggal ini.", "count": 0}
+        # Jika data sudah ada, langsung sukses
+        if req.tanggal and scraper.check_data_exists(req.tanggal):
+            return {"status": "success", "message": "Data sudah ada di database."}
+
+        # Buka tab baru di browser PC secara diam-diam
+        target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={req.tanggal or ''}&auto_close=1"
+        webbrowser.open_new(target_url)
+
+        # Tunggu Ekstensi Chrome menarik HTML, kirim ke /api/sync-html, dan memprosesnya
+        # Kita cek database maksimal 15 detik
+        for _ in range(15):
+            await asyncio.sleep(1)
+            if scraper.check_data_exists(req.tanggal):
+                return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!"}
+        
+        return {"status": "success", "message": "Timeout menunggu data dari ekstensi Chrome."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

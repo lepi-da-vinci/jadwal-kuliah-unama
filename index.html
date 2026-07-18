@@ -425,42 +425,41 @@
         // Update Panel Setiap Menit
         setInterval(updateActiveLabPanel, 60000);
 
-        // Logika Sinkronisasi Data via Ekstensi Chrome (Harus pakai ini karena Cloudflare memblokir backend Python)
+        // Logika Sinkronisasi Data via Backend API (Otomatis membuka tab di PC Host)
         async function syncData(tanggal) {
             const syncBtn = document.getElementById('sync-btn');
             const originalText = syncBtn.innerHTML;
-            syncBtn.innerHTML = '⏳ Buka Tab...';
+            syncBtn.innerHTML = '⏳ Menarik Data...';
             syncBtn.disabled = true;
             syncBtn.style.opacity = '0.7';
 
             try {
-                // Buka tab baru yang akan otomatis ditutup oleh Ekstensi Chrome
-                const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
-                const syncWindow = window.open(targetUrl, '_blank');
+                // Memanggil rute /api/sync di backend kita
+                const response = await fetch(`${API_BASE_URL}/api/sync`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ tanggal: tanggal || null })
+                });
 
-                if (!syncWindow) {
-                    alert("Gagal membuka tab baru. Tolong izinkan pop-up untuk situs ini.");
-                    throw new Error("Pop-up blocked");
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    // Data berhasil ditarik dan masuk ke database lokal
+                    syncBtn.innerHTML = '⏳ Merender...';
+                    await fetchAllJadwal(); // Tarik data terbaru dari DB ke layar
+                } else {
+                    alert("Gagal sinkronisasi: " + result.message);
                 }
 
-                // Cek secara berkala apakah tab sudah ditutup oleh ekstensi (artinya sinkronisasi selesai)
-                const checkInterval = setInterval(async () => {
-                    if (syncWindow.closed) {
-                        clearInterval(checkInterval);
-                        syncBtn.innerHTML = '⏳ Merender...';
-
-                        // Tab tertutup, berarti data sudah disinkronisasikan ke database lokal
-                        // Kita panggil ulang API lokal kita untuk mengambil data terbaru
-                        await fetchAllJadwal();
-
-                        syncBtn.innerHTML = originalText;
-                        syncBtn.disabled = false;
-                        syncBtn.style.opacity = '1';
-                    }
-                }, 500);
+                syncBtn.innerHTML = originalText;
+                syncBtn.disabled = false;
+                syncBtn.style.opacity = '1';
 
             } catch (error) {
                 console.error("Error saat sinkronisasi:", error);
+                alert("Terjadi kesalahan jaringan atau server.");
                 syncBtn.innerHTML = originalText;
                 syncBtn.disabled = false;
                 syncBtn.style.opacity = '1';

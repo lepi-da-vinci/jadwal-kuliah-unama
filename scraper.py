@@ -186,6 +186,21 @@ def save_to_db(data, target_date=None):
             cursor.close()
             conn.close()
 
+def check_data_exists(tanggal):
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM jadwal WHERE tanggal = %s", (tanggal,))
+        count = cursor.fetchone()[0]
+        return count > 0
+    except Exception as e:
+        print(f"Error checking data: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 if __name__ == "__main__":
     print("Memulai proses scraping...")
     target_date = "2026-07-18" # Contoh default, atau ambil dari argv
