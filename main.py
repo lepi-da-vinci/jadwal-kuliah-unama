@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import mysql.connector
+from pydantic import BaseModel
+from typing import Optional
+import scraper
 
 app = FastAPI(title="API Analitik Jadwal Kuliah")
 
@@ -100,3 +103,37 @@ def get_semua_jadwal():
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+class SyncRequest(BaseModel):
+    tanggal: Optional[str] = None
+
+class SyncHtmlRequest(BaseModel):
+    html: str
+    tanggal: Optional[str] = None
+
+@app.post("/api/sync")
+def sync_data(req: SyncRequest):
+    """Sinkronisasi data langsung dari web"""
+    try:
+        # Panggil fungsi scraper
+        data = scraper.fetch_and_parse(req.tanggal)
+        if len(data) > 0:
+            scraper.save_to_db(data)
+            return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal.", "count": len(data)}
+        else:
+            return {"status": "success", "message": "Tidak ada data jadwal ditemukan untuk tanggal ini.", "count": 0}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/sync-html")
+def sync_html_data(req: SyncHtmlRequest):
+    """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
+    try:
+        data = scraper.parse_html_content(req.html)
+        if len(data) > 0:
+            scraper.save_to_db(data)
+            return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi.", "count": len(data)}
+        else:
+            return {"status": "success", "message": "Tidak ada data jadwal ditemukan dalam HTML.", "count": 0}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

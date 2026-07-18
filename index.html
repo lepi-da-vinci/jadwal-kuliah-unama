@@ -58,6 +58,10 @@
         .stat-badge.ol {
             border-left: 4px solid #e74c3c;
         }
+        
+        .stat-badge.cc {
+            border-left: 4px solid #34495e;
+        }
 
         .card {
             background: white;
@@ -135,6 +139,10 @@
         .badge.ol {
             background-color: #e74c3c;
         }
+        
+        .badge.cc {
+            background-color: #34495e;
+        }
 
         .badge.default {
             background-color: #95a5a6;
@@ -147,6 +155,16 @@
             border-radius: 4px;
             margin-bottom: 15px;
             border: 1px solid #ffeeba;
+        }
+
+        .lab-alert {
+            padding: 15px;
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #bee5eb;
+            font-size: 0.95em;
         }
     </style>
 </head>
@@ -164,7 +182,14 @@
         <div class="card">
             <div class="filters">
                 <div class="filter-group">
-                    <label>Waktu & Hari</label>
+                    <label>Tanggal</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="date" id="filter-tanggal" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95em; flex: 1;">
+                        <button id="sync-btn" style="padding: 8px 12px; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold;">🔄 Sinkron</button>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Waktu</label>
                     <select id="filter-waktu">
                         <option value="sekarang">Jadwal Saat Ini (Otomatis)</option>
                         <option value="semua" selected>Semua Waktu</option>
@@ -177,7 +202,7 @@
                         <option value="semua">Semua Metode</option>
                         <option value="TM">Tatap Muka (TM)</option>
                         <option value="OL">Online (OL)</option>
-                        <option value="OL">Cencel (CC)</option>
+                        <option value="CC">Cancel (CC)</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -191,6 +216,10 @@
 
             <div id="info-jadwal-sekarang" class="alert" style="display: none;">
                 Menampilkan jadwal yang sedang berlangsung (berdasarkan jam sekarang).
+            </div>
+            
+            <div id="lab-notification" class="lab-alert" style="display: none;">
+                <!-- Notifikasi Lab Akan Muncul Di Sini -->
             </div>
 
             <div style="overflow-x: auto;">
@@ -221,6 +250,7 @@
 
         // Elements
         const tbody = document.querySelector('#jadwal-table tbody');
+        const filterTanggal = document.getElementById('filter-tanggal');
         const filterWaktu = document.getElementById('filter-waktu');
         const filterMetode = document.getElementById('filter-metode');
         const filterRuangan = document.getElementById('filter-ruangan');
@@ -245,17 +275,22 @@
             });
 
         // 2. Ambil Semua Jadwal
-        fetch(`${API_BASE_URL}/api/jadwal`)
-            .then(response => response.json())
-            .then(data => {
+        async function fetchAllJadwal() {
+            try {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Memuat data...</td></tr>';
+                const response = await fetch(`${API_BASE_URL}/api/jadwal`);
+                const data = await response.json();
                 if (data.status === 'success') {
                     allJadwal = data.data;
                     populateFilters();
-
-                    // Set default to "Semua" for the first load if "Sekarang" is empty
                     applyFilters();
                 }
-            });
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Gagal memuat data jadwal.</td></tr>';
+            }
+        }
+        
+        fetchAllJadwal();
 
         // Isi Dropdown Dinamis
         function populateFilters() {
@@ -295,7 +330,10 @@
             }
 
             data.forEach(item => {
-                const badgeClass = item.metode_pembelajaran === 'TM' ? 'tm' : (item.metode_pembelajaran === 'OL' ? 'ol' : 'default');
+                let badgeClass = 'default';
+                if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+                else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+                else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
                 const row = `
                 <tr>
                     <td><strong>${item.jam}</strong><br><small>${item.hari}, ${item.tanggal}</small></td>
@@ -312,6 +350,7 @@
 
         // Fungsi Filter Data
         function applyFilters() {
+            const ft = filterTanggal.value;
             const fw = filterWaktu.value;
             const fm = filterMetode.value;
             const fr = filterRuangan.value;
@@ -319,6 +358,11 @@
             let filtered = allJadwal;
 
             infoSekarang.style.display = 'none';
+
+            // Filter Tanggal
+            if (ft) {
+                filtered = filtered.filter(item => item.tanggal === ft);
+            }
 
             // Filter Waktu Khusus (Otomatis Sekarang)
             if (fw === 'sekarang') {
@@ -361,10 +405,114 @@
             renderTable(filtered);
         }
 
+        // Logika Sinkronisasi Data via Ekstensi Chrome
+        async function syncData(tanggal) {
+            const syncBtn = document.getElementById('sync-btn');
+            const originalText = syncBtn.innerHTML;
+            syncBtn.innerHTML = '⏳ Buka Tab...';
+            syncBtn.disabled = true;
+            syncBtn.style.opacity = '0.7';
+
+            try {
+                // Buka tab baru yang akan otomatis ditutup oleh Ekstensi Chrome
+                const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
+                const syncWindow = window.open(targetUrl, '_blank');
+                
+                if (!syncWindow) {
+                    alert("Gagal membuka tab baru. Tolong izinkan pop-up untuk situs ini.");
+                    throw new Error("Pop-up blocked");
+                }
+
+                // Cek secara berkala apakah tab sudah ditutup oleh ekstensi (artinya sinkronisasi selesai)
+                const checkInterval = setInterval(async () => {
+                    if (syncWindow.closed) {
+                        clearInterval(checkInterval);
+                        syncBtn.innerHTML = '⏳ Render...';
+                        
+                        // Tab tertutup, berarti data sudah disinkronisasikan ke database lokal
+                        // Kita panggil ulang API lokal kita untuk mengambil data terbaru
+                        await fetchAllJadwal();
+                        
+                        syncBtn.innerHTML = originalText;
+                        syncBtn.disabled = false;
+                        syncBtn.style.opacity = '1';
+                    }
+                }, 500);
+
+            } catch (error) {
+                console.error("Error saat sinkronisasi:", error);
+                syncBtn.innerHTML = originalText;
+                syncBtn.disabled = false;
+                syncBtn.style.opacity = '1';
+            }
+        }
+
         // Event Listeners untuk Dropdown
+        filterTanggal.addEventListener('change', (e) => {
+            const dateVal = e.target.value;
+            // Saat tanggal dipilih, sinkronisasikan data terlebih dahulu
+            syncData(dateVal);
+        });
+        
+        document.getElementById('sync-btn').addEventListener('click', () => {
+            syncData(filterTanggal.value);
+        });
         filterWaktu.addEventListener('change', applyFilters);
         filterMetode.addEventListener('change', applyFilters);
         filterRuangan.addEventListener('change', applyFilters);
+
+        // 3. Logika Notifikasi Lab (30 menit sebelum mulai)
+        function checkLabNotifications() {
+            const notifContainer = document.getElementById('lab-notification');
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMin = now.getMinutes();
+            const currentTotalMin = currentHour * 60 + currentMin;
+            
+            // Format YYYY-MM-DD
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const currentDayStr = `${year}-${month}-${day}`;
+            
+            let labToOpen = [];
+
+            allJadwal.forEach(item => {
+                // Pastikan jadwal hari ini dan bukan Cancel
+                if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.jam) {
+                    // Pastikan ruangan mengandung kata 'Lab' atau 'Labor'
+                    if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('lab')) {
+                        const parts = item.jam.split(':');
+                        const startHour = parseInt(parts[0], 10);
+                        const startMin = parseInt(parts[1], 10);
+                        const startTotalMin = startHour * 60 + startMin;
+                        
+                        // Hitung selisih waktu dalam menit
+                        const diffMin = startTotalMin - currentTotalMin;
+                        
+                        // Notifikasi muncul jika selisih waktu antara 0 hingga 30 menit
+                        if (diffMin >= 0 && diffMin <= 30) {
+                            labToOpen.push(`<b>${item.nama_ruangan}</b> untuk mata kuliah <b>${item.nama_mk}</b> (Mulai pukul ${item.jam})`);
+                        }
+                    }
+                }
+            });
+
+            if (labToOpen.length > 0) {
+                notifContainer.style.display = 'block';
+                notifContainer.innerHTML = '🔔 <b>Pemberitahuan:</b> Segera hidupkan Lab berikut dalam 30 menit ke depan:<br><ul style="margin-top: 5px; margin-bottom: 0;">' + 
+                                           labToOpen.map(l => `<li>${l}</li>`).join('') + 
+                                           '</ul>';
+            } else {
+                notifContainer.style.display = 'none';
+                notifContainer.innerHTML = '';
+            }
+        }
+
+        // Cek notifikasi setiap 1 menit
+        setInterval(checkLabNotifications, 60000);
+        // Panggil pertama kali setelah data dimuat
+        setTimeout(checkLabNotifications, 1000);
 
     </script>
 

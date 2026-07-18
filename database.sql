@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS jadwal (
     kode_mk VARCHAR(20),
     id_ruangan INT,
     status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
-    metode_pembelajaran ENUM('TM', 'OL') DEFAULT 'TM',
+    metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (id_dosen) REFERENCES dosen(id_dosen) ON DELETE SET NULL,

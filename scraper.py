@@ -2,6 +2,9 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import mysql.connector
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Dictionary pembantu untuk konversi bulan ke format angka
 BULAN_DICT = {
@@ -18,15 +21,28 @@ def get_db():
         database="db_jadwal_kuliah"
     )
 
-def fetch_and_parse():
-    print("Membaca data dari file lokal jadwal.html ...")
+def fetch_and_parse(target_date=None):
+    if target_date:
+        url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&q=&tanggal={target_date}&ruang=&status="
+        print(f"Membaca data dari website untuk tanggal {target_date} ...")
+    else:
+        url = "https://baak.unama.ac.id/jadwal-kuliah"
+        print("Membaca data default dari website ...")
+        
     try:
-        with open("jadwal.html", "r", encoding="utf-8") as f:
-            html_content = f.read()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, verify=False, timeout=10)
+        response.raise_for_status()
+        html_content = response.text
     except Exception as e:
-        print(f"Gagal membaca file jadwal.html. Error: {e}")
+        print(f"Gagal menarik data dari URL. Error: {e}")
         return []
     
+    return parse_html_content(html_content)
+
+def parse_html_content(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
     rows = soup.find_all('tr', class_='table-content')
     
@@ -68,7 +84,7 @@ def fetch_and_parse():
         # 4. Parsing Kolom STATUS (OnSchedule (TM))
         status_raw = cols[4].text.strip()
         status_jadwal, metode = status_raw, "TM"
-        match_status = re.match(r"(.*?)\s*\((TM|OL)\)", status_raw)
+        match_status = re.match(r"(.*?)\s*\((TM|OL|CC)\)", status_raw)
         if match_status:
             status_jadwal = match_status.group(1).strip()
             metode = match_status.group(2).strip()
