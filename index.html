@@ -157,14 +157,48 @@
             border: 1px solid #ffeeba;
         }
 
-        .lab-alert {
-            padding: 15px;
-            background-color: #d1ecf1;
-            color: #0c5460;
+        /* Modal Pop-up CSS */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #d35400;
+            margin-bottom: 10px;
+        }
+        .modal-body {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .modal-btn {
+            background: #2c3e50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
             border-radius: 4px;
-            margin-bottom: 15px;
-            border: 1px solid #bee5eb;
-            font-size: 0.95em;
+            cursor: pointer;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -197,12 +231,20 @@
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label>Metode Pembelajaran</label>
+                    <label>Status Kuliah</label>
                     <select id="filter-metode">
-                        <option value="semua">Semua Metode</option>
+                        <option value="semua">Semua Status</option>
                         <option value="TM">Tatap Muka (TM)</option>
                         <option value="OL">Online (OL)</option>
                         <option value="CC">Cancel (CC)</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Kategori Ruangan</label>
+                    <select id="filter-kategori-ruang">
+                        <option value="semua">Semua Kategori</option>
+                        <option value="labor">Laboratorium & Khusus</option>
+                        <option value="kelas">Kelas Biasa</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -214,12 +256,27 @@
                 </div>
             </div>
 
+            <!-- Panel Khusus: Lab Sedang Digunakan Saat Ini -->
+            <div id="active-lab-panel" style="background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 10px 0; color: #1565c0; font-size: 1.1em;">🔬 Laboratorium yang Sedang Digunakan Saat Ini</h3>
+                <div id="active-lab-list" style="font-size: 0.95em; color: #0d47a1;">
+                    <em style="color: #666;">Memeriksa status lab...</em>
+                </div>
+            </div>
+
             <div id="info-jadwal-sekarang" class="alert" style="display: none;">
                 Menampilkan jadwal yang sedang berlangsung (berdasarkan jam sekarang).
             </div>
-            
-            <div id="lab-notification" class="lab-alert" style="display: none;">
-                <!-- Notifikasi Lab Akan Muncul Di Sini -->
+
+            <!-- Modal Notifikasi Lab -->
+            <div id="lab-modal" class="modal-overlay">
+                <div class="modal-content">
+                    <div class="modal-title">🔔 Persiapan Laboratorium!</div>
+                    <div id="lab-modal-body" class="modal-body">
+                        <!-- Pesan akan diisi via JS -->
+                    </div>
+                    <button class="modal-btn" onclick="document.getElementById('lab-modal').style.display='none'">Oke, Mengerti</button>
+                </div>
             </div>
 
             <div style="overflow-x: auto;">
@@ -256,23 +313,30 @@
         const filterRuangan = document.getElementById('filter-ruangan');
         const infoSekarang = document.getElementById('info-jadwal-sekarang');
 
-        // 1. Ambil Statistik
-        fetch(`${API_BASE_URL}/api/statistik/metode-belajar`)
-            .then(response => response.json())
-            .then(data => {
-                const container = document.getElementById('stat-container');
-                if (data.status === 'success' && data.data.length > 0) {
-                    container.innerHTML = '';
-                    data.data.forEach(item => {
-                        const type = item.metode_pembelajaran.toLowerCase();
-                        container.innerHTML += `
-                        <div class="stat-badge ${type}">
-                            ${item.metode_pembelajaran}: ${item.total} Kelas
-                        </div>
-                    `;
-                    });
-                }
+        // 1. Fungsi Update Statistik (Berdasarkan Data Tanggal yang Difilter)
+        function updateStats(data) {
+            const container = document.getElementById('stat-container');
+            if (data.length === 0) {
+                container.innerHTML = '<div class="stat-badge">Tidak ada data</div>';
+                return;
+            }
+
+            let tmCount = 0;
+            let olCount = 0;
+            let ccCount = 0;
+
+            data.forEach(item => {
+                if (item.metode_pembelajaran === 'TM') tmCount++;
+                else if (item.metode_pembelajaran === 'OL') olCount++;
+                else if (item.metode_pembelajaran === 'CC') ccCount++;
             });
+
+            container.innerHTML = `
+                <div class="stat-badge tm">TM: ${tmCount} Kelas</div>
+                <div class="stat-badge ol">OL: ${olCount} Kelas</div>
+                <div class="stat-badge cc">CC: ${ccCount} Kelas</div>
+            `;
+        }
 
         // 2. Ambil Semua Jadwal
         async function fetchAllJadwal() {
@@ -348,12 +412,20 @@
             });
         }
 
+        // Fungsi Helper untuk cek apakah ruangan adalah Lab/Khusus
+        function isLab(namaRuangan) {
+            if (!namaRuangan) return false;
+            const name = namaRuangan.toLowerCase();
+            return name.includes('lab') || name.includes('3.1') || name.includes('3.4');
+        }
+
         // Fungsi Filter Data
         function applyFilters() {
             const ft = filterTanggal.value;
             const fw = filterWaktu.value;
             const fm = filterMetode.value;
             const fr = filterRuangan.value;
+            const fk = document.getElementById('filter-kategori-ruang').value;
 
             let filtered = allJadwal;
 
@@ -364,27 +436,22 @@
                 filtered = filtered.filter(item => item.tanggal === ft);
             }
 
+            // Update statistik berdasarkan hari yang dipilih (sebelum filter lain diterapkan)
+            updateStats(filtered);
+
             // Filter Waktu Khusus (Otomatis Sekarang)
             if (fw === 'sekarang') {
                 infoSekarang.style.display = 'block';
 
-                // Dapatkan Jam Sekarang
                 const now = new Date();
                 const currentHour = now.getHours();
                 const currentMin = now.getMinutes();
-                const currentTime = currentHour * 60 + currentMin; // dalam menit
+                const currentTime = currentHour * 60 + currentMin;
 
-                // Cari jadwal yang "sedang berlangsung"
-                // Kita asumsikan 1 kelas berlangsung selama 90 menit atau cari jam terdekat ke bawah
-                // Karena kita hanya punya jam mulai, kita akan cari jam yang paling relevan dengan waktu sekarang
                 filtered = filtered.filter(item => {
                     if (!item.jam) return false;
                     const parts = item.jam.split(':');
-                    const startHour = parseInt(parts[0], 10);
-                    const startMin = parseInt(parts[1], 10);
-                    const startTime = startHour * 60 + startMin;
-
-                    // Misal kelas berlangsung selama 2 Jam 15 menit (135 menit)
+                    const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
                     return (currentTime >= startTime) && (currentTime <= startTime + 135);
                 });
             }
@@ -392,18 +459,79 @@
                 filtered = filtered.filter(item => item.jam === fw);
             }
 
-            // Filter Metode
+            // Filter Metode/Status
             if (fm !== 'semua') {
                 filtered = filtered.filter(item => item.metode_pembelajaran === fm);
             }
 
-            // Filter Ruangan
+            // Filter Ruangan Spesifik
             if (fr !== 'semua') {
                 filtered = filtered.filter(item => item.nama_ruangan === fr);
             }
 
+            // Filter Kategori Ruangan (Labor/Kelas)
+            if (fk === 'labor') {
+                filtered = filtered.filter(item => isLab(item.nama_ruangan));
+            } else if (fk === 'kelas') {
+                filtered = filtered.filter(item => !isLab(item.nama_ruangan));
+            }
+
+            // Pengurutan: Prioritas Laboratorium, lalu Jam Pelajaran
+            filtered.sort((a, b) => {
+                // 1. Sort by Kategori: Lab vs Kelas
+                const aIsLab = isLab(a.nama_ruangan);
+                const bIsLab = isLab(b.nama_ruangan);
+                if (aIsLab && !bIsLab) return -1;
+                if (!aIsLab && bIsLab) return 1;
+
+                // 2. Sort by Jam
+                if (a.jam && b.jam) {
+                    if (a.jam < b.jam) return -1;
+                    if (a.jam > b.jam) return 1;
+                }
+                return 0;
+            });
+
             renderTable(filtered);
+            updateActiveLabPanel();
         }
+
+        // Fungsi Update Panel Lab Saat Ini
+        function updateActiveLabPanel() {
+            const panel = document.getElementById('active-lab-list');
+            const now = new Date();
+            
+            // Format YYYY-MM-DD
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const currentDayStr = `${year}-${month}-${day}`;
+            
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            let activeLabs = [];
+
+            allJadwal.forEach(item => {
+                if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan)) {
+                    const parts = item.jam.split(':');
+                    const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                    // Asumsi 135 menit = 1 sesi lab
+                    if (currentTime >= startTime && currentTime <= startTime + 135) {
+                        activeLabs.push(`<b>${item.nama_ruangan}</b>: ${item.nama_mk} (${item.jam})`);
+                    }
+                }
+            });
+
+            if (activeLabs.length > 0) {
+                panel.innerHTML = `<ul style="margin: 0; padding-left: 20px;">` + 
+                                  activeLabs.map(lab => `<li>${lab}</li>`).join('') + 
+                                  `</ul>`;
+            } else {
+                panel.innerHTML = `<em style="color: #666;">Saat ini tidak ada laboratorium yang sedang dipakai.</em>`;
+            }
+        }
+        
+        // Update Panel Setiap Menit
+        setInterval(updateActiveLabPanel, 60000);
 
         // Logika Sinkronisasi Data via Ekstensi Chrome
         async function syncData(tanggal) {
@@ -461,9 +589,10 @@
         filterMetode.addEventListener('change', applyFilters);
         filterRuangan.addEventListener('change', applyFilters);
 
-        // 3. Logika Notifikasi Lab (30 menit sebelum mulai)
+        document.getElementById('filter-kategori-ruang').addEventListener('change', applyFilters);
+
+        // 3. Logika Notifikasi Modal (Khusus Kelas Pertama di Lab)
         function checkLabNotifications() {
-            const notifContainer = document.getElementById('lab-notification');
             const now = new Date();
             const currentHour = now.getHours();
             const currentMin = now.getMinutes();
@@ -475,43 +604,47 @@
             const day = String(now.getDate()).padStart(2, '0');
             const currentDayStr = `${year}-${month}-${day}`;
             
-            let labToOpen = [];
+            // Cari jadwal PERTAMA untuk setiap Lab hari ini
+            let firstClasses = {}; // { "Lab 1": { nama_mk: "...", jam: "08:00", startTotalMin: 480 } }
 
             allJadwal.forEach(item => {
-                // Pastikan jadwal hari ini dan bukan Cancel
-                if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.jam) {
-                    // Pastikan ruangan mengandung kata 'Lab' atau 'Labor'
-                    if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('lab')) {
-                        const parts = item.jam.split(':');
-                        const startHour = parseInt(parts[0], 10);
-                        const startMin = parseInt(parts[1], 10);
-                        const startTotalMin = startHour * 60 + startMin;
-                        
-                        // Hitung selisih waktu dalam menit
-                        const diffMin = startTotalMin - currentTotalMin;
-                        
-                        // Notifikasi muncul jika selisih waktu antara 0 hingga 30 menit
-                        if (diffMin >= 0 && diffMin <= 30) {
-                            labToOpen.push(`<b>${item.nama_ruangan}</b> untuk mata kuliah <b>${item.nama_mk}</b> (Mulai pukul ${item.jam})`);
-                        }
+                if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.jam && isLab(item.nama_ruangan)) {
+                    const parts = item.jam.split(':');
+                    const startTotalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                    
+                    if (!firstClasses[item.nama_ruangan] || startTotalMin < firstClasses[item.nama_ruangan].startTotalMin) {
+                        firstClasses[item.nama_ruangan] = {
+                            nama_mk: item.nama_mk,
+                            jam: item.jam,
+                            startTotalMin: startTotalMin
+                        };
                     }
                 }
             });
 
-            if (labToOpen.length > 0) {
-                notifContainer.style.display = 'block';
-                notifContainer.innerHTML = '🔔 <b>Pemberitahuan:</b> Segera hidupkan Lab berikut dalam 30 menit ke depan:<br><ul style="margin-top: 5px; margin-bottom: 0;">' + 
-                                           labToOpen.map(l => `<li>${l}</li>`).join('') + 
-                                           '</ul>';
-            } else {
-                notifContainer.style.display = 'none';
-                notifContainer.innerHTML = '';
+            let labToNotify = [];
+
+            for (const [ruang, dataClass] of Object.entries(firstClasses)) {
+                const diffMin = dataClass.startTotalMin - currentTotalMin;
+                // Notifikasi muncul TEPAT 30 menit atau 15 menit sebelum kelas PERTAMA
+                if (diffMin === 30 || diffMin === 15) {
+                    labToNotify.push(`<b>${ruang}</b> untuk mata kuliah <b>${dataClass.nama_mk}</b> (Mulai pukul ${dataClass.jam}) - <i>Buka dalam ${diffMin} menit</i>`);
+                }
+            }
+
+            if (labToNotify.length > 0) {
+                const modalBody = document.getElementById('lab-modal-body');
+                modalBody.innerHTML = '<p>Silakan segera persiapkan dan buka laboratorium berikut untuk kelas pertama hari ini:</p>' + 
+                                      '<ul style="text-align: left;">' + 
+                                      labToNotify.map(l => `<li style="margin-bottom: 8px;">${l}</li>`).join('') + 
+                                      '</ul>';
+                document.getElementById('lab-modal').style.display = 'flex';
             }
         }
 
         // Cek notifikasi setiap 1 menit
         setInterval(checkLabNotifications, 60000);
-        // Panggil pertama kali setelah data dimuat
+        // Panggil pertama kali untuk testing
         setTimeout(checkLabNotifications, 1000);
 
     </script>
