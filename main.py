@@ -181,6 +181,27 @@ def sync_html_data(req: SyncHtmlRequest):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.get("/api/notifikasi-lab")
+def get_notifikasi_lab(tanggal: str):
+    """Ambil notifikasi lab untuk tanggal tertentu"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu
+            FROM notifikasi_lab 
+            WHERE tanggal = %s 
+            ORDER BY created_at DESC
+        """, (tanggal,))
+        results = cursor.fetchall()
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 # MENGABUNGKAN FRONTEND & BACKEND UNTUK NGROK
 # Semua file di folder ini (index.html, style.css, dll) akan dilayani oleh FastAPI di rute "/"
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

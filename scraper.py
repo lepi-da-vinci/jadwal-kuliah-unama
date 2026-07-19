@@ -85,6 +85,60 @@ def parse_html_content(html_content):
         
     return hasil_scraping
 
+def is_lab(nama_ruangan):
+    if not nama_ruangan: return False
+    name = nama_ruangan.lower()
+    return 'lab' in name or '3.1' in name or '3.4' in name
+
+def parse_time(jam_str):
+    try:
+        parts = jam_str.split('-')
+        start = parts[0].strip()
+        end = parts[1].strip()
+        sh, sm = map(int, start.split(':'))
+        eh, em = map(int, end.split(':'))
+        return (sh * 60 + sm), (eh * 60 + em)
+    except:
+        return 0, 0
+
+def calculate_and_save_gaps(conn, cursor, target_date):
+    cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA'", (target_date,))
+    
+    cursor.execute("""
+        SELECT j.jam, r.nama_ruangan, j.nama_mk
+        FROM jadwal j
+        JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+        WHERE j.tanggal = %s
+        ORDER BY r.nama_ruangan, j.jam
+    """, (target_date,))
+    schedules = cursor.fetchall()
+    
+    room_schedules = {}
+    for jam, nama_ruangan, nama_mk in schedules:
+        if is_lab(nama_ruangan):
+            if nama_ruangan not in room_schedules:
+                room_schedules[nama_ruangan] = []
+            start_min, end_min = parse_time(jam)
+            room_schedules[nama_ruangan].append({
+                'jam': jam, 'nama_mk': nama_mk, 'start': start_min, 'end': end_min
+            })
+            
+    for room, scheds in room_schedules.items():
+        scheds = sorted(scheds, key=lambda x: x['start'])
+        for i in range(len(scheds) - 1):
+            curr = scheds[i]
+            nxt = scheds[i+1]
+            gap = nxt['start'] - curr['end']
+            if gap >= 90:
+                hours = gap // 60
+                mins = gap % 60
+                dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
+                pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara {curr['jam'].split('-')[1].strip()} s/d {nxt['jam'].split('-')[0].strip()}."
+                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'JEDA', pesan))
+    conn.commit()
+
+old_lab_cache = {}
+
 def save_to_db(data, target_date=None, page="1"):
     try:
         conn = get_db()
@@ -92,6 +146,25 @@ def save_to_db(data, target_date=None, page="1"):
         
         # Hapus data jadwal yang sudah ada untuk tanggal ini agar tidak duplikat (hanya di halaman pertama)
         if target_date and str(page) == "1":
+            # Cache old lab schedules before deleting
+            cursor.execute("""
+                SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE j.tanggal = %s
+            """, (target_date,))
+            
+            old_schedules = cursor.fetchall()
+            old_lab_cache[target_date] = {'__is_update': len(old_schedules) > 0}
+            for row in old_schedules:
+                jam, kode_mk, nama_mk, kelas, nama_ruangan, status, metode, dosen = row
+                if is_lab(nama_ruangan):
+                    key = f"{jam}_{nama_ruangan}_{kelas}"
+                    old_lab_cache[target_date][key] = {
+                        'status': status, 'metode': metode, 'nama_mk': nama_mk, 'dosen': dosen
+                    }
+                    
             cursor.execute("DELETE FROM jadwal WHERE tanggal = %s", (target_date,))
             
         for item in data:
@@ -141,8 +214,34 @@ def save_to_db(data, target_date=None, page="1"):
                     id_dosen, kode_mk, item['nama_mk'], item['kelas'], id_ruangan, 
                     item['status'], item['metode']
                 ))
+                
+                # Check for notifications (only for labs)
+                if is_lab(item['ruangan']) and target_date:
+                    key = f"{item['jam']}_{item['ruangan']}_{item['kelas']}"
+                    
+                    if target_date in old_lab_cache:
+                        is_update = old_lab_cache[target_date].get('__is_update', False)
+                        
+                        if key not in old_lab_cache[target_date]:
+                            if is_update:
+                                # Kelas Tambahan
+                                pesan = f"Kelas TAMBAHAN: {item['nama_mk']} ({item['kelas']}) di {item['ruangan']} pada {item['jam']}. Dosen: {item['dosen']}."
+                                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'TAMBAHAN', pesan))
+                        else:
+                            # Perubahan Status/Metode
+                            old_data = old_lab_cache[target_date][key]
+                            if old_data['status'] != item['status'] or old_data['metode'] != item['metode']:
+                                pesan = f"PERUBAHAN STATUS: {item['nama_mk']} ({item['kelas']}) di {item['ruangan']} pada {item['jam']}. Status: {old_data['status']} -> {item['status']}, Metode: {old_data['metode']} -> {item['metode']}."
+                                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'PERUBAHAN', pesan))
+                            # Hapus dari cache agar kita tau sisa yang mungkin dibatalkan (optional)
+                            del old_lab_cache[target_date][key]
 
         conn.commit()
+        
+        # Kalkulasi Jeda Waktu (hanya dipanggil di akhir page? Kita bisa memanggil ini melalui endpoint terpisah atau sesudah semua selesai, tapi karena tidak tahu kapan page terakhir, jalankan saja setiap save_to_db lalu bersihkan JEDA lama)
+        if target_date:
+            calculate_and_save_gaps(conn, cursor, target_date)
+            
         print(f"Berhasil menyimpan {len(data)} jadwal ke database.")
         
     except mysql.connector.Error as err:

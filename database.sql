@@ -42,3 +42,11 @@ CREATE TABLE IF NOT EXISTS jadwal (
     FOREIGN KEY (kode_mk) REFERENCES mata_kuliah(kode_mk) ON DELETE SET NULL,
     FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS notifikasi_lab (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tanggal DATE NOT NULL,
+    tipe_notif VARCHAR(50) NOT NULL,
+    pesan TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

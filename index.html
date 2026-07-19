@@ -84,13 +84,25 @@
                 </div>
             </div>
 
-            <!-- Panel Khusus: Lab Sedang Digunakan Saat Ini -->
-            <div id="active-lab-panel"
-                style="background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
-                <h3 style="margin: 0 0 10px 0; color: #1565c0; font-size: 1.1em;">🔬 Laboratorium yang Sedang Digunakan
-                    Saat Ini</h3>
-                <div id="active-lab-list" style="font-size: 0.95em; color: #0d47a1;">
-                    <em style="color: #666;">Memeriksa status lab...</em>
+            <!-- Panel Khusus: Lab & Notifikasi -->
+            <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                <!-- Kolom Kiri: Lab Aktif -->
+                <div id="active-lab-panel"
+                    style="flex: 1; min-width: 300px; background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 6px;">
+                    <h3 style="margin: 0 0 10px 0; color: #1565c0; font-size: 1.1em;">Labor yang lagi di pakai</h3>
+                    <div id="active-lab-list" style="font-size: 0.95em; color: #0d47a1;">
+                        <em style="color: #666;">Memeriksa status lab...</em>
+                    </div>
+                </div>
+
+                <!-- Kolom Kanan: Notifikasi Lab -->
+                <div id="notifikasi-lab-panel"
+                    style="flex: 1; min-width: 300px; background: #fff3e0; border: 1px solid #ffcc80; padding: 15px; border-radius: 6px; max-height: 200px; overflow-y: auto;">
+                    <h3 style="margin: 0 0 10px 0; color: #e65100; font-size: 1.1em;">Info mase</h3>
+                    <div id="notifikasi-lab-list"
+                        style="font-size: 0.9em; color: #e65100; display: flex; flex-direction: column; gap: 8px;">
+                        <em style="color: #666;">Memuat notifikasi...</em>
+                    </div>
                 </div>
             </div>
 
@@ -308,6 +320,8 @@
         // Fungsi Filter Data
         function applyFilters() {
             const ft = filterTanggal.value;
+            fetchNotifikasiLab(ft);
+
             const fw = filterWaktu.value;
             const fm = filterMetode.value;
             const fr = filterRuangan.value;
@@ -365,7 +379,7 @@
                 filtered = filtered.filter(item => item.kampus && item.kampus.trim() === fKampus);
             }
 
-            // Pengurutan: Prioritas Laboratorium, lalu Jam Pelajaran
+            // Pengurutan: Prioritas Labor, lalu Jam Pelajaran
             filtered.sort((a, b) => {
                 // 1. Sort by Kategori: Lab vs Kelas
                 const aIsLab = isLab(a.nama_ruangan);
@@ -418,7 +432,7 @@
                     activeLabs.map(lab => `<li>${lab}</li>`).join('') +
                     `</ul>`;
             } else {
-                panel.innerHTML = `<em style="color: #666;">Saat ini tidak ada laboratorium yang sedang dipakai.</em>`;
+                panel.innerHTML = `<em style="color: #666;">Lagi dak da lab yang dipakai.</em>`;
             }
         }
 
@@ -444,11 +458,12 @@
                 });
 
                 const result = await response.json();
-                
+
                 if (result.status === 'success') {
                     // Data berhasil ditarik dan masuk ke database lokal
                     syncBtn.innerHTML = '⏳ Merender...';
                     await fetchAllJadwal(); // Tarik data terbaru dari DB ke layar
+                    fetchNotifikasiLab(tanggal, true); // Tampilkan popup notifikasi jika ada tambahan
                 } else {
                     alert("Gagal sinkronisasi: " + result.message);
                 }
@@ -466,11 +481,76 @@
             }
         }
 
+        // 5. Fetch Notifikasi Lab
+        async function fetchNotifikasiLab(tanggal, showPopup = false) {
+            const notifList = document.getElementById('notifikasi-lab-list');
+            if (!notifList) return;
+
+            if (!tanggal) {
+                notifList.innerHTML = '<em style="color: #666;">pilih tanggal tuk cek notif mas.</em>';
+                return;
+            }
+
+            try {
+                notifList.innerHTML = '<em style="color: #666;">Memuat notifikasi...</em>';
+                const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}`);
+                const data = await response.json();
+
+                if (data.status === 'success' && data.data && data.data.length > 0) {
+                    let html = '';
+                    let popupContent = '';
+
+                    data.data.forEach(n => {
+                        let icon = '📌';
+                        let color = '#333';
+                        let bg = '#fff';
+                        let border = '#eee';
+
+                        if (n.tipe_notif === 'TAMBAHAN') {
+                            icon = 'INPO'; color = '#0277bd'; bg = '#e1f5fe'; border = '#b3e5fc';
+                            if (showPopup) {
+                                popupContent += `
+                                    <div class="notification-item" style="margin-bottom: 10px; padding: 10px; background: #e1f5fe; border-radius: 5px;">
+                                        <strong>${icon} KELAS TAMBAHAN!</strong><br>
+                                        ${n.pesan}
+                                    </div>
+                                `;
+                            }
+                        } else if (n.tipe_notif === 'PERUBAHAN') {
+                            icon = '⚠️'; color = '#e65100'; bg = '#fff3e0'; border = '#ffe0b2';
+                        } else if (n.tipe_notif === 'JEDA') {
+                            icon = '🔒'; color = '#c62828'; bg = '#ffebee'; border = '#ffcdd2';
+                        }
+
+                        html += `
+                            <div style="padding: 10px; background: ${bg}; border: 1px solid ${border}; border-radius: 6px; font-size: 0.9em; color: ${color};">
+                                <div style="font-weight: bold; margin-bottom: 4px;">${icon} ${n.tipe_notif} <span style="float:right; font-weight:normal; font-size: 0.85em;">${n.waktu}</span></div>
+                                <div>${n.pesan}</div>
+                            </div>
+                        `;
+                    });
+                    notifList.innerHTML = html;
+
+                    // Tampilkan popup jika disuruh dan ada konten popup (Kelas Tambahan)
+                    if (showPopup && popupContent !== '') {
+                        document.getElementById('lab-modal-body').innerHTML = popupContent;
+                        document.getElementById('lab-modal').style.display = 'flex';
+                        playNotificationSound();
+                    }
+                } else {
+                    notifList.innerHTML = '<em style="color: #666;">Tidak ada notifikasi khusus pada tanggal ini.</em>';
+                }
+            } catch (e) {
+                notifList.innerHTML = '<em style="color: red;">Gagal memuat notifikasi.</em>';
+            }
+        }
+
         // Event Listeners untuk Dropdown
         filterTanggal.addEventListener('change', (e) => {
             const dateVal = e.target.value;
             // Saat tanggal dipilih, sinkronisasikan data terlebih dahulu
             syncData(dateVal);
+            applyFilters();
         });
 
         document.getElementById('sync-btn').addEventListener('click', () => {
@@ -626,7 +706,7 @@
             const modalBody = document.getElementById('lab-modal-body');
             modalBody.innerHTML = '<p>Buka labor ni sekarang ges, kelas bentar lagi mulai:</p>' +
                 '<ul style="text-align: left;">' +
-                '<li style="margin-bottom: 8px;"><b>Laboratorium Uji Coba (Kampus Dummy)</b> buat matkul <b>Pemrograman Web</b> (Mulai jam 10:00) - <i>Gass buka dalam 30 menit!</i></li>' +
+                '<li style="margin-bottom: 8px;"><b>Labora Uji Coba (Kampus Dummy)</b> buat matkul <b>Pemrograman Web</b> (Mulai jam 10:00) - <i>Gass buka dalam 30 menit!</i></li>' +
                 '</ul>';
             document.getElementById('lab-modal').style.display = 'flex';
             playNotificationSound();
