@@ -1,742 +1,575 @@
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Jadwal Kuliah</title>
-    <!-- Google Fonts: Plus Jakarta Sans -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Jadwal Kuliah</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-
-    <div class="container">
-        <div class="header">
-            <h1>Jadwal Kuliah</h1>
-            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-
-                <button id="clear-db-btn"
-                    style="padding: 8px 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold; box-shadow: var(--shadow-sm); transition: all 0.2s;">🗑️
-                    Bersihkan DB</button>
-                <button id="sync-btn"
-                    style="padding: 8px 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold; box-shadow: var(--shadow-sm); transition: all 0.2s;">🔄
-                    Sinkron</button>
-                <div class="stats-small" id="stat-container">
-                    <div class="stat-badge">Memuat statistik...</div>
-                </div>
-                <button id="theme-toggle" class="btn-theme" title="Ubah Tema"
-                    style="padding: 8px 12px; background-color: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 1.1em; box-shadow: var(--shadow-sm); transition: all 0.3s;">
-                    🌙
-                </button>
-            </div>
+  <div class="container">
+    <header class="header">
+      <h1>Jadwal Kuliah</h1>
+      <div class="header-actions">
+        <button id="clear-db-btn" class="btn btn-danger" aria-label="Bersihkan database">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          Bersihkan DB
+        </button>
+        <button id="sync-btn" class="btn btn-primary" aria-label="Sinkronisasi jadwal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Sinkron
+        </button>
+        <div class="stats-row" id="stat-container">
+          <div class="stat-badge">Memuat statistik...</div>
         </div>
+        <button id="theme-toggle" class="btn btn-ghost" aria-label="Ganti tema gelap terang">
+          <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+      </div>
+    </header>
 
-        <div class="card">
-            <div class="filters">
-                <div class="filter-group">
-                    <label>Tanggal</label>
-                    <input type="date" id="filter-tanggal">
-                </div>
-                <div class="filter-group">
-                    <label>Waktu</label>
-                    <select id="filter-waktu">
-                        <option value="sekarang">Jadwal Saat Ini (Otomatis)</option>
-                        <option value="semua" selected>Semua Waktu</option>
-                        <!-- Options lain akan di-generate via JS -->
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Status Kuliah</label>
-                    <select id="filter-metode">
-                        <option value="semua">Semua Status</option>
-                        <option value="TM">Tatap Muka (TM)</option>
-                        <option value="OL">Online (OL)</option>
-                        <option value="CC">Cancel (CC)</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Lokasi Kampus</label>
-                    <select id="filter-kampus">
-                        <option value="semua">Semua Kampus</option>
-                        <option value="Kampus Kobar">Kampus Kobar</option>
-                        <option value="Kampus Thehok">Kampus Thehok</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Kategori Ruangan</label>
-                    <select id="filter-kategori-ruang">
-                        <option value="semua">Semua Kategori</option>
-                        <option value="labor">Labor</option>
-                        <option value="kelas">Kelas</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Ruangan / Labor</label>
-                    <select id="filter-ruangan">
-                        <option value="semua">Semua Ruangan</option>
-                        <!-- Options akan di-generate via JS -->
-                    </select>
-                </div>
-            </div>
-
-            <!-- Panel Khusus: Lab & Notifikasi -->
-            <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
-                <!-- Kolom Kiri: Lab Aktif -->
-                <div id="active-lab-panel"
-                    style="flex: 1; min-width: 300px; background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 6px;">
-                    <h3 style="margin: 0 0 10px 0; color: #1565c0; font-size: 1.1em;">Labor yang lagi di pakai</h3>
-                    <div id="active-lab-list" style="font-size: 0.95em; color: #0d47a1;">
-                        <em style="color: #666;">Memeriksa status lab...</em>
-                    </div>
-                </div>
-
-                <!-- Kolom Kanan: Notifikasi Lab -->
-                <div id="notifikasi-lab-panel"
-                    style="flex: 1; min-width: 300px; background: #fff3e0; border: 1px solid #ffcc80; padding: 15px; border-radius: 6px; max-height: 200px; overflow-y: auto;">
-                    <h3 style="margin: 0 0 10px 0; color: #e65100; font-size: 1.1em;">Info mase</h3>
-                    <div id="notifikasi-lab-list"
-                        style="font-size: 0.9em; color: #e65100; display: flex; flex-direction: column; gap: 8px;">
-                        <em style="color: #666;">Memuat notifikasi...</em>
-                    </div>
-                </div>
-            </div>
-
-            <div id="info-jadwal-sekarang" class="alert" style="display: none;">
-                Menampilkan jadwal yang sedang berlangsung (berdasarkan jam sekarang).
-            </div>
-
-            <!-- Modal Notifikasi Lab -->
-            <div id="lab-modal" class="modal-overlay">
-                <div class="modal-content">
-                    <div class="modal-title">🔔 We Buka Lab, Ges!</div>
-                    <div id="lab-modal-body" class="modal-body">
-                        <!-- Pesan akan diisi via JS -->
-                    </div>
-                    <button class="modal-btn" onclick="document.getElementById('lab-modal').style.display='none'">Oke,
-                        Gas!</button>
-                </div>
-            </div>
-
-            <div
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 5px 0;">
-                <div id="hasil-pencarian" style="font-size: 0.95em; color: #555; font-weight: bold;">
-                    Hasil Pencarian: 0 jadwal
-                </div>
-                <button onclick="testNotification()"
-                    style="padding: 6px 12px; background-color: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🔔
-                    Test Notif</button>
-            </div>
-
-            <div style="overflow-x: auto;">
-                <table id="jadwal-table">
-                    <thead>
-                        <tr>
-                            <th width="15%">Waktu</th>
-                            <th width="25%">Mata Kuliah</th>
-                            <th width="20%">Dosen</th>
-                            <th width="20%">Ruangan</th>
-                            <th width="10%">Status</th>
-                            <th width="10%">Metode</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td colspan="6" style="text-align: center;">Memuat data...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+    <div class="card">
+      <div class="filters">
+        <div class="filter-group">
+          <label for="filter-tanggal">Tanggal</label>
+          <input type="date" id="filter-tanggal" autocomplete="off">
         </div>
+        <div class="filter-group">
+          <label for="filter-waktu">Waktu</label>
+          <select id="filter-waktu">
+            <option value="sekarang">Jadwal Saat Ini (Otomatis)</option>
+            <option value="semua" selected>Semua Waktu</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filter-metode">Status Kuliah</label>
+          <select id="filter-metode">
+            <option value="semua">Semua Status</option>
+            <option value="TM">Tatap Muka (TM)</option>
+            <option value="OL">Online (OL)</option>
+            <option value="CC">Cancel (CC)</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filter-kampus">Lokasi Kampus</label>
+          <select id="filter-kampus">
+            <option value="semua">Semua Kampus</option>
+            <option value="Kampus Kobar">Kampus Kobar</option>
+            <option value="Kampus Thehok">Kampus Thehok</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filter-kategori-ruang">Kategori Ruangan</label>
+          <select id="filter-kategori-ruang">
+            <option value="semua">Semua Kategori</option>
+            <option value="labor">Labor</option>
+            <option value="kelas">Kelas</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filter-ruangan">Ruangan / Labor</label>
+          <select id="filter-ruangan">
+            <option value="semua">Semua Ruangan</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panels-row">
+        <div class="panel panel-lab" id="active-lab-panel">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Labor yang lagi di pakai
+          </h3>
+          <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
+        </div>
+        <div class="panel panel-notif" id="notifikasi-lab-panel">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            Info mase
+          </h3>
+          <div class="panel-content" id="notifikasi-lab-list"><em>Memuat notifikasi...</em></div>
+        </div>
+      </div>
+
+      <div id="info-jadwal-sekarang" class="alert" role="alert" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>Menampilkan jadwal yang sedang berlangsung (berdasarkan jam sekarang).</span>
+      </div>
+
+      <div class="card-header">
+        <div id="hasil-pencarian" class="search-result">Hasil Pencarian: 0 jadwal</div>
+        <button id="test-notif-btn" class="btn btn-warning" aria-label="Test notifikasi">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Test Notif
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <table id="jadwal-table">
+          <thead>
+            <tr>
+              <th scope="col" width="15%">Waktu</th>
+              <th scope="col" width="25%">Mata Kuliah</th>
+              <th scope="col" width="20%">Dosen</th>
+              <th scope="col" width="20%">Ruangan</th>
+              <th scope="col" width="10%">Status</th>
+              <th scope="col" width="10%">Metode</th>
+            </tr>
+          </thead>
+          <tbody id="jadwal-tbody">
+            <tr><td colspan="6" class="text-center text-muted">Memuat data...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
+  </div>
 
-    <script>
-        // Gunakan alamat asal (origin) tempat HTML ini dibuka agar otomatis menyesuaikan dengan domain Ngrok/VPS
-        const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
-        let allJadwal = []; // Menyimpan semua data jadwal
+  <!-- Modal -->
+  <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Lab">
+    <div class="modal-box">
+      <div class="modal-icon">🔔</div>
+      <h2>We Buka Lab, Ges!</h2>
+      <div class="modal-body" id="lab-modal-body"></div>
+      <button class="modal-btn" id="modal-close-btn">Oke, Gas!</button>
+    </div>
+  </div>
 
-        // Elements
-        const tbody = document.querySelector('#jadwal-table tbody');
-        const filterTanggal = document.getElementById('filter-tanggal');
-        const filterWaktu = document.getElementById('filter-waktu');
-        const filterMetode = document.getElementById('filter-metode');
-        const filterRuangan = document.getElementById('filter-ruangan');
-        const infoSekarang = document.getElementById('info-jadwal-sekarang');
+  <script>
+    const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
+    let allJadwal = [];
 
-        // 1. Fungsi Update Statistik (Berdasarkan Data Tanggal yang Difilter)
-        function updateStats(data) {
-            const container = document.getElementById('stat-container');
-            if (data.length === 0) {
-                container.innerHTML = '<div class="stat-badge">Tidak ada data</div>';
-                return;
-            }
+    const tbody = document.getElementById('jadwal-tbody');
+    const filterTanggal = document.getElementById('filter-tanggal');
+    const filterWaktu = document.getElementById('filter-waktu');
+    const filterMetode = document.getElementById('filter-metode');
+    const filterRuangan = document.getElementById('filter-ruangan');
+    const infoSekarang = document.getElementById('info-jadwal-sekarang');
 
-            let tmCount = 0;
-            let olCount = 0;
-            let ccCount = 0;
+    function updateStats(data) {
+      const container = document.getElementById('stat-container');
+      if (data.length === 0) {
+        container.innerHTML = '<div class="stat-badge">Tidak ada data</div>';
+        return;
+      }
+      let tmCount = 0, olCount = 0, ccCount = 0;
+      data.forEach(item => {
+        if (item.metode_pembelajaran === 'TM') tmCount++;
+        else if (item.metode_pembelajaran === 'OL') olCount++;
+        else if (item.metode_pembelajaran === 'CC') ccCount++;
+      });
+      container.innerHTML = `
+        <div class="stat-badge tm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          TM: ${tmCount} Kelas
+        </div>
+        <div class="stat-badge ol">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          OL: ${olCount} Kelas
+        </div>
+        <div class="stat-badge cc">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          CC: ${ccCount} Kelas
+        </div>
+      `;
+    }
 
-            data.forEach(item => {
-                if (item.metode_pembelajaran === 'TM') tmCount++;
-                else if (item.metode_pembelajaran === 'OL') olCount++;
-                else if (item.metode_pembelajaran === 'CC') ccCount++;
-            });
+    function showSkeleton() {
+      const rows = Array.from({length: 5}, () =>
+        `<tr class="skeleton-row">${'<td class="skeleton">Memuat</td>'.repeat(6)}</tr>`
+      ).join('');
+      tbody.innerHTML = rows;
+    }
 
-            container.innerHTML = `
-                <div class="stat-badge tm">TM: ${tmCount} Kelas</div>
-                <div class="stat-badge ol">OL: ${olCount} Kelas</div>
-                <div class="stat-badge cc">CC: ${ccCount} Kelas</div>
-            `;
+    async function fetchAllJadwal() {
+      try {
+        showSkeleton();
+        const response = await fetch(`${API_BASE_URL}/api/jadwal`);
+        const data = await response.json();
+        if (data.status === 'success') {
+          allJadwal = data.data.map(item => {
+            if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
+            return item;
+          });
+          populateFilters();
+          applyFilters();
         }
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal.</td></tr>';
+      }
+    }
 
-        // 2. Ambil Semua Jadwal
-        async function fetchAllJadwal() {
-            try {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Memuat data...</td></tr>';
-                const response = await fetch(`${API_BASE_URL}/api/jadwal`);
-                const data = await response.json();
-                if (data.status === 'success') {
-                    allJadwal = data.data.map(item => {
-                        if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
-                        return item;
-                    });
-                    populateFilters();
-                    applyFilters();
-                }
-            } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Gagal memuat data jadwal.</td></tr>';
-            }
-        }
+    fetchAllJadwal();
 
-        fetchAllJadwal();
+    function updateRuanganDropdown() {
+      const fk = document.getElementById('filter-kategori-ruang').value;
+      const fKampus = document.getElementById('filter-kampus').value;
+      const ruanganSet = new Set();
+      allJadwal.forEach(item => {
+        if (!item.nama_ruangan) return;
+        if (fKampus !== 'semua' && item.kampus && item.kampus.trim() !== fKampus) return;
+        if (fk === 'labor') { if (isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan); }
+        else if (fk === 'kelas') { if (!isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan); }
+        else { ruanganSet.add(item.nama_ruangan); }
+      });
+      const oldVal = filterRuangan.value;
+      filterRuangan.innerHTML = '<option value="semua">Semua Ruangan</option>';
+      Array.from(ruanganSet).sort().forEach(ruang => {
+        const opt = document.createElement('option');
+        opt.value = ruang; opt.textContent = ruang;
+        filterRuangan.appendChild(opt);
+      });
+      filterRuangan.value = ruanganSet.has(oldVal) ? oldVal : 'semua';
+    }
 
-        // Fungsi untuk memperbarui dropdown ruangan berdasarkan kategori dan kampus yang dipilih
-        function updateRuanganDropdown() {
-            const fk = document.getElementById('filter-kategori-ruang').value;
-            const fKampus = document.getElementById('filter-kampus').value;
-            const ruanganSet = new Set();
+    function populateFilters() {
+      const waktuSet = new Set();
+      allJadwal.forEach(item => { if (item.jam) waktuSet.add(item.jam); });
+      filterWaktu.innerHTML = '<option value="sekarang">Jadwal Saat Ini (Otomatis)</option><option value="semua" selected>Semua Waktu</option>';
+      Array.from(waktuSet).sort().forEach(waktu => {
+        const opt = document.createElement('option');
+        opt.value = waktu; opt.textContent = `Pukul ${waktu}`;
+        filterWaktu.appendChild(opt);
+      });
+      updateRuanganDropdown();
+    }
 
-            allJadwal.forEach(item => {
-                if (!item.nama_ruangan) return;
+    function renderTable(data) {
+      const hasilLabel = document.getElementById('hasil-pencarian');
+      hasilLabel.innerHTML = `Hasil Pencarian: <strong style="color:var(--primary);">${data.length} jadwal</strong> ditemukan`;
+      tbody.innerHTML = '';
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Tidak ada jadwal yang sesuai dengan filter.</td></tr>';
+        return;
+      }
+      data.forEach(item => {
+        let badgeClass = 'default';
+        if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+        else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+        else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><strong>${item.jam}</strong><br><small>${item.hari}, ${item.tanggal_format || item.tanggal}</small></td>
+          <td>${item.nama_mk || '-'} ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${item.kelas})</small>` : ''}</td>
+          <td>${item.nama_dosen || '-'}</td>
+          <td>${item.nama_ruangan || '-'}</td>
+          <td>${item.status_jadwal}</td>
+          <td><span class="badge ${badgeClass}">${item.metode_pembelajaran}</span></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
 
-                // Cek Kampus
-                if (fKampus !== 'semua' && item.kampus && item.kampus.trim() !== fKampus) return;
+    function isLab(namaRuangan) {
+      if (!namaRuangan) return false;
+      const name = namaRuangan.toLowerCase();
+      return name.includes('lab') || /\b3\.1\b/.test(name) || /\b3\.4\b/.test(name);
+    }
 
-                // Cek Kategori
-                if (fk === 'labor') {
-                    if (isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan);
-                } else if (fk === 'kelas') {
-                    if (!isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan);
-                } else {
-                    ruanganSet.add(item.nama_ruangan);
-                }
-            });
+    function applyFilters() {
+      const ft = filterTanggal.value;
+      fetchNotifikasiLab(ft);
 
-            // Simpan value yang sedang dipilih (jika ada)
-            const oldVal = filterRuangan.value;
+      const fw = filterWaktu.value;
+      const fm = filterMetode.value;
+      const fr = filterRuangan.value;
+      const fk = document.getElementById('filter-kategori-ruang').value;
+      const fKampus = document.getElementById('filter-kampus').value;
 
-            // Kosongkan dan isi ulang
-            filterRuangan.innerHTML = '<option value="semua">Semua Ruangan</option>';
-            const sortedRuangan = Array.from(ruanganSet).sort();
-            sortedRuangan.forEach(ruang => {
-                const opt = document.createElement('option');
-                opt.value = ruang;
-                opt.textContent = ruang;
-                filterRuangan.appendChild(opt);
-            });
+      let filtered = allJadwal;
+      infoSekarang.style.display = 'none';
 
-            // Kembalikan value lama jika masih valid di daftar baru
-            if (ruanganSet.has(oldVal)) {
-                filterRuangan.value = oldVal;
-            } else {
-                filterRuangan.value = 'semua';
-            }
-        }
+      if (ft) filtered = filtered.filter(item => item.tanggal === ft);
 
-        // Isi Dropdown Dinamis Saat Pertama Kali Load
-        function populateFilters() {
-            const waktuSet = new Set();
-
-            allJadwal.forEach(item => {
-                if (item.jam) waktuSet.add(item.jam);
-            });
-
-            // Waktu Options
-            filterWaktu.innerHTML = '<option value="sekarang">Jadwal Saat Ini (Otomatis)</option><option value="semua" selected>Semua Waktu</option>';
-            const sortedWaktu = Array.from(waktuSet).sort();
-            sortedWaktu.forEach(waktu => {
-                const opt = document.createElement('option');
-                opt.value = waktu;
-                opt.textContent = `Pukul ${waktu}`;
-                filterWaktu.appendChild(opt);
-            });
-
-            // Ruangan Options
-            updateRuanganDropdown();
-        }
-
-        // Fungsi Render Tabel
-        function renderTable(data) {
-            const hasilLabel = document.getElementById('hasil-pencarian');
-            if (hasilLabel) {
-                hasilLabel.innerHTML = `Hasil Pencarian: <span style="color: #2980b9;">${data.length} jadwal</span> ditemukan`;
-            }
-
-            tbody.innerHTML = '';
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Tidak ada jadwal yang sesuai dengan filter.</td></tr>';
-                return;
-            }
-
-            data.forEach(item => {
-                let badgeClass = 'default';
-                if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
-                else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
-                else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
-                const row = `
-                <tr>
-                    <td><strong>${item.jam}</strong><br><small>${item.hari}, ${item.tanggal_format || item.tanggal}</small></td>
-                    <td>${item.nama_mk || '-'} ${item.kelas ? `<br><small style="color: #16a085; font-weight: bold;">(Kelas: ${item.kelas})</small>` : ''}</td>
-                    <td>${item.nama_dosen || '-'}</td>
-                    <td>${item.nama_ruangan || '-'}</td>
-                    <td>${item.status_jadwal}</td>
-                    <td><span class="badge ${badgeClass}">${item.metode_pembelajaran}</span></td>
-                </tr>
-            `;
-                tbody.innerHTML += row;
-            });
-        }
-
-        // Fungsi Helper untuk cek apakah ruangan adalah Lab/Khusus
-        function isLab(namaRuangan) {
-            if (!namaRuangan) return false;
-            const name = namaRuangan.toLowerCase();
-            return name.includes('lab') || /\b3\.1\b/.test(name) || /\b3\.4\b/.test(name);
-        }
-
-        // Fungsi Filter Data
-        function applyFilters() {
-            const ft = filterTanggal.value;
-            fetchNotifikasiLab(ft);
-
-            const fw = filterWaktu.value;
-            const fm = filterMetode.value;
-            const fr = filterRuangan.value;
-            const fk = document.getElementById('filter-kategori-ruang').value;
-            const fKampus = document.getElementById('filter-kampus').value;
-
-            let filtered = allJadwal;
-
-            infoSekarang.style.display = 'none';
-
-            // Filter Tanggal
-            if (ft) {
-                filtered = filtered.filter(item => item.tanggal === ft);
-            }
-
-            // Filter Waktu Khusus (Otomatis Sekarang)
-            if (fw === 'sekarang') {
-                infoSekarang.style.display = 'block';
-
-                const now = new Date();
-                const currentHour = now.getHours();
-                const currentMin = now.getMinutes();
-                const currentTime = currentHour * 60 + currentMin;
-
-                filtered = filtered.filter(item => {
-                    if (!item.jam) return false;
-                    const parts = item.jam.split(':');
-                    const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-                    return (currentTime >= startTime) && (currentTime <= startTime + 135);
-                });
-            }
-            else if (fw !== 'semua') {
-                filtered = filtered.filter(item => item.jam === fw);
-            }
-
-            // Filter Metode/Status
-            if (fm !== 'semua') {
-                filtered = filtered.filter(item => item.metode_pembelajaran === fm);
-            }
-
-            // Filter Ruangan Spesifik
-            if (fr !== 'semua') {
-                filtered = filtered.filter(item => item.nama_ruangan === fr);
-            }
-
-            // Filter Kategori Ruangan (Labor/Kelas)
-            if (fk === 'labor') {
-                filtered = filtered.filter(item => isLab(item.nama_ruangan));
-            } else if (fk === 'kelas') {
-                filtered = filtered.filter(item => !isLab(item.nama_ruangan));
-            }
-
-            // Filter Lokasi Kampus
-            if (fKampus !== 'semua') {
-                filtered = filtered.filter(item => item.kampus && item.kampus.trim() === fKampus);
-            }
-
-            // Pengurutan: Prioritas Labor, lalu Jam Pelajaran
-            filtered.sort((a, b) => {
-                // 1. Sort by Kategori: Lab vs Kelas
-                const aIsLab = isLab(a.nama_ruangan);
-                const bIsLab = isLab(b.nama_ruangan);
-                if (aIsLab && !bIsLab) return -1;
-                if (!aIsLab && bIsLab) return 1;
-
-                // 2. Sort by Jam
-                if (a.jam && b.jam) {
-                    if (a.jam < b.jam) return -1;
-                    if (a.jam > b.jam) return 1;
-                }
-                return 0;
-            });
-
-            // Update statistik berdasarkan SEMUA filter yang telah diterapkan (tanggal, kampus, ruangan, dll)
-            updateStats(filtered);
-
-            renderTable(filtered);
-            updateActiveLabPanel();
-        }
-
-        // Fungsi Update Panel Lab Saat Ini
-        function updateActiveLabPanel() {
-            const panel = document.getElementById('active-lab-list');
-            const now = new Date();
-
-            // Format YYYY-MM-DD
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const currentDayStr = `${year}-${month}-${day}`;
-
-            const currentTime = now.getHours() * 60 + now.getMinutes();
-            let activeLabs = [];
-
-            allJadwal.forEach(item => {
-                if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan)) {
-                    const parts = item.jam.split(':');
-                    const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-                    // Asumsi 135 menit = 1 sesi lab
-                    if (currentTime >= startTime && currentTime <= startTime + 135) {
-                        activeLabs.push(`<b>${item.nama_ruangan}</b>: ${item.nama_mk} (${item.jam})`);
-                    }
-                }
-            });
-
-            if (activeLabs.length > 0) {
-                panel.innerHTML = `<ul style="margin: 0; padding-left: 20px;">` +
-                    activeLabs.map(lab => `<li>${lab}</li>`).join('') +
-                    `</ul>`;
-            } else {
-                panel.innerHTML = `<em style="color: #666;">Lagi dak da lab yang dipakai.</em>`;
-            }
-        }
-
-        // Update Panel Setiap Menit
-        setInterval(updateActiveLabPanel, 60000);
-
-        // Logika Sinkronisasi Data via Backend API (Otomatis membuka tab di PC Host)
-        async function syncData(tanggal) {
-            const syncBtn = document.getElementById('sync-btn');
-            const originalText = syncBtn.innerHTML;
-            syncBtn.innerHTML = '⏳ Menarik Data...';
-            syncBtn.disabled = true;
-            syncBtn.style.opacity = '0.7';
-
-            try {
-                // Memanggil rute /api/sync di backend kita
-                const response = await fetch(`${API_BASE_URL}/api/sync`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ tanggal: tanggal || null })
-                });
-
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    // Data berhasil ditarik dan masuk ke database lokal
-                    syncBtn.innerHTML = '⏳ Merender...';
-                    await fetchAllJadwal(); // Tarik data terbaru dari DB ke layar
-                    fetchNotifikasiLab(tanggal, true); // Tampilkan popup notifikasi jika ada tambahan
-                } else {
-                    alert("Gagal sinkronisasi: " + result.message);
-                }
-
-                syncBtn.innerHTML = originalText;
-                syncBtn.disabled = false;
-                syncBtn.style.opacity = '1';
-
-            } catch (error) {
-                console.error("Error saat sinkronisasi:", error);
-                alert("Terjadi kesalahan jaringan atau server.");
-                syncBtn.innerHTML = originalText;
-                syncBtn.disabled = false;
-                syncBtn.style.opacity = '1';
-            }
-        }
-
-        // 5. Fetch Notifikasi Lab
-        async function fetchNotifikasiLab(tanggal, showPopup = false) {
-            const notifList = document.getElementById('notifikasi-lab-list');
-            if (!notifList) return;
-
-            if (!tanggal) {
-                notifList.innerHTML = '<em style="color: #666;">pilih tanggal tuk cek notif mas.</em>';
-                return;
-            }
-
-            try {
-                notifList.innerHTML = '<em style="color: #666;">Memuat notifikasi...</em>';
-                const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}`);
-                const data = await response.json();
-
-                if (data.status === 'success' && data.data && data.data.length > 0) {
-                    let html = '';
-                    let popupContent = '';
-
-                    data.data.forEach(n => {
-                        let icon = '📌';
-                        let color = '#333';
-                        let bg = '#fff';
-                        let border = '#eee';
-
-                        if (n.tipe_notif === 'TAMBAHAN') {
-                            icon = 'INPO'; color = '#0277bd'; bg = '#e1f5fe'; border = '#b3e5fc';
-                            if (showPopup) {
-                                popupContent += `
-                                    <div class="notification-item" style="margin-bottom: 10px; padding: 10px; background: #e1f5fe; border-radius: 5px;">
-                                        <strong>${icon} KELAS TAMBAHAN!</strong><br>
-                                        ${n.pesan}
-                                    </div>
-                                `;
-                            }
-                        } else if (n.tipe_notif === 'PERUBAHAN') {
-                            icon = '⚠️'; color = '#e65100'; bg = '#fff3e0'; border = '#ffe0b2';
-                        } else if (n.tipe_notif === 'JEDA') {
-                            icon = '🔒'; color = '#c62828'; bg = '#ffebee'; border = '#ffcdd2';
-                        }
-
-                        html += `
-                            <div style="padding: 10px; background: ${bg}; border: 1px solid ${border}; border-radius: 6px; font-size: 0.9em; color: ${color};">
-                                <div style="font-weight: bold; margin-bottom: 4px;">${icon} ${n.tipe_notif} <span style="float:right; font-weight:normal; font-size: 0.85em;">${n.waktu}</span></div>
-                                <div>${n.pesan}</div>
-                            </div>
-                        `;
-                    });
-                    notifList.innerHTML = html;
-
-                    // Tampilkan popup jika disuruh dan ada konten popup (Kelas Tambahan)
-                    if (showPopup && popupContent !== '') {
-                        document.getElementById('lab-modal-body').innerHTML = popupContent;
-                        document.getElementById('lab-modal').style.display = 'flex';
-                        playNotificationSound();
-                    }
-                } else {
-                    notifList.innerHTML = '<em style="color: #666;">Tidak ada notifikasi khusus pada tanggal ini.</em>';
-                }
-            } catch (e) {
-                notifList.innerHTML = '<em style="color: red;">Gagal memuat notifikasi.</em>';
-            }
-        }
-
-        // Event Listeners untuk Dropdown
-        filterTanggal.addEventListener('change', (e) => {
-            const dateVal = e.target.value;
-            // Saat tanggal dipilih, sinkronisasikan data terlebih dahulu
-            syncData(dateVal);
-            applyFilters();
+      if (fw === 'sekarang') {
+        infoSekarang.style.display = 'flex';
+        const now = new Date();
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+        filtered = filtered.filter(item => {
+          if (!item.jam) return false;
+          const parts = item.jam.split(':');
+          const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          return (currentTime >= startTime) && (currentTime <= startTime + 135);
         });
+      } else if (fw !== 'semua') {
+        filtered = filtered.filter(item => item.jam === fw);
+      }
 
-        document.getElementById('sync-btn').addEventListener('click', () => {
-            syncData(filterTanggal.value);
-        });
+      if (fm !== 'semua') filtered = filtered.filter(item => item.metode_pembelajaran === fm);
+      if (fr !== 'semua') filtered = filtered.filter(item => item.nama_ruangan === fr);
+      if (fk === 'labor') filtered = filtered.filter(item => isLab(item.nama_ruangan));
+      else if (fk === 'kelas') filtered = filtered.filter(item => !isLab(item.nama_ruangan));
+      if (fKampus !== 'semua') filtered = filtered.filter(item => item.kampus && item.kampus.trim() === fKampus);
 
-        document.getElementById('clear-db-btn').addEventListener('click', async () => {
-            if (confirm("Yakin ingin menghapus SELURUH data jadwal dari database? Tindakan ini tidak bisa dibatalkan.")) {
-                try {
-                    const btn = document.getElementById('clear-db-btn');
-                    btn.innerHTML = '⏳ Menghapus...';
-                    btn.disabled = true;
+      filtered.sort((a, b) => {
+        const aIsLab = isLab(a.nama_ruangan);
+        const bIsLab = isLab(b.nama_ruangan);
+        if (aIsLab && !bIsLab) return -1;
+        if (!aIsLab && bIsLab) return 1;
+        if (a.jam && b.jam) { if (a.jam < b.jam) return -1; if (a.jam > b.jam) return 1; }
+        return 0;
+      });
 
-                    const response = await fetch(`${API_BASE_URL}/api/jadwal`, {
-                        method: 'DELETE'
-                    });
+      updateStats(filtered);
+      renderTable(filtered);
+      updateActiveLabPanel();
+    }
 
-                    const result = await response.json();
-                    if (result.status === 'success') {
-                        alert(result.message);
-                        await fetchAllJadwal();
-                    } else {
-                        alert("Gagal menghapus database: " + result.message);
-                    }
+    function updateActiveLabPanel() {
+      const panel = document.getElementById('active-lab-list');
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const currentDayStr = `${year}-${month}-${day}`;
+      const currentTime = now.getHours() * 60 + now.getMinutes();
+      let activeLabs = [];
 
-                    btn.innerHTML = '🗑️ Bersihkan DB';
-                    btn.disabled = false;
-                } catch (e) {
-                    alert("Terjadi kesalahan saat menghapus database.");
-                    document.getElementById('clear-db-btn').innerHTML = '🗑️ Bersihkan DB';
-                    document.getElementById('clear-db-btn').disabled = false;
-                }
-            }
-        });
-
-        filterWaktu.addEventListener('change', applyFilters);
-        filterMetode.addEventListener('change', applyFilters);
-        filterRuangan.addEventListener('change', applyFilters);
-        document.getElementById('filter-kategori-ruang').addEventListener('change', () => {
-            updateRuanganDropdown();
-            applyFilters();
-        });
-        document.getElementById('filter-kampus').addEventListener('change', () => {
-            updateRuanganDropdown();
-            applyFilters();
-        });
-
-        // Fungsi Pemutar Suara Notifikasi
-        function playNotificationSound() {
-            try {
-                // Mencoba memutar file 'notif.mp3' yang diletakkan di folder yang sama
-                const customAudio = new Audio('notif.mp3');
-                customAudio.play().catch(e => {
-                    // Jika file notif.mp3 tidak ada atau browser memblokir, putar suara bawaan (fallback)
-                    playDefaultTone();
-                });
-            } catch (e) {
-                playDefaultTone();
-            }
+      allJadwal.forEach(item => {
+        if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan)) {
+          const parts = item.jam.split(':');
+          const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          if (currentTime >= startTime && currentTime <= startTime + 135) {
+            activeLabs.push(`<b>${item.nama_ruangan}</b>: ${item.nama_mk} (${item.jam})`);
+          }
         }
+      });
 
-        // Suara bawaan jika tidak ada file notif.mp3
-        function playDefaultTone() {
-            try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      panel.innerHTML = activeLabs.length > 0
+        ? `<ul>${activeLabs.map(lab => `<li>${lab}</li>`).join('')}</ul>`
+        : '<em>Lagi dak da lab yang dipakai.</em>';
+    }
 
-                function playTone(freq, startTime, duration) {
-                    const oscillator = audioCtx.createOscillator();
-                    const gainNode = audioCtx.createGain();
+    setInterval(updateActiveLabPanel, 60000);
 
-                    oscillator.type = 'sine';
-                    oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime + startTime);
+    async function syncData(tanggal) {
+      const syncBtn = document.getElementById('sync-btn');
+      const originalHtml = syncBtn.innerHTML;
+      syncBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+        Menarik Data...
+      `;
+      syncBtn.disabled = true;
 
-                    // Efek fade in dan fade out agar suaranya lembut (tidak terputus kasar)
-                    gainNode.gain.setValueAtTime(0, audioCtx.currentTime + startTime);
-                    gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + startTime + 0.02);
-                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + startTime + duration);
-
-                    oscillator.connect(gainNode);
-                    gainNode.connect(audioCtx.destination);
-
-                    oscillator.start(audioCtx.currentTime + startTime);
-                    oscillator.stop(audioCtx.currentTime + startTime + duration);
-                }
-
-                // Mainkan nada "Ting-Ting" yang khas untuk notifikasi
-                playTone(880, 0, 0.3);       // Nada A5
-                playTone(1108.73, 0.15, 0.5); // Nada C#6 sedikit overlap
-            } catch (e) {
-                console.log("Browser memblokir autoplay suara, user harus interaksi dengan halaman dulu.");
-            }
-        }
-
-        // 3. Logika Notifikasi Modal (Khusus Kelas Pertama di Lab)
-        function checkLabNotifications() {
-            const now = new Date();
-            const currentHour = now.getHours();
-            const currentMin = now.getMinutes();
-            const currentTotalMin = currentHour * 60 + currentMin;
-
-            // Format YYYY-MM-DD
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const currentDayStr = `${year}-${month}-${day}`;
-
-            // Cari jadwal PERTAMA untuk setiap Lab hari ini
-            let firstClasses = {}; // { "Lab 1": { nama_mk: "...", jam: "08:00", startTotalMin: 480 } }
-
-            allJadwal.forEach(item => {
-                if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.jam && isLab(item.nama_ruangan)) {
-                    const parts = item.jam.split(':');
-                    const startTotalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-
-                    if (!firstClasses[item.nama_ruangan] || startTotalMin < firstClasses[item.nama_ruangan].startTotalMin) {
-                        firstClasses[item.nama_ruangan] = {
-                            nama_mk: item.nama_mk,
-                            jam: item.jam,
-                            startTotalMin: startTotalMin
-                        };
-                    }
-                }
-            });
-
-            let labToNotify = [];
-
-            for (const [ruang, dataClass] of Object.entries(firstClasses)) {
-                const diffMin = dataClass.startTotalMin - currentTotalMin;
-                // Notifikasi muncul TEPAT 30 menit atau 15 menit sebelum kelas PERTAMA
-                if (diffMin === 30 || diffMin === 15) {
-                    labToNotify.push(`<b>${ruang}</b> buat matkul <b>${dataClass.nama_mk}</b> (Mulai jam ${dataClass.jam}) - <i>Gass buka dalam ${diffMin} menit!</i>`);
-                }
-            }
-
-            if (labToNotify.length > 0) {
-                const modalBody = document.getElementById('lab-modal-body');
-                modalBody.innerHTML = '<p>Buka labor ni sekarang, kelas entar lagi mulai:</p>' +
-                    '<ul style="text-align: left;">' +
-                    labToNotify.map(l => `<li style="margin-bottom: 8px;">${l}</li>`).join('') +
-                    '</ul>';
-                document.getElementById('lab-modal').style.display = 'flex';
-                playNotificationSound();
-            }
-        }
-
-        // Cek notifikasi setiap 1 menit
-        setInterval(checkLabNotifications, 60000);
-        // Panggil pertama kali untuk testing diam-diam
-        setTimeout(checkLabNotifications, 1000);
-
-        // Fungsi manual untuk ngetes pop up notifikasi
-        function testNotification() {
-            const modalBody = document.getElementById('lab-modal-body');
-            modalBody.innerHTML = '<p>Buka labor ni sekarang ges, kelas bentar lagi mulai:</p>' +
-                '<ul style="text-align: left;">' +
-                '<li style="margin-bottom: 8px;"><b>Labora Uji Coba (Kampus Dummy)</b> buat matkul <b>Pemrograman Web</b> (Mulai jam 10:00) - <i>Gass buka dalam 30 menit!</i></li>' +
-                '</ul>';
-            document.getElementById('lab-modal').style.display = 'flex';
-            playNotificationSound();
-        }
-
-        // --- 4. Logic Dark Mode Toggle ---
-        const themeToggleBtn = document.getElementById('theme-toggle');
-
-        // Cek preferensi awal di Local Storage
-        const currentTheme = localStorage.getItem('theme') || 'light';
-        if (currentTheme === 'dark') {
-            document.documentElement.setAttribute('data-theme', 'dark');
-            themeToggleBtn.textContent = '☀️';
-        }
-
-        themeToggleBtn.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme');
-            if (current === 'dark') {
-                document.documentElement.setAttribute('data-theme', 'light');
-                localStorage.setItem('theme', 'light');
-                themeToggleBtn.textContent = '🌙';
-            } else {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                localStorage.setItem('theme', 'dark');
-                themeToggleBtn.textContent = '☀️';
-            }
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tanggal: tanggal || null })
         });
+        const result = await response.json();
 
-    </script>
+        if (result.status === 'success') {
+          syncBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+            Merender...
+          `;
+          await fetchAllJadwal();
+          fetchNotifikasiLab(tanggal, true);
+        } else {
+          alert("Gagal sinkronisasi: " + result.message);
+        }
+      } catch (error) {
+        console.error("Error saat sinkronisasi:", error);
+        alert("Terjadi kesalahan jaringan atau server.");
+      }
 
+      syncBtn.innerHTML = originalHtml;
+      syncBtn.disabled = false;
+    }
+
+    async function fetchNotifikasiLab(tanggal, showPopup = false) {
+      const notifList = document.getElementById('notifikasi-lab-list');
+      if (!notifList) return;
+      if (!tanggal) {
+        notifList.innerHTML = '<em>pilih tanggal tuk cek notif mas.</em>';
+        return;
+      }
+      try {
+        notifList.innerHTML = '<em>Memuat notifikasi...</em>';
+        const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}`);
+        const data = await response.json();
+
+        if (data.status === 'success' && data.data && data.data.length > 0) {
+          let html = '', popupContent = '';
+          data.data.forEach(n => {
+            let cls = '';
+            if (n.tipe_notif === 'TAMBAHAN') {
+              cls = 'tambah';
+              if (showPopup) popupContent += `<div class="notif-item tambah"><strong>KELAS TAMBAHAN!</strong><br>${n.pesan}</div>`;
+            } else if (n.tipe_notif === 'PERUBAHAN') { cls = 'perubahan'; }
+            else if (n.tipe_notif === 'JEDA') { cls = 'jeda'; }
+            html += `<div class="notif-item ${cls}"><div class="notif-header"><span>${n.tipe_notif}</span><span class="notif-time">${n.waktu}</span></div><div>${n.pesan}</div></div>`;
+          });
+          notifList.innerHTML = html;
+          if (showPopup && popupContent) {
+            document.getElementById('lab-modal-body').innerHTML = popupContent;
+            openModal();
+          }
+        } else {
+          notifList.innerHTML = '<em>Tidak ada notifikasi khusus pada tanggal ini.</em>';
+        }
+      } catch (e) {
+        notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
+      }
+    }
+
+    filterTanggal.addEventListener('change', (e) => {
+      syncData(e.target.value);
+      applyFilters();
+    });
+
+    document.getElementById('sync-btn').addEventListener('click', () => syncData(filterTanggal.value));
+
+    document.getElementById('clear-db-btn').addEventListener('click', async () => {
+      if (confirm("Yakin ingin menghapus SELURUH data jadwal dari database? Tindakan ini tidak bisa dibatalkan.")) {
+        const btn = document.getElementById('clear-db-btn');
+        btn.disabled = true;
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+          Menghapus...
+        `;
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/jadwal`, { method: 'DELETE' });
+          const result = await response.json();
+          if (result.status === 'success') { alert(result.message); await fetchAllJadwal(); }
+          else { alert("Gagal menghapus database: " + result.message); }
+        } catch (e) { alert("Terjadi kesalahan saat menghapus database."); }
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Bersihkan DB`;
+      }
+    });
+
+    filterWaktu.addEventListener('change', applyFilters);
+    filterMetode.addEventListener('change', applyFilters);
+    filterRuangan.addEventListener('change', applyFilters);
+    document.getElementById('filter-kategori-ruang').addEventListener('change', () => { updateRuanganDropdown(); applyFilters(); });
+    document.getElementById('filter-kampus').addEventListener('change', () => { updateRuanganDropdown(); applyFilters(); });
+
+    // ─── Modal Logic ───
+    const modal = document.getElementById('lab-modal');
+    const modalBody = document.getElementById('lab-modal-body');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+
+    function openModal() {
+      modal.classList.add('open');
+      playNotificationSound();
+      modalCloseBtn.focus();
+    }
+
+    function closeModal() {
+      modal.classList.remove('open');
+    }
+
+    modalCloseBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+
+    // ─── Notification Sound ───
+    function playNotificationSound() {
+      try { const audio = new Audio('notif.mp3'); audio.play().catch(() => playDefaultTone()); }
+      catch (e) { playDefaultTone(); }
+    }
+
+    function playDefaultTone() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, startTime, duration) {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime + startTime);
+          gain.gain.setValueAtTime(0, audioCtx.currentTime + startTime);
+          gain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + startTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + startTime + duration);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(audioCtx.currentTime + startTime);
+          osc.stop(audioCtx.currentTime + startTime + duration);
+        }
+        playTone(880, 0, 0.3);
+        playTone(1108.73, 0.15, 0.5);
+      } catch (e) { console.log("Browser memblokir autoplay suara."); }
+    }
+
+    // ─── Lab Check ───
+    function checkLabNotifications() {
+      const now = new Date();
+      const currentTotalMin = now.getHours() * 60 + now.getMinutes();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const currentDayStr = `${year}-${month}-${day}`;
+
+      let firstClasses = {};
+      allJadwal.forEach(item => {
+        if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.jam && isLab(item.nama_ruangan)) {
+          const parts = item.jam.split(':');
+          const startTotalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          if (!firstClasses[item.nama_ruangan] || startTotalMin < firstClasses[item.nama_ruangan].startTotalMin) {
+            firstClasses[item.nama_ruangan] = { nama_mk: item.nama_mk, jam: item.jam, startTotalMin };
+          }
+        }
+      });
+
+      let labToNotify = [];
+      for (const [ruang, dataClass] of Object.entries(firstClasses)) {
+        const diffMin = dataClass.startTotalMin - currentTotalMin;
+        if (diffMin === 30 || diffMin === 15) {
+          labToNotify.push(`<b>${ruang}</b> buat matkul <b>${dataClass.nama_mk}</b> (Mulai jam ${dataClass.jam}) - <i>Gass buka dalam ${diffMin} menit!</i>`);
+        }
+      }
+
+      if (labToNotify.length > 0) {
+        modalBody.innerHTML = '<p>Buka labor ni sekarang, kelas entar lagi mulai:</p><ul>' + labToNotify.map(l => `<li style="margin-bottom:8px;">${l}</li>`).join('') + '</ul>';
+        openModal();
+      }
+    }
+
+    setInterval(checkLabNotifications, 60000);
+    setTimeout(checkLabNotifications, 1000);
+
+    // ─── Test Notification ───
+    document.getElementById('test-notif-btn').addEventListener('click', () => {
+      modalBody.innerHTML = '<p>Buka labor ni sekarang ges, kelas bentar lagi mulai:</p><ul><li style="margin-bottom:8px;"><b>Labora Uji Coba (Kampus Dummy)</b> buat matkul <b>Pemrograman Web</b> (Mulai jam 10:00) - <i>Gass buka dalam 30 menit!</i></li></ul>';
+      openModal();
+    });
+
+    // ─── Theme Toggle ───
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = themeToggle.querySelector('.sun-icon');
+    const moonIcon = themeToggle.querySelector('.moon-icon');
+
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    if (currentTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      moonIcon.style.display = 'none';
+      sunIcon.style.display = '';
+    }
+
+    themeToggle.addEventListener('click', () => {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+        moonIcon.style.display = '';
+        sunIcon.style.display = 'none';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+        moonIcon.style.display = 'none';
+        sunIcon.style.display = '';
+      }
+    });
+
+    // ─── Spin animation ───
+    const style = document.createElement('style');
+    style.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+    document.head.appendChild(style);
+  </script>
 </body>
-
 </html>
