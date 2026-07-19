@@ -1,10 +1,6 @@
-import requests
 from bs4 import BeautifulSoup
 import re
 import mysql.connector
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Dictionary pembantu untuk konversi bulan ke format angka
 BULAN_DICT = {
@@ -21,36 +17,6 @@ def get_db():
         database="db_jadwal_kuliah"
     )
 
-def fetch_and_parse(target_date=None):
-    if target_date:
-        url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&q=&tanggal={target_date}&ruang=&status="
-        print(f"Membaca data dari website untuk tanggal {target_date} ...")
-    else:
-        url = "https://baak.unama.ac.id/jadwal-kuliah"
-        print("Membaca data default dari website ...")
-        
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("ALTER TABLE jadwal ADD COLUMN kelas VARCHAR(50) AFTER kode_mk")
-        conn.commit()
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass # Column might already exist
-        
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, verify=False, timeout=10)
-        response.raise_for_status()
-        html_content = response.text
-    except Exception as e:
-        print(f"Gagal menarik data dari URL. Error: {e}")
-        return []
-    
-    return parse_html_content(html_content)
 
 def parse_html_content(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -119,13 +85,13 @@ def parse_html_content(html_content):
         
     return hasil_scraping
 
-def save_to_db(data, target_date=None):
+def save_to_db(data, target_date=None, page="1"):
     try:
         conn = get_db()
         cursor = conn.cursor()
         
-        # Hapus data jadwal yang sudah ada untuk tanggal ini agar tidak duplikat
-        if target_date:
+        # Hapus data jadwal yang sudah ada untuk tanggal ini agar tidak duplikat (hanya di halaman pertama)
+        if target_date and str(page) == "1":
             cursor.execute("DELETE FROM jadwal WHERE tanggal = %s", (target_date,))
             
         for item in data:
@@ -167,12 +133,12 @@ def save_to_db(data, target_date=None):
             # Skip jika tanggal/jam kosong untuk mencegah error
             if item['tanggal'] and item['jam']:
                 query_jadwal = """
-                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(query_jadwal, (
                     item['tanggal'], item['hari'], item['jam'], 
-                    id_dosen, kode_mk, item['kelas'], id_ruangan, 
+                    id_dosen, kode_mk, item['nama_mk'], item['kelas'], id_ruangan, 
                     item['status'], item['metode']
                 ))
 
@@ -186,16 +152,16 @@ def save_to_db(data, target_date=None):
             cursor.close()
             conn.close()
 
-def check_data_exists(tanggal):
+def get_data_count(tanggal):
     try:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM jadwal WHERE tanggal = %s", (tanggal,))
         count = cursor.fetchone()[0]
-        return count > 0
+        return count
     except Exception as e:
         print(f"Error checking data: {e}")
-        return False
+        return 0
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()

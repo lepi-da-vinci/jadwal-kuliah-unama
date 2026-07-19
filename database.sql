@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS jadwal (
     jam TIME NOT NULL,
     id_dosen INT,
     kode_mk VARCHAR(20),
+    nama_mk VARCHAR(150),
+    kelas VARCHAR(50),
     id_ruangan INT,
     status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
     metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM',

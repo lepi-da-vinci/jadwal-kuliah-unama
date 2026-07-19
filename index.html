@@ -302,7 +302,7 @@
         function isLab(namaRuangan) {
             if (!namaRuangan) return false;
             const name = namaRuangan.toLowerCase();
-            return name.includes('lab') || name.includes('3.1') || name.includes('3.4');
+            return name.includes('lab') || /\b3\.1\b/.test(name) || /\b3\.4\b/.test(name);
         }
 
         // Fungsi Filter Data

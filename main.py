@@ -63,7 +63,7 @@ def get_semua_jadwal():
                 j.tanggal, 
                 j.jam, 
                 d.nama_dosen, 
-                mk.nama_mk, 
+                COALESCE(j.nama_mk, mk.nama_mk) AS nama_mk, 
                 j.kelas,
                 r.kampus,
                 r.nama_ruangan, 
@@ -131,13 +131,14 @@ class SyncRequest(BaseModel):
 class SyncHtmlRequest(BaseModel):
     html: str
     tanggal: Optional[str] = None
+    page: Optional[str] = "1"
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
     """Sinkronisasi data dengan memerintahkan browser lokal (PC) membuka tab"""
     try:
         # Jika data sudah ada, langsung sukses
-        if req.tanggal and scraper.check_data_exists(req.tanggal):
+        if req.tanggal and scraper.get_data_count(req.tanggal) > 0:
             return {"status": "success", "message": "Data sudah ada di database."}
 
         # Buka tab baru di browser PC secara diam-diam
@@ -145,11 +146,23 @@ async def sync_data(req: SyncRequest):
         webbrowser.open_new(target_url)
 
         # Tunggu Ekstensi Chrome menarik HTML, kirim ke /api/sync-html, dan memprosesnya
-        # Kita cek database maksimal 15 detik
-        for _ in range(15):
+        # Kita cek database maksimal 40 detik. Kita nyatakan selesai jika jumlah baris stabil (tidak bertambah) selama 3 detik.
+        stable_count = 0
+        last_row_count = 0
+        for _ in range(40):
             await asyncio.sleep(1)
-            if scraper.check_data_exists(req.tanggal):
-                return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!"}
+            
+            # Dapatkan jumlah baris saat ini untuk tanggal tersebut
+            current_count = scraper.get_data_count(req.tanggal)
+            
+            if current_count > 0:
+                if current_count == last_row_count:
+                    stable_count += 1
+                    if stable_count >= 3:
+                        return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!"}
+                else:
+                    stable_count = 0
+                    last_row_count = current_count
         
         return {"status": "success", "message": "Timeout menunggu data dari ekstensi Chrome."}
     except Exception as e:
@@ -161,7 +174,7 @@ def sync_html_data(req: SyncHtmlRequest):
     try:
         data = scraper.parse_html_content(req.html)
         if len(data) > 0:
-            scraper.save_to_db(data, req.tanggal)
+            scraper.save_to_db(data, req.tanggal, req.page)
             return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi.", "count": len(data)}
         else:
             return {"status": "success", "message": "Tidak ada data jadwal ditemukan dalam HTML.", "count": 0}
