@@ -248,25 +248,27 @@ body {
 .filter-group input[type="date"] { background-image: none; padding-right: 12px; }
 
 /* ─── Panels (Lab & Notification) ─── */
-.panels-row { display: flex; gap: var(--space-lg); margin-bottom: var(--space-lg); flex-wrap: wrap; align-items: flex-start; }
+.panels-row { display: flex; gap: var(--space-lg); margin-bottom: var(--space-lg); flex-wrap: wrap; align-items: stretch; }
 .panel {
   flex: 1; min-width: 280px;
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
+  min-height: 250px; /* Made the box even larger */
+  display: flex; flex-direction: column;
+  padding: var(--space-xl); /* Larger padding */
+  border-radius: var(--radius-lg);
   transition: all var(--transition);
 }
 .panel h3 {
-  margin: 0 0 var(--space-sm) 0;
-  font-size: 0.95em;
+  margin: 0 0 var(--space-md) 0;
+  font-size: 0.95em; /* Reverted to original */
   font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 6px; /* Reverted to original */
 }
-.panel h3 svg { width: 18px; height: 18px; }
-.panel-content { font-size: 0.9em; }
-.panel-content ul { margin: 0; padding-left: 18px; }
-.panel-content li { margin-bottom: 5px; line-height: 1.5; }
+.panel h3 svg { width: 18px; height: 18px; } /* Reverted to original */
+.panel-content { font-size: 0.95em; flex-grow: 1; line-height: 1.5; } /* Reverted to original */
+.panel-content ul { margin: 0; padding-left: 18px; } /* Reverted to original */
+.panel-content li { margin-bottom: 5px; line-height: 1.5; } /* Reverted to original */
 
 .panel-lab {
   background: var(--panel-lab-bg);
@@ -279,15 +281,16 @@ body {
   background: var(--panel-notif-bg);
   border: 1px solid var(--panel-notif-border);
   overflow-y: auto;
+  /* Removed max-height so it can stretch fully */
 }
 .panel-notif h3 { color: var(--panel-notif-text); }
 .panel-notif .panel-content { color: var(--panel-notif-text); }
 
 .notif-item {
-  padding: 10px 12px;
+  padding: 12px 16px;
   border-radius: var(--radius-sm);
   margin-bottom: var(--space-sm);
-  font-size: 0.9em;
+  font-size: 0.95em;
   line-height: 1.5;
   border: 1px solid transparent;
 }

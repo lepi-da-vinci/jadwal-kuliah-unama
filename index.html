@@ -185,13 +185,46 @@
     </div>
   </div>
 
-  <!-- Modal -->
+  <!-- Modal Notifikasi Lab -->
   <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Lab">
     <div class="modal-box">
       <div class="modal-icon">🔔</div>
       <h2>We Buka Lab, Ges!</h2>
       <div class="modal-body" id="lab-modal-body"></div>
       <button class="modal-btn" id="modal-close-btn">Oke, Gas!</button>
+    </div>
+  </div>
+
+  <!-- Modal Password Admin -->
+  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-icon">🔒</div>
+      <h2>Otorisasi Admin</h2>
+      <div class="modal-body" style="text-align: center;">
+        <p id="password-message" style="margin-bottom: 15px;">Masukkan password Admin untuk melanjutkan:</p>
+        <input type="password" id="admin-password-input" style="width: 100%; padding: 12px; text-align: center; font-size: 1.2em; letter-spacing: 2px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;" placeholder="••••••••">
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="password-cancel-btn">Batal</button>
+        <button class="modal-btn" id="password-submit-btn">Lanjut</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Test WA -->
+  <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Pilih Asisten Lab">
+    <div class="modal-box" style="max-width: 450px;">
+      <div class="modal-icon">💬</div>
+      <h2>Pilih Asisten Lab (Test WA)</h2>
+      <div class="modal-body" style="text-align: left;">
+        <select id="aslab-select" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; appearance: auto; font-size: 1em;">
+          <option value="">-- Semua Aslab --</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="test-wa-cancel-btn">Batal</button>
+        <button class="modal-btn" id="test-wa-submit-btn">Kirim Test</button>
+      </div>
     </div>
   </div>
 
@@ -307,13 +340,17 @@
         if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
         else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
         else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+        let displayStatus = item.status_jadwal;
+        if (item.metode_pembelajaran === 'OL') {
+          displayStatus = 'Online';
+        }
         const row = document.createElement('tr');
         row.innerHTML = `
           <td><strong>${item.jam}</strong><br><small>${item.hari}, ${item.tanggal_format || item.tanggal}</small></td>
           <td>${item.nama_mk || '-'} ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${item.kelas})</small>` : ''}</td>
           <td>${item.nama_dosen || '-'}</td>
           <td>${item.nama_ruangan || '-'}</td>
-          <td>${item.status_jadwal}</td>
+          <td>${displayStatus}</td>
           <td><span class="badge ${badgeClass}">${item.metode_pembelajaran}</span></td>
         `;
         tbody.appendChild(row);
@@ -559,31 +596,115 @@
       applyFilters();
     });
 
+    // Helper custom password prompt
+    function promptPassword(message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('password-modal');
+        const input = document.getElementById('admin-password-input');
+        const msg = document.getElementById('password-message');
+        const submitBtn = document.getElementById('password-submit-btn');
+        const cancelBtn = document.getElementById('password-cancel-btn');
+
+        msg.textContent = message;
+        input.value = '';
+        modal.classList.add('open');
+        input.focus();
+
+        const cleanup = () => {
+          submitBtn.onclick = null;
+          cancelBtn.onclick = null;
+          input.onkeyup = null;
+          modal.classList.remove('open');
+        };
+
+        const handleSubmit = () => {
+          const val = input.value;
+          cleanup();
+          resolve(val);
+        };
+
+        submitBtn.onclick = handleSubmit;
+        cancelBtn.onclick = () => { cleanup(); resolve(null); };
+        input.onkeyup = (e) => { if (e.key === 'Enter') handleSubmit(); };
+      });
+    }
+
     document.getElementById('sync-btn').addEventListener('click', () => syncData(filterTanggal.value));
 
     document.getElementById('test-wa-btn').addEventListener('click', async () => {
-      const btn = document.getElementById('test-wa-btn');
-      const originalHtml = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Mengirim...`;
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/test-wa`, { method: 'POST' });
-        const result = await response.json();
-        if (result.status === 'success') {
-          let report = result.message + "\n\nDetail:\n";
-          result.data.forEach(d => report += `- ${d.ruangan} (${d.nama}): ${d.success ? 'TERKIRIM' : 'GAGAL'}\n`);
-          alert(report);
-        } else {
-          alert("Gagal kirim test WA: " + result.message);
-        }
-      } catch (e) {
-        alert("Terjadi kesalahan koneksi saat kirim WA.");
+      const pass = await promptPassword("Masukkan password Admin untuk fitur Test WA:");
+      if (pass === null) return; // Dibatalkan
+      if (pass !== "unama123") {
+        alert("Password salah! Anda tidak memiliki izin.");
+        return;
       }
-      btn.disabled = false;
-      btn.innerHTML = originalHtml;
+      try {
+        // Ambil data aslab
+        const resAslab = await fetch(`${API_BASE_URL}/api/aslab`);
+        const dataAslab = await resAslab.json();
+        
+        if (dataAslab.status !== 'success' || dataAslab.data.length === 0) {
+            alert("Gagal mengambil data aslab atau data kosong.");
+            return;
+        }
+
+        // Tampilkan custom modal Test WA
+        const select = document.getElementById('aslab-select');
+        select.innerHTML = '<option value="">-- Semua Aslab --</option>';
+        dataAslab.data.forEach(a => {
+            select.innerHTML += `<option value="${a.id_aslab}">${a.nama_ruangan} - ${a.nama_aslab}</option>`;
+        });
+
+        const testModal = document.getElementById('test-wa-modal');
+        testModal.classList.add('open');
+
+        document.getElementById('test-wa-cancel-btn').onclick = () => {
+            testModal.classList.remove('open');
+        };
+
+        document.getElementById('test-wa-submit-btn').onclick = async () => {
+            const selectedId = select.value;
+            const btn = document.getElementById('test-wa-btn');
+            const originalHtml = btn.innerHTML;
+            
+            testModal.classList.remove('open');
+            
+            btn.disabled = true;
+            btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Mengirim...`;
+            
+            try {
+                const payload = selectedId ? { id_aslab: parseInt(selectedId) } : {};
+                const response = await fetch(`${API_BASE_URL}/api/test-wa`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    let report = result.message + "\\n\\nDetail:\\n";
+                    result.data.forEach(d => report += `- ${d.ruangan} (${d.nama}): ${d.success ? 'TERKIRIM' : 'GAGAL'}\\n`);
+                    alert(report);
+                } else {
+                    alert("Gagal kirim test WA: " + result.message);
+                }
+            } catch (e) {
+                alert("Terjadi kesalahan koneksi saat kirim WA.");
+            }
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        };
+      } catch (e) {
+          alert("Gagal memuat daftar aslab.");
+      }
     });
 
     document.getElementById('clear-db-btn').addEventListener('click', async () => {
+      const pass = await promptPassword("Masukkan password Admin untuk menghapus Database:");
+      if (pass === null) return; // Dibatalkan
+      if (pass !== "unama123") {
+        alert("Password salah! Anda tidak memiliki izin.");
+        return;
+      }
       if (confirm("Yakin ingin menghapus SELURUH data jadwal dari database? Tindakan ini tidak bisa dibatalkan.")) {
         const btn = document.getElementById('clear-db-btn');
         btn.disabled = true;

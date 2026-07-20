@@ -4,23 +4,21 @@ import requests
 import mysql.connector
 import scraper
 
-# Konfigurasi Fonnte
-FONNTE_TOKEN = "5rBE6UovEgXwgmhBG3ws" # Token dari fonnte.com
 
 # In-memory set to prevent duplicate notifications
 sent_notifications = set()
 
 def send_wa_message(no_wa, pesan):
     try:
-        url = "https://api.fonnte.com/send"
+        url = "http://localhost:3000/send"
         headers = {
-            'Authorization': FONNTE_TOKEN
+            'Content-Type': 'application/json'
         }
         data = {
             'target': no_wa,
             'message': pesan,
         }
-        response = requests.post(url, headers=headers, data=data)
+        response = requests.post(url, headers=headers, json=data)
         if response.status_code == 200:
             print(f"[WA TERKIRIM] Ke: {no_wa}")
             return True
@@ -130,20 +128,28 @@ def check_lab_schedules():
             cursor.close()
             conn.close()
 
-def test_send_all():
+def test_send(id_aslab=None):
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT a.no_wa, a.nama_aslab, r.nama_ruangan 
+        
+        query = """
+            SELECT a.id_aslab, a.no_wa, a.nama_aslab, r.nama_ruangan 
             FROM asisten_lab a
             JOIN ruangan r ON a.id_ruangan = r.id_ruangan
-        """)
+        """
+        params = ()
+        
+        if id_aslab:
+            query += " WHERE a.id_aslab = %s"
+            params = (id_aslab,)
+            
+        cursor.execute(query, params)
         aslab_data = cursor.fetchall()
         
         results = []
         for row in aslab_data:
-            msg = f"*UJI COBA NOTIFIKASI*\n\nMisi mas{row['nama_aslab']}, ini test notif  {row['nama_ruangan']}. kalu dah terima pesan ini  berarti notif dah oke"
+            msg = f"*UJI COBA NOTIFIKASI*\n\nHalo mas {row['nama_aslab']}, ini tuk test sesuai dengan {row['nama_ruangan']}. kalau dah terima pesan ini, berarti notif dah oke"
             success = send_wa_message(row['no_wa'], msg)
             results.append({"nama": row['nama_aslab'], "ruangan": row['nama_ruangan'], "no_wa": row['no_wa'], "success": success})
             

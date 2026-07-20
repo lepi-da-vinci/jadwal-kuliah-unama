@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const express = require('express');
 const cors = require('cors');
 const qrcode = require('qrcode-terminal');
@@ -14,11 +14,14 @@ let sock;
 
 async function connectToWhatsApp () {
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
     sock = makeWASocket({
+        version,
         logger: pino({ level: 'silent' }),
         auth: state,
-        browser: ["WA Bot Unama", "Chrome", "1.0.0"]
+        browser: Browsers.ubuntu('Chrome')
     });
 
     sock.ev.on('connection.update', (update) => {
@@ -32,9 +35,12 @@ async function connectToWhatsApp () {
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Koneksi terputus karena ter-disconnect, mencoba menghubungkan ulang:', shouldReconnect);
+            if (lastDisconnect.error) {
+                console.error('Error detail:', lastDisconnect.error);
+            }
             
             if (shouldReconnect) {
-                connectToWhatsApp();
+                setTimeout(connectToWhatsApp, 2000); // Wait 2s before reconnecting
             } else {
                 console.log('Anda telah logout. Silakan hapus folder "baileys_auth_info" dan scan ulang QR code.');
             }
@@ -65,8 +71,14 @@ app.post('/send', async (req, res) => {
     const jid = target + '@s.whatsapp.net';
     
     try {
-        await sock.sendMessage(jid, { text: message });
-        res.json({ status: 'success', message: 'Pesan berhasil dikirim' });
+        // Cek apakah nomor terdaftar di WhatsApp
+        const [result] = await sock.onWhatsApp(jid);
+        if (result && result.exists) {
+            await sock.sendMessage(jid, { text: message });
+            res.json({ status: 'success', message: 'Pesan berhasil dikirim' });
+        } else {
+            res.status(400).json({ status: 'error', message: 'Nomor tidak terdaftar di WA' });
+        }
     } catch (error) {
         res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan', error: error.toString() });
     }

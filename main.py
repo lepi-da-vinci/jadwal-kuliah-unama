@@ -185,13 +185,36 @@ def get_notifikasi_lab(tanggal: str):
             cursor.close()
             conn.close()
 
+class TestWARequest(BaseModel):
+    id_aslab: Optional[int] = None
+
+@app.get("/api/aslab")
+def get_aslab():
+    """Mengambil daftar asisten lab beserta nama ruangannya"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT a.id_aslab, a.nama_aslab, r.nama_ruangan 
+            FROM asisten_lab a
+            JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+        """)
+        results = cursor.fetchall()
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.post("/api/test-wa")
-def test_wa():
-    """Mengirim pesan WA percobaan ke semua aslab di database"""
-    results = wa_notifier.test_send_all()
+def test_wa(req: TestWARequest):
+    """Mengirim pesan WA percobaan ke aslab tertentu atau semua"""
+    results = wa_notifier.test_send(req.id_aslab)
     if not results:
         return {"status": "error", "message": "Tidak ada data aslab atau terjadi kesalahan"}
-    return {"status": "success", "message": "Pesan WA percobaan berhasil dikirim!", "data": results}
+    return {"status": "success", "message": "Pesan WA percobaan selesai diproses!", "data": results}
 
 # MENGABUNGKAN FRONTEND & BACKEND UNTUK NGROK
 # Semua file di folder ini (index.html, style.css, dll) akan dilayani oleh FastAPI di rute "/"
