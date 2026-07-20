@@ -8,7 +8,13 @@ from typing import Optional
 import scraper
 import webbrowser
 import asyncio
+import wa_notifier
 app = FastAPI(title="API Analitik Jadwal Kuliah")
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(wa_notifier.wa_notifier_loop())
+
 
 # Mengizinkan Frontend mengakses API
 app.add_middleware(
@@ -178,6 +184,14 @@ def get_notifikasi_lab(tanggal: str):
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+@app.post("/api/test-wa")
+def test_wa():
+    """Mengirim pesan WA percobaan ke semua aslab di database"""
+    results = wa_notifier.test_send_all()
+    if not results:
+        return {"status": "error", "message": "Tidak ada data aslab atau terjadi kesalahan"}
+    return {"status": "success", "message": "Pesan WA percobaan berhasil dikirim!", "data": results}
 
 # MENGABUNGKAN FRONTEND & BACKEND UNTUK NGROK
 # Semua file di folder ini (index.html, style.css, dll) akan dilayani oleh FastAPI di rute "/"
