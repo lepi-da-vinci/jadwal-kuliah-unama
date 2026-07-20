@@ -28,28 +28,6 @@ def get_db():
 
 
 
-@app.get("/api/statistik/metode-belajar")
-def get_statistik_metode():
-    """Mengembalikan total kelas Online vs Tatap Muka"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute('''
-            SELECT metode_pembelajaran, COUNT(*) as total 
-            FROM jadwal 
-            GROUP BY metode_pembelajaran
-        ''')
-        
-        hasil = cursor.fetchall()
-        return {"status": "success", "data": hasil}
-    except mysql.connector.Error as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
 @app.get("/api/jadwal")
 def get_semua_jadwal():
     """Mengembalikan daftar semua jadwal dengan join ke master tabel"""
@@ -173,8 +151,12 @@ def sync_html_data(req: SyncHtmlRequest):
 @app.post("/api/sync-complete")
 def sync_complete(req: SyncCompleteRequest):
     """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
-    sync_status[req.tanggal] = "done"
-    return {"status": "success"}
+    try:
+        scraper.compare_and_finalize_sync(req.tanggal)
+        sync_status[req.tanggal] = "done"
+        return {"status": "success", "message": "Proses perbandingan dan finalisasi selesai."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/api/notifikasi-lab")
 def get_notifikasi_lab(tanggal: str):

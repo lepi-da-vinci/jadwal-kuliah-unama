@@ -117,7 +117,7 @@
               <line x1="8" y1="21" x2="16" y2="21" />
               <line x1="12" y1="17" x2="12" y2="21" />
             </svg>
-            Labor yang lagi di pakai
+            Labor yang lagi dipakai
           </h3>
           <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
         </div>
@@ -130,6 +130,7 @@
             </svg>
             Info mase
           </h3>
+          <div id="live-warnings"></div>
           <div class="panel-content" id="notifikasi-lab-list"><em>Memuat notifikasi...</em></div>
         </div>
       </div>
@@ -316,7 +317,7 @@
     function isLab(namaRuangan) {
       if (!namaRuangan) return false;
       const name = namaRuangan.toLowerCase();
-      return name.includes('lab') || /\b3\.1\b/.test(name) || /\b3\.4\b/.test(name);
+      return name.includes('lab') || name.includes('praktek');
     }
 
     function applyFilters() {
@@ -376,21 +377,100 @@
       const day = String(now.getDate()).padStart(2, '0');
       const currentDayStr = `${year}-${month}-${day}`;
       const currentTime = now.getHours() * 60 + now.getMinutes();
-      let activeLabs = [];
+      let activeLabsThehok = [];
+      let activeLabsKobar = [];
+      let labSchedules = {};
 
       allJadwal.forEach(item => {
         if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan)) {
           const parts = item.jam.split(':');
           const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          
+          if (!labSchedules[item.nama_ruangan]) {
+            labSchedules[item.nama_ruangan] = [];
+          }
+          labSchedules[item.nama_ruangan].push(startTime);
+
           if (currentTime >= startTime && currentTime <= startTime + 135) {
-            activeLabs.push(`<b>${item.nama_ruangan}</b>: ${item.nama_mk} (${item.jam})`);
+            let roomName = item.nama_ruangan;
+            if (roomName.includes("(Kampus Thehok)")) {
+               roomName = roomName.replace(" (Kampus Thehok)", "");
+               activeLabsThehok.push(`<b>${roomName}</b>: ${item.nama_mk} (${item.jam})`);
+            } else if (roomName.includes("(Kampus Kobar)")) {
+               roomName = roomName.replace(" (Kampus Kobar)", "");
+               activeLabsKobar.push(`<b>${roomName}</b>: ${item.nama_mk} (${item.jam})`);
+            } else {
+               activeLabsThehok.push(`<b>${roomName}</b>: ${item.nama_mk} (${item.jam})`);
+            }
           }
         }
       });
+      
+      let warningsHTML = '';
+      for (const [room, startTimes] of Object.entries(labSchedules)) {
+        const lastStartTime = Math.max(...startTimes);
+        const lastClassEndTime = lastStartTime + 135;
+        const minsLeft = lastClassEndTime - currentTime;
+        
+        if (minsLeft >= 0 && minsLeft <= 30) {
+          const color = minsLeft <= 15 ? 'var(--badge-cc)' : '#f39c12';
+          const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
+          const m = (lastClassEndTime % 60).toString().padStart(2, '0');
+          warningsHTML += `
+            <div class="notif-item" style="border-left: 4px solid ${color};">
+              <div class="notif-header">
+                <span class="notif-type" style="color: ${color}; font-weight:bold;">TUTUP LAB (${minsLeft} mnt lagi)</span>
+              </div>
+              <div class="notif-message">
+                Kelas terakhir di <b>${room}</b> akan selesai pada ${h}:${m}. Segera bersiap untuk menutup lab!
+              </div>
+            </div>
+          `;
+        }
+      }
+      
+      const liveWarningsContainer = document.getElementById('live-warnings');
+      if (liveWarningsContainer) {
+        liveWarningsContainer.innerHTML = warningsHTML;
+      }
 
-      panel.innerHTML = activeLabs.length > 0
-        ? `<ul>${activeLabs.map(lab => `<li>${lab}</li>`).join('')}</ul>`
-        : '<em>Lagi dak da lab yang dipakai.</em>';
+      let htmlContent = '';
+      if (activeLabsThehok.length > 0 || activeLabsKobar.length > 0) {
+        htmlContent = '<ul style="margin:0; padding-left:18px; list-style-type: none; margin-left: -18px;">';
+        if (activeLabsThehok.length > 0) {
+            htmlContent += `<li style="margin-bottom:10px;"><b style="color: var(--primary); font-size: 1.05em;">Thehok</b>
+              <ul style="margin:4px 0 0 0; padding-left:18px; list-style-type: disc;">
+                ${activeLabsThehok.map(lab => `<li style="margin-bottom:5px;">${lab}</li>`).join('')}
+              </ul>
+            </li>`;
+        }
+        if (activeLabsKobar.length > 0) {
+            htmlContent += `<li style="margin-bottom:10px;"><b style="color: var(--primary); font-size: 1.05em;">Kobar</b>
+              <ul style="margin:4px 0 0 0; padding-left:18px; list-style-type: disc;">
+                ${activeLabsKobar.map(lab => `<li style="margin-bottom:5px;">${lab}</li>`).join('')}
+              </ul>
+            </li>`;
+        }
+        htmlContent += '</ul>';
+      } else {
+        htmlContent = '<em>Lagi dak da lab yang dipakai.</em>';
+      }
+      
+      panel.innerHTML = htmlContent;
+      adjustNotifHeight();
+    }
+
+    function adjustNotifHeight() {
+      const leftPanel = document.getElementById('active-lab-panel');
+      const rightPanel = document.getElementById('notifikasi-lab-panel');
+      if(leftPanel && rightPanel) {
+        setTimeout(() => {
+          const leftHeight = leftPanel.offsetHeight;
+          if(leftHeight > 0) {
+            rightPanel.style.maxHeight = leftHeight + 'px';
+          }
+        }, 50);
+      }
     }
 
     setInterval(updateActiveLabPanel, 60000);
@@ -462,6 +542,7 @@
         } else {
           notifList.innerHTML = '<em>Tidak ada notifikasi khusus pada tanggal ini.</em>';
         }
+        adjustNotifHeight();
       } catch (e) {
         notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
       }
@@ -498,17 +579,17 @@
     filterRuangan.addEventListener('change', applyFilters);
     document.getElementById('filter-kategori-ruang').addEventListener('change', () => { updateRuanganDropdown(); applyFilters(); });
     document.getElementById('filter-kampus').addEventListener('change', () => {
-        updateRuanganDropdown();
-        applyFilters();
+      updateRuanganDropdown();
+      applyFilters();
     });
 
     // 6. Auto-Sync setiap 30 menit
     setInterval(() => {
-        const currentDate = filterTanggal.value;
-        if (currentDate) {
-            console.log("Menjalankan Auto-Sync untuk tanggal:", currentDate);
-            syncData(currentDate);
-        }
+      const currentDate = filterTanggal.value;
+      if (currentDate) {
+        console.log("Menjalankan Auto-Sync untuk tanggal:", currentDate);
+        syncData(currentDate);
+      }
     }, 30 * 60 * 1000); // 30 menit dalam milidetik
 
     // ─── Modal Logic ───

@@ -248,7 +248,7 @@ body {
 .filter-group input[type="date"] { background-image: none; padding-right: 12px; }
 
 /* ─── Panels (Lab & Notification) ─── */
-.panels-row { display: flex; gap: var(--space-lg); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+.panels-row { display: flex; gap: var(--space-lg); margin-bottom: var(--space-lg); flex-wrap: wrap; align-items: flex-start; }
 .panel {
   flex: 1; min-width: 280px;
   padding: var(--space-md);
@@ -278,7 +278,7 @@ body {
 .panel-notif {
   background: var(--panel-notif-bg);
   border: 1px solid var(--panel-notif-border);
-  max-height: 220px; overflow-y: auto;
+  overflow-y: auto;
 }
 .panel-notif h3 { color: var(--panel-notif-text); }
 .panel-notif .panel-content { color: var(--panel-notif-text); }

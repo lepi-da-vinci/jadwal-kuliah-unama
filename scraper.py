@@ -88,18 +88,7 @@ def parse_html_content(html_content):
 def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
-    return 'lab' in name or '3.1' in name or '3.4' in name
-
-def parse_time(jam_str):
-    try:
-        parts = jam_str.split('-')
-        start = parts[0].strip()
-        end = parts[1].strip()
-        sh, sm = map(int, start.split(':'))
-        eh, em = map(int, end.split(':'))
-        return (sh * 60 + sm), (eh * 60 + em)
-    except:
-        return 0, 0
+    return 'lab' in name or 'praktek' in name
 
 def calculate_and_save_gaps(conn, cursor, target_date):
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA'", (target_date,))
@@ -118,9 +107,18 @@ def calculate_and_save_gaps(conn, cursor, target_date):
         if is_lab(nama_ruangan):
             if nama_ruangan not in room_schedules:
                 room_schedules[nama_ruangan] = []
-            start_min, end_min = parse_time(jam)
+            
+            # jam is a datetime.timedelta
+            total_seconds = int(jam.total_seconds())
+            start_min = total_seconds // 60
+            end_min = start_min + 135 # 3 SKS = 135 menit
+            
+            h = start_min // 60
+            m = start_min % 60
+            jam_str = f"{h:02d}:{m:02d}"
+            
             room_schedules[nama_ruangan].append({
-                'jam': jam, 'nama_mk': nama_mk, 'start': start_min, 'end': end_min
+                'jam': jam_str, 'nama_mk': nama_mk, 'start': start_min, 'end': end_min
             })
             
     for room, scheds in room_schedules.items():
@@ -133,40 +131,42 @@ def calculate_and_save_gaps(conn, cursor, target_date):
                 hours = gap // 60
                 mins = gap % 60
                 dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
-                pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara {curr['jam'].split('-')[1].strip()} s/d {nxt['jam'].split('-')[0].strip()}."
+                
+                # Format end time of current class
+                eh = curr['end'] // 60
+                em = curr['end'] % 60
+                end_str = f"{eh:02d}:{em:02d}"
+                
+                pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara {end_str} s/d {nxt['jam']}."
                 cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'JEDA', pesan))
     conn.commit()
 
-old_lab_cache = {}
-
+def create_temp_table(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jadwal_temp (
+            id_jadwal int(11) NOT NULL AUTO_INCREMENT,
+            tanggal date NOT NULL,
+            hari varchar(20) NOT NULL,
+            jam time NOT NULL,
+            id_dosen int(11) DEFAULT NULL,
+            kode_mk varchar(50) DEFAULT NULL,
+            nama_mk varchar(100) DEFAULT NULL,
+            kelas varchar(20) DEFAULT NULL,
+            id_ruangan int(11) DEFAULT NULL,
+            status_jadwal varchar(50) DEFAULT NULL,
+            metode_pembelajaran varchar(50) DEFAULT NULL,
+            PRIMARY KEY (id_jadwal)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """)
 def save_to_db(data, target_date=None, page="1"):
     try:
         conn = get_db()
         cursor = conn.cursor()
+        create_temp_table(cursor)
         
-        # Hapus data jadwal yang sudah ada untuk tanggal ini agar tidak duplikat (hanya di halaman pertama)
+        # Hapus data temporary jika halaman 1
         if target_date and str(page) == "1":
-            # Cache old lab schedules before deleting
-            cursor.execute("""
-                SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
-                FROM jadwal j
-                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE j.tanggal = %s
-            """, (target_date,))
-            
-            old_schedules = cursor.fetchall()
-            old_lab_cache[target_date] = {'__is_update': len(old_schedules) > 0}
-            for row in old_schedules:
-                jam, kode_mk, nama_mk, kelas, nama_ruangan, status, metode, dosen = row
-                if is_lab(nama_ruangan):
-                    key = f"{jam}_{nama_ruangan}_{kelas}"
-                    old_lab_cache[target_date][key] = {
-                        'status': status, 'metode': metode, 'nama_mk': nama_mk, 'dosen': dosen
-                    }
-                    
-            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s", (target_date,))
-            
+            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s", (target_date,))
         for item in data:
             # Insert atau ignore dosen
             if item['dosen']:
@@ -202,11 +202,11 @@ def save_to_db(data, target_date=None, page="1"):
             else:
                 id_ruangan = None
 
-            # Insert ke tabel jadwal
+            # Insert ke tabel jadwal_temp
             # Skip jika tanggal/jam kosong untuk mencegah error
             if item['tanggal'] and item['jam']:
                 query_jadwal = """
-                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
+                    INSERT INTO jadwal_temp (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(query_jadwal, (
@@ -214,35 +214,10 @@ def save_to_db(data, target_date=None, page="1"):
                     id_dosen, kode_mk, item['nama_mk'], item['kelas'], id_ruangan, 
                     item['status'], item['metode']
                 ))
-                
-                # Check for notifications (only for labs)
-                if is_lab(item['ruangan']) and target_date:
-                    key = f"{item['jam']}_{item['ruangan']}_{item['kelas']}"
-                    
-                    if target_date in old_lab_cache:
-                        is_update = old_lab_cache[target_date].get('__is_update', False)
-                        
-                        if key not in old_lab_cache[target_date]:
-                            if is_update:
-                                # Kelas Tambahan
-                                pesan = f"Kelas TAMBAHAN: {item['nama_mk']} ({item['kelas']}) di {item['ruangan']} pada {item['jam']}. Dosen: {item['dosen']}."
-                                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'TAMBAHAN', pesan))
-                        else:
-                            # Perubahan Status/Metode
-                            old_data = old_lab_cache[target_date][key]
-                            if old_data['status'] != item['status'] or old_data['metode'] != item['metode']:
-                                pesan = f"PERUBAHAN STATUS: {item['nama_mk']} ({item['kelas']}) di {item['ruangan']} pada {item['jam']}. Status: {old_data['status']} -> {item['status']}, Metode: {old_data['metode']} -> {item['metode']}."
-                                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'PERUBAHAN', pesan))
-                            # Hapus dari cache agar kita tau sisa yang mungkin dibatalkan (optional)
-                            del old_lab_cache[target_date][key]
 
         conn.commit()
         
-        # Kalkulasi Jeda Waktu (hanya dipanggil di akhir page? Kita bisa memanggil ini melalui endpoint terpisah atau sesudah semua selesai, tapi karena tidak tahu kapan page terakhir, jalankan saja setiap save_to_db lalu bersihkan JEDA lama)
-        if target_date:
-            calculate_and_save_gaps(conn, cursor, target_date)
-            
-        print(f"Berhasil menyimpan {len(data)} jadwal ke database.")
+        print(f"Berhasil menyimpan {len(data)} jadwal ke database temporary.")
         
     except mysql.connector.Error as err:
         print(f"Error Database: {err}")
@@ -251,25 +226,84 @@ def save_to_db(data, target_date=None, page="1"):
             cursor.close()
             conn.close()
 
-def get_data_count(tanggal):
+def compare_and_finalize_sync(target_date):
+    if not target_date:
+        return
+        
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM jadwal WHERE tanggal = %s", (tanggal,))
-        count = cursor.fetchone()[0]
-        return count
-    except Exception as e:
-        print(f"Error checking data: {e}")
-        return 0
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        
+        # 1. Ambil data lama
+        cursor.execute("""
+            SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.tanggal = %s
+        """, (target_date,))
+        old_schedules = cursor.fetchall()
+        is_update = len(old_schedules) > 0
+        
+        old_lab_cache = {}
+        for row in old_schedules:
+            jam, kode_mk, nama_mk, kelas, nama_ruangan, status, metode, dosen = row
+            total_seconds = int(jam.total_seconds())
+            h = total_seconds // 3600
+            m = (total_seconds % 3600) // 60
+            jam_str = f"{h:02d}:{m:02d}"
+            
+            if is_lab(nama_ruangan):
+                key = f"{jam_str}_{nama_ruangan}_{kelas}"
+                old_lab_cache[key] = {
+                    'status': status, 'metode': metode, 'nama_mk': nama_mk, 'dosen': dosen
+                }
+                
+        # 2. Ambil data baru dari jadwal_temp
+        cursor.execute("""
+            SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+            FROM jadwal_temp j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.tanggal = %s
+        """, (target_date,))
+        new_schedules = cursor.fetchall()
+        
+        # 3. Bandingkan dan buat notifikasi
+        for row in new_schedules:
+            jam, kode_mk, nama_mk, kelas, nama_ruangan, status, metode, dosen = row
+            if is_lab(nama_ruangan):
+                total_seconds = int(jam.total_seconds())
+                h = total_seconds // 3600
+                m = (total_seconds % 3600) // 60
+                start_time = f"{h:02d}:{m:02d}"
+                key = f"{start_time}_{nama_ruangan}_{kelas}"
+                
+                dosen_str = dosen or '-'
+                
+                if key not in old_lab_cache:
+                    if is_update:
+                        pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {nama_ruangan} pada {start_time}. Dosen: {dosen_str}."
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'TAMBAHAN', pesan))
+                else:
+                    old_data = old_lab_cache[key]
+                    if old_data['status'] != status or old_data['metode'] != metode:
+                        pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {nama_ruangan} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'PERUBAHAN', pesan))
+        
+        # 4. Finalisasi Pindah Data
+        cursor.execute("DELETE FROM jadwal WHERE tanggal = %s", (target_date,))
+        cursor.execute("""
+            INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
+            SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran
+            FROM jadwal_temp WHERE tanggal = %s
+        """, (target_date,))
+        
+        cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s", (target_date,))
+        
+        calculate_and_save_gaps(conn, cursor, target_date)
+        
+        conn.commit()
+    except mysql.connector.Error as err:
+        print(f"Error Database Finalize: {err}")
 
-if __name__ == "__main__":
-    print("Memulai proses scraping...")
-    target_date = "2026-07-18" # Contoh default, atau ambil dari argv
-    data = fetch_and_parse(target_date)
-    print(f"Ditemukan {len(data)} baris data jadwal.")
-    print("Menyimpan ke database...")
-    save_to_db(data, target_date)
