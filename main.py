@@ -133,38 +133,27 @@ class SyncHtmlRequest(BaseModel):
     tanggal: Optional[str] = None
     page: Optional[str] = "1"
 
+class SyncCompleteRequest(BaseModel):
+    tanggal: Optional[str] = None
+
+sync_status = {}
+
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
     """Sinkronisasi data dengan memerintahkan browser lokal (PC) membuka tab"""
     try:
-        # Jika data sudah ada, langsung sukses
-        if req.tanggal and scraper.get_data_count(req.tanggal) > 0:
-            return {"status": "success", "message": "Data sudah ada di database."}
-
         # Buka tab baru di browser PC secara diam-diam
+        sync_status[req.tanggal] = "pending"
         target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={req.tanggal or ''}&auto_close=1"
         webbrowser.open_new(target_url)
 
-        # Tunggu Ekstensi Chrome menarik HTML, kirim ke /api/sync-html, dan memprosesnya
-        # Kita cek database maksimal 40 detik. Kita nyatakan selesai jika jumlah baris stabil (tidak bertambah) selama 3 detik.
-        stable_count = 0
-        last_row_count = 0
+        # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
         for _ in range(40):
             await asyncio.sleep(1)
-            
-            # Dapatkan jumlah baris saat ini untuk tanggal tersebut
-            current_count = scraper.get_data_count(req.tanggal)
-            
-            if current_count > 0:
-                if current_count == last_row_count:
-                    stable_count += 1
-                    if stable_count >= 3:
-                        return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!"}
-                else:
-                    stable_count = 0
-                    last_row_count = current_count
+            if sync_status.get(req.tanggal) == "done":
+                return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!"}
         
-        return {"status": "success", "message": "Timeout menunggu data dari ekstensi Chrome."}
+        return {"status": "success", "message": "Timeout menunggu data dari ekstensi Chrome, tapi proses mungkin selesai di background."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -180,6 +169,12 @@ def sync_html_data(req: SyncHtmlRequest):
             return {"status": "success", "message": "Tidak ada data jadwal ditemukan dalam HTML.", "count": 0}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.post("/api/sync-complete")
+def sync_complete(req: SyncCompleteRequest):
+    """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
+    sync_status[req.tanggal] = "done"
+    return {"status": "success"}
 
 @app.get("/api/notifikasi-lab")
 def get_notifikasi_lab(tanggal: str):

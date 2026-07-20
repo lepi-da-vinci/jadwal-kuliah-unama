@@ -80,13 +80,24 @@ function processPage(htmlContent, pageNum, docContext) {
                     try { window.close(); } catch (e) {} // Tutup jika error
                 });
         } else {
-            console.log("Semua halaman selesai! Menutup tab otomatis...");
-            // Karena tidak berpindah URL asli, window.close() akan BEKERJA DENGAN SEMPURNA!
-            try {
+            console.log("Semua halaman selesai ditarik!");
+            fetch('http://127.0.0.1:8000/api/sync-complete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    tanggal: tanggal
+                })
+            }).then(() => {
+                document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Selesai!</h1><p style='font-size:18px;'>Tab ini akan tertutup otomatis...</p></div>";
+                setTimeout(() => {
+                    window.close();
+                }, 1500);
+            }).catch(err => {
+                console.error("Gagal mengirim sinyal sync complete", err);
                 window.close();
-            } catch (e) {
-                document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Sinkronisasi Selesai!</h1><p style='font-size:18px;'>Semua halaman (termasuk jadwal malam) telah berhasil disinkronisasi.</p><p style='font-size:18px; color:#555;'>Silakan tutup tab ini secara manual.</p></div>";
-            }
+            });
         }
     })
     .catch(error => {
