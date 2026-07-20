@@ -108,7 +108,7 @@ def check_lab_schedules():
                     if notif_key not in sent_notifications:
                         h = cls['start_min'] // 60
                         m = cls['start_min'] % 60
-                        msg = f"🔔 *Buka Lab {room}*\n\nKelas *{cls['nama_mk']}* akan dimulai pukul {h:02d}:{m:02d}.\n\nMohon bersiap untuk membuka lab dalam {diff_buka} menit!"
+                        msg = f"🔔 *Buka Lab mas{room}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\ntolong bukak lab ni dalam {diff_buka} menit!"
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)
             
@@ -143,7 +143,7 @@ def test_send_all():
         
         results = []
         for row in aslab_data:
-            msg = f"🧪 *UJI COBA NOTIFIKASI*\n\nHalo {row['nama_aslab']}, ini adalah pesan uji coba dari sistem untuk penjaga {row['nama_ruangan']}. Jika Anda menerima pesan ini, berarti sistem sudah siap digunakan!"
+            msg = f"*UJI COBA NOTIFIKASI*\n\nMisi mas{row['nama_aslab']}, ini test notif  {row['nama_ruangan']}. kalu dah terima pesan ini  berarti notif dah oke"
             success = send_wa_message(row['no_wa'], msg)
             results.append({"nama": row['nama_aslab'], "ruangan": row['nama_ruangan'], "no_wa": row['no_wa'], "success": success})
             
