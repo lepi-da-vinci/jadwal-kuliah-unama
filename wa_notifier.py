@@ -40,45 +40,44 @@ def check_lab_schedules():
         
         # Ambil data aslab
         cursor.execute("""
-            SELECT a.no_wa, r.nama_ruangan 
+            SELECT a.no_wa, r.id_ruangan, r.nama_ruangan, r.lokasi_kampus
             FROM asisten_lab a
             JOIN ruangan r ON a.id_ruangan = r.id_ruangan
         """)
-        aslab_data = {row['nama_ruangan']: row['no_wa'] for row in cursor.fetchall()}
+        aslab_data = {row['id_ruangan']: {'no_wa': row['no_wa'], 'nama_ruangan': row['nama_ruangan'], 'lokasi_kampus': row['lokasi_kampus']} for row in cursor.fetchall()}
         
         if not aslab_data:
             return # Tidak ada data aslab sama sekali
             
         # Ambil jadwal lab hari ini
         cursor.execute("""
-            SELECT j.jam, r.nama_ruangan, j.nama_mk
+            SELECT j.jam, r.id_ruangan, j.nama_mk
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             WHERE j.tanggal = %s AND j.metode_pembelajaran NOT IN ('CC', 'OL')
-            ORDER BY r.nama_ruangan, j.jam
+            ORDER BY r.id_ruangan, j.jam
         """, (current_date,))
         schedules = cursor.fetchall()
         
         lab_schedules = {}
         for row in schedules:
-            nama_ruangan = row['nama_ruangan']
-            if scraper.is_lab(nama_ruangan):
+            id_ruangan = row['id_ruangan']
+            if id_ruangan in aslab_data:
                 total_seconds = int(row['jam'].total_seconds())
                 start_min = total_seconds // 60
                 
-                if nama_ruangan not in lab_schedules:
-                    lab_schedules[nama_ruangan] = []
-                lab_schedules[nama_ruangan].append({
+                if id_ruangan not in lab_schedules:
+                    lab_schedules[id_ruangan] = []
+                lab_schedules[id_ruangan].append({
                     'nama_mk': row['nama_mk'],
                     'start_min': start_min,
                     'end_min': start_min + 135 # 135 menit = 3 SKS
                 })
         
-        for room, scheds in lab_schedules.items():
-            if room not in aslab_data:
-                continue
-                
-            no_wa = aslab_data[room]
+        for id_room, scheds in lab_schedules.items():
+            no_wa = aslab_data[id_room]['no_wa']
+            room_name_full = f"{aslab_data[id_room]['nama_ruangan']} ({aslab_data[id_room]['lokasi_kampus']})"
+            
             # Sort schedules by start time
             scheds = sorted(scheds, key=lambda x: x['start_min'])
             
@@ -102,11 +101,11 @@ def check_lab_schedules():
             for cls in openings:
                 diff_buka = cls['start_min'] - current_total_min
                 if diff_buka in (30, 15):
-                    notif_key = f"{current_date}_{room}_buka_{cls['start_min']}_{diff_buka}"
+                    notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{diff_buka}"
                     if notif_key not in sent_notifications:
                         h = cls['start_min'] // 60
                         m = cls['start_min'] % 60
-                        msg = f"🔔 *Buka Lab mas{room}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\ntolong bukak lab ni dalam {diff_buka} menit!"
+                        msg = f"🔔 *Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {diff_buka} menit!"
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)
             
@@ -114,11 +113,11 @@ def check_lab_schedules():
             for cls in closings:
                 diff_tutup = cls['end_min'] - current_total_min
                 if diff_tutup in (30, 15):
-                    notif_key = f"{current_date}_{room}_tutup_{cls['end_min']}_{diff_tutup}"
+                    notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{diff_tutup}"
                     if notif_key not in sent_notifications:
                         eh = cls['end_min'] // 60
                         em = cls['end_min'] % 60
-                        msg = f"🔒 *Tutup Lab mas {room}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {diff_tutup} menit!"
+                        msg = f"🔒 *Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {diff_tutup} menit!"
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)
     except Exception as e:
