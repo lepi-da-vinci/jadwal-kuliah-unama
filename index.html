@@ -745,15 +745,26 @@
     const modal = document.getElementById('lab-modal');
     const modalBody = document.getElementById('lab-modal-body');
     const modalCloseBtn = document.getElementById('modal-close-btn');
+    let alarmInterval = null;
 
-    function openModal() {
+    function openModal(isRepeat = false) {
       modal.classList.add('open');
       playNotificationSound();
+      
+      // Ulangi alarm setiap 3 menit jika belum ditutup dan isRepeat = true
+      if (isRepeat && !alarmInterval) {
+        alarmInterval = setInterval(playNotificationSound, 3 * 60 * 1000);
+      }
+      
       modalCloseBtn.focus();
     }
 
     function closeModal() {
       modal.classList.remove('open');
+      if (alarmInterval) {
+        clearInterval(alarmInterval);
+        alarmInterval = null;
+      }
     }
 
     modalCloseBtn.addEventListener('click', closeModal);
@@ -798,7 +809,7 @@
 
       let firstClasses = {};
       allJadwal.forEach(item => {
-        if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.jam && isLab(item.nama_ruangan)) {
+        if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL' && item.jam && isLab(item.nama_ruangan)) {
           const parts = item.jam.split(':');
           const startTotalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
           if (!firstClasses[item.nama_ruangan] || startTotalMin < firstClasses[item.nama_ruangan].startTotalMin) {
@@ -817,7 +828,7 @@
 
       if (labToNotify.length > 0) {
         modalBody.innerHTML = '<p>Buka labor ni sekarang, kelas entar lagi mulai:</p><ul>' + labToNotify.map(l => `<li style="margin-bottom:8px;">${l}</li>`).join('') + '</ul>';
-        openModal();
+        openModal(true); // Ulangi alarm untuk notifikasi asli
       }
     }
 

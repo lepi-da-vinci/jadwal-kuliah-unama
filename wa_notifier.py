@@ -54,7 +54,7 @@ def check_lab_schedules():
             SELECT j.jam, r.nama_ruangan, j.nama_mk
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-            WHERE j.tanggal = %s AND j.metode_pembelajaran != 'CC'
+            WHERE j.tanggal = %s AND j.metode_pembelajaran NOT IN ('CC', 'OL')
             ORDER BY r.nama_ruangan, j.jam
         """, (current_date,))
         schedules = cursor.fetchall()

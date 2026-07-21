@@ -94,7 +94,7 @@ def calculate_and_save_gaps(conn, cursor, target_date):
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA'", (target_date,))
     
     cursor.execute("""
-        SELECT j.jam, r.nama_ruangan, j.nama_mk
+        SELECT j.jam, r.nama_ruangan, r.lokasi_kampus, j.nama_mk
         FROM jadwal j
         JOIN ruangan r ON j.id_ruangan = r.id_ruangan
         WHERE j.tanggal = %s
@@ -103,10 +103,11 @@ def calculate_and_save_gaps(conn, cursor, target_date):
     schedules = cursor.fetchall()
     
     room_schedules = {}
-    for jam, nama_ruangan, nama_mk in schedules:
+    for jam, nama_ruangan, lokasi, nama_mk in schedules:
         if is_lab(nama_ruangan):
-            if nama_ruangan not in room_schedules:
-                room_schedules[nama_ruangan] = []
+            ruang_lengkap = f"{nama_ruangan} ({lokasi})"
+            if ruang_lengkap not in room_schedules:
+                room_schedules[ruang_lengkap] = []
             
             # jam is a datetime.timedelta
             total_seconds = int(jam.total_seconds())
@@ -261,7 +262,7 @@ def compare_and_finalize_sync(target_date):
                 
         # 2. Ambil data baru dari jadwal_temp
         cursor.execute("""
-            SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+            SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.lokasi_kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
             FROM jadwal_temp j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
@@ -271,7 +272,7 @@ def compare_and_finalize_sync(target_date):
         
         # 3. Bandingkan dan buat notifikasi
         for row in new_schedules:
-            jam, kode_mk, nama_mk, kelas, nama_ruangan, status, metode, dosen = row
+            jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
             if is_lab(nama_ruangan):
                 total_seconds = int(jam.total_seconds())
                 h = total_seconds // 3600
@@ -280,15 +281,16 @@ def compare_and_finalize_sync(target_date):
                 key = f"{start_time}_{nama_ruangan}_{kelas}"
                 
                 dosen_str = dosen or '-'
+                ruang_lengkap = f"{nama_ruangan} ({lokasi})"
                 
                 if key not in old_lab_cache:
                     if is_update:
-                        pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {nama_ruangan} pada {start_time}. Dosen: {dosen_str}."
+                        pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
                         cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'TAMBAHAN', pesan))
                 else:
                     old_data = old_lab_cache[key]
                     if old_data['status'] != status or old_data['metode'] != metode:
-                        pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {nama_ruangan} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
+                        pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
                         cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'PERUBAHAN', pesan))
         
         # 4. Finalisasi Pindah Data
