@@ -40,7 +40,7 @@ def check_lab_schedules():
         
         # Ambil data aslab
         cursor.execute("""
-            SELECT a.no_wa, r.id_ruangan, r.nama_ruangan, r.lokasi_kampus
+            SELECT a.no_wa, r.id_ruangan, r.nama_ruangan, r.kampus AS lokasi_kampus
             FROM asisten_lab a
             JOIN ruangan r ON a.id_ruangan = r.id_ruangan
         """)

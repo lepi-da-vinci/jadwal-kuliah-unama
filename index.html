@@ -116,14 +116,19 @@
 
       <div class="panels-row">
         <div class="panel panel-lab" id="active-lab-panel">
-          <h3>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-              stroke-linejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
-            Labor yang lagi dipakai
+          <h3 style="justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+              Labor yang lagi dipakai
+            </div>
+            <div style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
+              <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span> Dipakai</div>
+              <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span> Kosong</div>
+            </div>
           </h3>
           <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
         </div>
@@ -231,6 +236,19 @@
   <script>
     const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
     let allJadwal = [];
+    let allRuanganData = [];
+
+    async function fetchAllRuangan() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/ruangan`);
+        const result = await response.json();
+        if (result.status === 'success') {
+          allRuanganData = result.data;
+          updateActiveLabPanel();
+        }
+      } catch (e) { console.error("Gagal load ruangan", e); }
+    }
+    fetchAllRuangan();
 
     const tbody = document.getElementById('jadwal-tbody');
     const filterTanggal = document.getElementById('filter-tanggal');
@@ -415,36 +433,49 @@
     function updateActiveLabPanel() {
       const panel = document.getElementById('active-lab-list');
       const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const currentDayStr = `${year}-${month}-${day}`;
+      const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const currentTime = now.getHours() * 60 + now.getMinutes();
-      let activeLabsThehok = [];
-      let activeLabsKobar = [];
+      
+      let labsThehok = {};
+      let labsKobar = {};
       let labSchedules = {};
+
+      // Inisialisasi semua ruangan dari database
+      allRuanganData.forEach(r => {
+         let roomName = r.nama_ruangan;
+         let isThehok = true;
+         if (roomName.includes("(Kampus Kobar)") || (r.kampus && r.kampus.toLowerCase().includes("kobar"))) {
+             isThehok = false;
+         }
+         roomName = roomName.replace(/ \(Kampus.*?\)/, "");
+         let targetDict = isThehok ? labsThehok : labsKobar;
+         targetDict[roomName] = { isOccupied: false, text: "Kosong", jam: "" };
+      });
 
       allJadwal.forEach(item => {
         if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan) && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
           const parts = item.jam.split(':');
           const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
           
-          if (!labSchedules[item.nama_ruangan]) {
-            labSchedules[item.nama_ruangan] = [];
-          }
+          if (!labSchedules[item.nama_ruangan]) labSchedules[item.nama_ruangan] = [];
           labSchedules[item.nama_ruangan].push(startTime);
 
+          let roomName = item.nama_ruangan;
+          let isThehok = true;
+          if (roomName.includes("(Kampus Kobar)") || (item.kampus && item.kampus.toLowerCase().includes("kobar"))) {
+             isThehok = false;
+          }
+          roomName = roomName.replace(/ \(Kampus.*?\)/, "");
+
+          let targetDict = isThehok ? labsThehok : labsKobar;
+          if (!targetDict[roomName]) {
+             targetDict[roomName] = { isOccupied: false, text: "Kosong", jam: "" };
+          }
+          
           if (currentTime >= startTime && currentTime <= startTime + 135) {
-            let roomName = item.nama_ruangan;
-            if (roomName.includes("(Kampus Thehok)")) {
-               roomName = roomName.replace(" (Kampus Thehok)", "");
-               activeLabsThehok.push(`<b>${roomName}</b>: ${item.nama_mk} (${item.jam})`);
-            } else if (roomName.includes("(Kampus Kobar)")) {
-               roomName = roomName.replace(" (Kampus Kobar)", "");
-               activeLabsKobar.push(`<b>${roomName}</b>: ${item.nama_mk} (${item.jam})`);
-            } else {
-               activeLabsThehok.push(`<b>${roomName}</b>: ${item.nama_mk} (${item.jam})`);
-            }
+             targetDict[roomName].isOccupied = true;
+             targetDict[roomName].text = item.nama_mk;
+             targetDict[roomName].jam = item.jam;
           }
         }
       });
@@ -459,16 +490,7 @@
           const color = minsLeft <= 15 ? 'var(--badge-cc)' : '#f39c12';
           const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
           const m = (lastClassEndTime % 60).toString().padStart(2, '0');
-          warningsHTML += `
-            <div class="notif-item" style="border-left: 4px solid ${color};">
-              <div class="notif-header">
-                <span class="notif-type" style="color: ${color}; font-weight:bold;">TUTUP LAB (${minsLeft} mnt lagi)</span>
-              </div>
-              <div class="notif-message">
-                Kelas terakhir di <b>${room}</b> akan selesai pada ${h}:${m}. Segera bersiap untuk menutup lab!
-              </div>
-            </div>
-          `;
+          warningsHTML += `<div class="notif-item" style="border-left: 4px solid ${color};"><div class="notif-header"><span class="notif-type" style="color: ${color}; font-weight:bold;">TUTUP LAB (${minsLeft} mnt lagi)</span></div><div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.</div></div>`;
         }
       }
       
@@ -478,25 +500,34 @@
       }
 
       let htmlContent = '';
-      if (activeLabsThehok.length > 0 || activeLabsKobar.length > 0) {
-        htmlContent = '<ul style="margin:0; padding-left:18px; list-style-type: none; margin-left: -18px;">';
-        if (activeLabsThehok.length > 0) {
-            htmlContent += `<li style="margin-bottom:10px;"><b style="color: var(--primary); font-size: 1.05em;">Thehok</b>
-              <ul style="margin:4px 0 0 0; padding-left:18px; list-style-type: disc;">
-                ${activeLabsThehok.map(lab => `<li style="margin-bottom:5px;">${lab}</li>`).join('')}
-              </ul>
-            </li>`;
+      if (Object.keys(labsThehok).length > 0 || Object.keys(labsKobar).length > 0) {
+        
+        const renderBlocks = (labs) => {
+          // Sort labs alphabetically for consistency
+          const sortedRooms = Object.keys(labs).sort();
+          let html = '<div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;">';
+          for (const room of sortedRooms) {
+             const data = labs[room];
+             const bgColor = data.isOccupied ? 'var(--badge-tm)' : 'var(--badge-cc)';
+             html += `
+               <div style="background-color: ${bgColor}; color: #fff; padding: 6px 10px; border-radius: 6px; flex: 1 1 calc(33.33% - 10px); box-sizing: border-box; min-width: 120px; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">
+                 <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 2px;">${room}</div>
+                 <div style="font-size: 0.75em; opacity: 0.95;">${data.isOccupied ? data.text + ' (' + data.jam + ')' : 'Kosong'}</div>
+               </div>
+             `;
+          }
+          html += '</div>';
+          return html;
+        };
+
+        if (Object.keys(labsThehok).length > 0) {
+            htmlContent += `<div style="margin-bottom:15px;"><b style="color: var(--primary); font-size: 1.1em; display:block; margin-bottom: 5px;">Thehok</b>${renderBlocks(labsThehok)}</div>`;
         }
-        if (activeLabsKobar.length > 0) {
-            htmlContent += `<li style="margin-bottom:10px;"><b style="color: var(--primary); font-size: 1.05em;">Kobar</b>
-              <ul style="margin:4px 0 0 0; padding-left:18px; list-style-type: disc;">
-                ${activeLabsKobar.map(lab => `<li style="margin-bottom:5px;">${lab}</li>`).join('')}
-              </ul>
-            </li>`;
+        if (Object.keys(labsKobar).length > 0) {
+            htmlContent += `<div><b style="color: var(--primary); font-size: 1.1em; display:block; margin-bottom: 5px;">Kobar</b>${renderBlocks(labsKobar)}</div>`;
         }
-        htmlContent += '</ul>';
       } else {
-        htmlContent = '<em>Lagi dak da lab yang dipakai.</em>';
+        htmlContent = '<em>Tidak ada jadwal lab untuk hari ini.</em>';
       }
       
       panel.innerHTML = htmlContent;

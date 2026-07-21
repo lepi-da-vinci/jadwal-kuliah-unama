@@ -188,6 +188,22 @@ def get_notifikasi_lab(tanggal: str):
 class TestWARequest(BaseModel):
     id_aslab: Optional[int] = None
 
+@app.get("/api/ruangan")
+def get_ruangan():
+    """Mengambil daftar semua ruangan lab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE '%lab%' OR nama_ruangan LIKE '%praktek%'")
+        results = cursor.fetchall()
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.get("/api/aslab")
 def get_aslab():
     """Mengambil daftar asisten lab beserta nama ruangannya"""

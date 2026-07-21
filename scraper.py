@@ -94,7 +94,7 @@ def calculate_and_save_gaps(conn, cursor, target_date):
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA'", (target_date,))
     
     cursor.execute("""
-        SELECT j.jam, r.nama_ruangan, r.lokasi_kampus, j.nama_mk
+        SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
         FROM jadwal j
         JOIN ruangan r ON j.id_ruangan = r.id_ruangan
         WHERE j.tanggal = %s
@@ -118,7 +118,7 @@ def calculate_and_save_gaps(conn, cursor, target_date):
             m = start_min % 60
             jam_str = f"{h:02d}:{m:02d}"
             
-            room_schedules[nama_ruangan].append({
+            room_schedules[ruang_lengkap].append({
                 'jam': jam_str, 'nama_mk': nama_mk, 'start': start_min, 'end': end_min
             })
             
@@ -262,7 +262,7 @@ def compare_and_finalize_sync(target_date):
                 
         # 2. Ambil data baru dari jadwal_temp
         cursor.execute("""
-            SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.lokasi_kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+            SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
             FROM jadwal_temp j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
