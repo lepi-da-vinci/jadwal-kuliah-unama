@@ -425,7 +425,7 @@
       let labSchedules = {};
 
       allJadwal.forEach(item => {
-        if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan)) {
+        if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan) && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
           const parts = item.jam.split(':');
           const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
           
