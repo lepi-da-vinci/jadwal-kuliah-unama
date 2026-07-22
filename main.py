@@ -8,12 +8,55 @@ from typing import Optional
 import scraper
 import webbrowser
 import asyncio
+import threading
+import time
 import wa_notifier
 app = FastAPI(title="API Analitik Jadwal Kuliah")
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(wa_notifier.wa_notifier_loop())
+    
+    def auto_send_ngrok():
+        time.sleep(3) # Tunggu sebentar agar ngrok siap dan server sudah fully berjalan
+        print("[Auto-Send] Mengecek Ngrok untuk dikirim otomatis...")
+        
+        import urllib.request, json, os
+        try:
+            # Cek dulu link ngrok yang aktif sekarang
+            req = urllib.request.Request("http://127.0.0.1:4040/api/tunnels")
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode())
+                current_ngrok = None
+                for tunnel in data.get('tunnels', []):
+                    if tunnel['proto'] == 'https':
+                        current_ngrok = tunnel['public_url']
+                        break
+                
+                if current_ngrok:
+                    # Cek apakah link ini sudah pernah dikirim (anti-spam)
+                    cache_file = "last_ngrok.txt"
+                    if os.path.exists(cache_file):
+                        with open(cache_file, "r") as f:
+                            if f.read().strip() == current_ngrok:
+                                print("[Auto-Send] Aman! Link ngrok ini sudah pernah dikirim sebelumnya. Batal kirim agar tidak spam.")
+                                return
+                    
+                    # Simpan link baru ke cache
+                    with open(cache_file, "w") as f:
+                        f.write(current_ngrok)
+                    
+                    # Kirim pesan
+                    results = wa_notifier.test_send(id_aslab=None, action_type="ngrok")
+                    if isinstance(results, dict) and "error" in results:
+                        print(f"[Auto-Send] Batal: {results['error']}")
+                    else:
+                        print(f"[Auto-Send] Berhasil mengirim link Ngrok otomatis ke Aslab!")
+        except Exception as e:
+            print("[Auto-Send] Ngrok tidak terdeteksi, batal otomatis.")
+
+    # Jalankan di background thread agar tidak memblokir startup FastAPI
+    threading.Thread(target=auto_send_ngrok, daemon=True).start()
 
 
 # Mengizinkan Frontend mengakses API
@@ -187,6 +230,8 @@ def get_notifikasi_lab(tanggal: str):
 
 class TestWARequest(BaseModel):
     id_aslab: Optional[int] = None
+    action_type: str = "test"
+    ngrok_link: Optional[str] = None
 
 @app.get("/api/ruangan")
 def get_ruangan():
@@ -227,7 +272,9 @@ def get_aslab():
 @app.post("/api/test-wa")
 def test_wa(req: TestWARequest):
     """Mengirim pesan WA percobaan ke aslab tertentu atau semua"""
-    results = wa_notifier.test_send(req.id_aslab)
+    results = wa_notifier.test_send(req.id_aslab, req.action_type, req.ngrok_link)
+    if isinstance(results, dict) and "error" in results:
+        return {"status": "error", "message": results["error"]}
     if not results:
         return {"status": "error", "message": "Tidak ada data aslab atau terjadi kesalahan"}
     return {"status": "success", "message": "Pesan WA percobaan selesai diproses!", "data": results}

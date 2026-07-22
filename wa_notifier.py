@@ -127,8 +127,27 @@ def check_lab_schedules():
             cursor.close()
             conn.close()
 
-def test_send(id_aslab=None):
+import urllib.request
+import json
+
+def test_send(id_aslab=None, action_type="test", ngrok_link=None):
     try:
+        if action_type == "ngrok":
+            try:
+                # Mengambil URL otomatis dari API lokal Ngrok
+                req = urllib.request.Request("http://127.0.0.1:4040/api/tunnels")
+                with urllib.request.urlopen(req) as response:
+                    data = json.loads(response.read().decode())
+                    # Cari tunnel HTTPS
+                    for tunnel in data.get('tunnels', []):
+                        if tunnel['proto'] == 'https':
+                            ngrok_link = tunnel['public_url']
+                            break
+                    if not ngrok_link:
+                        return {"error": "Ngrok berjalan tapi tunnel HTTPS tidak ditemukan."}
+            except Exception as e:
+                return {"error": "Ngrok belum berjalan! Pastikan Anda sudah menjalankan 'ngrok http 8000' di terminal lain."}
+
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
         
@@ -148,7 +167,11 @@ def test_send(id_aslab=None):
         
         results = []
         for row in aslab_data:
-            msg = f"*UJI COBA NOTIFIKASI*\n\nHalo mas {row['nama_aslab']}, ini tuk test sesuai dengan {row['nama_ruangan']}. kalau dah terima pesan ini, berarti notif dah oke"
+            if action_type == "ngrok" and ngrok_link:
+                msg = f"*LINK SERVER NGROK AKTIF*\n\nHalo mas {row['nama_aslab']}, server jadwal kuliah untuk {row['nama_ruangan']} sudah online.\n\nSilakan akses melalui link berikut:\n{ngrok_link}"
+            else:
+                msg = f"*UJI COBA NOTIFIKASI*\n\nHalo mas {row['nama_aslab']}, ini tuk test sesuai dengan {row['nama_ruangan']}. kalau dah terima pesan ini, berarti notif dah oke"
+            
             success = send_wa_message(row['no_wa'], msg)
             results.append({"nama": row['nama_aslab'], "ruangan": row['nama_ruangan'], "no_wa": row['no_wa'], "success": success})
             

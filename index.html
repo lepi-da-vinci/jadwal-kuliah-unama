@@ -252,15 +252,26 @@
   <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Pilih Asisten Lab">
     <div class="modal-box" style="max-width: 450px;">
       <div class="modal-icon">💬</div>
-      <h2>Pilih Asisten Lab (Test WA)</h2>
-      <div class="modal-body" style="text-align: left;">
-        <select id="aslab-select" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; appearance: auto; font-size: 1em;">
-          <option value="">-- Semua Aslab --</option>
-        </select>
+      <h2>Test WA & Ngrok Link</h2>
+      <div class="modal-body" style="text-align: left; display: flex; flex-direction: column; gap: 15px;">
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Asisten Lab:</label>
+          <select id="aslab-select" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; appearance: auto; font-size: 1em;">
+            <option value="">-- Semua Aslab --</option>
+          </select>
+        </div>
+        
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Aksi:</label>
+          <select id="test-action-select" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; appearance: auto; font-size: 1em;">
+            <option value="test">Kirim Pesan Uji Coba</option>
+            <option value="ngrok">Kirim Link Ngrok (Otomatis)</option>
+          </select>
+        </div>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="test-wa-cancel-btn">Batal</button>
-        <button class="modal-btn" id="test-wa-submit-btn">Kirim Test</button>
+        <button class="modal-btn" id="test-wa-submit-btn">Kirim</button>
       </div>
     </div>
   </div>
@@ -852,6 +863,8 @@
 
         document.getElementById('test-wa-submit-btn').onclick = async () => {
             const selectedId = select.value;
+            const actionType = document.getElementById('test-action-select').value;
+            
             const btn = document.getElementById('test-wa-btn');
             const originalHtml = btn.innerHTML;
             
@@ -861,7 +874,10 @@
             btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Mengirim...`;
             
             try {
-                const payload = selectedId ? { id_aslab: parseInt(selectedId) } : {};
+                const payload = {};
+                if (selectedId) payload.id_aslab = parseInt(selectedId);
+                payload.action_type = actionType;
+
                 const response = await fetch(`${API_BASE_URL}/api/test-wa`, { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
