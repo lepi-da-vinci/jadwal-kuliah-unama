@@ -114,6 +114,16 @@
         </div>
       </div>
 
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; margin-top: 24px;">
+        <h2 style="font-size: 1.1rem; color: var(--text-dark); margin: 0;">Status Penggunaan Ruangan</h2>
+        <div class="filter-group" style="margin: 0;">
+          <select id="panel-kampus-filter" style="width: auto; padding-top: 8px; padding-bottom: 8px;">
+            <option value="semua">Semua Kampus</option>
+            <option value="thehok">Kampus Thehok</option>
+            <option value="kobar">Kampus Kobar</option>
+          </select>
+        </div>
+      </div>
       <div class="panels-row">
         <div class="panel panel-lab" id="active-lab-panel">
           <h3 style="justify-content: space-between; width: 100%;">
@@ -127,22 +137,44 @@
             </div>
             <div style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
               <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span> Dipakai</div>
+              <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-wa); border-radius:3px;"></span> Jeda</div>
               <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span> Kosong</div>
             </div>
           </h3>
           <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
         </div>
-        <div class="panel panel-notif" id="notifikasi-lab-panel">
-          <h3>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-              stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            Info mase
+        
+        <div class="panel panel-lab" id="active-room-panel" style="border-color: rgba(59, 130, 246, 0.4);">
+          <h3 style="justify-content: space-between; width: 100%; color: var(--badge-ol);">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+              Ruangan yang lagi dipakai
+            </div>
+            <div style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
+              <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span> Dipakai</div>
+              <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-wa); border-radius:3px;"></span> Jeda</div>
+              <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span> Kosong</div>
+            </div>
           </h3>
-          <div id="live-warnings"></div>
-          <div class="panel-content" id="notifikasi-lab-list"><em>Memuat notifikasi...</em></div>
+          <div class="panel-content" id="active-room-list"><em>Memeriksa status ruangan...</em></div>
+        </div>
+      </div>
+      
+      <!-- Info Mase Collapsible Panel -->
+      <div class="panel panel-notif" id="info-mase-panel" style="display: none; margin-bottom: 24px;">
+        <h3 style="margin-bottom: 15px; border-bottom: 1px solid rgba(194, 65, 12, 0.15); padding-bottom: 10px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          Info Mase
+        </h3>
+        <div id="live-warnings"></div>
+        <div class="panel-notif-wrapper" id="notif-scroll-container" style="overflow-y: auto; overflow-x: hidden; max-height: 400px; margin-top: 10px;">
+          <div class="panel-content" id="notifikasi-lab-list" style="padding-right: 5px;"><em>Memuat notifikasi...</em></div>
         </div>
       </div>
 
@@ -158,13 +190,13 @@
 
       <div class="card-header">
         <div id="hasil-pencarian" class="search-result">Hasil Pencarian: 0 jadwal</div>
-        <button id="test-notif-btn" class="btn btn-warning" aria-label="Test notifikasi">
+        <button id="toggle-notif-btn" class="btn btn-secondary" aria-label="Info Mase">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          Test Notif
+          Info Mase
         </button>
       </div>
 
@@ -233,6 +265,21 @@
     </div>
   </div>
 
+  <!-- Modal Detail Ruangan -->
+  <div id="room-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Detail Ruangan">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-icon" style="background: var(--primary); color: white;">📋</div>
+      <h2 id="room-detail-title">Detail Ruangan</h2>
+      <div class="modal-body" style="text-align: left; max-height: 50vh; overflow-y: auto;">
+        <ul id="room-detail-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px;">
+        </ul>
+      </div>
+      <div style="text-align: right; margin-top: 20px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="room-detail-close-btn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
     let allJadwal = [];
@@ -256,6 +303,40 @@
     const filterMetode = document.getElementById('filter-metode');
     const filterRuangan = document.getElementById('filter-ruangan');
     const infoSekarang = document.getElementById('info-jadwal-sekarang');
+
+    let notifScrollInterval = null;
+    const scrollContainer = document.getElementById('notif-scroll-container');
+
+    function startNotifScroll() {
+      stopNotifScroll();
+      if (!scrollContainer) return;
+      if (scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+        notifScrollInterval = setInterval(() => {
+          let oldScroll = scrollContainer.scrollTop;
+          scrollContainer.scrollTop += 1;
+          
+          if (scrollContainer.scrollTop <= oldScroll) {
+            scrollContainer.scrollTop = 0;
+          }
+        }, 50);
+      }
+    }
+
+    function stopNotifScroll() {
+      if (notifScrollInterval) {
+        clearInterval(notifScrollInterval);
+        notifScrollInterval = null;
+      }
+    }
+
+    if (scrollContainer) {
+      scrollContainer.addEventListener('mouseenter', stopNotifScroll);
+      scrollContainer.addEventListener('mouseleave', () => {
+        if (document.getElementById('notifikasi-lab-list').innerHTML.includes('notif-item')) {
+          startNotifScroll();
+        }
+      });
+    }
 
     function updateStats(data) {
       const container = document.getElementById('stat-container');
@@ -431,57 +512,141 @@
     }
 
     function updateActiveLabPanel() {
-      const panel = document.getElementById('active-lab-list');
+      const labPanel = document.getElementById('active-lab-list');
+      const roomPanel = document.getElementById('active-room-list');
+      if (!labPanel || !roomPanel) return;
+
       const now = new Date();
       const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const currentTime = now.getHours() * 60 + now.getMinutes();
       
       let labsThehok = {};
       let labsKobar = {};
-      let labSchedules = {};
+      let roomsThehok = {};
+      let roomsKobar = {};
+      
+      let roomSchedules = {};
 
-      // Inisialisasi semua ruangan dari database
-      allRuanganData.forEach(r => {
-         let roomName = r.nama_ruangan;
-         let isThehok = true;
-         if (roomName.includes("(Kampus Kobar)") || (r.kampus && r.kampus.toLowerCase().includes("kobar"))) {
-             isThehok = false;
-         }
-         roomName = roomName.replace(/ \(Kampus.*?\)/, "");
-         let targetDict = isThehok ? labsThehok : labsKobar;
-         targetDict[roomName] = { isOccupied: false, text: "Kosong", jam: "" };
-      });
-
+      // 1. Group schedules by room
       allJadwal.forEach(item => {
-        if (item.tanggal === currentDayStr && item.jam && isLab(item.nama_ruangan) && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
+        if (item.tanggal === currentDayStr && item.jam && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
           const parts = item.jam.split(':');
           const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
           
-          if (!labSchedules[item.nama_ruangan]) labSchedules[item.nama_ruangan] = [];
-          labSchedules[item.nama_ruangan].push(startTime);
-
-          let roomName = item.nama_ruangan;
-          let isThehok = true;
-          if (roomName.includes("(Kampus Kobar)") || (item.kampus && item.kampus.toLowerCase().includes("kobar"))) {
-             isThehok = false;
-          }
-          roomName = roomName.replace(/ \(Kampus.*?\)/, "");
-
-          let targetDict = isThehok ? labsThehok : labsKobar;
-          if (!targetDict[roomName]) {
-             targetDict[roomName] = { isOccupied: false, text: "Kosong", jam: "" };
-          }
-          
-          if (currentTime >= startTime && currentTime <= startTime + 135) {
-             targetDict[roomName].isOccupied = true;
-             targetDict[roomName].text = item.nama_mk;
-             targetDict[roomName].jam = item.jam;
-          }
+          if (!roomSchedules[item.nama_ruangan]) roomSchedules[item.nama_ruangan] = [];
+          roomSchedules[item.nama_ruangan].push({
+             start: startTime,
+             end: startTime + 135,
+             nama: item.nama_mk,
+             jam: item.jam
+          });
         }
       });
+
+      // 2. Determine state for each room in the database
+      allRuanganData.forEach(r => {
+         let rawName = r.nama_ruangan;
+         let isThehok = true;
+         if (rawName.includes("(Kampus Kobar)") || (r.kampus && r.kampus.toLowerCase().includes("kobar"))) {
+             isThehok = false;
+         }
+         let cleanName = rawName.replace(/ \(Kampus.*?\)/, "");
+         let isRoomLab = isLab(rawName);
+         
+         let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
+         
+         let state = 'empty'; // empty (red), waiting (orange), occupied (green)
+         let text = 'Kosong';
+         let jamText = '';
+         
+         let schedules = roomSchedules[rawName] || [];
+         
+         // Sort schedules by start time
+         schedules.sort((a, b) => a.start - b.start);
+         
+         let isOccupied = false;
+         let hasFutureClass = false;
+         let activeClass = null;
+         let nextClass = null;
+
+         for (const s of schedules) {
+            if (currentTime >= s.start && currentTime <= s.end) {
+               isOccupied = true;
+               activeClass = s;
+               break;
+            } else if (currentTime < s.start) {
+               hasFutureClass = true;
+               if (!nextClass) nextClass = s; // First future class
+            }
+         }
+
+         if (isOccupied) {
+            state = 'occupied';
+            text = activeClass.nama;
+            jamText = activeClass.jam;
+         } else if (hasFutureClass) {
+            state = 'waiting';
+            text = 'Jeda';
+            jamText = `(Buka: ${nextClass.jam})`;
+         }
+
+         targetDict[cleanName] = { state, text, jamText };
+      });
       
+      // Handle rooms that are in schedule but not in allRuanganData (e.g., specific regular rooms)
+      Object.keys(roomSchedules).forEach(rawName => {
+         // Check if already processed in allRuanganData
+         if (allRuanganData.some(r => r.nama_ruangan === rawName)) return;
+
+         let isThehok = true;
+         if (rawName.includes("(Kampus Kobar)")) isThehok = false; // Fallback check
+         
+         let cleanName = rawName.replace(/ \(Kampus.*?\)/, "");
+         let isRoomLab = isLab(rawName);
+         
+         let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
+         
+         let state = 'empty';
+         let text = 'Kosong';
+         let jamText = '';
+         
+         let schedules = roomSchedules[rawName];
+         schedules.sort((a, b) => a.start - b.start);
+         
+         let isOccupied = false;
+         let hasFutureClass = false;
+         let activeClass = null;
+         let nextClass = null;
+
+         for (const s of schedules) {
+            if (currentTime >= s.start && currentTime <= s.end) {
+               isOccupied = true;
+               activeClass = s;
+               break;
+            } else if (currentTime < s.start) {
+               hasFutureClass = true;
+               if (!nextClass) nextClass = s;
+            }
+         }
+
+         if (isOccupied) {
+            state = 'occupied';
+            text = activeClass.nama;
+            jamText = activeClass.jam;
+         } else if (hasFutureClass) {
+            state = 'waiting';
+            text = 'Jeda';
+            jamText = `(Buka: ${nextClass.jam})`;
+         }
+
+         targetDict[cleanName] = { state, text, jamText };
+      });
+      
+      // Live warnings only for Labs (keep existing behavior for tutup lab)
       let warningsHTML = '';
-      for (const [room, startTimes] of Object.entries(labSchedules)) {
+      for (const [room, schedules] of Object.entries(roomSchedules)) {
+        if (!isLab(room)) continue;
+        const startTimes = schedules.map(s => s.start);
         const lastStartTime = Math.max(...startTimes);
         const lastClassEndTime = lastStartTime + 135;
         const minsLeft = lastClassEndTime - currentTime;
@@ -499,52 +664,44 @@
         liveWarningsContainer.innerHTML = warningsHTML;
       }
 
-      let htmlContent = '';
-      if (Object.keys(labsThehok).length > 0 || Object.keys(labsKobar).length > 0) {
-        
-        const renderBlocks = (labs) => {
-          // Sort labs alphabetically for consistency
-          const sortedRooms = Object.keys(labs).sort();
-          let html = '<div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;">';
-          for (const room of sortedRooms) {
-             const data = labs[room];
-             const bgColor = data.isOccupied ? 'var(--badge-tm)' : 'var(--badge-cc)';
-             html += `
-               <div style="background-color: ${bgColor}; color: #fff; padding: 6px 10px; border-radius: 6px; flex: 1 1 calc(33.33% - 10px); box-sizing: border-box; min-width: 120px; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">
-                 <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 2px;">${room}</div>
-                 <div style="font-size: 0.75em; opacity: 0.95;">${data.isOccupied ? data.text + ' (' + data.jam + ')' : 'Kosong'}</div>
-               </div>
-             `;
-          }
-          html += '</div>';
-          return html;
-        };
-
-        if (Object.keys(labsThehok).length > 0) {
-            htmlContent += `<div style="margin-bottom:15px;"><b style="color: var(--primary); font-size: 1.1em; display:block; margin-bottom: 5px;">Thehok</b>${renderBlocks(labsThehok)}</div>`;
+      const renderBlocks = (dict) => {
+        const sortedRooms = Object.keys(dict).sort();
+        let html = '<div class="lab-grid">';
+        for (const room of sortedRooms) {
+           const data = dict[room];
+           html += `
+             <div class="lab-card ${data.state}" onclick="showRoomDetail('${room}')">
+               <div class="lab-name">${room}</div>
+               <div class="lab-status">${data.state === 'empty' ? 'Kosong' : data.text + ' ' + data.jamText}</div>
+             </div>
+           `;
         }
-        if (Object.keys(labsKobar).length > 0) {
-            htmlContent += `<div><b style="color: var(--primary); font-size: 1.1em; display:block; margin-bottom: 5px;">Kobar</b>${renderBlocks(labsKobar)}</div>`;
-        }
-      } else {
-        htmlContent = '<em>Tidak ada jadwal lab untuk hari ini.</em>';
-      }
-      
-      panel.innerHTML = htmlContent;
-      adjustNotifHeight();
-    }
+        html += '</div>';
+        return html;
+      };
 
-    function adjustNotifHeight() {
-      const leftPanel = document.getElementById('active-lab-panel');
-      const rightPanel = document.getElementById('notifikasi-lab-panel');
-      if(leftPanel && rightPanel) {
-        setTimeout(() => {
-          const leftHeight = leftPanel.offsetHeight;
-          if(leftHeight > 0) {
-            rightPanel.style.maxHeight = leftHeight + 'px';
-          }
-        }, 50);
+      const kampusFilter = document.getElementById('panel-kampus-filter') ? document.getElementById('panel-kampus-filter').value : 'semua';
+
+      // Render Lab Panel
+      let htmlLab = '';
+      if ((kampusFilter === 'semua' || kampusFilter === 'thehok') && Object.keys(labsThehok).length > 0) {
+          htmlLab += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(labsThehok)}</div>`;
       }
+      if ((kampusFilter === 'semua' || kampusFilter === 'kobar') && Object.keys(labsKobar).length > 0) {
+          htmlLab += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(labsKobar)}</div>`;
+      }
+      if (htmlLab === '') htmlLab = '<em>Tidak ada lab yang sesuai.</em>';
+      labPanel.innerHTML = htmlLab;
+
+      // Render Room Panel
+      let htmlRoom = '';
+      if ((kampusFilter === 'semua' || kampusFilter === 'thehok') && Object.keys(roomsThehok).length > 0) {
+          htmlRoom += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(roomsThehok)}</div>`;
+      }
+      if ((kampusFilter === 'semua' || kampusFilter === 'kobar') && Object.keys(roomsKobar).length > 0) {
+          htmlRoom += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(roomsKobar)}</div>`;
+      }
+      roomPanel.innerHTML = htmlRoom;
     }
 
     setInterval(updateActiveLabPanel, 60000);
@@ -616,7 +773,6 @@
         } else {
           notifList.innerHTML = '<em>Tidak ada notifikasi khusus pada tanggal ini.</em>';
         }
-        adjustNotifHeight();
       } catch (e) {
         notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
       }
@@ -662,6 +818,7 @@
 
     document.getElementById('sync-btn').addEventListener('click', () => syncData(filterTanggal.value));
 
+    // --- Test WA Endpoint ---
     document.getElementById('test-wa-btn').addEventListener('click', async () => {
       const pass = await promptPassword("Masukkan password Admin untuk fitur Test WA:");
       if (pass === null) return; // Dibatalkan
@@ -728,6 +885,68 @@
           alert("Gagal memuat daftar aslab.");
       }
     });
+
+    // Toggle Info Mase Inline Panel
+    document.getElementById('toggle-notif-btn').addEventListener('click', () => {
+      const panel = document.getElementById('info-mase-panel');
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+      } else {
+        panel.style.display = 'none';
+      }
+    });
+
+    // Handle Modal Detail Ruangan
+    window.showRoomDetail = function(roomName) {
+      const today = new Date();
+      const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      
+      const schedules = allJadwal.filter(item => 
+        item.nama_ruangan &&
+        item.nama_ruangan.split(" (Kampus")[0] === roomName && 
+        item.tanggal === currentDayStr && 
+        item.jam
+      );
+      
+      schedules.sort((a, b) => {
+        const aParts = a.jam.split(':');
+        const bParts = b.jam.split(':');
+        return (parseInt(aParts[0], 10) * 60 + parseInt(aParts[1], 10)) - (parseInt(bParts[0], 10) * 60 + parseInt(bParts[1], 10));
+      });
+      
+      document.getElementById('room-detail-title').innerText = roomName;
+      const listContainer = document.getElementById('room-detail-list');
+      
+      if (schedules.length === 0) {
+        listContainer.innerHTML = '<li><em>Tidak ada jadwal tercatat hari ini.</em></li>';
+      } else {
+        listContainer.innerHTML = schedules.map(s => {
+          let methodBadge = '';
+          if (s.metode_pembelajaran) {
+             methodBadge = `<span style="font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: var(--primary); margin-left: 8px; font-weight: bold;">${s.metode_pembelajaran}</span>`;
+          }
+          return `
+            <li style="background: var(--bg-card); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); box-shadow: var(--shadow-xs);">
+              <div style="font-weight: bold; font-size: 1.05em; color: var(--text-dark); margin-bottom: 4px;">${s.jam} - Selesai ${methodBadge}</div>
+              <div style="color: var(--text);">${s.nama_mk}</div>
+              <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Kelas ${s.kelas} • ${s.nama_dosen}</div>
+            </li>
+          `;
+        }).join('');
+      }
+      
+      document.getElementById('room-detail-modal').classList.add('open');
+    };
+
+    const roomModal = document.getElementById('room-detail-modal');
+    document.getElementById('room-detail-close-btn').addEventListener('click', () => roomModal.classList.remove('open'));
+    roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('open'); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal.classList.contains('open')) roomModal.classList.remove('open'); });
+
+    // Handle Kampus filter for panels
+    if (document.getElementById('panel-kampus-filter')) {
+      document.getElementById('panel-kampus-filter').addEventListener('change', updateActiveLabPanel);
+    }
 
     document.getElementById('clear-db-btn').addEventListener('click', async () => {
       const pass = await promptPassword("Masukkan password Admin untuk menghapus Database:");
@@ -865,12 +1084,6 @@
 
     setInterval(checkLabNotifications, 60000);
     setTimeout(checkLabNotifications, 1000);
-
-    // ─── Test Notification ───
-    document.getElementById('test-notif-btn').addEventListener('click', () => {
-      modalBody.innerHTML = '<p>Buka labor ni sekarang ges, kelas bentar lagi mulai:</p><ul><li style="margin-bottom:8px;"><b>Labora Uji Coba (Kampus Dummy)</b> buat matkul <b>Pemrograman Web</b> (Mulai jam 10:00) - <i>Gass buka dalam 30 menit!</i></li></ul>';
-      openModal();
-    });
 
     // ─── Theme Toggle ───
     const themeToggle = document.getElementById('theme-toggle');
