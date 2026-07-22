@@ -23,11 +23,5 @@
       "src": "/",
       "dest": "index.html"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/notifikasi",
-      "schedule": "* * * * *"
-    }
   ]
 }
