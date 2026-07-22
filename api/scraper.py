@@ -9,12 +9,14 @@ BULAN_DICT = {
     "September": "09", "Oktober": "10", "November": "11", "Desember": "12"
 }
 
+import os
+
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="", # Ubah jika ada password
-        database="db_jadwal_kuliah"
+        host=os.environ.get("DB_HOST", "localhost"),
+        user=os.environ.get("DB_USER", "root"),
+        password=os.environ.get("DB_PASSWORD", ""),
+        database=os.environ.get("DB_NAME", "db_jadwal_kuliah")
     )
 
 

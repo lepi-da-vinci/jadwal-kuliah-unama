@@ -2,15 +2,17 @@ import asyncio
 import datetime
 import requests
 import mysql.connector
-import scraper
+from api import scraper
 
 
 # In-memory set to prevent duplicate notifications
 sent_notifications = set()
 
+import os
+
 def send_wa_message(no_wa, pesan):
     try:
-        url = "http://localhost:3000/send"
+        url = os.environ.get("WA_API_URL", "http://localhost:3000/send")
         headers = {
             'Content-Type': 'application/json'
         }
@@ -162,11 +164,6 @@ def test_send(id_aslab=None):
             conn.close()
 
 
-async def wa_notifier_loop():
-    print("WA Notifier Loop Started.")
-    while True:
-        check_lab_schedules()
-        # Sleep until the start of the next minute
-        now = datetime.datetime.now()
-        sleep_seconds = 60 - now.second
-        await asyncio.sleep(sleep_seconds)
+async def run_wa_notifier_check():
+    print("Mengeksekusi WA Notifier Check (Cron Job).")
+    check_lab_schedules()
