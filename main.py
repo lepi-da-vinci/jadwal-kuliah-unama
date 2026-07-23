@@ -6,7 +6,6 @@ import mysql.connector
 from pydantic import BaseModel
 from typing import Optional
 import scraper
-import webbrowser
 import asyncio
 import threading
 import time
@@ -186,9 +185,6 @@ async def sync_data(req: SyncRequest):
 def sync_html_data(req: SyncHtmlRequest):
     """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
     try:
-        with open(f"baak_debug_{req.page}.html", "w", encoding="utf-8") as f:
-            f.write(req.html)
-            
         data = scraper.parse_html_content(req.html)
         if len(data) > 0:
             scraper.save_to_db(data, req.tanggal, req.page)
