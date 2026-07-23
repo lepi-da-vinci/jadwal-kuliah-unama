@@ -133,18 +133,18 @@ def get_semua_jadwal():
 
 @app.delete("/api/jadwal")
 def clear_jadwal():
-    """Menghapus seluruh data dari database dan mereset ID ke 1"""
+    """Menghapus seluruh jadwal dari database (biarkan ruangan & dosen)"""
     try:
-        conn = get_db()
+        conn = scraper.get_db()
         cursor = conn.cursor()
         cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
         cursor.execute("TRUNCATE TABLE jadwal")
-        cursor.execute("TRUNCATE TABLE dosen")
-        cursor.execute("TRUNCATE TABLE ruangan")
+        cursor.execute("TRUNCATE TABLE jadwal_temp")
+        cursor.execute("TRUNCATE TABLE notifikasi_lab")
         cursor.execute("TRUNCATE TABLE mata_kuliah")
         cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
         conn.commit()
-        return {"status": "success", "message": "Seluruh database berhasil dibersihkan dan ID telah direset ke 1."}
+        return {"status": "success", "message": "Jadwal dan mata kuliah berhasil dibersihkan."}
     except mysql.connector.Error as err:
         return {"status": "error", "message": str(err)}
     finally:
@@ -169,11 +169,9 @@ sync_status = {}
 async def sync_data(req: SyncRequest):
     """Sinkronisasi data dengan memerintahkan browser lokal (PC) membuka tab"""
     try:
-        # Buka tab baru di browser PC secara diam-diam
+        # Buka tab baru di browser PC secara diam-diam (Sekarang dipindah ke frontend)
         sync_status[req.tanggal] = "pending"
-        target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={req.tanggal or ''}&auto_close=1"
-        webbrowser.open_new(target_url)
-
+        
         # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
         for _ in range(40):
             await asyncio.sleep(1)
@@ -188,6 +186,9 @@ async def sync_data(req: SyncRequest):
 def sync_html_data(req: SyncHtmlRequest):
     """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
     try:
+        with open(f"baak_debug_{req.page}.html", "w", encoding="utf-8") as f:
+            f.write(req.html)
+            
         data = scraper.parse_html_content(req.html)
         if len(data) > 0:
             scraper.save_to_db(data, req.tanggal, req.page)

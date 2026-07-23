@@ -726,6 +726,10 @@
       `;
       syncBtn.disabled = true;
 
+      // Buka tab BAAK UNAMA dari frontend agar ekstensi bisa auto-close
+      const target_url = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
+      window.open(target_url, '_blank');
+
       try {
         const response = await fetch(`${API_BASE_URL}/api/sync`, {
           method: 'POST',

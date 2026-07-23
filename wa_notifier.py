@@ -105,7 +105,7 @@ def check_lab_schedules():
                     if notif_key not in sent_notifications:
                         h = cls['start_min'] // 60
                         m = cls['start_min'] % 60
-                        msg = f"🔔 *Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {diff_buka} menit!"
+                        msg = f"🔔 *Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {diff_buka} menit loh mas!"
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)
             
@@ -117,7 +117,7 @@ def check_lab_schedules():
                     if notif_key not in sent_notifications:
                         eh = cls['end_min'] // 60
                         em = cls['end_min'] % 60
-                        msg = f"🔒 *Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {diff_tutup} menit!"
+                        msg = f"🔒 *Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {diff_tutup} menit loh mas!"
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)
     except Exception as e:

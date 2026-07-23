@@ -29,9 +29,9 @@ def parse_html_content(html_content):
         if not cols or len(cols) < 5:
             continue
             
-        # 1. Parsing Kolom TANGGAL (Jumat, 17 Juli 2026 08:00)
+        # 1. Parsing Kolom TANGGAL (Jumat, 17 Juli 2026 08:00) atau (Jum'at, 24 Juli 2026 14:00)
         waktu_raw = cols[1].text.strip()
-        match_waktu = re.match(r"([A-Za-z]+),\s(\d+)\s([A-Za-z]+)\s(\d+)\s(\d{2}:\d{2})", waktu_raw)
+        match_waktu = re.match(r"^([^,]+),\s*(\d+)\s+([A-Za-z]+)\s+(\d+)\s+(\d{2}:\d{2})", waktu_raw)
         hari, tanggal_db, jam = "", "", ""
         if match_waktu:
             hari, tgl, bln_text, thn, jam = match_waktu.groups()
@@ -54,7 +54,9 @@ def parse_html_content(html_content):
         ruang_raw = cols[3].text.strip()
         kampus, nama_ruangan = "", ""
         if "," in ruang_raw:
-            kampus, nama_ruangan = [x.strip() for x in ruang_raw.split(",")]
+            parts = [x.strip() for x in ruang_raw.split(",")]
+            kampus = parts[0]
+            nama_ruangan = ", ".join(parts[1:])
         else:
             nama_ruangan = ruang_raw
             
