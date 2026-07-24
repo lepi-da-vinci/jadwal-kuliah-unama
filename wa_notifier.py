@@ -251,7 +251,7 @@ def handle_incoming_message(sender, text):
                         aslab_lain = cursor.fetchone()
                         
                         if aslab_lain:
-                            pesan_token = f"PEMBERITAHUAN KEAMANAN 🔒\nAda Aslab baru ({state['nama_aslab']} - {state['nama_ruangan']}) yang sedang mencoba mendaftar ke Bot. Jika benar itu dia, beritahu dia token pendaftaran ini: *{token}*"
+                            pesan_token = f"PEMBERITAHUAN KEAMANAN 🔒\nAda Aslab yang mau daftar ({state['nama_aslab']} - {state['nama_ruangan']}). Jika benar itu dia, beritahu dia token pendaftaran ini: *{token}*"
                             send_wa_message(aslab_lain['no_wa'], pesan_token)
                             return f"Sip mas {state['nama_aslab']}! Untuk keamanan, saya sudah mengirimkan 4 digit token ke Aslab kita ({aslab_lain['nama_aslab']}). Silakan japri {aslab_lain['nama_aslab']} untuk minta tokennya dan balas ke sini ya mase!"
                         else:
@@ -309,7 +309,7 @@ def handle_incoming_message(sender, text):
         
         if not aslab:
             # Jika belum terdaftar dan mengirim info/inpo -> Memicu Pendaftaran Baru
-            if text_clean in ["info", "inpo"]:
+            if text_clean in ["info", "inpo", "info mase", "inpo mase", "INFO", "INPO", "INFO MASE", "INPO MASE", "oi mas", "oi mase", "Oi mas", "Oi mase", "OI MAS", "OI MASE", "oi", "Oi", "OI", "oi", "p inpo", "p inpo mas", "p inpo mase", "p inpo mas", "p inpo mase", "p inpo mas", "p inpo mas", "p inpo mas", "p inpo mas", "p inpo mas", "p inpo mase", "p inpo mas", "p inpo mase", "p inpo mase"]:
                 registration_states[sender] = {"step": 1}
                 return "siapa nih?"
             else:
@@ -339,7 +339,7 @@ def handle_incoming_message(sender, text):
             jadwals = cursor.fetchall()
             
             if not jadwals:
-                return f"Tidak ada jadwal praktikum di {ruang} untuk hari ini."
+                return f"Lagi kosong ni mas tuk {ruang} hari ini."
                 
             msg = f"📅 *Jadwal {ruang} Hari Ini:*\n"
             for j in jadwals:
@@ -356,13 +356,35 @@ def handle_incoming_message(sender, text):
             return msg
             
         elif text_clean == "2":
-            return "📣 *Info Mase:*\n\nBelum ada informasi terbaru untuk saat ini"
+            now = datetime.datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+            
+            cursor.execute('''
+                SELECT tipe_notif, pesan 
+                FROM notifikasi_lab 
+                WHERE tanggal = %s 
+                ORDER BY id ASC
+            ''', (today_str,))
+            notifs = cursor.fetchall()
+            
+            if not notifs:
+                return "📣 *Info Mase:*\n\nBelum ada informasi terbaru untuk saat ini"
+                
+            msg = "📣 *Info Mase:*\n"
+            for n in notifs:
+                msg += f"\n▪️ *{n['tipe_notif']}*\n{n['pesan']}\n"
+                
+            return msg
             
         elif text_clean == "3":
             try:
-                with open("last_ngrok.txt", "r") as f:
-                    ngrok_link = f.read().strip()
-                return f"🌐 *Link Server Ngrok:*\n\n{ngrok_link}"
+                response = requests.get("http://localhost:4040/api/tunnels", timeout=3)
+                if response.status_code == 200:
+                    tunnels = response.json().get('tunnels', [])
+                    for tunnel in tunnels:
+                        if tunnel['public_url'].startswith("https"):
+                            return f"🌐 *Link Server Ngrok:*\n\n{tunnel['public_url']}"
+                return "🌐 *Link Server Ngrok:*\n\nTerdeteksi ngrok berjalan tapi tidak ada URL https."
             except Exception:
                 return "🌐 *Link Server Ngrok:*\n\nServer ngrok saat ini belum aktif atau tidak terdeteksi."
             

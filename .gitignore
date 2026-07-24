@@ -3,5 +3,5 @@ __pycache__/
 wa-bot/node_modules/
 wa-bot/.wwebjs_auth/
 wa-bot/.wwebjs_cache/
-.env
 baileys_auth_info/  
+.env
