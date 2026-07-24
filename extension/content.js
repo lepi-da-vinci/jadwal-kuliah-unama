@@ -94,12 +94,12 @@ function processPage(htmlContent, pageNum, docContext) {
             .then(() => {
                 if (isAutoClose) {
                     document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Sinkronisasi Selesai!</h1><p style='font-size:18px;'>Menutup tab dalam 2 detik...</p></div>";
-                    setTimeout(() => window.close(), 2000);
+                    setTimeout(() => chrome.runtime.sendMessage({action: "closeTab"}), 2000);
                 }
             })
             .catch(err => {
                 console.error("Gagal mengirim sinyal sync complete", err);
-                window.close();
+                chrome.runtime.sendMessage({action: "closeTab"});
             });
         }
     })

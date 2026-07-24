@@ -675,13 +675,13 @@
         liveWarningsContainer.innerHTML = warningsHTML;
       }
 
-      const renderBlocks = (dict) => {
+      const renderBlocks = (dict, kampusStr) => {
         const sortedRooms = Object.keys(dict).sort();
         let html = '<div class="lab-grid">';
         for (const room of sortedRooms) {
            const data = dict[room];
            html += `
-             <div class="lab-card ${data.state}" onclick="showRoomDetail('${room}')">
+             <div class="lab-card ${data.state}" onclick="showRoomDetail('${room}', '${kampusStr}')">
                <div class="lab-name">${room}</div>
                <div class="lab-status">${data.state === 'empty' ? 'Kosong' : data.text + ' ' + data.jamText}</div>
              </div>
@@ -696,10 +696,10 @@
       // Render Lab Panel
       let htmlLab = '';
       if ((kampusFilter === 'semua' || kampusFilter === 'thehok') && Object.keys(labsThehok).length > 0) {
-          htmlLab += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(labsThehok)}</div>`;
+          htmlLab += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(labsThehok, 'Thehok')}</div>`;
       }
       if ((kampusFilter === 'semua' || kampusFilter === 'kobar') && Object.keys(labsKobar).length > 0) {
-          htmlLab += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(labsKobar)}</div>`;
+          htmlLab += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(labsKobar, 'Kobar')}</div>`;
       }
       if (htmlLab === '') htmlLab = '<em>Tidak ada lab yang sesuai.</em>';
       labPanel.innerHTML = htmlLab;
@@ -707,10 +707,10 @@
       // Render Room Panel
       let htmlRoom = '';
       if ((kampusFilter === 'semua' || kampusFilter === 'thehok') && Object.keys(roomsThehok).length > 0) {
-          htmlRoom += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(roomsThehok)}</div>`;
+          htmlRoom += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(roomsThehok, 'Thehok')}</div>`;
       }
       if ((kampusFilter === 'semua' || kampusFilter === 'kobar') && Object.keys(roomsKobar).length > 0) {
-          htmlRoom += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(roomsKobar)}</div>`;
+          htmlRoom += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(roomsKobar, 'Kobar')}</div>`;
       }
       roomPanel.innerHTML = htmlRoom;
     }
@@ -725,10 +725,6 @@
         Menarik Data...
       `;
       syncBtn.disabled = true;
-
-      // Buka tab BAAK UNAMA dari frontend agar ekstensi bisa auto-close
-      const target_url = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
-      window.open(target_url, '_blank');
 
       try {
         const response = await fetch(`${API_BASE_URL}/api/sync`, {
@@ -794,8 +790,14 @@
     }
 
     filterTanggal.addEventListener('change', (e) => {
-      syncData(e.target.value);
-      applyFilters();
+      const selectedDate = e.target.value;
+      if (selectedDate) {
+         // Selalu lakukan syncData agar update dari BAAK (Tambahan/Perubahan) bisa masuk.
+         // applyFilters() akan dipanggil otomatis setelah sync selesai.
+         syncData(selectedDate);
+      } else {
+         applyFilters();
+      }
     });
 
     // Helper custom password prompt
@@ -917,16 +919,22 @@
     });
 
     // Handle Modal Detail Ruangan
-    window.showRoomDetail = function(roomName) {
+    window.showRoomDetail = function(roomName, kampusStr) {
       const today = new Date();
       const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       
-      const schedules = allJadwal.filter(item => 
-        item.nama_ruangan &&
-        item.nama_ruangan.split(" (Kampus")[0] === roomName && 
-        item.tanggal === currentDayStr && 
-        item.jam
-      );
+      const schedules = allJadwal.filter(item => {
+        if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
+        if (item.tanggal !== currentDayStr) return false;
+        
+        if (item.nama_ruangan.split(" (Kampus")[0] !== roomName) return false;
+        
+        if (kampusStr) {
+           if (kampusStr === 'Thehok' && item.nama_ruangan.includes('Kampus Kobar')) return false;
+           if (kampusStr === 'Kobar' && item.nama_ruangan.includes('Kampus Thehok')) return false;
+        }
+        return true;
+      });
       
       schedules.sort((a, b) => {
         const aParts = a.jam.split(':');
@@ -934,7 +942,7 @@
         return (parseInt(aParts[0], 10) * 60 + parseInt(aParts[1], 10)) - (parseInt(bParts[0], 10) * 60 + parseInt(bParts[1], 10));
       });
       
-      document.getElementById('room-detail-title').innerText = roomName;
+      document.getElementById('room-detail-title').innerText = `${roomName} (${kampusStr || ''})`;
       const listContainer = document.getElementById('room-detail-list');
       
       if (schedules.length === 0) {

@@ -50,6 +50,42 @@ async function connectToWhatsApp () {
     });
 
     sock.ev.on('creds.update', saveCreds);
+
+    // Menerima pesan masuk dan meneruskannya ke backend Python
+    sock.ev.on('messages.upsert', async (m) => {
+        const msg = m.messages[0];
+        // Abaikan pesan kosong atau pesan yang dikirim oleh bot sendiri
+        if (!msg.message || msg.key.fromMe) return;
+
+        try {
+            const sender = msg.key.participant || msg.key.remoteJid;
+            // Abaikan pesan dari grup
+            if (sender.endsWith('@g.us')) return;
+            
+            console.log("DEBUG MSG KEY:", JSON.stringify(msg.key));
+            console.log("DEBUG PARTICIPANT:", msg.key.participant);
+            console.log("DEBUG REMOTE JID:", msg.key.remoteJid);
+
+            // Ambil isi teks pesan
+            const text = msg.message.conversation || 
+                         (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text) || '';
+                         
+            if (!text) return;
+            
+            console.log(`\n[PESAN MASUK] Dari ${sender}: ${text}`);
+
+            // Kirim webhook ke FastAPI Python
+            const response = await fetch('http://127.0.0.1:8000/api/webhook/wa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sender: sender, text: text.trim() })
+            });
+            
+            console.log(`[WEBHOOK] Status dikirim ke Backend Python: HTTP ${response.status}`);
+        } catch (e) {
+            console.error('Webhook error:', e);
+        }
+    });
 }
 
 // Endpoint untuk mengirim pesan
@@ -60,25 +96,22 @@ app.post('/send', async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'Target dan message diperlukan' });
     }
     
-    // Hapus karakter non-angka (seperti +, spasi, strip)
-    target = target.replace(/\D/g, '');
-    
-    // Format nomor target (hilangkan awalan 0, tambah 62, plus @s.whatsapp.net)
-    if (target.startsWith('0')) {
-        target = '62' + target.substring(1);
+    let jid = target;
+    // Jika belum mengandung '@', format sebagai nomor standar
+    if (!target.includes('@')) {
+        // Hapus karakter non-angka
+        target = target.replace(/\D/g, '');
+        if (target.startsWith('0')) {
+            target = '62' + target.substring(1);
+        }
+        jid = target + '@s.whatsapp.net';
     }
     
-    const jid = target + '@s.whatsapp.net';
-    
     try {
-        // Cek apakah nomor terdaftar di WhatsApp
-        const [result] = await sock.onWhatsApp(jid);
-        if (result && result.exists) {
-            await sock.sendMessage(jid, { text: message });
-            res.json({ status: 'success', message: 'Pesan berhasil dikirim' });
-        } else {
-            res.status(400).json({ status: 'error', message: 'Nomor tidak terdaftar di WA' });
-        }
+        // Coba kirim langsung tanpa cek onWhatsApp karena onWhatsApp kadang gagal 
+        // mengenali nomor yang tidak ada di kontak hp.
+        await sock.sendMessage(jid, { text: message });
+        res.json({ status: 'success', message: 'Pesan berhasil dikirim' });
     } catch (error) {
         res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan', error: error.toString() });
     }

@@ -5,8 +5,12 @@
   "description": "Ekstensi untuk menyinkronkan data jadwal dari baak.unama.ac.id langsung ke Dashboard lokal Anda.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["*://baak.unama.ac.id/jadwal-kuliah*"],
