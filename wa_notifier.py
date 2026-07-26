@@ -5,6 +5,8 @@ import mysql.connector
 import scraper
 import re
 import random
+import threading
+from datetime import timedelta
 
 # State pendaftaran bot
 registration_states = {}
@@ -12,6 +14,174 @@ registration_states = {}
 
 # In-memory set to prevent duplicate notifications
 sent_notifications = set()
+
+def parse_tanggal(text_clean):
+    text_clean = text_clean.strip().lower()
+    
+    if text_clean == 'besok':
+        return (datetime.datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"), None
+        
+    if text_clean in ['hari ini', 'sekarang']:
+        return datetime.datetime.now().strftime("%Y-%m-%d"), None
+    
+    match = re.search(r'\b(\d{1,2})[\s/-]+([a-z]+|\d{1,2})[\s/-]+(\d{2,4})\b', text_clean)
+    if not match:
+        return None, "Format tanggal tidak valid. Contoh: 12 Agustus 2026 atau besok"
+        
+    hari = int(match.group(1))
+    bulan_str = match.group(2)
+    tahun = int(match.group(3))
+    
+    if tahun < 100:
+        tahun += 2000
+        
+    if bulan_str.isdigit():
+        bulan = int(bulan_str)
+    else:
+        bulan_map = {
+            'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'mei': 5, 'may': 5,
+            'jun': 6, 'jul': 7, 'agu': 8, 'aug': 8, 'sep': 9, 'okt': 10, 'oct': 10,
+            'nov': 11, 'des': 12, 'dec': 12
+        }
+        
+        if bulan_str.startswith('ju') and bulan_str not in ['juni', 'juli']:
+            return None, "CONFIRM_JUN_JUL"
+            
+        if bulan_str == 'juni':
+            bulan = 6
+        elif bulan_str == 'juli':
+            bulan = 7
+        else:
+            bulan = next((v for k, v in bulan_map.items() if bulan_str.startswith(k)), None)
+            
+        if not bulan:
+            return None, "Bulan tidak valid."
+            
+    try:
+        dt = datetime.datetime(tahun, bulan, hari)
+        return dt.strftime("%Y-%m-%d"), None
+    except ValueError:
+        return None, "Tanggal tidak valid (misal 30 Februari)."
+
+def background_sync_and_reply(target_date, no_wa, intent, data=None, need_sync=True):
+    try:
+        if need_sync:
+            response = requests.post('http://127.0.0.1:8000/api/sync', json={"tanggal": target_date}, timeout=60).json()
+            if response.get("status") != "success":
+                send_wa_message(no_wa, "Gagal sinkronisasi data dari server mas.")
+                return
+                
+        # Panggil ulang logic sesuai intent
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        if intent == "jadwal_sendiri":
+            id_ruangan = data['id_ruangan']
+            ruang = data['ruang']
+            cursor.execute('''
+                SELECT jam, nama_mk, kelas, dosen.nama_dosen
+                FROM jadwal
+                LEFT JOIN dosen ON jadwal.id_dosen = dosen.id_dosen
+                WHERE id_ruangan = %s AND tanggal = %s
+                ORDER BY jam
+            ''', (id_ruangan, target_date))
+            jadwals = cursor.fetchall()
+            if not jadwals:
+                msg = f"Lagi kosong ni mas tuk {ruang} tanggal {target_date}."
+            else:
+                msg = f"📅 *Jadwal {ruang} Tanggal {target_date}:*\n"
+                for j in jadwals:
+                    total_seconds = int(j['jam'].total_seconds())
+                    h = total_seconds // 3600
+                    m = (total_seconds % 3600) // 60
+                    eh = (total_seconds // 60 + 135) // 60
+                    em = (total_seconds // 60 + 135) % 60
+                    dosen_str = j['nama_dosen'] or '-'
+                    msg += f"\n⏰ {h:02d}:{m:02d} - {eh:02d}:{em:02d}\n📚 {j['nama_mk']} ({j['kelas']})\n 🧑‍🏫{dosen_str}\n"
+            send_wa_message(no_wa, msg)
+            
+        elif intent == "jadwal_semua":
+            kampus_query = data['kampus_query']
+            kampus_name = data['kampus_name']
+            cursor.execute('''
+                SELECT r.nama_ruangan, j.jam, j.nama_mk, j.kelas, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE r.kampus LIKE %s AND j.tanggal = %s 
+                  AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+                ORDER BY r.nama_ruangan, j.jam
+            ''', (kampus_query, target_date))
+            jadwals = cursor.fetchall()
+            if not jadwals:
+                msg = f"Lagi kosong ni mas tuk semua lab di kampus {kampus_name} tanggal {target_date}."
+            else:
+                msg = f"📋 *Jadwal Semua Lab Kampus {kampus_name} Tanggal {target_date}:*\n"
+                current_room = None
+                for j in jadwals:
+                    if current_room != j['nama_ruangan']:
+                        current_room = j['nama_ruangan']
+                        msg += f"\n📍 *{current_room}*\n"
+                    total_seconds = int(j['jam'].total_seconds())
+                    h = total_seconds // 3600
+                    m = (total_seconds % 3600) // 60
+                    eh = (total_seconds // 60 + 135) // 60
+                    em = (total_seconds // 60 + 135) % 60
+                    dosen_str = j['nama_dosen'] or '-'
+                    msg += f"• {h:02d}:{m:02d} - {eh:02d}:{em:02d} | {j['nama_mk']} ({j['kelas']}) | {dosen_str}\n"
+            send_wa_message(no_wa, msg)
+            
+        elif intent == "cek_kosong":
+            kampus_query = data['kampus_query']
+            kampus_name = data['kampus_name']
+            
+            # Cek lab kosong
+            cursor.execute('''
+                SELECT r.nama_ruangan, j.jam
+                FROM ruangan r
+                LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
+                WHERE r.kampus LIKE %s 
+                  AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+                ORDER BY r.nama_ruangan, j.jam
+            ''', (target_date, kampus_query))
+            results = cursor.fetchall()
+            
+            # Kumpulkan jadwal per ruangan
+            room_schedules = {}
+            for r in results:
+                rname = r['nama_ruangan']
+                if rname not in room_schedules:
+                    room_schedules[rname] = []
+                if r['jam']:
+                    room_schedules[rname].append(int(r['jam'].total_seconds()) // 60)
+            
+            msg = f"🔍 *Info Lab Kosong {kampus_name} Tanggal {target_date}:*\n\n"
+            for rname, start_mins in room_schedules.items():
+                if not start_mins:
+                    msg += f"✅ *{rname}*: full kosong aja\n"
+                else:
+                    msg += f"⚠️ *{rname}*:\n"
+                    start_mins = sorted(start_mins)
+                    
+                    current = 480
+                    end_of_day = max(1020, max((s + 135 for s in start_mins), default=1020))
+                    
+                    for sm in start_mins:
+                        if sm > current:
+                            msg += f"   - {current//60:02d}:{current%60:02d} - {sm//60:02d}:{sm%60:02d} kosong (setelahnya ada kelas)\n"
+                        current = max(current, sm + 135)
+                    
+                    if current < end_of_day:
+                        msg += f"   - {current//60:02d}:{current%60:02d} - {end_of_day//60:02d}:{end_of_day%60:02d} kosong\n"
+                        
+                    msg += "\n"
+            send_wa_message(no_wa, msg)
+            
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Background thread error: {e}")
+        send_wa_message(no_wa, "Terjadi kesalahan sistem saat mengambil data mas.")
 
 def send_wa_message(no_wa, pesan):
     try:
@@ -293,7 +463,7 @@ def handle_incoming_message(sender, text):
             else:
                 return "Token salah mase! Coba minta lagi ke aslab yang bersangkutan, atau jawab 'batal' untuk membatalkan pendaftaran."
                 
-        elif step == "pilih_kampus":
+        elif step == "pilih_kampus_jadwal_semua" or step == "pilih_kampus_cek_kosong":
             if any(k in text_clean for k in ["kobar", "kobr", "kbar", "kob", "kbr"]):
                 kampus_query = "%Kobar%"
                 kampus_name = "Kobar"
@@ -303,6 +473,80 @@ def handle_incoming_message(sender, text):
             else:
                 return "Kampus nggak valid mase. Pilih Kobar atau Thehok aja, atau ketik 'batal'."
             
+            state["kampus_query"] = kampus_query
+            state["kampus_name"] = kampus_name
+            if step == "pilih_kampus_jadwal_semua":
+                state["step"] = "pilih_tanggal_jadwal_semua"
+            else:
+                state["step"] = "pilih_tanggal_cek_kosong"
+                
+            return "Untuk tanggal berapa mase? (Ketik 'besok' atau tanggal spt '12 Agustus 2026')"
+            
+        elif step in ["pilih_tanggal_sendiri", "pilih_tanggal_jadwal_semua", "pilih_tanggal_cek_kosong", "konfirmasi_bulan"]:
+            if step == "konfirmasi_bulan":
+                if text_clean not in ['juni', 'juli']:
+                    return "Tolong jawab dengan 'juni' atau 'juli', atau ketik 'batal'."
+                raw_text = state["raw_text"]
+                text_clean = re.sub(r'\b(ju[a-z]*)\b', text_clean, raw_text)
+                step = state["next_step"]
+                state["step"] = step
+                
+            parsed_date, error = parse_tanggal(text_clean)
+            if error == "CONFIRM_JUN_JUL":
+                state["next_step"] = step
+                state["step"] = "konfirmasi_bulan"
+                state["raw_text"] = text_clean
+                return "Maksud mase bulan Juni atau Juli? balas 'juni' atau 'juli'"
+            elif error:
+                return error
+                
+            target_dt = datetime.datetime.strptime(parsed_date, "%Y-%m-%d")
+            if target_dt.weekday() == 6:
+                del registration_states[sender]
+                return f"Tanggal {parsed_date} itu hari Minggu mase, kampus libur toh mas"
+                
+            intent_map = {
+                "pilih_tanggal_sendiri": "jadwal_sendiri",
+                "pilih_tanggal_jadwal_semua": "jadwal_semua",
+                "pilih_tanggal_cek_kosong": "cek_kosong"
+            }
+            intent = intent_map[step]
+            
+            try:
+                conn = scraper.get_db()
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT id_jadwal FROM jadwal WHERE tanggal = %s LIMIT 1", (parsed_date,))
+                exists = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                
+                need_sync = True if not exists else False
+                
+                thread_data = {}
+                if intent == "jadwal_sendiri":
+                    thread_data['id_ruangan'] = state['id_ruangan']
+                    thread_data['ruang'] = state['ruang']
+                else:
+                    thread_data['kampus_query'] = state['kampus_query']
+                    thread_data['kampus_name'] = state['kampus_name']
+                
+                del registration_states[sender]
+                
+                threading.Thread(target=background_sync_and_reply, args=(parsed_date, sender, intent, thread_data, need_sync)).start()
+                
+                if need_sync:
+                    return f"Bentar mas cek jadwal tanggal {parsed_date} dulu..."
+                else:
+                    return f"Memproses jadwal tanggal {parsed_date}..."
+                    
+            except Exception as e:
+                print(e)
+                del registration_states[sender]
+                return "Terjadi kesalahan sistem saat memproses tanggal."
+
+        elif step == "cari_dosen":
+            nama_dosen = text_clean.upper()
+            del registration_states[sender]
             try:
                 conn = scraper.get_db()
                 cursor = conn.cursor(dictionary=True)
@@ -313,40 +557,29 @@ def handle_incoming_message(sender, text):
                     SELECT r.nama_ruangan, j.jam, j.nama_mk, j.kelas, d.nama_dosen
                     FROM jadwal j
                     JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                    LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-                    WHERE r.kampus LIKE %s 
-                      AND j.tanggal = %s 
-                      AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
-                    ORDER BY r.nama_ruangan, j.jam
-                ''', (kampus_query, today_str))
+                    JOIN dosen d ON j.id_dosen = d.id_dosen
+                    WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
+                    ORDER BY j.jam
+                ''', (f"%{nama_dosen}%", today_str))
                 jadwals = cursor.fetchall()
                 
-                del registration_states[sender]
-                
                 if not jadwals:
-                    return f"Lagi kosong ni mas tuk semua lab di kampus {kampus_name} hari ini."
+                    return f"Nggak ketemu jadwal untuk dosen {nama_dosen} hari ini mas."
                     
-                msg = f"📋 *Jadwal Semua Lab Kampus {kampus_name} Hari Ini:*\n"
-                current_room = None
+                dosen_full = jadwals[0]['nama_dosen']
+                msg = f"👨‍🏫 *Jadwal {dosen_full} Hari Ini:*\n"
                 for j in jadwals:
-                    if current_room != j['nama_ruangan']:
-                        current_room = j['nama_ruangan']
-                        msg += f"\n📍 *{current_room}*\n"
-                    
                     total_seconds = int(j['jam'].total_seconds())
                     h = total_seconds // 3600
                     m = (total_seconds % 3600) // 60
-                    end_min = (total_seconds // 60) + 135
-                    eh = end_min // 60
-                    em = end_min % 60
-                    dosen_str = j['nama_dosen'] or '-'
-                    
-                    msg += f"• {h:02d}:{m:02d} - {eh:02d}:{em:02d} | {j['nama_mk']} ({j['kelas']}) | {dosen_str}\n"
+                    eh = (total_seconds // 60 + 135) // 60
+                    em = (total_seconds // 60 + 135) % 60
+                    msg += f"\n⏰ {h:02d}:{m:02d} - {eh:02d}:{em:02d}\n📍 {j['nama_ruangan']}\n📚 {j['nama_mk']} ({j['kelas']})\n"
                     
                 return msg
             except Exception as e:
                 print(e)
-                return "Terjadi kesalahan sistem saat mengambil jadwal semua lab."
+                return "Terjadi kesalahan saat mencari dosen."
             finally:
                 if 'conn' in locals() and conn.is_connected():
                     cursor.close()
@@ -382,43 +615,21 @@ def handle_incoming_message(sender, text):
         print(f"[WA INCOMING] Dikenali sebagai Aslab: {nama} ({ruang})")
         
         if re.search(r'\b(info|inpo|infoo|inpoo|oi)\b', text_clean):
-            return f"naon mas {nama},\nni inpo yang ada:\n\n1. Jadwal Lab {ruang}\n2. Jadwal Semua Lab (Kobar/Thehok)\n3. Info Mase\n4. Link Server Ngrok\n\nBalas dengan angka 1, 2, 3, atau 4."
+            return f"naon mas {nama},\nni inpo yang ada:\n\n1. Jadwal Lab {ruang}\n2. Jadwal Semua Lab (Kobar/Thehok)\n3. Cek Lab Kosong\n4. Info Mase\n5. Cari Posisi Dosen\n6. Link Server Ngrok\n\nBalas dengan angka 1 s/d 6."
             
         elif text_clean == "1":
-            now = datetime.datetime.now()
-            today_str = now.strftime("%Y-%m-%d")
-            
-            cursor.execute('''
-                SELECT jam, nama_mk, kelas, dosen.nama_dosen
-                FROM jadwal
-                LEFT JOIN dosen ON jadwal.id_dosen = dosen.id_dosen
-                WHERE id_ruangan = %s AND tanggal = %s
-                ORDER BY jam
-            ''', (id_ruangan, today_str))
-            jadwals = cursor.fetchall()
-            
-            if not jadwals:
-                return f"Lagi kosong ni mas tuk {ruang} hari ini."
-                
-            msg = f"📅 *Jadwal {ruang} Hari Ini:*\n"
-            for j in jadwals:
-                total_seconds = int(j['jam'].total_seconds())
-                h = total_seconds // 3600
-                m = (total_seconds % 3600) // 60
-                end_min = (total_seconds // 60) + 135
-                eh = end_min // 60
-                em = end_min % 60
-                dosen_str = j['nama_dosen'] or '-'
-                
-                msg += f"\n⏰ {h:02d}:{m:02d} - {eh:02d}:{em:02d}\n📚 {j['nama_mk']} ({j['kelas']})\n 🧑‍🏫{dosen_str}\n"
-                
-            return msg
+            registration_states[sender] = {"step": "pilih_tanggal_sendiri", "id_ruangan": id_ruangan, "ruang": ruang}
+            return "Untuk tanggal berapa mase? (Ketik 'besok' atau tanggal spt '12 Agustus 2026')"
             
         elif text_clean == "2":
-            registration_states[sender] = {"step": "pilih_kampus"}
+            registration_states[sender] = {"step": "pilih_kampus_jadwal_semua"}
             return "Kampus mana mase? (Kobar / Thehok)"
             
         elif text_clean == "3":
+            registration_states[sender] = {"step": "pilih_kampus_cek_kosong"}
+            return "Kampus mana mase? (Kobar / Thehok)"
+            
+        elif text_clean == "4":
             now = datetime.datetime.now()
             today_str = now.strftime("%Y-%m-%d")
             
@@ -439,7 +650,11 @@ def handle_incoming_message(sender, text):
                 
             return msg
             
-        elif text_clean == "4":
+        elif text_clean == "5":
+            registration_states[sender] = {"step": "cari_dosen"}
+            return "Siapa nama dosennya mas?"
+            
+        elif text_clean == "6":
             try:
                 response = requests.get("http://localhost:4040/api/tunnels", timeout=3)
                 if response.status_code == 200:
@@ -450,6 +665,47 @@ def handle_incoming_message(sender, text):
                 return "🌐 *Link Server Ngrok:*\n\nTerdeteksi ngrok berjalan tapi tidak ada URL https."
             except Exception:
                 return "🌐 *Link Server Ngrok:*\n\nServer ngrok saat ini belum aktif atau tidak terdeteksi."
+                
+        elif text_clean.startswith("lab") or re.match(r'^\d+\.\d+$', text_clean):
+            nama_lab = text_clean.upper()
+            now = datetime.datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+            
+            cursor.execute('''
+                SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen
+                FROM ruangan r
+                LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
+                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(r.nama_ruangan) LIKE %s
+                ORDER BY r.kampus, r.nama_ruangan, j.jam
+            ''', (today_str, f"%{nama_lab}%"))
+            jadwals = cursor.fetchall()
+            
+            if not jadwals:
+                return f"Ruangan {nama_lab} tidak ditemukan atau kosong."
+                
+            msg = f"📅 *Hasil Pencarian Jadwal {nama_lab} Hari Ini:*\n"
+            current_room = None
+            for j in jadwals:
+                room_full_name = f"{j['nama_ruangan']} ({j['kampus']})"
+                if current_room != room_full_name:
+                    current_room = room_full_name
+                    msg += f"\n📍 *{current_room}*\n"
+                    # Check if this room has no schedule today
+                    if not j['jam']:
+                        msg += "Lagi kosong ni mas hari ini.\n"
+                        continue
+                        
+                if j['jam']:
+                    total_seconds = int(j['jam'].total_seconds())
+                    h = total_seconds // 3600
+                    m = (total_seconds % 3600) // 60
+                    eh = (total_seconds // 60 + 135) // 60
+                    em = (total_seconds // 60 + 135) % 60
+                    dosen_str = j['nama_dosen'] or '-'
+                    msg += f"• {h:02d}:{m:02d} - {eh:02d}:{em:02d} | {j['nama_mk']} ({j['kelas']}) | {dosen_str}\n"
+                    
+            return msg
             
         return None # Abaikan jika bukan perintah valid
             
