@@ -208,7 +208,7 @@ def handle_incoming_message(sender, text):
         state = registration_states[sender]
         step = state.get("step")
         
-        if text_clean == "batal":
+        if text_clean in ["batal", "batal mas", "batal mase"]:
             del registration_states[sender]
             return "Pendaftaran dibatalkan mase. Ketik 'info' jika ingin mencoba lagi."
             
@@ -292,6 +292,65 @@ def handle_incoming_message(sender, text):
                         conn.close()
             else:
                 return "Token salah mase! Coba minta lagi ke aslab yang bersangkutan, atau jawab 'batal' untuk membatalkan pendaftaran."
+                
+        elif step == "pilih_kampus":
+            if any(k in text_clean for k in ["kobar", "kobr", "kbar", "kob", "kbr"]):
+                kampus_query = "%Kobar%"
+                kampus_name = "Kobar"
+            elif any(k in text_clean for k in ["thehok", "tehok", "thok", "teho", "theok"]):
+                kampus_query = "%Thehok%"
+                kampus_name = "Thehok"
+            else:
+                return "Kampus nggak valid mase. Pilih Kobar atau Thehok aja, atau ketik 'batal'."
+            
+            try:
+                conn = scraper.get_db()
+                cursor = conn.cursor(dictionary=True)
+                now = datetime.datetime.now()
+                today_str = now.strftime("%Y-%m-%d")
+                
+                cursor.execute('''
+                    SELECT r.nama_ruangan, j.jam, j.nama_mk, j.kelas, d.nama_dosen
+                    FROM jadwal j
+                    JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                    LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                    WHERE r.kampus LIKE %s 
+                      AND j.tanggal = %s 
+                      AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+                    ORDER BY r.nama_ruangan, j.jam
+                ''', (kampus_query, today_str))
+                jadwals = cursor.fetchall()
+                
+                del registration_states[sender]
+                
+                if not jadwals:
+                    return f"Lagi kosong ni mas tuk semua lab di kampus {kampus_name} hari ini."
+                    
+                msg = f"📋 *Jadwal Semua Lab Kampus {kampus_name} Hari Ini:*\n"
+                current_room = None
+                for j in jadwals:
+                    if current_room != j['nama_ruangan']:
+                        current_room = j['nama_ruangan']
+                        msg += f"\n📍 *{current_room}*\n"
+                    
+                    total_seconds = int(j['jam'].total_seconds())
+                    h = total_seconds // 3600
+                    m = (total_seconds % 3600) // 60
+                    end_min = (total_seconds // 60) + 135
+                    eh = end_min // 60
+                    em = end_min % 60
+                    dosen_str = j['nama_dosen'] or '-'
+                    
+                    msg += f"• {h:02d}:{m:02d} - {eh:02d}:{em:02d} | {j['nama_mk']} ({j['kelas']}) | {dosen_str}\n"
+                    
+                return msg
+            except Exception as e:
+                print(e)
+                return "Terjadi kesalahan sistem saat mengambil jadwal semua lab."
+            finally:
+                if 'conn' in locals() and conn.is_connected():
+                    cursor.close()
+                    conn.close()
     
     # 3. Alur Normal (Bukan Sedang Daftar)
     try:
@@ -309,12 +368,12 @@ def handle_incoming_message(sender, text):
         
         if not aslab:
             # Jika belum terdaftar dan mengirim info/inpo -> Memicu Pendaftaran Baru
-            if text_clean in ["info", "inpo", "info mase", "inpo mase", "INFO", "INPO", "INFO MASE", "INPO MASE", "oi mas", "oi mase", "Oi mas", "Oi mase", "OI MAS", "OI MASE", "oi", "Oi", "OI", "oi", "p inpo", "p inpo mas", "p inpo mase", "p inpo mas", "p inpo mase", "p inpo mas", "p inpo mas", "p inpo mas", "p inpo mas", "p inpo mas", "p inpo mase", "p inpo mas", "p inpo mase", "p inpo mase"]:
+            if re.search(r'\b(info|inpo|infoo|inpoo|oi)\b', text_clean):
                 registration_states[sender] = {"step": 1}
                 return "siapa nih?"
             else:
-                print(f"[WA INCOMING] Ditolak: Nomor {no_wa} tidak terdaftar sebagai Aslab.")
-                return f"Maaf, sistem mendeteksi ID Anda ({no_wa}) tidak terdaftar sebagai Asisten Lab di database kami. Ketik 'info' untuk mencoba mendaftar."
+                print(f"[WA INCOMING] Diabaikan: Nomor {no_wa} tidak terdaftar dan pesan bukan perintah pendaftaran.")
+                return None
             
         nama = aslab['nama_aslab']
         ruang = f"{aslab['nama_ruangan']} ({aslab['kampus']})"
@@ -322,8 +381,8 @@ def handle_incoming_message(sender, text):
         
         print(f"[WA INCOMING] Dikenali sebagai Aslab: {nama} ({ruang})")
         
-        if text_clean in ["info", "inpo"]:
-            return f"naon mas {nama},\nni inpo yang ada:\n\n1. Jadwal Lab {ruang}\n2. Info Mase\n3. Link Server Ngrok\n\nBalas dengan angka 1, 2, atau 3."
+        if re.search(r'\b(info|inpo|infoo|inpoo|oi)\b', text_clean):
+            return f"naon mas {nama},\nni inpo yang ada:\n\n1. Jadwal Lab {ruang}\n2. Jadwal Semua Lab (Kobar/Thehok)\n3. Info Mase\n4. Link Server Ngrok\n\nBalas dengan angka 1, 2, 3, atau 4."
             
         elif text_clean == "1":
             now = datetime.datetime.now()
@@ -356,6 +415,10 @@ def handle_incoming_message(sender, text):
             return msg
             
         elif text_clean == "2":
+            registration_states[sender] = {"step": "pilih_kampus"}
+            return "Kampus mana mase? (Kobar / Thehok)"
+            
+        elif text_clean == "3":
             now = datetime.datetime.now()
             today_str = now.strftime("%Y-%m-%d")
             
@@ -376,7 +439,7 @@ def handle_incoming_message(sender, text):
                 
             return msg
             
-        elif text_clean == "3":
+        elif text_clean == "4":
             try:
                 response = requests.get("http://localhost:4040/api/tunnels", timeout=3)
                 if response.status_code == 200:
@@ -388,7 +451,7 @@ def handle_incoming_message(sender, text):
             except Exception:
                 return "🌐 *Link Server Ngrok:*\n\nServer ngrok saat ini belum aktif atau tidak terdeteksi."
             
-        return None # Abaikan jika bukan info/1/2
+        return None # Abaikan jika bukan perintah valid
             
     except Exception as e:
         print(f"Error handling incoming WA: {e}")

@@ -118,15 +118,13 @@
         </div>
       </div>
 
-      <div
-        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; margin-top: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; margin-top: 24px;">
         <h2 style="font-size: 1.1rem; color: var(--text-dark); margin: 0;">Status Penggunaan Ruangan</h2>
-        <div class="filter-group" style="margin: 0;">
-          <select id="panel-kampus-filter" style="width: auto; padding-top: 8px; padding-bottom: 8px;">
-            <option value="semua">Semua Kampus</option>
-            <option value="thehok">Kampus Thehok</option>
-            <option value="kobar">Kampus Kobar</option>
-          </select>
+        <div style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span> Dipakai</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-wa); border-radius:3px;"></span> Jeda</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span> Kosong</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:12px; height:12px; background: var(--lab-scheduled-bg); border-radius:3px;"></span> Terjadwal</div>
         </div>
       </div>
       <div class="panels-row">
@@ -141,18 +139,6 @@
               </svg>
               Labor yang lagi dipakai
             </div>
-            <div
-              style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
-              <div style="display: flex; align-items: center; gap: 4px;"><span
-                  style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span>
-                Dipakai</div>
-              <div style="display: flex; align-items: center; gap: 4px;"><span
-                  style="display:inline-block; width:12px; height:12px; background-color: var(--badge-wa); border-radius:3px;"></span>
-                Jeda</div>
-              <div style="display: flex; align-items: center; gap: 4px;"><span
-                  style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span>
-                Kosong</div>
-            </div>
           </h3>
           <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
         </div>
@@ -166,18 +152,6 @@
                 <polyline points="9 22 9 12 15 12 15 22"></polyline>
               </svg>
               Ruangan yang lagi dipakai
-            </div>
-            <div
-              style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
-              <div style="display: flex; align-items: center; gap: 4px;"><span
-                  style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span>
-                Dipakai</div>
-              <div style="display: flex; align-items: center; gap: 4px;"><span
-                  style="display:inline-block; width:12px; height:12px; background-color: var(--badge-wa); border-radius:3px;"></span>
-                Jeda</div>
-              <div style="display: flex; align-items: center; gap: 4px;"><span
-                  style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span>
-                Kosong</div>
             </div>
           </h3>
           <div class="panel-content" id="active-room-list"><em>Memeriksa status ruangan...</em></div>
@@ -582,13 +556,36 @@
     }
 
     function updateActiveLabPanel() {
-      const labPanel = document.getElementById('active-lab-list');
-      const roomPanel = document.getElementById('active-room-list');
-      if (!labPanel || !roomPanel) return;
+        const labPanel = document.getElementById('active-lab-list');
+        const roomPanel = document.getElementById('active-room-list');
+        const labPanelContainer = document.getElementById('active-lab-panel');
+        const roomPanelContainer = document.getElementById('active-room-panel');
+        if (!labPanel || !roomPanel) return;
+        
+        const kampusFilter = document.getElementById('filter-kampus') ? document.getElementById('filter-kampus').value : 'semua';
+        const kategoriFilter = document.getElementById('filter-kategori-ruang') ? document.getElementById('filter-kategori-ruang').value : 'semua';
 
-      const now = new Date();
-      const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const currentTime = now.getHours() * 60 + now.getMinutes();
+        if (kategoriFilter === 'labor') {
+            labPanelContainer.style.display = 'flex';
+            roomPanelContainer.style.display = 'none';
+        } else if (kategoriFilter === 'kelas') {
+            labPanelContainer.style.display = 'none';
+            roomPanelContainer.style.display = 'flex';
+        } else {
+            labPanelContainer.style.display = 'flex';
+            roomPanelContainer.style.display = 'flex';
+        }
+
+        const now = new Date();
+        const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        const filterTanggal = document.getElementById('filter-tanggal');
+        const activeDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr;
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+        const isToday = (activeDate === currentDayStr);
+
+        const filterRuangan = document.getElementById('filter-ruangan') ? document.getElementById('filter-ruangan').value : 'semua';
+        const filterMetode = document.getElementById('filter-metode') ? document.getElementById('filter-metode').value : 'semua';
 
       let labsThehok = {};
       let labsKobar = {};
@@ -597,10 +594,13 @@
 
       let roomSchedules = {};
 
-      // 1. Group schedules by room
-      allJadwal.forEach(item => {
-        if (item.tanggal === currentDayStr && item.jam && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
-          const parts = item.jam.split(':');
+        // 1. Group schedules by room
+        allJadwal.forEach(item => {
+          if (item.tanggal === activeDate && item.jam && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
+            if (filterRuangan !== 'semua' && item.nama_ruangan !== filterRuangan) return;
+            if (filterMetode !== 'semua' && item.metode_pembelajaran !== filterMetode) return;
+
+            const parts = item.jam.split(':');
           const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 
           if (!roomSchedules[item.nama_ruangan]) roomSchedules[item.nama_ruangan] = [];
@@ -613,9 +613,11 @@
         }
       });
 
-      // 2. Determine state for each room in the database
-      allRuanganData.forEach(r => {
-        let rawName = r.nama_ruangan;
+        // 2. Determine state for each room in the database
+        allRuanganData.forEach(r => {
+          if (filterRuangan !== 'semua' && r.nama_ruangan !== filterRuangan) return;
+          
+          let rawName = r.nama_ruangan;
         let isThehok = true;
         if (rawName.includes("(Kampus Kobar)") || (r.kampus && r.kampus.toLowerCase().includes("kobar"))) {
           isThehok = false;
@@ -639,26 +641,32 @@
         let activeClass = null;
         let nextClass = null;
 
-        for (const s of schedules) {
-          if (currentTime >= s.start && currentTime <= s.end) {
-            isOccupied = true;
-            activeClass = s;
-            break;
-          } else if (currentTime < s.start) {
-            hasFutureClass = true;
-            if (!nextClass) nextClass = s; // First future class
+        if (isToday) {
+            for (const s of schedules) {
+              if (currentTime >= s.start && currentTime <= s.end) {
+                isOccupied = true;
+                activeClass = s;
+                break;
+              } else if (currentTime < s.start) {
+                hasFutureClass = true;
+                if (!nextClass) nextClass = s; // First future class
+              }
+            }
           }
-        }
-
-        if (isOccupied) {
-          state = 'occupied';
-          text = activeClass.nama;
-          jamText = activeClass.jam;
-        } else if (hasFutureClass) {
-          state = 'waiting';
-          text = 'Jeda';
-          jamText = `(Buka: ${nextClass.jam})`;
-        }
+  
+          if (isOccupied) {
+            state = 'occupied';
+            text = activeClass.nama;
+            jamText = activeClass.jam;
+          } else if (hasFutureClass) {
+            state = 'waiting';
+            text = 'Jeda';
+            jamText = `(Buka: ${nextClass.jam})`;
+          } else if (!isToday && schedules.length > 0) {
+            state = 'scheduled';
+            text = 'Terjadwal';
+            jamText = `(${schedules.length} Kelas)`;
+          }
 
         targetDict[cleanName] = { state, text, jamText };
       });
@@ -688,15 +696,17 @@
         let activeClass = null;
         let nextClass = null;
 
-        for (const s of schedules) {
-          if (currentTime >= s.start && currentTime <= s.end) {
-            isOccupied = true;
-            activeClass = s;
-            break;
-          } else if (currentTime < s.start) {
-            hasFutureClass = true;
-            if (!nextClass) nextClass = s;
-          }
+        if (isToday) {
+            for (const s of schedules) {
+              if (currentTime >= s.start && currentTime <= s.end) {
+                isOccupied = true;
+                activeClass = s;
+                break;
+              } else if (currentTime < s.start) {
+                hasFutureClass = true;
+                if (!nextClass) nextClass = s;
+              }
+            }
         }
 
         if (isOccupied) {
@@ -707,6 +717,10 @@
           state = 'waiting';
           text = 'Jeda';
           jamText = `(Buka: ${nextClass.jam})`;
+        } else if (!isToday && schedules.length > 0) {
+            state = 'scheduled';
+            text = 'Terjadwal';
+            jamText = `(${schedules.length} Kelas)`;
         }
 
         targetDict[cleanName] = { state, text, jamText };
@@ -714,18 +728,20 @@
 
       // Live warnings only for Labs (keep existing behavior for tutup lab)
       let warningsHTML = '';
-      for (const [room, schedules] of Object.entries(roomSchedules)) {
-        if (!isLab(room)) continue;
-        const startTimes = schedules.map(s => s.start);
-        const lastStartTime = Math.max(...startTimes);
-        const lastClassEndTime = lastStartTime + 135;
-        const minsLeft = lastClassEndTime - currentTime;
-
-        if (minsLeft >= 0 && minsLeft <= 30) {
-          const color = minsLeft <= 15 ? 'var(--badge-cc)' : '#f39c12';
-          const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
-          const m = (lastClassEndTime % 60).toString().padStart(2, '0');
-          warningsHTML += `<div class="notif-item" style="border-left: 4px solid ${color};"><div class="notif-header"><span class="notif-type" style="color: ${color}; font-weight:bold;">TUTUP LAB (${minsLeft} mnt lagi)</span></div><div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.</div></div>`;
+      if (isToday) {
+        for (const [room, schedules] of Object.entries(roomSchedules)) {
+          if (!isLab(room)) continue;
+          const startTimes = schedules.map(s => s.start);
+          const lastStartTime = Math.max(...startTimes);
+          const lastClassEndTime = lastStartTime + 135;
+          const minsLeft = lastClassEndTime - currentTime;
+  
+          if (minsLeft >= 0 && minsLeft <= 30) {
+            const color = minsLeft <= 15 ? 'var(--badge-cc)' : '#f39c12';
+            const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
+            const m = (lastClassEndTime % 60).toString().padStart(2, '0');
+            warningsHTML += `<div class="notif-item" style="border-left: 4px solid ${color};"><div class="notif-header"><span class="notif-type" style="color: ${color}; font-weight:bold;">TUTUP LAB (${minsLeft} mnt lagi)</span></div><div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.</div></div>`;
+          }
         }
       }
 
@@ -750,14 +766,12 @@
         return html;
       };
 
-      const kampusFilter = document.getElementById('panel-kampus-filter') ? document.getElementById('panel-kampus-filter').value : 'semua';
-
       // Render Lab Panel
       let htmlLab = '';
-      if ((kampusFilter === 'semua' || kampusFilter === 'thehok') && Object.keys(labsThehok).length > 0) {
+      if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Thehok') && Object.keys(labsThehok).length > 0) {
         htmlLab += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(labsThehok, 'Thehok')}</div>`;
       }
-      if ((kampusFilter === 'semua' || kampusFilter === 'kobar') && Object.keys(labsKobar).length > 0) {
+      if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Kobar') && Object.keys(labsKobar).length > 0) {
         htmlLab += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(labsKobar, 'Kobar')}</div>`;
       }
       if (htmlLab === '') htmlLab = '<em>Tidak ada lab yang sesuai.</em>';
@@ -765,12 +779,13 @@
 
       // Render Room Panel
       let htmlRoom = '';
-      if ((kampusFilter === 'semua' || kampusFilter === 'thehok') && Object.keys(roomsThehok).length > 0) {
+      if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Thehok') && Object.keys(roomsThehok).length > 0) {
         htmlRoom += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(roomsThehok, 'Thehok')}</div>`;
       }
-      if ((kampusFilter === 'semua' || kampusFilter === 'kobar') && Object.keys(roomsKobar).length > 0) {
+      if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Kobar') && Object.keys(roomsKobar).length > 0) {
         htmlRoom += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(roomsKobar, 'Kobar')}</div>`;
       }
+      if (htmlRoom === '') htmlRoom = '<em>Tidak ada ruangan yang sesuai.</em>';
       roomPanel.innerHTML = htmlRoom;
     }
 
@@ -1064,12 +1079,14 @@
 
     // Handle Modal Detail Ruangan
     window.showRoomDetail = function (roomName, kampusStr) {
-      const today = new Date();
-      const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        const filterTanggal = document.getElementById('filter-tanggal');
+        const today = new Date();
+        const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        const activeDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr;
 
-      const schedules = allJadwal.filter(item => {
-        if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
-        if (item.tanggal !== currentDayStr) return false;
+        const schedules = allJadwal.filter(item => {
+          if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
+          if (item.tanggal !== activeDate) return false;
 
         if (item.nama_ruangan.split(" (Kampus")[0] !== roomName) return false;
 
@@ -1097,11 +1114,28 @@
           if (s.metode_pembelajaran) {
             methodBadge = `<span style="font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: var(--primary); margin-left: 8px; font-weight: bold;">${s.metode_pembelajaran}</span>`;
           }
+          
+          let statusBadge = '';
+          if (s.status_jadwal && s.status_jadwal.trim() !== '' && s.status_jadwal.trim() !== '-') {
+             let sText = s.status_jadwal.toUpperCase();
+             let bg = 'rgba(107, 114, 128, 0.15)';
+             let c = '#9ca3af';
+             
+             if (sText.includes('TAMBAHAN')) { bg = 'rgba(34, 197, 94, 0.15)'; c = '#4ade80'; }
+             else if (sText.includes('PERUBAHAN')) { bg = 'rgba(239, 68, 68, 0.15)'; c = '#f87171'; }
+             else if (sText.includes('JEDA')) { bg = 'rgba(245, 158, 11, 0.15)'; c = '#fbbf24'; }
+             
+             statusBadge = `<div style="font-size: 0.65em; padding: 4px 8px; border-radius: 6px; background: ${bg}; color: ${c}; font-weight: bold; border: 1px solid ${c}40; text-align: center; display: flex; align-items: center; justify-content: center; max-width: 90px; line-height: 1.2;">${sText}</div>`;
+          }
+
           return `
-            <li style="background: var(--bg-card); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); box-shadow: var(--shadow-xs);">
-              <div style="font-weight: bold; font-size: 1.05em; color: var(--text-dark); margin-bottom: 4px;">${s.jam} - Selesai ${methodBadge}</div>
-              <div style="color: var(--text);">${s.nama_mk}</div>
-              <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Kelas ${s.kelas} • ${s.nama_dosen}</div>
+            <li style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); box-shadow: var(--shadow-xs);">
+              <div>
+                <div style="font-weight: bold; font-size: 1.05em; color: var(--text-dark); margin-bottom: 4px;">${s.jam} - Selesai ${methodBadge}</div>
+                <div style="color: var(--text);">${s.nama_mk}</div>
+                <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Kelas ${s.kelas} • ${s.nama_dosen}</div>
+              </div>
+              ${statusBadge}
             </li>
           `;
         }).join('');
@@ -1114,11 +1148,6 @@
     document.getElementById('room-detail-close-btn').addEventListener('click', () => roomModal.classList.remove('open'));
     roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('open'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal.classList.contains('open')) roomModal.classList.remove('open'); });
-
-    // Handle Kampus filter for panels
-    if (document.getElementById('panel-kampus-filter')) {
-      document.getElementById('panel-kampus-filter').addEventListener('change', updateActiveLabPanel);
-    }
 
     document.getElementById('clear-db-btn').addEventListener('click', async () => {
       const pass = await promptPassword("Masukkan password Admin untuk menghapus Database:");
@@ -1148,10 +1177,15 @@
     filterWaktu.addEventListener('change', applyFilters);
     filterMetode.addEventListener('change', applyFilters);
     filterRuangan.addEventListener('change', applyFilters);
-    document.getElementById('filter-kategori-ruang').addEventListener('change', () => { updateRuanganDropdown(); applyFilters(); });
+    document.getElementById('filter-kategori-ruang').addEventListener('change', () => { 
+        updateRuanganDropdown(); 
+        applyFilters(); 
+        updateActiveLabPanel();
+    });
     document.getElementById('filter-kampus').addEventListener('change', () => {
-      updateRuanganDropdown();
-      applyFilters();
+        updateRuanganDropdown();
+        applyFilters();
+        updateActiveLabPanel();
     });
 
     // 6. Auto-Sync setiap 30 menit
