@@ -271,6 +271,97 @@ def wa_webhook(req: WebhookRequest):
         wa_notifier.send_wa_message(req.sender, response_msg)
     return {"status": "ok"}
 
+@app.get("/api/cek_kosong")
+def cek_kosong(kampus: str, tanggal: str):
+    """Mendapatkan data lab kosong dengan algoritma gap jam"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute('''
+            SELECT r.nama_ruangan, j.jam
+            FROM ruangan r
+            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
+            WHERE r.kampus LIKE %s 
+              AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+            ORDER BY r.nama_ruangan, j.jam
+        ''', (tanggal, f"%{kampus}%"))
+        results = cursor.fetchall()
+        
+        room_schedules = {}
+        for r in results:
+            rname = r['nama_ruangan']
+            if rname not in room_schedules:
+                room_schedules[rname] = []
+            if r['jam']:
+                room_schedules[rname].append(int(r['jam'].total_seconds()) // 60)
+        
+        data = []
+        for rname, start_mins in room_schedules.items():
+            if not start_mins:
+                data.append({"ruangan": rname, "status": "full kosong aja", "gaps": []})
+            else:
+                gaps = []
+                start_mins = sorted(start_mins)
+                current = 480
+                end_of_day = max(1020, max((s + 135 for s in start_mins), default=1020))
+                
+                for sm in start_mins:
+                    if sm > current:
+                        gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{sm//60:02d}:{sm%60:02d}", "note": "setelahnya ada kelas"})
+                    current = max(current, sm + 135)
+                if current < end_of_day:
+                    gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{end_of_day//60:02d}:{end_of_day%60:02d}", "note": ""})
+                
+                data.append({"ruangan": rname, "status": "ada kelas", "gaps": gaps})
+        
+        return {"status": "success", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/cari_dosen")
+def cari_dosen(nama: str):
+    """Mencari jadwal dosen hari ini"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        import datetime
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        cursor.execute('''
+            SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
+            ORDER BY j.jam
+        ''', (f"%{nama.upper()}%", today_str))
+        results = cursor.fetchall()
+        
+        for row in results:
+            if row['jam']:
+                ts = int(row['jam'].total_seconds())
+                h = ts // 3600
+                m = (ts % 3600) // 60
+                eh = (ts // 60 + 135) // 60
+                em = (ts // 60 + 135) % 60
+                row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
+            else:
+                row['waktu'] = "-"
+            row['tanggal'] = str(row['tanggal'])
+            del row['jam']
+            
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 # MENGABUNGKAN FRONTEND & BACKEND UNTUK NGROK
-# Semua file di folder ini (index.html, style.css, dll) akan dilayani oleh FastAPI di rute "/"
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

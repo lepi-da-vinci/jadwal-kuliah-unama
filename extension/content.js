@@ -12,7 +12,7 @@ if (isAutoClose) {
         
         // Pastikan kita sudah masuk ke halaman asli, bukan halaman verifikasi keamanan Cloudflare
         const hasScheduleTable = document.querySelector('.table-content') !== null;
-        const noDataFound = document.documentElement.outerHTML.includes('Data tidak ditemukan'); // Jika memang hari libur
+        const noDataFound = document.documentElement.outerHTML.includes('Data tidak ditemukan') || document.documentElement.outerHTML.includes('Data tidak ada'); // Jika memang hari libur/kosong
         
         if (hasScheduleTable || noDataFound) {
             clearInterval(checkInterval); // Berhenti mengecek

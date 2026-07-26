@@ -116,6 +116,14 @@
             <option value="semua">Semua Ruangan</option>
           </select>
         </div>
+        <div class="filter-group" style="align-self: flex-end;">
+          <button id="btn-fitur-tambahan" class="btn btn-secondary" style="height: 42px; margin-top: 24px; padding: 0 16px;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Info Lain
+          </button>
+        </div>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; margin-top: 24px;">
@@ -218,9 +226,52 @@
         </table>
       </div>
     </div>
-  </div>
+    </div> <!-- End container -->
 
-  <!-- Modal Notifikasi Lab -->
+    <div id="modal-fitur" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+      <div class="modal-content" style="background-color: var(--bg-card); margin: 5% auto; padding: 24px; border: 1px solid var(--border); width: 80%; max-width: 600px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); color: var(--text);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px;">
+          <h2 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Info Lain
+          </h2>
+          <span id="close-modal-fitur" style="cursor: pointer; font-size: 24px; font-weight: bold; line-height: 1;">&times;</span>
+        </div>
+  
+        <div class="tab-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
+          <button id="tab-lab-kosong" class="btn btn-primary" style="flex: 1;">Cari Lab Kosong</button>
+          <button id="tab-cari-dosen" class="btn btn-secondary" style="flex: 1;">Cari Posisi Dosen</button>
+        </div>
+  
+        <div id="content-lab-kosong">
+          <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <select id="fitur-kampus" class="form-control" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);">
+              <option value="Kobar">Kampus Kobar</option>
+              <option value="Thehok">Kampus Thehok</option>
+            </select>
+            <input type="date" id="fitur-tanggal" class="form-control" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);">
+            <button id="btn-submit-lab-kosong" class="btn btn-primary">Cari</button>
+          </div>
+          <div id="result-lab-kosong" style="background: var(--bg); padding: 15px; border-radius: 8px; min-height: 100px; max-height: 300px; overflow-y: auto;">
+            <p style="color: var(--text-muted); text-align: center; margin-top: 30px;">Pilih kampus dan tanggal untuk mencari lab kosong.</p>
+          </div>
+        </div>
+  
+        <div id="content-cari-dosen" style="display: none;">
+          <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="fitur-nama-dosen" class="form-control" placeholder="Masukkan nama dosen..." style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);">
+            <button id="btn-submit-cari-dosen" class="btn btn-primary">Cari</button>
+          </div>
+          <div id="result-cari-dosen" style="background: var(--bg); padding: 15px; border-radius: 8px; min-height: 100px; max-height: 300px; overflow-y: auto;">
+            <p style="color: var(--text-muted); text-align: center; margin-top: 30px;">Ketik nama dosen untuk melihat jadwal hari ini.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Notifikasi Toast -->
   <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Lab">
     <div class="modal-box">
       <div class="modal-icon">🔔</div>
@@ -1325,6 +1376,135 @@
     const style = document.createElement('style');
     style.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
     document.head.appendChild(style);
+
+    // ─── Fitur Tambahan (Modal & Logic) ───
+    const btnFiturTambahan = document.getElementById('btn-fitur-tambahan');
+    const modalFitur = document.getElementById('modal-fitur');
+    const closeFitur = document.getElementById('close-modal-fitur');
+    const tabLabKosong = document.getElementById('tab-lab-kosong');
+    const tabCariDosen = document.getElementById('tab-cari-dosen');
+    const contentLabKosong = document.getElementById('content-lab-kosong');
+    const contentCariDosen = document.getElementById('content-cari-dosen');
+    const btnSubmitLabKosong = document.getElementById('btn-submit-lab-kosong');
+    const btnSubmitCariDosen = document.getElementById('btn-submit-cari-dosen');
+    
+    // Set default date to today
+    document.getElementById('fitur-tanggal').value = new Date().toISOString().split('T')[0];
+
+    btnFiturTambahan.addEventListener('click', () => {
+      modalFitur.style.display = 'block';
+    });
+
+    closeFitur.addEventListener('click', () => {
+      modalFitur.style.display = 'none';
+    });
+
+    window.addEventListener('click', (e) => {
+      if (e.target === modalFitur) {
+        modalFitur.style.display = 'none';
+      }
+    });
+
+    tabLabKosong.addEventListener('click', () => {
+      tabLabKosong.className = 'btn btn-primary';
+      tabCariDosen.className = 'btn btn-secondary';
+      contentLabKosong.style.display = 'block';
+      contentCariDosen.style.display = 'none';
+    });
+
+    tabCariDosen.addEventListener('click', () => {
+      tabCariDosen.className = 'btn btn-primary';
+      tabLabKosong.className = 'btn btn-secondary';
+      contentCariDosen.style.display = 'block';
+      contentLabKosong.style.display = 'none';
+    });
+
+    btnSubmitLabKosong.addEventListener('click', async () => {
+      const kampus = document.getElementById('fitur-kampus').value;
+      const tanggal = document.getElementById('fitur-tanggal').value;
+      const resContainer = document.getElementById('result-lab-kosong');
+      
+      if (!tanggal) {
+        alert("Pilih tanggal dulu!");
+        return;
+      }
+      
+      resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
+      
+      try {
+        const response = await fetch(`/api/cek_kosong?kampus=${kampus}&tanggal=${tanggal}`);
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          let html = '';
+          result.data.forEach(room => {
+            if (room.status === 'full kosong aja') {
+              html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+                <strong style="display:flex; align-items:center; gap:6px;">
+                  <span style="color:var(--badge-tm);">✅</span> ${room.ruangan}
+                </strong>
+                <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px;">full kosong aja</div>
+              </div>`;
+            } else {
+              let gapsHtml = room.gaps.map(g => `<li>${g.start} - ${g.end} kosong ${g.note ? `<i>(${g.note})</i>` : ''}</li>`).join('');
+              html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+                <strong style="display:flex; align-items:center; gap:6px;">
+                  <span style="color:var(--badge-wa);">⚠️</span> ${room.ruangan}
+                </strong>
+                <ul style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px; margin-bottom: 0;">${gapsHtml}</ul>
+              </div>`;
+            }
+          });
+          if (!html) html = '<p style="text-align:center;">Tidak ada lab terdaftar.</p>';
+          resContainer.innerHTML = html;
+        } else {
+          resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
+        }
+      } catch (err) {
+        resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
+      }
+    });
+
+    btnSubmitCariDosen.addEventListener('click', async () => {
+      const nama = document.getElementById('fitur-nama-dosen').value;
+      const resContainer = document.getElementById('result-cari-dosen');
+      
+      if (!nama) {
+        alert("Masukkan nama dosen dulu!");
+        return;
+      }
+      
+      resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
+      
+      try {
+        const response = await fetch(`/api/cari_dosen?nama=${encodeURIComponent(nama)}`);
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          if (result.data.length === 0) {
+            resContainer.innerHTML = '<p style="text-align:center; color: var(--text-muted);">Tidak ada jadwal hari ini untuk dosen tersebut.</p>';
+            return;
+          }
+          
+          let html = '';
+          result.data.forEach(item => {
+            html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+              <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
+              <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+                <span style="display:flex; align-items:center; gap:4px;">⏱️ ${item.waktu}</span>
+                <span style="display:flex; align-items:center; gap:4px;">📍 ${item.nama_ruangan} (${item.kampus})</span>
+                <span style="display:flex; align-items:center; gap:4px;">🧑‍🏫 ${item.nama_dosen}</span>
+              </div>
+            </div>`;
+          });
+          resContainer.innerHTML = html;
+        } else {
+          resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
+        }
+      } catch (err) {
+        resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
+      }
+    });
   </script>
 </body>
 

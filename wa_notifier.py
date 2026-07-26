@@ -87,7 +87,11 @@ def background_sync_and_reply(target_date, no_wa, intent, data=None, need_sync=T
             ''', (id_ruangan, target_date))
             jadwals = cursor.fetchall()
             if not jadwals:
-                msg = f"Lagi kosong ni mas tuk {ruang} tanggal {target_date}."
+                dt_obj = datetime.datetime.strptime(target_date, "%Y-%m-%d")
+                if dt_obj.weekday() == 6:
+                    msg = f"Libur mas, soalnya hari Minggu tanggal {target_date}."
+                else:
+                    msg = f"Selesai ambil data, jadwal kosong untuk {ruang} pada tanggal {target_date}."
             else:
                 msg = f"📅 *Jadwal {ruang} Tanggal {target_date}:*\n"
                 for j in jadwals:
@@ -114,7 +118,11 @@ def background_sync_and_reply(target_date, no_wa, intent, data=None, need_sync=T
             ''', (kampus_query, target_date))
             jadwals = cursor.fetchall()
             if not jadwals:
-                msg = f"Lagi kosong ni mas tuk semua lab di kampus {kampus_name} tanggal {target_date}."
+                dt_obj = datetime.datetime.strptime(target_date, "%Y-%m-%d")
+                if dt_obj.weekday() == 6:
+                    msg = f"Libur mas, soalnya hari Minggu tanggal {target_date}."
+                else:
+                    msg = f"Selesai ambil data, semua lab di kampus {kampus_name} kosong pada tanggal {target_date}."
             else:
                 msg = f"📋 *Jadwal Semua Lab Kampus {kampus_name} Tanggal {target_date}:*\n"
                 current_room = None
