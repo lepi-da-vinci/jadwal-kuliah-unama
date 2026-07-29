@@ -1253,6 +1253,7 @@
     const modalBody = document.getElementById('lab-modal-body');
     const modalCloseBtn = document.getElementById('modal-close-btn');
     let alarmInterval = null;
+    let autoCloseTimeout = null;
 
     function openModal(isRepeat = false) {
       modal.classList.add('open');
@@ -1263,6 +1264,14 @@
         alarmInterval = setInterval(playNotificationSound, 3 * 60 * 1000);
       }
 
+      // Auto close setelah 30 detik
+      if (autoCloseTimeout) {
+        clearTimeout(autoCloseTimeout);
+      }
+      autoCloseTimeout = setTimeout(() => {
+        closeModal();
+      }, 30000);
+
       modalCloseBtn.focus();
     }
 
@@ -1271,6 +1280,10 @@
       if (alarmInterval) {
         clearInterval(alarmInterval);
         alarmInterval = null;
+      }
+      if (autoCloseTimeout) {
+        clearTimeout(autoCloseTimeout);
+        autoCloseTimeout = null;
       }
     }
 

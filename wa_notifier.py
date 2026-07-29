@@ -18,10 +18,10 @@ sent_notifications = set()
 def parse_tanggal(text_clean):
     text_clean = text_clean.strip().lower()
     
-    if text_clean == 'besok':
+    if 'besok' in text_clean:
         return (datetime.datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"), None
         
-    if text_clean in ['hari ini', 'sekarang']:
+    if 'hari ini' in text_clean or 'sekarang' in text_clean:
         return datetime.datetime.now().strftime("%Y-%m-%d"), None
     
     match = re.search(r'\b(\d{1,2})[\s/-]+([a-z]+|\d{1,2})[\s/-]+(\d{2,4})\b', text_clean)
