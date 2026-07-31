@@ -47,3 +47,12 @@ CREATE TABLE IF NOT EXISTS notifikasi_lab (
     pesan TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- 6. Tabel Master Asisten Lab
+CREATE TABLE IF NOT EXISTS asisten_lab (
+    id_aslab INT AUTO_INCREMENT PRIMARY KEY,
+    nama_aslab VARCHAR(150) NOT NULL,
+    no_wa VARCHAR(50) NOT NULL,
+    id_ruangan INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
+);
