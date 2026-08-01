@@ -240,56 +240,61 @@
     </div>
   </div> <!-- End container -->
 
-  <div id="modal-fitur" class="modal"
-    style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
-    <div class="modal-content"
-      style="background-color: var(--bg-card); margin: 5% auto; padding: 24px; border: 1px solid var(--border); width: 80%; max-width: 600px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); color: var(--text);">
-      <div
-        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 20px;">
-        <h2 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
+  <div id="modal-fitur" class="modal-overlay"
+    style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+    <div class="modal-box"
+      style="margin: 5% auto; width: 90%; max-width: 550px; padding: 0; background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-xl); border-radius: var(--radius-lg); overflow: hidden;">
+      
+      <!-- Modal Header -->
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.1);">
+        <h2 style="margin: 0; display: flex; align-items: center; gap: 10px; font-size: 1.25em;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
           Info Lain
         </h2>
-        <span id="close-modal-fitur"
-          style="cursor: pointer; font-size: 24px; font-weight: bold; line-height: 1;">&times;</span>
+        <span id="close-modal-fitur" style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </span>
       </div>
 
-      <div class="tab-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
-        <button id="tab-lab-kosong" class="btn btn-primary" style="flex: 1;">Cari Lab Kosong</button>
-        <button id="tab-cari-dosen" class="btn btn-secondary" style="flex: 1;">Cari Posisi Dosen</button>
-      </div>
+      <div style="padding: 24px;">
+        <!-- Segmented Tabs -->
+        <div style="display: flex; background: var(--bg); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border);">
+          <button id="tab-lab-kosong" style="flex: 1; padding: 10px; border: none; background: var(--primary); color: #fff; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); box-shadow: var(--shadow-sm);">Cari Lab Kosong</button>
+          <button id="tab-cari-dosen" style="flex: 1; padding: 10px; border: none; background: transparent; color: var(--text-muted); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font);">Cari Posisi Dosen</button>
+        </div>
 
-      <div id="content-lab-kosong">
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-          <select id="fitur-kampus" class="form-control"
-            style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);">
-            <option value="Kobar">Kampus Kobar</option>
-            <option value="Thehok">Kampus Thehok</option>
-          </select>
-          <input type="date" id="fitur-tanggal" class="form-control"
-            style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);">
-          <button id="btn-submit-lab-kosong" class="btn btn-primary">Cari</button>
+        <!-- Content: Lab Kosong -->
+        <div id="content-lab-kosong">
+          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+            <select id="fitur-kampus" style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+              <option value="Kobar">Kampus Kobar</option>
+              <option value="Thehok">Kampus Thehok</option>
+            </select>
+            <input type="date" id="fitur-tanggal" style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+            <button id="btn-submit-lab-kosong" class="btn btn-primary" style="padding: 0 20px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
+          </div>
+          <div id="result-lab-kosong" style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
+            <div style="text-align: center; color: var(--text-muted); margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <span>Pilih kampus dan tanggal untuk mencari lab kosong.</span>
+            </div>
+          </div>
         </div>
-        <div id="result-lab-kosong"
-          style="background: var(--bg); padding: 15px; border-radius: 8px; min-height: 100px; max-height: 300px; overflow-y: auto;">
-          <p style="color: var(--text-muted); text-align: center; margin-top: 30px;">Pilih kampus dan tanggal untuk
-            mencari lab kosong.</p>
-        </div>
-      </div>
 
-      <div id="content-cari-dosen" style="display: none;">
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-          <input type="text" id="fitur-nama-dosen" class="form-control" placeholder="Masukkan nama dosen..."
-            style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);">
-          <button id="btn-submit-cari-dosen" class="btn btn-primary">Cari</button>
-        </div>
-        <div id="result-cari-dosen"
-          style="background: var(--bg); padding: 15px; border-radius: 8px; min-height: 100px; max-height: 300px; overflow-y: auto;">
-          <p style="color: var(--text-muted); text-align: center; margin-top: 30px;">Ketik nama dosen untuk melihat
-            jadwal hari ini.</p>
+        <!-- Content: Cari Dosen -->
+        <div id="content-cari-dosen" style="display: none;">
+          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+            <input type="text" id="fitur-nama-dosen" placeholder="Masukkan nama dosen..." style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+            <button id="btn-submit-cari-dosen" class="btn btn-primary" style="padding: 0 20px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
+          </div>
+          <div id="result-cari-dosen" style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
+            <div style="text-align: center; color: var(--text-muted); margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <span>Ketik nama dosen untuk melihat jadwal mengajarnya hari ini.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -335,6 +340,8 @@
           Uji Coba Pesan WA</button>
         <button class="btn btn-secondary" id="btn-show-data-wa" style="padding: 15px; font-size: 1.1em; width: 100%;">📋
           Lihat Data WA Aslab</button>
+        <button class="btn btn-secondary" id="btn-show-add-wa" style="padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05);">➕
+          Tambah Data Aslab Manual</button>
         <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
           <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
         </div>
@@ -377,6 +384,28 @@
         </div>
         <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
           <button class="modal-btn" style="background: var(--text-muted);" id="data-wa-back-btn">Kembali</button>
+        </div>
+      </div>
+
+      <!-- Tampilan Tambah Data WA Aslab -->
+      <div id="wa-modal-add" class="modal-body" style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Aslab:</label>
+          <input type="text" id="add-aslab-nama" placeholder="Contoh: Budi" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">No WhatsApp:</label>
+          <input type="text" id="add-aslab-wa" placeholder="Contoh: 081234567890" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Ruangan Labor:</label>
+          <select id="add-aslab-ruangan" style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+            <option value="">-- Pilih Ruangan --</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+          <button class="modal-btn" style="background: var(--text-muted);" id="add-wa-back-btn">Kembali</button>
+          <button class="modal-btn" id="add-wa-submit-btn">Simpan Data</button>
         </div>
       </div>
 
@@ -1054,6 +1083,7 @@
         const menuView = document.getElementById('wa-modal-menu');
         const testView = document.getElementById('wa-modal-test');
         const dataView = document.getElementById('wa-modal-data');
+        const addView = document.getElementById('wa-modal-add');
         const modalTitle = document.getElementById('wa-modal-title');
         const modalIcon = document.getElementById('wa-modal-icon');
 
@@ -1062,6 +1092,7 @@
           menuView.style.display = 'flex';
           testView.style.display = 'none';
           dataView.style.display = 'none';
+          addView.style.display = 'none';
           modalTitle.innerText = "Data WA Aslab";
           modalIcon.innerText = "👥";
         };
@@ -1097,9 +1128,78 @@
           renderAslabTable();
         };
 
+        // Navigasi ke Tambah Data WA
+        document.getElementById('btn-show-add-wa').onclick = () => {
+          menuView.style.display = 'none';
+          addView.style.display = 'flex';
+          modalTitle.innerText = "Tambah Aslab";
+          modalIcon.innerText = "➕";
+          
+          const selectRuangan = document.getElementById('add-aslab-ruangan');
+          selectRuangan.innerHTML = '<option value="">-- Pilih Ruangan --</option>';
+          
+          // Group by kampus
+          const kobarRooms = allRuanganData.filter(r => r.kampus && r.kampus.includes('Kobar'));
+          const thehokRooms = allRuanganData.filter(r => r.kampus && r.kampus.includes('Thehok'));
+
+          selectRuangan.innerHTML += '<optgroup label="Kampus Kobar">';
+          kobarRooms.forEach(r => {
+            selectRuangan.innerHTML += `<option value="${r.id_ruangan}">${r.nama_ruangan} (Kobar)</option>`;
+          });
+          selectRuangan.innerHTML += '</optgroup>';
+
+          selectRuangan.innerHTML += '<optgroup label="Kampus Thehok">';
+          thehokRooms.forEach(r => {
+            selectRuangan.innerHTML += `<option value="${r.id_ruangan}">${r.nama_ruangan} (Thehok)</option>`;
+          });
+          selectRuangan.innerHTML += '</optgroup>';
+        };
+
         // Tombol kembali
         document.getElementById('test-wa-back-btn').onclick = showMenu;
         document.getElementById('data-wa-back-btn').onclick = showMenu;
+        document.getElementById('add-wa-back-btn').onclick = showMenu;
+
+        // Submit Tambah Data WA
+        document.getElementById('add-wa-submit-btn').onclick = async () => {
+          const nama = document.getElementById('add-aslab-nama').value;
+          const noWa = document.getElementById('add-aslab-wa').value;
+          const idRuangan = document.getElementById('add-aslab-ruangan').value;
+
+          if (!nama || !noWa || !idRuangan) {
+            alert("Harap isi semua data (Nama, No WA, dan Ruangan)!");
+            return;
+          }
+
+          const btn = document.getElementById('add-wa-submit-btn');
+          const originalHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = 'Menyimpan...';
+
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/aslab/add`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nama_aslab: nama, no_wa: noWa, id_ruangan: parseInt(idRuangan) })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              alert(data.message);
+              // Clear inputs
+              document.getElementById('add-aslab-nama').value = '';
+              document.getElementById('add-aslab-wa').value = '';
+              document.getElementById('add-aslab-ruangan').value = '';
+              // Return to data view to see changes
+              document.getElementById('btn-show-data-wa').click();
+            } else {
+              alert("Gagal menambahkan data: " + data.message);
+            }
+          } catch (e) {
+            alert("Terjadi kesalahan jaringan.");
+          }
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        };
 
         // Submit Uji Coba WA
         document.getElementById('test-wa-submit-btn').onclick = async () => {
@@ -1442,16 +1542,36 @@
       }
     });
 
+    // Hover effects for close button
+    closeFitur.addEventListener('mouseover', () => closeFitur.style.opacity = '1');
+    closeFitur.addEventListener('mouseout', () => closeFitur.style.opacity = '0.6');
+
     tabLabKosong.addEventListener('click', () => {
-      tabLabKosong.className = 'btn btn-primary';
-      tabCariDosen.className = 'btn btn-secondary';
+      // Styling Tab Lab Kosong (Active)
+      tabLabKosong.style.background = 'var(--primary)';
+      tabLabKosong.style.color = '#fff';
+      tabLabKosong.style.boxShadow = 'var(--shadow-sm)';
+      
+      // Styling Tab Cari Dosen (Inactive)
+      tabCariDosen.style.background = 'transparent';
+      tabCariDosen.style.color = 'var(--text-muted)';
+      tabCariDosen.style.boxShadow = 'none';
+
       contentLabKosong.style.display = 'block';
       contentCariDosen.style.display = 'none';
     });
 
     tabCariDosen.addEventListener('click', () => {
-      tabCariDosen.className = 'btn btn-primary';
-      tabLabKosong.className = 'btn btn-secondary';
+      // Styling Tab Cari Dosen (Active)
+      tabCariDosen.style.background = 'var(--primary)';
+      tabCariDosen.style.color = '#fff';
+      tabCariDosen.style.boxShadow = 'var(--shadow-sm)';
+      
+      // Styling Tab Lab Kosong (Inactive)
+      tabLabKosong.style.background = 'transparent';
+      tabLabKosong.style.color = 'var(--text-muted)';
+      tabLabKosong.style.boxShadow = 'none';
+
       contentCariDosen.style.display = 'block';
       contentLabKosong.style.display = 'none';
     });

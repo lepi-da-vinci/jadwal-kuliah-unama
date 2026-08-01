@@ -193,6 +193,11 @@ class TestWARequest(BaseModel):
     action_type: str = "test"
     ngrok_link: Optional[str] = None
 
+class AddAslabRequest(BaseModel):
+    nama_aslab: str
+    no_wa: str
+    id_ruangan: int
+
 @app.get("/api/ruangan")
 def get_ruangan():
     """Mengambil daftar semua ruangan lab"""
@@ -241,6 +246,33 @@ def delete_aslab(id_aslab: int):
             return {"status": "success", "message": "Data asisten lab berhasil dihapus."}
         else:
             return {"status": "error", "message": "Data tidak ditemukan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/aslab/add")
+def add_aslab(req: AddAslabRequest):
+    """Menambahkan data asisten lab secara manual"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Format No WA (pastikan diawali 62)
+        no_wa = re.sub(r'\D', '', req.no_wa)
+        if no_wa.startswith('0'):
+            no_wa = '62' + no_wa[1:]
+        elif no_wa.startswith('8'):
+            no_wa = '62' + no_wa
+            
+        cursor.execute(
+            "INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan) VALUES (%s, %s, %s)", 
+            (req.nama_aslab, no_wa, req.id_ruangan)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Data asisten lab berhasil ditambahkan."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
