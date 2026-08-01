@@ -10,6 +10,8 @@ import asyncio
 import threading
 import time
 import wa_notifier
+from datetime import datetime
+
 app = FastAPI(title="API Analitik Jadwal Kuliah")
 
 @app.on_event("startup")
@@ -304,11 +306,48 @@ def wa_webhook(req: WebhookRequest):
     return {"status": "ok"}
 
 @app.get("/api/cek_kosong")
-def cek_kosong(kampus: str, tanggal: str):
+async def cek_kosong(kampus: str, tanggal: str):
     """Mendapatkan data lab kosong dengan algoritma gap jam"""
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+        
+        # Cek apakah ada jadwal sama sekali di tanggal tersebut
+        cursor.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = %s", (tanggal,))
+        count_jadwal = cursor.fetchone()['count']
+        
+        if count_jadwal == 0:
+            import datetime
+            dt_obj = datetime.datetime.strptime(tanggal, "%Y-%m-%d")
+            if dt_obj.weekday() == 6:
+                return {"status": "error", "message": f"Libur mas, soalnya hari Minggu tanggal {tanggal}."}
+            else:
+                import webbrowser
+                import asyncio
+                
+                # Buka tab untuk menarik data baru
+                target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tanggal}&auto_close=1"
+                webbrowser.open(target_url)
+                sync_status[tanggal] = "pending"
+                
+                # Tutup koneksi sementara selagi menunggu agar tidak menggantung resource
+                cursor.close()
+                conn.close()
+                
+                # Tunggu maksimal 40 detik
+                for _ in range(40):
+                    await asyncio.sleep(1)
+                    if sync_status.get(tanggal) == "done":
+                        break
+                
+                # Buka koneksi lagi
+                conn = get_db()
+                cursor = conn.cursor(dictionary=True)
+                
+                # Cek ulang setelah sinkronisasi
+                cursor.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = %s", (tanggal,))
+                if cursor.fetchone()['count'] == 0:
+                    return {"status": "error", "message": f"Belum ada data jadwal pada tanggal {tanggal}. (Auto-sync gagal/kosong)"}
         
         cursor.execute('''
             SELECT r.nama_ruangan, j.jam
@@ -356,22 +395,83 @@ def cek_kosong(kampus: str, tanggal: str):
             conn.close()
 
 @app.get("/api/cari_dosen")
-def cari_dosen(nama: str):
-    """Mencari jadwal dosen hari ini"""
+def cari_dosen(nama: str, tanggal: Optional[str] = None):
+    """Mencari jadwal dosen berdasarkan nama"""
+    if not nama:
+        return {"status": "error", "message": "Nama dosen tidak boleh kosong"}
+    
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-        import datetime
-        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
         
-        cursor.execute('''
-            SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
-            FROM jadwal j
-            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-            JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
-            ORDER BY j.jam
-        ''', (f"%{nama.upper()}%", today_str))
+        if tanggal:
+            cursor.execute('''
+                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
+                ORDER BY j.jam ASC
+            ''', (f"%{nama.upper()}%", tanggal))
+        else:
+            cursor.execute('''
+                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(d.nama_dosen) LIKE %s
+                ORDER BY j.tanggal DESC, j.jam ASC
+            ''', (f"%{nama.upper()}%",))
+            
+        results = cursor.fetchall()
+        
+        for row in results:
+            if row['jam']:
+                ts = int(row['jam'].total_seconds())
+                h = ts // 3600
+                m = (ts % 3600) // 60
+                eh = (ts // 60 + 135) // 60
+                em = (ts // 60 + 135) % 60
+                row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
+            else:
+                row['waktu'] = "-"
+            row['tanggal'] = str(row['tanggal'])
+            del row['jam']
+            
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/cari_kelas")
+def cari_kelas(kode: str, tanggal: Optional[str] = None):
+    """Mencari jadwal kelas"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        if tanggal:
+            cursor.execute('''
+                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(j.kelas) LIKE %s AND j.tanggal = %s
+                ORDER BY j.jam ASC
+            ''', (f"%{kode.upper()}%", tanggal))
+        else:
+            cursor.execute('''
+                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(j.kelas) LIKE %s
+                ORDER BY j.tanggal DESC, j.jam ASC
+            ''', (f"%{kode.upper()}%",))
+            
         results = cursor.fetchall()
         
         for row in results:
