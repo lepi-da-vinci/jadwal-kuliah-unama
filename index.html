@@ -339,7 +339,7 @@
         <!-- Content: Cari Kode Kelas -->
         <div id="content-cari-kelas" style="display: none;">
           <div style="display: flex; gap: 12px; margin-bottom: 20px;">
-            <input type="text" id="fitur-kode-kelas" placeholder="Masukkan kode kelas... (contoh: SI6L)"
+            <input type="text" id="fitur-kode-kelas" placeholder="Masukkan kode kelas... (contoh: 01PT1)"
               style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
             <button id="btn-submit-cari-kelas" class="btn btn-primary" style="padding: 0 20px;"><svg viewBox="0 0 24 24"
                 width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -396,7 +396,10 @@
   <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Data WA Aslab">
     <div class="modal-box" style="max-width: 600px; width: 90%;">
       <div class="modal-icon" id="wa-modal-icon">👥</div>
-      <h2 id="wa-modal-title">Data WA Aslab</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+        <h2 id="wa-modal-title" style="margin: 0;">Data WA Aslab</h2>
+        <button id="admin-mode-toggle" style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 0.85em; color: var(--text-muted); cursor: pointer;">Admin: OFF</button>
+      </div>
 
       <!-- Tampilan Menu Utama -->
       <div id="wa-modal-menu" class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
@@ -475,6 +478,33 @@
         <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
           <button class="modal-btn" style="background: var(--text-muted);" id="add-wa-back-btn">Kembali</button>
           <button class="modal-btn" id="add-wa-submit-btn">Simpan Data</button>
+        </div>
+      </div>
+
+      <!-- Tampilan Edit Data WA Aslab -->
+      <div id="wa-modal-edit" class="modal-body"
+        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+        <input type="hidden" id="edit-aslab-id">
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Aslab:</label>
+          <input type="text" id="edit-aslab-nama" placeholder="Contoh: Budi"
+            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">No WhatsApp:</label>
+          <input type="text" id="edit-aslab-wa" placeholder="Contoh: 081234567890"
+            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Ruangan Labor:</label>
+          <select id="edit-aslab-ruangan"
+            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+            <option value="">-- Pilih Ruangan --</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+          <button class="modal-btn" style="background: var(--text-muted);" id="edit-wa-back-btn">Batal</button>
+          <button class="modal-btn" id="edit-wa-submit-btn">Update Data</button>
         </div>
       </div>
 
@@ -1084,6 +1114,7 @@
 
     // --- Data WA Aslab Modal Endpoint ---
     let globalAslabData = [];
+    let isAslabAdmin = false;
 
     function renderAslabTable() {
       const tbody = document.getElementById('aslab-data-tbody');
@@ -1093,13 +1124,27 @@
         return;
       }
       globalAslabData.forEach(a => {
+        let displayWa = a.no_wa || '-';
+        if (!isAslabAdmin && displayWa.length > 7) {
+          // Mask WA number: 62812****890
+          displayWa = displayWa.substring(0, 5) + '****' + displayWa.substring(displayWa.length - 3);
+        }
+        
+        let actionHtml = '-';
+        if (isAslabAdmin) {
+          actionHtml = `
+            <button class="btn" style="padding: 5px 10px; font-size: 0.85em; background: var(--bg-elevated); border: 1px solid var(--border); margin-right: 5px;" onclick="editAslab(${a.id_aslab})">Edit</button>
+            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deleteAslab(${a.id_aslab}, '${a.nama_aslab}')">Hapus</button>
+          `;
+        }
+        
         tbody.innerHTML += `
             <tr style="border-bottom: 1px solid var(--border);">
               <td style="padding: 10px;">${a.nama_aslab}</td>
               <td style="padding: 10px;">${a.nama_ruangan}</td>
-              <td style="padding: 10px;">${a.no_wa || '-'}</td>
+              <td style="padding: 10px;">${displayWa}</td>
               <td style="padding: 10px; text-align: center;">
-                <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deleteAslab(${a.id_aslab}, '${a.nama_aslab}')">Hapus</button>
+                ${actionHtml}
               </td>
             </tr>
           `;
@@ -1129,15 +1174,41 @@
       }
     };
 
-    document.getElementById('test-wa-btn').addEventListener('click', async () => {
-      const pass = await promptPassword("Masukkan password Admin untuk Kelola Data WA Aslab:");
-      if (pass === null) return; // Dibatalkan
-      if (pass !== "unama123") {
-        alert("Password salah! Anda tidak memiliki izin.");
-        return;
+    window.editAslab = function(id_aslab) {
+      const aslab = globalAslabData.find(a => a.id_aslab === id_aslab);
+      if (!aslab) return;
+      
+      document.getElementById('edit-aslab-id').value = aslab.id_aslab;
+      document.getElementById('edit-aslab-nama').value = aslab.nama_aslab;
+      document.getElementById('edit-aslab-wa').value = aslab.no_wa;
+      
+      const select = document.getElementById('edit-aslab-ruangan');
+      select.innerHTML = '<option value="">-- Pilih Ruangan --</option>';
+      const kobarRooms = allRuanganData.filter(r => r.kampus && r.kampus.includes('Kobar'));
+      const thehokRooms = allRuanganData.filter(r => r.kampus && r.kampus.includes('Thehok'));
+
+      if (kobarRooms.length > 0) {
+        const group = document.createElement('optgroup');
+        group.label = "Kampus Kobar";
+        kobarRooms.forEach(r => group.innerHTML += `<option value="${r.id_ruangan}">${r.nama_ruangan}</option>`);
+        select.appendChild(group);
       }
+      if (thehokRooms.length > 0) {
+        const group = document.createElement('optgroup');
+        group.label = "Kampus Thehok";
+        thehokRooms.forEach(r => group.innerHTML += `<option value="${r.id_ruangan}">${r.nama_ruangan}</option>`);
+        select.appendChild(group);
+      }
+      select.value = aslab.id_ruangan;
+      
+      document.getElementById('wa-modal-data').style.display = 'none';
+      document.getElementById('wa-modal-edit').style.display = 'flex';
+      document.getElementById('wa-modal-title').innerText = "Edit Aslab";
+    };
+
+    document.getElementById('test-wa-btn').addEventListener('click', async () => {
+      // Buka modal secara gratis (Guest Mode)
       try {
-        // Ambil data aslab
         const resAslab = await fetch(`${API_BASE_URL}/api/aslab`);
         const dataAslab = await resAslab.json();
 
@@ -1153,17 +1224,60 @@
         const testView = document.getElementById('wa-modal-test');
         const dataView = document.getElementById('wa-modal-data');
         const addView = document.getElementById('wa-modal-add');
+        const editView = document.getElementById('wa-modal-edit');
         const modalTitle = document.getElementById('wa-modal-title');
         const modalIcon = document.getElementById('wa-modal-icon');
+        const adminToggle = document.getElementById('admin-mode-toggle');
+        const btnShowTest = document.getElementById('btn-show-test-wa');
+        const btnShowAdd = document.getElementById('btn-show-add-wa');
 
-        // Fungsi untuk reset ke menu
+        const updateAdminUI = () => {
+          if (isAslabAdmin) {
+            adminToggle.innerText = 'Admin: ON';
+            adminToggle.style.color = '#fff';
+            adminToggle.style.background = 'var(--primary)';
+            btnShowTest.style.display = 'block';
+            btnShowAdd.style.display = 'block';
+          } else {
+            adminToggle.innerText = 'Admin: OFF';
+            adminToggle.style.color = 'var(--text-muted)';
+            adminToggle.style.background = 'var(--bg-elevated)';
+            btnShowTest.style.display = 'none';
+            btnShowAdd.style.display = 'none';
+          }
+          renderAslabTable();
+        };
+
+        adminToggle.onclick = async () => {
+          if (isAslabAdmin) {
+            isAslabAdmin = false;
+            updateAdminUI();
+          } else {
+            testModal.classList.remove('open');
+            const pass = await promptPassword("Masukkan password Admin untuk masuk ke Mode Admin:");
+            if (pass === "unama123") {
+              isAslabAdmin = true;
+              updateAdminUI();
+              testModal.classList.add('open');
+            } else if (pass !== null) {
+              alert("Password salah!");
+              testModal.classList.add('open');
+            } else {
+              testModal.classList.add('open');
+            }
+          }
+        };
+
         const showMenu = () => {
           menuView.style.display = 'flex';
           testView.style.display = 'none';
           dataView.style.display = 'none';
           addView.style.display = 'none';
+          editView.style.display = 'none';
           modalTitle.innerText = "Data WA Aslab";
           modalIcon.innerText = "👥";
+          adminToggle.style.display = 'block';
+          updateAdminUI();
         };
 
         showMenu();
@@ -1171,6 +1285,8 @@
 
         // Tutup modal
         document.getElementById('wa-modal-close-btn').onclick = () => {
+          isAslabAdmin = false;
+          updateAdminUI();
           testModal.classList.remove('open');
         };
 
@@ -1178,6 +1294,7 @@
         document.getElementById('btn-show-test-wa').onclick = () => {
           menuView.style.display = 'none';
           testView.style.display = 'flex';
+          adminToggle.style.display = 'none';
           modalTitle.innerText = "Uji Coba Pesan WA";
           modalIcon.innerText = "💬";
 
@@ -1228,6 +1345,55 @@
         document.getElementById('test-wa-back-btn').onclick = showMenu;
         document.getElementById('data-wa-back-btn').onclick = showMenu;
         document.getElementById('add-wa-back-btn').onclick = showMenu;
+        document.getElementById('edit-wa-back-btn').onclick = showMenu;
+
+        // Submit Edit Data WA
+        document.getElementById('edit-wa-submit-btn').onclick = async () => {
+          const id = document.getElementById('edit-aslab-id').value;
+          const nama = document.getElementById('edit-aslab-nama').value;
+          const noWa = document.getElementById('edit-aslab-wa').value;
+          const idRuangan = document.getElementById('edit-aslab-ruangan').value;
+
+          if (!id || !nama || !noWa || !idRuangan) {
+            alert("Harap isi semua data (Nama, No WA, dan Ruangan)!");
+            return;
+          }
+
+          const btn = document.getElementById('edit-wa-submit-btn');
+          const originalHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = 'Menyimpan...';
+
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/aslab/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nama_aslab: nama, no_wa: noWa, id_ruangan: parseInt(idRuangan) })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              alert(data.message);
+              // Update local data
+              const index = globalAslabData.findIndex(a => a.id_aslab == id);
+              if (index !== -1) {
+                 globalAslabData[index].nama_aslab = nama;
+                 globalAslabData[index].no_wa = noWa;
+                 globalAslabData[index].id_ruangan = parseInt(idRuangan);
+                 const select = document.getElementById('edit-aslab-ruangan');
+                 const ruanganText = select.options[select.selectedIndex].text.replace(/ \(.*\)/, ''); // Remove (Kobar) / (Thehok) for display
+                 globalAslabData[index].nama_ruangan = ruanganText;
+              }
+              // Return to data view to see changes
+              document.getElementById('btn-show-data-wa').click();
+            } else {
+              alert("Gagal mengubah data: " + data.message);
+            }
+          } catch (e) {
+            alert("Terjadi kesalahan jaringan.");
+          }
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        };
 
         // Submit Tambah Data WA
         document.getElementById('add-wa-submit-btn').onclick = async () => {
@@ -1736,8 +1902,8 @@
 
       try {
         const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
-        const url = tanggalFilter 
-          ? `/api/cari_dosen?nama=${encodeURIComponent(nama)}&tanggal=${encodeURIComponent(tanggalFilter)}` 
+        const url = tanggalFilter
+          ? `/api/cari_dosen?nama=${encodeURIComponent(nama)}&tanggal=${encodeURIComponent(tanggalFilter)}`
           : `/api/cari_dosen?nama=${encodeURIComponent(nama)}`;
         const response = await fetch(url);
         const result = await response.json();
@@ -1781,8 +1947,8 @@
 
       try {
         const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
-        const url = tanggalFilter 
-          ? `/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}` 
+        const url = tanggalFilter
+          ? `/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}`
           : `/api/cari_kelas?kode=${encodeURIComponent(kode)}`;
         const response = await fetch(url);
         const result = await response.json();

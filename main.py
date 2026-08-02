@@ -282,6 +282,36 @@ def add_aslab(req: AddAslabRequest):
             cursor.close()
             conn.close()
 
+@app.put("/api/aslab/{id_aslab}")
+def edit_aslab(id_aslab: int, req: AddAslabRequest):
+    """Mengubah data asisten lab secara manual"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Format No WA (pastikan diawali 62)
+        no_wa = re.sub(r'\D', '', req.no_wa)
+        if no_wa.startswith('0'):
+            no_wa = '62' + no_wa[1:]
+        elif no_wa.startswith('8'):
+            no_wa = '62' + no_wa
+            
+        cursor.execute(
+            "UPDATE asisten_lab SET nama_aslab = %s, no_wa = %s, id_ruangan = %s WHERE id_aslab = %s", 
+            (req.nama_aslab, no_wa, req.id_ruangan, id_aslab)
+        )
+        conn.commit()
+        if cursor.rowcount > 0:
+            return {"status": "success", "message": "Data asisten lab berhasil diubah."}
+        else:
+            return {"status": "error", "message": "Data tidak ditemukan atau tidak ada perubahan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.post("/api/test-wa")
 def test_wa(req: TestWARequest):
     """Mengirim pesan WA percobaan ke aslab tertentu atau semua"""
