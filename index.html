@@ -281,7 +281,7 @@
 
         <!-- Content: Lab Kosong -->
         <div id="content-lab-kosong">
-          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+          <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
             <select id="fitur-kampus"
               style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
               <option value="Kobar">Kampus Kobar</option>
@@ -289,11 +289,12 @@
             </select>
             <input type="date" id="fitur-tanggal"
               style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
-            <button id="btn-submit-lab-kosong" class="btn btn-primary" style="padding: 0 20px;"><svg viewBox="0 0 24 24"
-                width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <button id="btn-submit-lab-kosong" class="btn btn-primary" style="padding: 12px 20px; flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+              </svg> Cari
+            </button>
           </div>
           <div id="result-lab-kosong"
             style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
@@ -313,14 +314,15 @@
 
         <!-- Content: Cari Dosen -->
         <div id="content-cari-dosen" style="display: none;">
-          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+          <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
             <input type="text" id="fitur-nama-dosen" placeholder="Masukkan nama dosen..."
               style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
-            <button id="btn-submit-cari-dosen" class="btn btn-primary" style="padding: 0 20px;"><svg viewBox="0 0 24 24"
-                width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <button id="btn-submit-cari-dosen" class="btn btn-primary" style="padding: 12px 20px; flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+              </svg> Cari
+            </button>
           </div>
           <div id="result-cari-dosen"
             style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
@@ -338,14 +340,15 @@
 
         <!-- Content: Cari Kode Kelas -->
         <div id="content-cari-kelas" style="display: none;">
-          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+          <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
             <input type="text" id="fitur-kode-kelas" placeholder="Masukkan kode kelas... (contoh: 01PT1)"
               style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
-            <button id="btn-submit-cari-kelas" class="btn btn-primary" style="padding: 0 20px;"><svg viewBox="0 0 24 24"
-                width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <button id="btn-submit-cari-kelas" class="btn btn-primary" style="padding: 12px 20px; flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+              </svg> Cari
+            </button>
           </div>
           <div id="result-cari-kelas"
             style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
@@ -388,6 +391,22 @@
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="password-cancel-btn">Batal</button>
         <button class="modal-btn" id="password-submit-btn">Lanjut</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Konfirmasi Bahaya -->
+  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya">
+    <div class="modal-box" style="max-width: 450px; border-top: 5px solid var(--badge-cc);">
+      <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">⚠️</div>
+      <h2 style="color: var(--badge-cc);">Peringatan Berbahaya!</h2>
+      <div class="modal-body" style="text-align: center;">
+        <p id="danger-message" style="margin-bottom: 5px; font-weight: 500;"></p>
+        <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan ini sangat berisiko dan tidak bisa dikembalikan. Pastikan Anda benar-benar sadar akan dampaknya.</p>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="danger-cancel-btn">Batal</button>
+        <button class="modal-btn" style="background: var(--badge-cc);" id="danger-submit-btn">Ya, Hapus Semua!</button>
       </div>
     </div>
   </div>
@@ -1110,6 +1129,32 @@
       });
     }
 
+    // Helper custom danger confirm prompt
+    function promptConfirmDanger(message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('danger-modal');
+        const msg = document.getElementById('danger-message');
+        const submitBtn = document.getElementById('danger-submit-btn');
+        const cancelBtn = document.getElementById('danger-cancel-btn');
+
+        msg.textContent = message;
+        modal.classList.add('open');
+        submitBtn.focus();
+
+        const cleanup = () => {
+          submitBtn.onclick = null;
+          cancelBtn.onclick = null;
+          modal.classList.remove('open');
+        };
+
+        submitBtn.onclick = () => {
+          cleanup();
+          resolve(true);
+        };
+        cancelBtn.onclick = () => { cleanup(); resolve(false); };
+      });
+    }
+
     document.getElementById('sync-btn').addEventListener('click', () => syncData(filterTanggal.value));
 
     // --- Data WA Aslab Modal Endpoint ---
@@ -1256,9 +1301,18 @@
             testModal.classList.remove('open');
             const pass = await promptPassword("Masukkan password Admin untuk masuk ke Mode Admin:");
             if (pass === "unama123") {
-              isAslabAdmin = true;
-              updateAdminUI();
-              testModal.classList.add('open');
+              // 2-Step Verification
+              const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:");
+              if (pass2 === "makannasipadangdepangang!") {
+                isAslabAdmin = true;
+                updateAdminUI();
+                testModal.classList.add('open');
+              } else if (pass2 !== null) {
+                alert("Password Master salah!");
+                testModal.classList.add('open');
+              } else {
+                testModal.classList.add('open');
+              }
             } else if (pass !== null) {
               alert("Password salah!");
               testModal.classList.add('open');
@@ -1566,7 +1620,17 @@
         alert("Password salah! Anda tidak memiliki izin.");
         return;
       }
-      if (confirm("Yakin ingin menghapus SELURUH data jadwal dari database? Tindakan ini tidak bisa dibatalkan.")) {
+      
+      // 2-Step Verification
+      const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master untuk menghapus Database:");
+      if (pass2 === null) return;
+      if (pass2 !== "makannasipadangdepangang!") {
+        alert("Password Master salah! Penghapusan dibatalkan.");
+        return;
+      }
+      
+      const isSure = await promptConfirmDanger("Yakin ingin menghapus SELURUH data jadwal dari database?");
+      if (isSure) {
         const btn = document.getElementById('clear-db-btn');
         btn.disabled = true;
         btn.innerHTML = `
@@ -1978,6 +2042,38 @@
         resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
       }
     });
+
+    // ─── Generic Modal Closer (Click Outside & Escape Key) ───
+    function closeAnyModal(modal) {
+      if (!modal) return;
+      const id = modal.id;
+      if (id === 'modal-fitur') document.getElementById('modal-close')?.click();
+      else if (id === 'password-modal') document.getElementById('password-cancel-btn')?.click();
+      else if (id === 'danger-modal') document.getElementById('danger-cancel-btn')?.click();
+      else if (id === 'test-wa-modal') document.getElementById('wa-modal-close-btn')?.click();
+      else if (id === 'room-detail-modal') document.getElementById('room-detail-close-btn')?.click();
+      // lab-modal is already handled by its own listeners, but we can fallback here:
+      else if (id === 'lab-modal') document.getElementById('modal-close-btn')?.click();
+      else modal.classList.remove('open');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        closeAnyModal(e.target);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const openModals = document.querySelectorAll('.modal-overlay.open');
+        // Close the top-most modal first (last in DOM or highest z-index)
+        if (openModals.length > 0) {
+          const topModal = openModals[openModals.length - 1];
+          closeAnyModal(topModal);
+        }
+      }
+    });
+
   </script>
 </body>
 
