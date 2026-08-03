@@ -40,12 +40,13 @@
   --panel-notif-text: #ea580c;
 
   /* Claymorphism Shadows */
-  --clay-outer-sm: 4px 4px 8px rgba(163,177,209,0.4), -4px -4px 8px rgba(255,255,255,0.8);
-  --clay-outer: 8px 8px 16px rgba(163,177,209,0.5), -8px -8px 16px rgba(255,255,255,0.85);
-  --clay-outer-lg: 12px 12px 24px rgba(163,177,209,0.5), -12px -12px 24px rgba(255,255,255,0.9);
+  /* Claymorphism Shadows */
+  --clay-outer-sm: 4px 4px 8px rgba(163,177,209,0.35), -4px -4px 8px rgba(255,255,255,0.5);
+  --clay-outer: 8px 8px 16px rgba(163,177,209,0.4), -8px -8px 16px rgba(255,255,255,0.6);
+  --clay-outer-lg: 12px 12px 24px rgba(163,177,209,0.45), -12px -12px 24px rgba(255,255,255,0.6);
   
-  --clay-inner: inset 4px 4px 8px rgba(163,177,209,0.5), inset -4px -4px 8px rgba(255,255,255,0.85);
-  --clay-inner-sm: inset 2px 2px 5px rgba(163,177,209,0.4), inset -2px -2px 5px rgba(255,255,255,0.8);
+  --clay-inner: inset 4px 4px 8px rgba(163,177,209,0.45), inset -4px -4px 8px rgba(255,255,255,0.6);
+  --clay-inner-sm: inset 2px 2px 5px rgba(163,177,209,0.35), inset -2px -2px 5px rgba(255,255,255,0.5);
 
   /* Legacy shadow overrides to clay */
   --shadow-xs: var(--clay-outer-sm);
@@ -116,7 +117,16 @@
   --clay-inner-sm: inset 2px 2px 5px rgba(12, 13, 20, 0.7), inset -2px -2px 5px rgba(60, 65, 85, 0.3);
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+  -webkit-tap-highlight-color: transparent;
+}
+
+*:focus {
+  outline: none;
+}
 
 body {
   font-family: var(--font);
@@ -168,6 +178,11 @@ button, input, select, textarea { font-family: var(--font); }
 }
 
 /* ─── Buttons ─── */
+.btn, .modal-btn, .lab-card, .badge, .stat-badge, .panel, .notif-item {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -569,7 +584,7 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   max-width: 440px;
   width: 92%;
   text-align: center;
-  box-shadow: var(--clay-outer-lg);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25), inset 2px 2px 8px rgba(255, 255, 255, 0.6);
   border: none;
   animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   max-height: 90vh;
@@ -626,6 +641,36 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   box-shadow: var(--clay-inner-sm);
 }
 
+.aslab-list-container {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--clay-inner-sm);
+}
+.aslab-list-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: all 0.2s;
+  color: var(--text);
+  font-size: 0.95em;
+  text-align: left;
+}
+.aslab-list-item:last-child {
+  border-bottom: none;
+}
+.aslab-list-item:hover {
+  background: var(--bg-card);
+}
+.aslab-list-item.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ─── Switch Toggle ─── */
 /* ─── Loading Skeleton ─── */
 .skeleton {
   background: linear-gradient(90deg, var(--border) 25%, var(--bg-elevated) 50%, var(--border) 75%);
