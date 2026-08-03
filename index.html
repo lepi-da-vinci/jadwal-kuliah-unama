@@ -79,77 +79,42 @@
           <input type="date" id="filter-tanggal" autocomplete="off">
         </div>
         <div class="filter-group">
-          <label>Waktu</label>
-          <div class="custom-select-wrapper" id="wrapper-waktu">
-            <div class="custom-select-trigger" onclick="toggleCustomSelect('waktu', event)">
-              <span class="custom-select-label" id="label-waktu">Semua Waktu</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="aslab-list-container custom-select-dropdown" id="dropdown-waktu">
-              <div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption('waktu', 'semua', 'Semua Waktu')">Semua Waktu</div>
-              <div class="aslab-list-item" data-value="sekarang" onclick="selectCustomOption('waktu', 'sekarang', 'Jadwal Saat Ini (Otomatis)')">Jadwal Saat Ini (Otomatis)</div>
-            </div>
-            <input type="hidden" id="filter-waktu" value="semua">
-          </div>
+          <label for="filter-waktu">Waktu</label>
+          <select id="filter-waktu">
+            <option value="sekarang">Jadwal Saat Ini (Otomatis)</option>
+            <option value="semua" selected>Semua Waktu</option>
+          </select>
         </div>
         <div class="filter-group">
-          <label>Status Kuliah</label>
-          <div class="custom-select-wrapper" id="wrapper-metode">
-            <div class="custom-select-trigger" onclick="toggleCustomSelect('metode', event)">
-              <span class="custom-select-label" id="label-metode">Semua Status</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="aslab-list-container custom-select-dropdown" id="dropdown-metode">
-              <div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption('metode', 'semua', 'Semua Status')">Semua Status</div>
-              <div class="aslab-list-item" data-value="TM" onclick="selectCustomOption('metode', 'TM', 'Tatap Muka (TM)')">Tatap Muka (TM)</div>
-              <div class="aslab-list-item" data-value="OL" onclick="selectCustomOption('metode', 'OL', 'Online (OL)')">Online (OL)</div>
-              <div class="aslab-list-item" data-value="CC" onclick="selectCustomOption('metode', 'CC', 'Cancel (CC)')">Cancel (CC)</div>
-            </div>
-            <input type="hidden" id="filter-metode" value="semua">
-          </div>
+          <label for="filter-metode">Status Kuliah</label>
+          <select id="filter-metode">
+            <option value="semua">Semua Status</option>
+            <option value="TM">Tatap Muka (TM)</option>
+            <option value="OL">Online (OL)</option>
+            <option value="CC">Cancel (CC)</option>
+          </select>
         </div>
         <div class="filter-group">
-          <label>Lokasi Kampus</label>
-          <div class="custom-select-wrapper" id="wrapper-kampus">
-            <div class="custom-select-trigger" onclick="toggleCustomSelect('kampus', event)">
-              <span class="custom-select-label" id="label-kampus">Semua Kampus</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="aslab-list-container custom-select-dropdown" id="dropdown-kampus">
-              <div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption('kampus', 'semua', 'Semua Kampus')">Semua Kampus</div>
-              <div class="aslab-list-item" data-value="Kampus Kobar" onclick="selectCustomOption('kampus', 'Kampus Kobar', 'Kampus Kobar')">Kampus Kobar</div>
-              <div class="aslab-list-item" data-value="Kampus Thehok" onclick="selectCustomOption('kampus', 'Kampus Thehok', 'Kampus Thehok')">Kampus Thehok</div>
-            </div>
-            <input type="hidden" id="filter-kampus" value="semua">
-          </div>
+          <label for="filter-kampus">Lokasi Kampus</label>
+          <select id="filter-kampus">
+            <option value="semua">Semua Kampus</option>
+            <option value="Kampus Kobar">Kampus Kobar</option>
+            <option value="Kampus Thehok">Kampus Thehok</option>
+          </select>
         </div>
         <div class="filter-group">
-          <label>Kategori Ruangan</label>
-          <div class="custom-select-wrapper" id="wrapper-kategori-ruang">
-            <div class="custom-select-trigger" onclick="toggleCustomSelect('kategori-ruang', event)">
-              <span class="custom-select-label" id="label-kategori-ruang">Semua Kategori</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="aslab-list-container custom-select-dropdown" id="dropdown-kategori-ruang">
-              <div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption('kategori-ruang', 'semua', 'Semua Kategori')">Semua Kategori</div>
-              <div class="aslab-list-item" data-value="labor" onclick="selectCustomOption('kategori-ruang', 'labor', 'Labor')">Labor</div>
-              <div class="aslab-list-item" data-value="kelas" onclick="selectCustomOption('kategori-ruang', 'kelas', 'Kelas')">Kelas</div>
-            </div>
-            <input type="hidden" id="filter-kategori-ruang" value="semua">
-          </div>
+          <label for="filter-kategori-ruang">Kategori Ruangan</label>
+          <select id="filter-kategori-ruang">
+            <option value="semua">Semua Kategori</option>
+            <option value="labor">Labor</option>
+            <option value="kelas">Kelas</option>
+          </select>
         </div>
         <div class="filter-group">
-          <label>Ruangan / Labor</label>
-          <div class="custom-select-wrapper" id="wrapper-ruangan">
-            <div class="custom-select-trigger" onclick="toggleCustomSelect('ruangan', event)">
-              <span class="custom-select-label" id="label-ruangan">Semua Ruangan</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="aslab-list-container custom-select-dropdown" id="dropdown-ruangan">
-              <div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption('ruangan', 'semua', 'Semua Ruangan')">Semua Ruangan</div>
-            </div>
-            <input type="hidden" id="filter-ruangan" value="semua">
-          </div>
+          <label for="filter-ruangan">Ruangan / Labor</label>
+          <select id="filter-ruangan">
+            <option value="semua">Semua Ruangan</option>
+          </select>
         </div>
         <div class="filter-group">
           <label style="visibility: hidden;">Info Lain</label>
@@ -318,18 +283,19 @@
         <div id="content-lab-kosong">
           <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
             <select id="fitur-kampus"
-              style="flex: 1; min-width: 120px; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+              style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
               <option value="Kobar">Kampus Kobar</option>
               <option value="Thehok">Kampus Thehok</option>
             </select>
             <input type="date" id="fitur-tanggal"
-              style="flex: 1; min-width: 120px; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+              style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
             <button id="btn-submit-lab-kosong" class="btn btn-primary"
-              style="width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg
-                viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              style="padding: 12px 20px; flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+              </svg> Cari
+            </button>
           </div>
           <div id="result-lab-kosong"
             style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
@@ -351,13 +317,14 @@
         <div id="content-cari-dosen" style="display: none;">
           <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
             <input type="text" id="fitur-nama-dosen" placeholder="Masukkan nama dosen..."
-              style="flex: 1; min-width: 180px; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+              style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
             <button id="btn-submit-cari-dosen" class="btn btn-primary"
-              style="width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg
-                viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              style="padding: 12px 20px; flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+              </svg> Cari
+            </button>
           </div>
           <div id="result-cari-dosen"
             style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
@@ -376,14 +343,15 @@
         <!-- Content: Cari Kode Kelas -->
         <div id="content-cari-kelas" style="display: none;">
           <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
-            <input type="text" id="fitur-kode-kelas" placeholder="Masukkan kode kelas... (contoh: 01PT1)"
-              style="flex: 1; min-width: 180px; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
+            <input type="text" id="fitur-kode-kelas" placeholder="Masukkan kode kelas (contoh: 01PT1)"
+              style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
             <button id="btn-submit-cari-kelas" class="btn btn-primary"
-              style="width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg
-                viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              style="padding: 12px 20px; flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+              </svg> Cari
+            </button>
           </div>
           <div id="result-cari-kelas"
             style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
@@ -478,10 +446,10 @@
         style="display: none; text-align: left; flex-direction: column; gap: 15px;">
         <div>
           <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Asisten Lab:</label>
-          <div id="aslab-list-container" class="aslab-list-container">
-            <!-- Items injected by JS -->
-          </div>
-          <input type="hidden" id="aslab-select" value="">
+          <select id="aslab-select"
+            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; appearance: auto; font-size: 1em;">
+            <option value="">-- Semua Aslab --</option>
+          </select>
         </div>
         <input type="hidden" id="test-action-select" value="test">
         <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
@@ -586,55 +554,6 @@
   </div>
 
   <script>
-    function selectAslabItem(element, value) {
-      document.getElementById('aslab-select').value = value;
-      const items = document.querySelectorAll('#aslab-list-container .aslab-list-item');
-      items.forEach(item => item.classList.remove('active'));
-      element.classList.add('active');
-    }
-
-    // Custom Select Dropdown Logic
-    function toggleCustomSelect(id, event) {
-      event.stopPropagation();
-      const dropdown = document.getElementById(`dropdown-${id}`);
-      const isCurrentlyOpen = dropdown.classList.contains('open');
-      
-      // Close all other open dropdowns
-      document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
-        el.classList.remove('open');
-      });
-
-      if (!isCurrentlyOpen) {
-        dropdown.classList.add('open');
-      }
-    }
-
-    function selectCustomOption(id, value, label) {
-      document.getElementById(`filter-${id}`).value = value;
-      document.getElementById(`label-${id}`).innerText = label;
-      
-      const items = document.querySelectorAll(`#dropdown-${id} .aslab-list-item`);
-      items.forEach(item => item.classList.remove('active'));
-      event.currentTarget.classList.add('active');
-      
-      // Close the dropdown
-      document.getElementById(`dropdown-${id}`).classList.remove('open');
-      
-      // Trigger applyFilters or update dynamic options if necessary
-      if (id === 'kampus' || id === 'kategori-ruang') {
-        updateRuanganFilterOptions();
-        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
-      }
-      applyFilters();
-    }
-
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', (event) => {
-      document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
-        el.classList.remove('open');
-      });
-    });
-
     const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
     let allJadwal = [];
     let allRuanganData = [];
@@ -747,58 +666,37 @@
 
     fetchAllJadwal();
 
-    function updateRuanganFilterOptions() {
-      const dropdownRuangan = document.getElementById('dropdown-ruangan');
-      const hiddenInput = document.getElementById('filter-ruangan');
-      const oldVal = hiddenInput.value;
-      
-      dropdownRuangan.innerHTML = '<div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption(\'ruangan\', \'semua\', \'Semua Ruangan\')">Semua Ruangan</div>';
-
-      const filterKampus = document.getElementById('filter-kampus').value;
-      const filterKat = document.getElementById('filter-kategori-ruang').value;
-
+    function updateRuanganDropdown() {
+      const fk = document.getElementById('filter-kategori-ruang').value;
+      const fKampus = document.getElementById('filter-kampus').value;
       const ruanganSet = new Set();
-      allRuanganData.forEach(r => {
-        if (filterKampus !== 'semua' && r.kampus !== filterKampus) return;
-        if (filterKat !== 'semua' && r.kategori !== filterKat) return;
-        ruanganSet.add(r.nama_ruangan);
+      allJadwal.forEach(item => {
+        if (!item.nama_ruangan) return;
+        if (fKampus !== 'semua' && item.kampus && item.kampus.trim() !== fKampus) return;
+        if (fk === 'labor') { if (isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan); }
+        else if (fk === 'kelas') { if (!isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan); }
+        else { ruanganSet.add(item.nama_ruangan); }
       });
-
-      let foundOld = false;
-      Array.from(ruanganSet).sort().forEach(nama => {
-        if (nama === oldVal) foundOld = true;
-        const isActive = (nama === oldVal) ? 'active' : '';
-        dropdownRuangan.innerHTML += `<div class="aslab-list-item ${isActive}" data-value="${nama}" onclick="selectCustomOption('ruangan', '${nama}', '${nama}')">${nama}</div>`;
+      const oldVal = filterRuangan.value;
+      filterRuangan.innerHTML = '<option value="semua">Semua Ruangan</option>';
+      Array.from(ruanganSet).sort().forEach(ruang => {
+        const opt = document.createElement('option');
+        opt.value = ruang; opt.textContent = ruang;
+        filterRuangan.appendChild(opt);
       });
-
-      if (ruanganSet.has(oldVal)) {
-        hiddenInput.value = oldVal;
-        document.getElementById('label-ruangan').innerText = oldVal;
-        // Make sure only the selected item is marked active (done above)
-        // Ensure "Semua Ruangan" is not active if oldVal is selected
-        if(oldVal !== 'semua') {
-            dropdownRuangan.children[0].classList.remove('active');
-        }
-      } else {
-        hiddenInput.value = 'semua';
-        document.getElementById('label-ruangan').innerText = 'Semua Ruangan';
-        dropdownRuangan.children[0].classList.add('active');
-      }
+      filterRuangan.value = ruanganSet.has(oldVal) ? oldVal : 'semua';
     }
 
     function populateFilters() {
       const waktuSet = new Set();
       allJadwal.forEach(item => { if (item.jam) waktuSet.add(item.jam); });
-      
-      // Update Waktu dropdown list
-      const dropdownWaktu = document.getElementById('dropdown-waktu');
-      dropdownWaktu.innerHTML = `<div class="aslab-list-item active" onclick="selectCustomOption('waktu', 'semua', 'Semua Waktu')">Semua Waktu</div>
-                                <div class="aslab-list-item" onclick="selectCustomOption('waktu', 'sekarang', 'Jadwal Saat Ini')">Jadwal Saat Ini</div>`;
+      filterWaktu.innerHTML = '<option value="sekarang">Jadwal Saat Ini (Otomatis)</option><option value="semua" selected>Semua Waktu</option>';
       Array.from(waktuSet).sort().forEach(waktu => {
-        dropdownWaktu.innerHTML += `<div class="aslab-list-item" onclick="selectCustomOption('waktu', '${waktu}', 'Pukul ${waktu}')">Pukul ${waktu}</div>`;
+        const opt = document.createElement('option');
+        opt.value = waktu; opt.textContent = `Pukul ${waktu}`;
+        filterWaktu.appendChild(opt);
       });
-
-      updateRuanganFilterOptions();
+      updateRuanganDropdown();
     }
 
     function renderTable(data) {
@@ -1197,6 +1095,8 @@
     filterTanggal.addEventListener('change', (e) => {
       const selectedDate = e.target.value;
       if (selectedDate) {
+        // Selalu lakukan syncData agar update dari BAAK (Tambahan/Perubahan) bisa masuk.
+        // applyFilters() akan dipanggil otomatis setelah sync selesai.
         syncData(selectedDate);
       } else {
         applyFilters();
@@ -1459,14 +1359,11 @@
           modalTitle.innerText = "Uji Coba Pesan WA";
           modalIcon.innerText = "💬";
 
-          const listContainer = document.getElementById('aslab-list-container');
-          document.getElementById('aslab-select').value = "";
-
-          let listHtml = `<div class="aslab-list-item active" onclick="selectAslabItem(this, '')">-- Semua Aslab --</div>`;
+          const select = document.getElementById('aslab-select');
+          select.innerHTML = '<option value="">-- Semua Aslab --</option>';
           globalAslabData.forEach(a => {
-            listHtml += `<div class="aslab-list-item" onclick="selectAslabItem(this, '${a.id_aslab}')">${a.nama_ruangan} - ${a.nama_aslab}</div>`;
+            select.innerHTML += `<option value="${a.id_aslab}">${a.nama_ruangan} - ${a.nama_aslab}</option>`;
           });
-          listContainer.innerHTML = listHtml;
         };
 
         // Navigasi ke Data WA
@@ -1758,7 +1655,19 @@
       }
     });
 
-    filterTanggal.addEventListener('change', applyFilters);
+    filterWaktu.addEventListener('change', applyFilters);
+    filterMetode.addEventListener('change', applyFilters);
+    filterRuangan.addEventListener('change', applyFilters);
+    document.getElementById('filter-kategori-ruang').addEventListener('change', () => {
+      updateRuanganDropdown();
+      applyFilters();
+      updateActiveLabPanel();
+    });
+    document.getElementById('filter-kampus').addEventListener('change', () => {
+      updateRuanganDropdown();
+      applyFilters();
+      updateActiveLabPanel();
+    });
 
     // 6. Auto-Sync setiap 30 menit
     setInterval(() => {
