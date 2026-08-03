@@ -11,7 +11,8 @@
     rel="stylesheet">
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 
 <body>
@@ -582,6 +583,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script>
     function selectAslabItem(element, value) {
       document.getElementById('aslab-select').value = value;
@@ -2165,6 +2167,17 @@
         if (openModals.length > 0) {
           const topModal = openModals[openModals.length - 1];
           closeAnyModal(topModal);
+        }
+      }
+    });
+
+    flatpickr("input[type='date']", {
+      dateFormat: "Y-m-d",
+      disableMobile: true,
+      onChange: function(selectedDates, dateStr, instance) {
+        instance.close();
+        if (instance.element) {
+          instance.element.dispatchEvent(new Event('change'));
         }
       }
     });
