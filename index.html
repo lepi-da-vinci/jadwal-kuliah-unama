@@ -554,6 +554,55 @@
   </div>
 
   <script>
+    function selectAslabItem(element, value) {
+      document.getElementById('aslab-select').value = value;
+      const items = document.querySelectorAll('#aslab-list-container .aslab-list-item');
+      items.forEach(item => item.classList.remove('active'));
+      element.classList.add('active');
+    }
+
+    // Custom Select Dropdown Logic
+    function toggleCustomSelect(id, event) {
+      event.stopPropagation();
+      const dropdown = document.getElementById(`dropdown-${id}`);
+      const isCurrentlyOpen = dropdown.classList.contains('open');
+
+      // Close all other open dropdowns
+      document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
+        el.classList.remove('open');
+      });
+
+      if (!isCurrentlyOpen) {
+        dropdown.classList.add('open');
+      }
+    }
+
+    function selectCustomOption(id, value, label) {
+      document.getElementById(`filter-${id}`).value = value;
+      document.getElementById(`label-${id}`).innerText = label;
+
+      const items = document.querySelectorAll(`#dropdown-${id} .aslab-list-item`);
+      items.forEach(item => item.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      // Close the dropdown
+      document.getElementById(`dropdown-${id}`).classList.remove('open');
+
+      // Trigger applyFilters or update dynamic options if necessary
+      if (id === 'kampus' || id === 'kategori-ruang') {
+        updateRuanganFilterOptions();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+      }
+      applyFilters();
+    }
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (event) => {
+      document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
+        el.classList.remove('open');
+      });
+    });
+
     const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
     let allJadwal = [];
     let allRuanganData = [];

@@ -670,43 +670,6 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   font-weight: 600;
 }
 
-/* ─── Custom Select Dropdown ─── */
-.custom-select-wrapper {
-  position: relative;
-  width: 100%;
-}
-.custom-select-trigger {
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  border: 1.5px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 0.95em;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.custom-select-trigger:hover {
-  background: var(--bg-card);
-}
-.custom-select-dropdown {
-  position: absolute;
-  top: calc(100% + 5px);
-  left: 0;
-  width: 100%;
-  z-index: 1000;
-  display: none;
-}
-.custom-select-dropdown.open {
-  display: block;
-  animation: fadeInDown 0.2s ease;
-}
-
 /* ─── Switch Toggle ─── */
 /* ─── Loading Skeleton ─── */
 .skeleton {
