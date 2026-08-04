@@ -1,16 +1,13 @@
+import asyncio
+
+import mysql.connector
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-import mysql.connector
 from pydantic import BaseModel
-from typing import Optional
+
 import scraper
-import asyncio
-import threading
-import time
 import wa_notifier
-from datetime import datetime
 
 app = FastAPI(title="API Analitik Jadwal Kuliah")
 
@@ -112,19 +109,20 @@ def clear_jadwal():
             conn.close()
 
 class SyncRequest(BaseModel):
-    tanggal: Optional[str] = None
+    tanggal: str | None = None
 
 class SyncHtmlRequest(BaseModel):
     html: str
-    tanggal: Optional[str] = None
-    page: Optional[str] = "1"
+    tanggal: str | None = None
+    page: str | None = "1"
 
 class SyncCompleteRequest(BaseModel):
-    tanggal: Optional[str] = None
+    tanggal: str | None = None
 
 sync_status = {}
 
 import webbrowser
+
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
@@ -191,9 +189,9 @@ def get_notifikasi_lab(tanggal: str):
             conn.close()
 
 class TestWARequest(BaseModel):
-    id_aslab: Optional[int] = None
+    id_aslab: int | None = None
     action_type: str = "test"
-    ngrok_link: Optional[str] = None
+    ngrok_link: str | None = None
 
 class AddAslabRequest(BaseModel):
     nama_aslab: str
@@ -352,8 +350,8 @@ async def cek_kosong(kampus: str, tanggal: str):
             if dt_obj.weekday() == 6:
                 return {"status": "error", "message": f"Libur mas, soalnya hari Minggu tanggal {tanggal}."}
             else:
-                import webbrowser
                 import asyncio
+                import webbrowser
                 
                 # Buka tab untuk menarik data baru
                 target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tanggal}&auto_close=1"
@@ -425,7 +423,7 @@ async def cek_kosong(kampus: str, tanggal: str):
             conn.close()
 
 @app.get("/api/cari_dosen")
-def cari_dosen(nama: str, tanggal: Optional[str] = None):
+def cari_dosen(nama: str, tanggal: str | None = None):
     """Mencari jadwal dosen berdasarkan nama"""
     if not nama:
         return {"status": "error", "message": "Nama dosen tidak boleh kosong"}
@@ -477,7 +475,7 @@ def cari_dosen(nama: str, tanggal: Optional[str] = None):
             conn.close()
 
 @app.get("/api/cari_kelas")
-def cari_kelas(kode: str, tanggal: Optional[str] = None):
+def cari_kelas(kode: str, tanggal: str | None = None):
     """Mencari jadwal kelas"""
     try:
         conn = get_db()

@@ -1,6 +1,7 @@
-from bs4 import BeautifulSoup
 import re
+
 import mysql.connector
+from bs4 import BeautifulSoup
 
 # Dictionary pembantu untuk konversi bulan ke format angka
 BULAN_DICT = {

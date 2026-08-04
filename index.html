@@ -774,30 +774,39 @@
     fetchAllJadwal();
 
     function updateRuanganFilterOptions() {
-      const dropdownRuangan = document.getElementById('dropdown-ruangan');
+      const dropdownRuangan = document.getElementById('dropdown-ruangan').querySelector('.aslab-list-container') || document.getElementById('dropdown-ruangan');
       const hiddenInput = document.getElementById('filter-ruangan');
       const oldVal = hiddenInput.value;
 
-      dropdownRuangan.innerHTML = '<div class="aslab-list-item active" data-value="semua" onclick="selectCustomOption(\'ruangan\', \'semua\', \'Semua Ruangan\')">Semua Ruangan</div>';
-
-      const filterKampus = document.getElementById('filter-kampus').value;
+      const fKampus = document.getElementById('filter-kampus').value;
       const filterKat = document.getElementById('filter-kategori-ruang').value;
 
       const ruanganSet = new Set();
-      allRuanganData.forEach(r => {
-        if (filterKampus !== 'semua' && r.kampus !== filterKampus) return;
-        if (filterKat !== 'semua' && r.kategori !== filterKat) return;
-        ruanganSet.add(r.nama_ruangan);
+      
+      allJadwal.forEach(item => {
+        if (!item.nama_ruangan) return;
+        if (fKampus !== 'semua' && (!item.kampus || item.kampus.trim() !== fKampus)) return;
+
+        if (filterKat === 'semua') {
+          ruanganSet.add(item.nama_ruangan);
+        } else if (filterKat === 'labor') {
+          if (isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan);
+        } else if (filterKat === 'kelas') {
+          if (!isLab(item.nama_ruangan)) ruanganSet.add(item.nama_ruangan);
+        }
       });
 
+      let html = `<div class="aslab-list-item active" onclick="selectCustomOption('ruangan', 'semua', 'Semua Ruangan')">Semua Ruangan</div>`;
+      
       let foundOld = false;
-      Array.from(ruanganSet).sort().forEach(nama => {
-        if (nama === oldVal) foundOld = true;
-        const isActive = (nama === oldVal) ? 'active' : '';
-        dropdownRuangan.innerHTML += `<div class="aslab-list-item ${isActive}" data-value="${nama}" onclick="selectCustomOption('ruangan', '${nama}', '${nama}')">${nama}</div>`;
+      Array.from(ruanganSet).sort().forEach(r => {
+        if (r === oldVal) foundOld = true;
+        html += `<div class="aslab-list-item" onclick="selectCustomOption('ruangan', '${r}', '${r}')">${r}</div>`;
       });
+      
+      dropdownRuangan.innerHTML = html;
 
-      if (ruanganSet.has(oldVal)) {
+      if (foundOld) {
         hiddenInput.value = oldVal;
         document.getElementById('label-ruangan').innerText = oldVal;
         if (oldVal !== 'semua') {
@@ -1790,7 +1799,7 @@
     setInterval(() => {
       const currentDate = filterTanggal.value;
       if (currentDate) {
-        console.log("Menjalankan Auto-Sync untuk tanggal:", currentDate);
+        // Menjalankan Auto-Sync untuk tanggal: currentDate
         syncData(currentDate);
       }
     }, 30 * 60 * 1000); // 30 menit dalam milidetik
@@ -1862,7 +1871,7 @@
         }
         playTone(880, 0, 0.3);
         playTone(1108.73, 0.15, 0.5);
-      } catch (e) { console.log("Browser memblokir autoplay suara."); }
+      } catch (e) { /* Browser memblokir autoplay suara */ }
     }
 
     // ─── Lab Check ───
@@ -2039,7 +2048,7 @@
       resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
 
       try {
-        const response = await fetch(`/api/cek_kosong?kampus=${kampus}&tanggal=${tanggal}`);
+        const response = await fetch(`${API_BASE_URL}/api/cek_kosong?kampus=${kampus}&tanggal=${tanggal}`);
         const result = await response.json();
 
         if (result.status === 'success') {
@@ -2091,8 +2100,8 @@
       try {
         const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
         const url = tanggalFilter
-          ? `/api/cari_dosen?nama=${encodeURIComponent(nama)}&tanggal=${encodeURIComponent(tanggalFilter)}`
-          : `/api/cari_dosen?nama=${encodeURIComponent(nama)}`;
+          ? `${API_BASE_URL}/api/cari_dosen?nama=${encodeURIComponent(nama)}&tanggal=${encodeURIComponent(tanggalFilter)}`
+          : `${API_BASE_URL}/api/cari_dosen?nama=${encodeURIComponent(nama)}`;
         const response = await fetch(url);
         const result = await response.json();
 
@@ -2136,8 +2145,8 @@
       try {
         const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
         const url = tanggalFilter
-          ? `/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}`
-          : `/api/cari_kelas?kode=${encodeURIComponent(kode)}`;
+          ? `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}`
+          : `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}`;
         const response = await fetch(url);
         const result = await response.json();
 

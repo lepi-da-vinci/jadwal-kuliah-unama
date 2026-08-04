@@ -1,12 +1,13 @@
 import asyncio
 import datetime
-import requests
-import mysql.connector
-import scraper
-import re
 import random
+import re
 import threading
 from datetime import timedelta
+
+import requests
+
+import scraper
 
 # State pendaftaran bot
 registration_states = {}
@@ -209,7 +210,7 @@ def send_wa_message(no_wa, pesan):
             print(f"[WA GAGAL] Ke: {no_wa} | {response.text}")
             return False
     except Exception as e:
-        print(f"[WA ERROR] {str(e)}")
+        print(f"[WA ERROR] {e!s}")
         return False
 
 def check_lab_schedules():
@@ -310,8 +311,9 @@ def check_lab_schedules():
             cursor.close()
             conn.close()
 
-import urllib.request
 import json
+import urllib.request
+
 
 def test_send(id_aslab=None, action_type="test", ngrok_link=None):
     try:
@@ -328,7 +330,7 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
                             break
                     if not ngrok_link:
                         return {"error": "Ngrok berjalan tapi tunnel HTTPS tidak ditemukan."}
-            except Exception as e:
+            except Exception:
                 return {"error": "Ngrok belum berjalan! Pastikan Anda sudah menjalankan 'ngrok http 8000' di terminal lain."}
 
         conn = scraper.get_db()
