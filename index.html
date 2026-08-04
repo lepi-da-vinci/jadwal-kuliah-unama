@@ -2059,16 +2059,26 @@
                 <strong style="display:flex; align-items:center; gap:6px;">
                   <span style="color:var(--badge-tm);">✅</span> ${room.ruangan}
                 </strong>
-                <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px;">full kosong aja</div>
+                <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px;">Kosong seharian penuh</div>
               </div>`;
             } else {
-              let gapsHtml = room.gaps.map(g => `<li>${g.start} - ${g.end} kosong ${g.note ? `<i>(${g.note})</i>` : ''}</li>`).join('');
-              html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
-                <strong style="display:flex; align-items:center; gap:6px;">
-                  <span style="color:var(--badge-wa);">⚠️</span> ${room.ruangan}
-                </strong>
-                <ul style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px; margin-bottom: 0;">${gapsHtml}</ul>
-              </div>`;
+              if (room.gaps && room.gaps.length > 0) {
+                let gapsHtml = room.gaps.map(g => `<li>${g.start} - ${g.end} kosong ${g.note ? `<i>(${g.note})</i>` : ''}</li>`).join('');
+                html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+                  <strong style="display:flex; align-items:center; gap:6px;">
+                    <span style="color:var(--badge-wa);">⚠️</span> ${room.ruangan}
+                  </strong>
+                  <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.85em; margin-top:4px; margin-bottom: 4px;">Ada jam kosong pada:</div>
+                  <ul style="padding-left: 44px; color: var(--text-muted); font-size: 0.85em; margin-top:0; margin-bottom: 0;">${gapsHtml}</ul>
+                </div>`;
+              } else {
+                html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+                  <strong style="display:flex; align-items:center; gap:6px;">
+                    <span style="color:var(--badge-cc);">❌</span> ${room.ruangan}
+                  </strong>
+                  <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.85em; margin-top:4px;">Terpakai penuh (Full Kelas)</div>
+                </div>`;
+              }
             }
           });
           if (!html) html = '<p style="text-align:center;">Tidak ada lab terdaftar.</p>';
