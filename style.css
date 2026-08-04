@@ -109,9 +109,9 @@
   --panel-notif-text: #fbbd23;
 
   /* Dark Claymorphism Shadows */
-  --clay-outer-sm: 4px 4px 8px rgba(12, 13, 20, 0.7), -3px -3px 8px rgba(60, 65, 85, 0.3);
-  --clay-outer: 8px 8px 16px rgba(12, 13, 20, 0.7), -6px -6px 16px rgba(60, 65, 85, 0.3);
-  --clay-outer-lg: 12px 12px 24px rgba(12, 13, 20, 0.8), -8px -8px 24px rgba(60, 65, 85, 0.25);
+  --clay-outer-sm: 4px 4px 10px rgba(0, 0, 0, 0.4);
+  --clay-outer: 8px 8px 20px rgba(0, 0, 0, 0.5);
+  --clay-outer-lg: 12px 12px 30px rgba(0, 0, 0, 0.6);
   
   --clay-inner: inset 4px 4px 8px rgba(12, 13, 20, 0.7), inset -4px -4px 8px rgba(60, 65, 85, 0.3);
   --clay-inner-sm: inset 2px 2px 5px rgba(12, 13, 20, 0.7), inset -2px -2px 5px rgba(60, 65, 85, 0.3);
@@ -584,11 +584,13 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   max-width: 440px;
   width: 92%;
   text-align: center;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25), inset 2px 2px 8px rgba(255, 255, 255, 0.6);
-  border: none;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
   animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   max-height: 90vh;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 .modal-box .modal-icon {
   font-size: 2em;
@@ -657,6 +659,8 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   color: var(--text);
   font-size: 0.95em;
   text-align: left;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .aslab-list-item:last-child {
   border-bottom: none;
@@ -813,4 +817,8 @@ html body .flatpickr-calendar.arrowBottom:after {
 @keyframes slideInLeftTab {
   from { opacity: 0; transform: translateX(-20px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+#result-lab-kosong, #result-cari-dosen, #result-cari-kelas {
+  padding-bottom: 24px;
 }
