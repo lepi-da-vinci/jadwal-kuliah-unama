@@ -2203,9 +2203,6 @@
       disableMobile: true,
       onChange: function (selectedDates, dateStr, instance) {
         instance.close();
-        if (instance.element) {
-          instance.element.dispatchEvent(new Event('change'));
-        }
       }
     });
 
