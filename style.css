@@ -804,3 +804,13 @@ html body .flatpickr-calendar.arrowBottom:before,
 html body .flatpickr-calendar.arrowBottom:after {
   display: none !important;
 }
+
+@keyframes slideInRightTab {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeftTab {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}

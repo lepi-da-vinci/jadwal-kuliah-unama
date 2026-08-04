@@ -25,7 +25,7 @@ app.add_middleware(
 
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
+        host="127.0.0.1",
         user="root",
         password="", # Ubah jika ada password
         database="db_jadwal_kuliah"

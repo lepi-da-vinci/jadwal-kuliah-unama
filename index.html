@@ -647,7 +647,7 @@
       document.getElementById(`dropdown-${id}`).classList.remove('open');
 
       // Trigger applyFilters or update dynamic options if necessary
-      if (id === 'kampus' || id === 'kategori-ruang') {
+      if (id === 'kampus' || id === 'kategori-ruang' || id === 'waktu' || id === 'metode') {
         updateRuanganFilterOptions();
         if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
       }
@@ -765,6 +765,8 @@
           });
           populateFilters();
           applyFilters();
+        } else {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal: ${data.message}</td></tr>`;
         }
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal.</td></tr>';
@@ -780,12 +782,28 @@
 
       const fKampus = document.getElementById('filter-kampus').value;
       const filterKat = document.getElementById('filter-kategori-ruang').value;
+      const fTanggal = document.getElementById('filter-tanggal').value;
+      const fWaktu = document.getElementById('filter-waktu').value;
+      const fMetode = document.getElementById('filter-metode').value;
 
       const ruanganSet = new Set();
       
       allJadwal.forEach(item => {
         if (!item.nama_ruangan) return;
         if (fKampus !== 'semua' && (!item.kampus || item.kampus.trim() !== fKampus)) return;
+        if (fTanggal && item.tanggal !== fTanggal) return;
+        if (fMetode !== 'semua' && item.metode_pembelajaran !== fMetode) return;
+        
+        if (fWaktu !== 'semua' && fWaktu !== 'sekarang') {
+          if (item.jam !== fWaktu) return;
+        } else if (fWaktu === 'sekarang') {
+          const now = new Date();
+          const currentTime = now.getHours() * 60 + now.getMinutes();
+          if (!item.jam) return;
+          const parts = item.jam.split(':');
+          const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          if (!(currentTime >= startTime && currentTime <= startTime + 135)) return;
+        }
 
         if (filterKat === 'semua') {
           ruanganSet.add(item.nama_ruangan);
@@ -1227,16 +1245,7 @@
       }
     }
 
-    filterTanggal.addEventListener('change', (e) => {
-      const selectedDate = e.target.value;
-      if (selectedDate) {
-        // Selalu lakukan syncData agar update dari BAAK (Tambahan/Perubahan) bisa masuk.
-        // applyFilters() akan dipanggil otomatis setelah sync selesai.
-        syncData(selectedDate);
-      } else {
-        applyFilters();
-      }
-    });
+
 
     // Helper custom password prompt
     function promptPassword(message) {
@@ -1793,7 +1802,10 @@
       }
     });
 
-    filterTanggal.addEventListener('change', applyFilters);
+    filterTanggal.addEventListener('change', () => {
+      updateRuanganFilterOptions();
+      applyFilters();
+    });
 
     // 6. Auto-Sync setiap 30 menit
     setInterval(() => {
@@ -1981,6 +1993,14 @@
     closeFitur.addEventListener('mouseover', () => closeFitur.style.opacity = '1');
     closeFitur.addEventListener('mouseout', () => closeFitur.style.opacity = '0.6');
 
+    let currentInfoTab = 0; // 0: Lab Kosong, 1: Posisi Dosen, 2: Kode Kelas
+    
+    function animateTabContent(element, direction) {
+      element.style.animation = 'none';
+      void element.offsetWidth; // trigger reflow
+      element.style.animation = direction === 'left' ? 'slideInLeftTab 0.3s cubic-bezier(0.16, 1, 0.3, 1)' : 'slideInRightTab 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+    }
+
     tabLabKosong.addEventListener('click', () => {
       tabLabKosong.style.background = 'var(--primary)';
       tabLabKosong.style.color = '#fff';
@@ -1994,9 +2014,15 @@
       tabCariKelas.style.color = 'var(--text-muted)';
       tabCariKelas.style.boxShadow = 'none';
 
-      contentLabKosong.style.display = 'block';
+      const prevTab = currentInfoTab;
+      currentInfoTab = 0;
       contentCariDosen.style.display = 'none';
       contentCariKelas.style.display = 'none';
+      contentLabKosong.style.display = 'block';
+
+      if (prevTab !== 0) {
+        animateTabContent(contentLabKosong, prevTab > 0 ? 'left' : 'right');
+      }
     });
 
     tabCariDosen.addEventListener('click', () => {
@@ -2012,9 +2038,15 @@
       tabCariKelas.style.color = 'var(--text-muted)';
       tabCariKelas.style.boxShadow = 'none';
 
-      contentCariDosen.style.display = 'block';
+      const prevTab = currentInfoTab;
+      currentInfoTab = 1;
       contentLabKosong.style.display = 'none';
       contentCariKelas.style.display = 'none';
+      contentCariDosen.style.display = 'block';
+
+      if (prevTab !== 1) {
+        animateTabContent(contentCariDosen, prevTab > 1 ? 'left' : 'right');
+      }
     });
 
     tabCariKelas.addEventListener('click', () => {
@@ -2030,9 +2062,15 @@
       tabCariDosen.style.color = 'var(--text-muted)';
       tabCariDosen.style.boxShadow = 'none';
 
-      contentCariKelas.style.display = 'block';
+      const prevTab = currentInfoTab;
+      currentInfoTab = 2;
       contentLabKosong.style.display = 'none';
       contentCariDosen.style.display = 'none';
+      contentCariKelas.style.display = 'block';
+
+      if (prevTab !== 2) {
+        animateTabContent(contentCariKelas, prevTab > 2 ? 'left' : 'right');
+      }
     });
 
     btnSubmitLabKosong.addEventListener('click', async () => {
