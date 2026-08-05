@@ -24,21 +24,32 @@ Fitur Utama
 Pastikan Anda telah menginstal aplikasi berikut sebelum menjalankan sistem ini:
 1. Python 3.8+ (Untuk backend web)
 2. Node.js v16+ (Untuk Bot WhatsApp)
-3. MySQL / XAMPP (Untuk Database)
+3. **XAMPP** atau **Laragon** (Untuk Database MySQL)
 4. Google Chrome (Wajib untuk Chrome Extension)
+5. Akun Google AI Studio (Untuk mendapatkan API Key Gemini AI)
 
 ---
 
 ## Langkah Instalasi
 
-### 1. Persiapan Database
+### 1. Persiapan Database (XAMPP / Laragon)
 
-1. Buka XAMPP dan jalankan modul MySQL.
-2. Masuk ke phpMyAdmin (`http://localhost/phpmyadmin`).
+1. Buka aplikasi **XAMPP** atau **Laragon**, lalu jalankan modul/service **MySQL**.
+2. Buka pengelola database Anda:
+   - Jika pakai XAMPP: Buka browser dan masuk ke phpMyAdmin (`http://localhost/phpmyadmin`).
+   - Jika pakai Laragon: Klik tombol `Database` (biasanya membuka HeidiSQL) atau gunakan phpMyAdmin jika sudah diinstal.
 3. Buat database baru dengan nama `db_jadwal_kuliah`.
 4. Import file `database.sql` yang ada di dalam folder proyek ini ke database tersebut.
 
-### 2. Instalasi Backend (Python)
+### 2. Persiapan API Key (Gemini AI)
+
+1. Buka situs [Google AI Studio](https://aistudio.google.com/) dan buat API Key baru.
+2. Buka file `.env` di folder utama proyek (atau buat jika belum ada), lalu isi dengan:
+   ```env
+   GEMINI_API_KEY=KODE_API_KEY_ANDA_DISINI
+   ```
+
+### 3. Instalasi Backend (Python)
 
 Buka terminal/command prompt di dalam folder proyek:
 
@@ -46,7 +57,7 @@ Buka terminal/command prompt di dalam folder proyek:
 
 (Ini akan menginstal "fastapi", "uvicorn", "mysql-connector-python", dll)
 
-### 3. Instalasi WhatsApp Bot (Node.js)
+### 4. Instalasi WhatsApp Bot (Node.js)
 
 Buka terminal/command prompt lalu masuk ke folder `wa-bot`:
 
@@ -55,7 +66,7 @@ npm install
 
 (Ini akan menginstal dependensi `@whiskeysockets/baileys` dan `express`)
 
-### 4. Pemasangan Chrome Extension
+### 5. Pemasangan Chrome Extension
 
 1. Buka browser Google Chrome.
 2. Ketik `chrome://extensions/` di address bar.
