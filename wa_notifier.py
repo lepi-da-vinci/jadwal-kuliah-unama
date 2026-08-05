@@ -335,7 +335,7 @@ Jawablah dengan ringkas tapi asik. PENTING: Gunakan format teks khusus WhatsApp!
 Kalau Aslab bilang 'info' atau 'oi', kasih tau fitur apa aja yang kamu bisa bantu (misal: cek jadwal labnya sendiri, lab lain, cari lab kosong, info terbaru, cari dosen, ubah nama/lab)."""
 
         model = genai.GenerativeModel(
-            model_name='gemini-flash-latest',
+            model_name='gemini-flash-lite-latest',
             system_instruction=system_instruction,
             tools=ai_tools
         )
