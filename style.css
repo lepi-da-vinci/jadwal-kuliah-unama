@@ -587,8 +587,6 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border);
   animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  max-height: 90vh;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -772,6 +770,8 @@ html body .flatpickr-calendar {
   border-radius: var(--radius-lg);
   font-family: var(--font);
   padding: 10px;
+  box-sizing: content-box !important;
+  width: 307.875px !important;
 }
 html body .flatpickr-day.selected, 
 html body .flatpickr-day.selected:hover,
