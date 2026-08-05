@@ -115,6 +115,18 @@ Cara B (Manual via Terminal):
 4. Scan QR Code yang muncul di terminal komputer.
 5. Tunggu hingga muncul tulisan `✅ WhatsApp Client is READY!` di terminal.
 
+### Langkah 4: Menjadikan Server Publik Menggunakan Ngrok (Opsional)
+
+Jika Anda ingin website ini bisa diakses secara online dari mana saja (di luar jaringan WiFi lokal), Anda bisa menggunakan **Ngrok**.
+
+1. Download dan instal [Ngrok](https://ngrok.com/).
+2. Buka terminal baru (Command Prompt) dan ketikkan perintah:
+   ```bash
+   ngrok http 8000
+   ```
+3. Ngrok akan menampilkan sebuah URL publik berwarna hijau (contoh: `https://abcd-123.ngrok-free.app`).
+4. Bagikan link tersebut ke asisten lab lainnya. AI WhatsApp Bot juga otomatis akan mendeteksi link ini jika Aslab bertanya *"minta link ngrok dong"*!
+
 Selesai! Sistem jadwal dan notifikasi WhatsApp sudah aktif sepenuhnya.
 
 ---
