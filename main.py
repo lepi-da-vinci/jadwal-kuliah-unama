@@ -334,7 +334,7 @@ def wa_webhook(req: WebhookRequest):
     return {"status": "ok"}
 
 @app.get("/api/cek_kosong")
-async def cek_kosong(kampus: str, tanggal: str):
+async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
     """Mendapatkan data lab kosong dengan algoritma gap jam"""
     try:
         conn = get_db()
@@ -377,14 +377,22 @@ async def cek_kosong(kampus: str, tanggal: str):
                 if cursor.fetchone()['count'] == 0:
                     return {"status": "error", "message": f"Belum ada data jadwal pada tanggal {tanggal}. (Auto-sync gagal/kosong)"}
         
-        cursor.execute('''
+        if jenis == "Kelas":
+            filter_kondisi = "AND r.nama_ruangan NOT LIKE '%lab%' AND r.nama_ruangan NOT LIKE '%praktek%'"
+        elif jenis == "Lab":
+            filter_kondisi = "AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')"
+        else:
+            filter_kondisi = ""
+
+        query = f'''
             SELECT r.nama_ruangan, j.jam
             FROM ruangan r
             LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
             WHERE r.kampus LIKE %s 
-              AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+              {filter_kondisi}
             ORDER BY r.nama_ruangan, j.jam
-        ''', (tanggal, f"%{kampus}%"))
+        '''
+        cursor.execute(query, (tanggal, f"%{kampus}%"))
         results = cursor.fetchall()
         
         room_schedules = {}

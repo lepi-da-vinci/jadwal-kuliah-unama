@@ -319,7 +319,7 @@
         <div
           style="display: flex; background: var(--bg); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border);">
           <button id="tab-lab-kosong"
-            style="flex: 1; padding: 10px; border: none; background: var(--primary); color: #fff; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); box-shadow: var(--shadow-sm); font-size: 0.9em;">Lab
+            style="flex: 1; padding: 10px; border: none; background: var(--primary); color: #fff; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); box-shadow: var(--shadow-sm); font-size: 0.9em;">Ruangan
             Kosong</button>
           <button id="tab-cari-dosen"
             style="flex: 1; padding: 10px; border: none; background: transparent; color: var(--text-muted); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); font-size: 0.9em;">Posisi
@@ -331,6 +331,11 @@
 
         <!-- Content: Lab Kosong -->
         <div id="content-lab-kosong">
+          <div style="display: flex; gap: 8px; margin-bottom: 15px; background: var(--bg-elevated); padding: 5px; border-radius: var(--radius-sm);">
+            <button id="btn-filter-jenis-lab" style="flex: 1; padding: 8px; border: none; background: var(--primary); color: white; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: 0.3s; font-family: var(--font); font-size: 0.9em; box-shadow: var(--shadow-sm);">Lab</button>
+            <button id="btn-filter-jenis-kelas" style="flex: 1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: 0.3s; font-family: var(--font); font-size: 0.9em;">Kelas</button>
+          </div>
+          <input type="hidden" id="filter-jenis-ruangan" value="Lab">
           <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
             <div class="custom-select-wrapper" id="wrapper-fitur-kampus" style="flex: 1; position: relative; min-width: 150px;">
               <div class="custom-select-trigger" onclick="toggleCustomSelect('fitur-kampus', event)" style="height: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); box-shadow: none;">
@@ -365,7 +370,7 @@
                 <line x1="8" y1="2" x2="8" y2="6"></line>
                 <line x1="3" y1="10" x2="21" y2="10"></line>
               </svg>
-              <span>Pilih kampus dan tanggal untuk mencari lab kosong.</span>
+              <span>Pilih kampus dan tanggal untuk mencari ruangan kosong.</span>
             </div>
           </div>
         </div>

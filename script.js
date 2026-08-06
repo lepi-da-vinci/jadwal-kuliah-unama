@@ -1422,6 +1422,30 @@
     const btnFiturTambahan = document.getElementById('btn-fitur-tambahan');
     const modalFitur = document.getElementById('modal-fitur');
     const closeFitur = document.getElementById('close-modal-fitur');
+
+    const btnJenisLab = document.getElementById('btn-filter-jenis-lab');
+    const btnJenisKelas = document.getElementById('btn-filter-jenis-kelas');
+    const inputJenisRuangan = document.getElementById('filter-jenis-ruangan');
+
+    btnJenisLab.addEventListener('click', () => {
+      btnJenisLab.style.background = 'var(--primary)';
+      btnJenisLab.style.color = 'white';
+      btnJenisLab.style.boxShadow = 'var(--shadow-sm)';
+      btnJenisKelas.style.background = 'transparent';
+      btnJenisKelas.style.color = 'var(--text-muted)';
+      btnJenisKelas.style.boxShadow = 'none';
+      inputJenisRuangan.value = 'Lab';
+    });
+
+    btnJenisKelas.addEventListener('click', () => {
+      btnJenisKelas.style.background = 'var(--primary)';
+      btnJenisKelas.style.color = 'white';
+      btnJenisKelas.style.boxShadow = 'var(--shadow-sm)';
+      btnJenisLab.style.background = 'transparent';
+      btnJenisLab.style.color = 'var(--text-muted)';
+      btnJenisLab.style.boxShadow = 'none';
+      inputJenisRuangan.value = 'Kelas';
+    });
     const tabLabKosong = document.getElementById('tab-lab-kosong');
     const tabCariDosen = document.getElementById('tab-cari-dosen');
     const tabCariKelas = document.getElementById('tab-cari-kelas');
@@ -1542,6 +1566,7 @@
     btnSubmitLabKosong.addEventListener('click', async () => {
       const kampus = document.getElementById('filter-fitur-kampus').value;
       const tanggal = document.getElementById('fitur-tanggal').value;
+      const jenis = document.getElementById('filter-jenis-ruangan').value;
       const resContainer = document.getElementById('result-lab-kosong');
 
       if (!tanggal) {
@@ -1552,7 +1577,7 @@
       resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/cek_kosong?kampus=${kampus}&tanggal=${tanggal}`);
+        const response = await fetch(`${API_BASE_URL}/api/cek_kosong?kampus=${kampus}&tanggal=${tanggal}&jenis=${jenis}`);
         const result = await response.json();
 
         if (result.status === 'success') {
