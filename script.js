@@ -707,6 +707,12 @@
       }
       globalAslabData.forEach(a => {
         let displayWa = a.no_wa || '-';
+        
+        // Sembunyikan akun @lid (grup/akun bot internal) jika bukan Admin
+        if (!isAslabAdmin && displayWa.includes('@lid')) {
+          return;
+        }
+
         if (!isAslabAdmin && displayWa.length > 7) {
           // Mask WA number: 62812****890
           displayWa = displayWa.substring(0, 5) + '****' + displayWa.substring(displayWa.length - 3);
