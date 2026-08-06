@@ -692,6 +692,69 @@
       });
     }
 
+    // Helper custom final text verification
+    function generateRandomString(length) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (const i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+
+    function promptFinalConfirmDanger() {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('final-danger-modal');
+        const codeElem = document.getElementById('final-danger-code');
+        const inputElem = document.getElementById('final-danger-input');
+        const submitBtn = document.getElementById('final-danger-submit-btn');
+        const cancelBtn = document.getElementById('final-danger-cancel-btn');
+
+        const targetCode = generateRandomString(15);
+        codeElem.textContent = targetCode;
+        inputElem.value = '';
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.5';
+        submitBtn.style.cursor = 'not-allowed';
+        
+        modal.classList.add('open');
+        inputElem.focus();
+
+        const checkInput = () => {
+          if (inputElem.value.toUpperCase() === targetCode) {
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '1';
+            submitBtn.style.cursor = 'pointer';
+          } else {
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.5';
+            submitBtn.style.cursor = 'not-allowed';
+          }
+        };
+
+        const cleanup = () => {
+          submitBtn.onclick = null;
+          cancelBtn.onclick = null;
+          inputElem.oninput = null;
+          modal.classList.remove('open');
+        };
+
+        inputElem.oninput = checkInput;
+
+        submitBtn.onclick = () => {
+          if (inputElem.value.toUpperCase() === targetCode) {
+            cleanup();
+            resolve(true);
+          }
+        };
+
+        cancelBtn.onclick = () => {
+          cleanup();
+          resolve(false);
+        };
+      });
+    }
+
     document.getElementById('sync-btn').addEventListener('click', () => syncData(filterTanggal.value));
 
     // --- Data WA Aslab Modal Endpoint ---
@@ -826,12 +889,14 @@
             adminToggle.style.background = 'var(--primary)';
             btnShowTest.style.display = 'block';
             btnShowAdd.style.display = 'block';
+            document.getElementById('clear-db-btn').style.display = 'block';
           } else {
             adminToggle.innerText = 'Admin: OFF';
             adminToggle.style.color = 'var(--text-muted)';
             adminToggle.style.background = 'var(--bg-elevated)';
             btnShowTest.style.display = 'none';
             btnShowAdd.style.display = 'none';
+            document.getElementById('clear-db-btn').style.display = 'none';
           }
           renderAslabTable();
         };
@@ -1177,12 +1242,12 @@
 
       const isSure = await promptConfirmDanger("Yakin ingin menghapus SELURUH data jadwal dari database?");
       if (isSure) {
+        const isFinalSure = await promptFinalConfirmDanger();
+        if (!isFinalSure) return;
+
         const btn = document.getElementById('clear-db-btn');
         btn.disabled = true;
-        btn.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
-          Menghapus...
-        `;
+        btn.innerHTML = `⏳ Menghapus...`;
         try {
           const response = await fetch(`${API_BASE_URL}/api/jadwal`, { method: 'DELETE' });
           const result = await response.json();
@@ -1190,7 +1255,7 @@
           else { alert("Gagal menghapus database: " + result.message); }
         } catch (e) { alert("Terjadi kesalahan saat menghapus database."); }
         btn.disabled = false;
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Bersihkan DB`;
+        btn.innerHTML = `🗑️ Bersihkan Semua Jadwal DB`;
       }
     });
 

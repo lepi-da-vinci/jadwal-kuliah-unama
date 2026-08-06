@@ -30,16 +30,6 @@
           </svg>
           Data WA Aslab
         </button>
-        <button id="clear-db-btn" class="btn btn-danger" aria-label="Bersihkan database">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-            stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <line x1="10" y1="11" x2="10" y2="17" />
-            <line x1="14" y1="11" x2="14" y2="17" />
-          </svg>
-          Bersihkan DB
-        </button>
         <button id="sync-btn" class="btn btn-primary" aria-label="Sinkronisasi jadwal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
@@ -446,7 +436,7 @@
   </div>
 
   <!-- Modal Password Admin -->
-  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin">
+  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin" style="z-index: 10000;">
     <div class="modal-box" style="max-width: 400px;">
       <div class="modal-icon">🔒</div>
       <h2>Otorisasi Admin</h2>
@@ -464,7 +454,7 @@
   </div>
 
   <!-- Modal Konfirmasi Bahaya -->
-  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya">
+  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya" style="z-index: 10000;">
     <div class="modal-box" style="max-width: 450px; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">⚠️</div>
       <h2 style="color: var(--badge-cc);">Peringatan Berbahaya!</h2>
@@ -476,6 +466,25 @@
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="danger-cancel-btn">Batal</button>
         <button class="modal-btn" style="background: var(--badge-cc);" id="danger-submit-btn">Ya, Hapus Semua!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Konfirmasi Teks Final -->
+  <div id="final-danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Akhir" style="z-index: 10001;">
+    <div class="modal-box" style="max-width: 450px; border-top: 5px solid var(--badge-cc);">
+      <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">🚨</div>
+      <h2 style="color: var(--badge-cc);">Konfirmasi Akhir</h2>
+      <div class="modal-body" style="text-align: center;">
+        <p style="margin-bottom: 10px;">Ketik ulang kode unik berikut untuk melanjutkan:</p>
+        <p id="final-danger-code" style="font-weight: bold; letter-spacing: 2px; font-size: 1.2em; color: var(--primary); background: var(--bg-elevated); padding: 10px; border-radius: var(--radius-sm); user-select: none;">CODE</p>
+        <input type="text" id="final-danger-input" autocomplete="off"
+          style="width: 100%; padding: 12px; margin-top: 15px; text-align: center; font-size: 1.1em; letter-spacing: 1px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
+          placeholder="Ketik kode di sini">
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="final-danger-cancel-btn">Batal</button>
+        <button class="modal-btn" style="background: var(--badge-cc); opacity: 0.5; cursor: not-allowed;" id="final-danger-submit-btn" disabled>Hapus Permanen</button>
       </div>
     </div>
   </div>
@@ -501,6 +510,8 @@
         <button class="btn btn-secondary" id="btn-show-add-wa"
           style="padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05);">➕
           Tambah Data Aslab Manual</button>
+        <button class="btn btn-danger" id="clear-db-btn" style="padding: 15px; font-size: 1.1em; width: 100%; display: none;">🗑️
+          Bersihkan Semua Jadwal DB</button>
         <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
           <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
         </div>
