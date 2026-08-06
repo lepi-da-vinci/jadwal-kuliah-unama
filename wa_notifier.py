@@ -15,9 +15,10 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+GEMINI_API_KEYS_STR = os.getenv("GEMINI_API_KEYS", os.getenv("GEMINI_API_KEY", "")).strip()
+AVAILABLE_API_KEYS = [k.strip() for k in GEMINI_API_KEYS_STR.split(",") if k.strip()]
+
+ai_lock = threading.Lock()
 
 # State pendaftaran bot
 registration_states = {}
@@ -338,7 +339,8 @@ PENTING: Gunakan format teks WhatsApp (*tebal*, _miring_). JANGAN gunakan Markdo
             tools=ai_tools
         )
         chat = model.start_chat(enable_automatic_function_calling=True)
-        chat_sessions[sender] = chat
+        assigned_key = random.choice(AVAILABLE_API_KEYS) if AVAILABLE_API_KEYS else None
+        chat_sessions[sender] = {'chat': chat, 'api_key': assigned_key}
     return chat_sessions[sender]
 
 
@@ -489,11 +491,18 @@ def handle_incoming_message(sender, text):
     # Jika TERDAFTAR
     print(f"[WA INCOMING] Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})")
     
-    if GEMINI_API_KEY:
+    if AVAILABLE_API_KEYS:
         try:
             current_sender_context.sender = sender
-            chat = get_or_create_chat_session(sender, aslab['nama_aslab'], aslab['nama_ruangan'], aslab['kampus'])
-            response = chat.send_message(text)
+            session_data = get_or_create_chat_session(sender, aslab['nama_aslab'], aslab['nama_ruangan'], aslab['kampus'])
+            chat = session_data['chat']
+            api_key = session_data['api_key']
+            
+            with ai_lock:
+                if api_key:
+                    genai.configure(api_key=api_key)
+                response = chat.send_message(text)
+                
             return response.text
         except Exception as e:
             print(f"Gemini AI Error: {e}")
@@ -501,7 +510,7 @@ def handle_incoming_message(sender, text):
     else:
         if re.search(r'\b(info|inpo|infoo|inpoo|oi)\b', text_clean):
             return "Mas belum pasang API Key Gemini nih, jadi saya pake mode lama kaku wkwk.\n\n1. Jadwal Sendiri\n2. Jadwal Semua\n3. Lab Kosong"
-        return "Sistem AI tidak aktif, mohon pasang GEMINI_API_KEY di file .env."
+        return "Sistem AI tidak aktif, mohon pasang GEMINI_API_KEYS di file .env."
 
 
 # =========================================================================================

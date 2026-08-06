@@ -48,6 +48,10 @@ Pastikan Anda telah menginstal aplikasi berikut sebelum menjalankan sistem ini:
    ```env
    GEMINI_API_KEY=KODE_API_KEY_ANDA_DISINI
    ```
+   > **TIPS (Load Balancing):** Jika bot Anda digunakan oleh banyak orang dan Anda takut kehabisan kuota, Anda bisa menggunakan banyak API Key sekaligus! AI akan memilih secara acak untuk setiap asisten lab. Cukup pisahkan dengan koma seperti ini:
+   > ```env
+   > GEMINI_API_KEYS=key_satu,key_dua,key_tiga
+   > ```
 
 ### 3. Instalasi Backend (Python)
 
