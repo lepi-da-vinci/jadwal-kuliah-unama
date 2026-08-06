@@ -696,7 +696,7 @@
     function generateRandomString(length) {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       let result = '';
-      for (const i = 0; i < length; i++) {
+      for (let i = 0; i < length; i++) {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
       }
       return result;
@@ -1251,9 +1251,16 @@
         try {
           const response = await fetch(`${API_BASE_URL}/api/jadwal`, { method: 'DELETE' });
           const result = await response.json();
-          if (result.status === 'success') { alert(result.message); await fetchAllJadwal(); }
-          else { alert("Gagal menghapus database: " + result.message); }
-        } catch (e) { alert("Terjadi kesalahan saat menghapus database."); }
+          if (result.status === 'success') { 
+            showCustomAlert("Berhasil Dihapus!", result.message, "✅");
+            await fetchAllJadwal(); 
+          }
+          else { 
+            showCustomAlert("Gagal!", "Gagal menghapus database: " + result.message, "❌");
+          }
+        } catch (e) { 
+          showCustomAlert("Error", "Terjadi kesalahan saat menghapus database.", "⚠️");
+        }
         btn.disabled = false;
         btn.innerHTML = `🗑️ Bersihkan Semua Jadwal DB`;
       }
@@ -1726,7 +1733,22 @@
       else if (id === 'room-detail-modal') document.getElementById('room-detail-close-btn')?.click();
       // lab-modal is already handled by its own listeners, but we can fallback here:
       else if (id === 'lab-modal') document.getElementById('modal-close-btn')?.click();
+      else if (id === 'alert-modal') document.getElementById('alert-modal-close-btn')?.click();
       else modal.classList.remove('open');
+    }
+
+    // Generic Custom Alert function
+    function showCustomAlert(title, message, icon) {
+      const alertModal = document.getElementById('alert-modal');
+      document.getElementById('alert-modal-title').textContent = title;
+      document.getElementById('alert-modal-message').textContent = message;
+      document.getElementById('alert-modal-icon').textContent = icon;
+      
+      alertModal.classList.add('open');
+      
+      document.getElementById('alert-modal-close-btn').onclick = () => {
+        alertModal.classList.remove('open');
+      };
     }
 
     document.addEventListener('click', (e) => {
