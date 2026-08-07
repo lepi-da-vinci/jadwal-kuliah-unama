@@ -387,7 +387,9 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
         query = f'''
             SELECT r.nama_ruangan, j.jam
             FROM ruangan r
-            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
+            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
+                               AND j.tanggal = %s 
+                               AND j.metode_pembelajaran = 'TM'
             WHERE r.kampus LIKE %s 
               {filter_kondisi}
             ORDER BY r.nama_ruangan, j.jam
