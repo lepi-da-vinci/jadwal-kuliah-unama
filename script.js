@@ -906,6 +906,7 @@
             adminToggle.style.background = 'var(--primary)';
             btnShowTest.style.display = 'block';
             btnShowAdd.style.display = 'block';
+            document.getElementById('btn-test-notif-suara').style.display = 'block';
             document.getElementById('clear-db-btn').style.display = 'block';
           } else {
             adminToggle.innerText = 'Admin: OFF';
@@ -913,6 +914,7 @@
             adminToggle.style.background = 'var(--bg-elevated)';
             btnShowTest.style.display = 'none';
             btnShowAdd.style.display = 'none';
+            document.getElementById('btn-test-notif-suara').style.display = 'none';
             document.getElementById('clear-db-btn').style.display = 'none';
           }
           renderAslabTable();
@@ -1240,6 +1242,10 @@
     document.getElementById('room-detail-close-btn').addEventListener('click', () => roomModal.classList.remove('open'));
     roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('open'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal.classList.contains('open')) roomModal.classList.remove('open'); });
+
+    document.getElementById('btn-test-notif-suara').addEventListener('click', () => {
+      playNotificationSound();
+    });
 
     document.getElementById('clear-db-btn').addEventListener('click', async () => {
       const pass = await promptPassword("Masukkan password Admin untuk menghapus Database:");
