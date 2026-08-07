@@ -152,10 +152,12 @@
           populateFilters();
           applyFilters();
         } else {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal: ${data.message}</td></tr>`;
+          if (!filterTanggal.value) { applyFilters(); }
+          else { tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal: ${data.message}</td></tr>`; }
         }
       } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal.</td></tr>';
+        if (!filterTanggal.value) { applyFilters(); }
+        else { tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal.</td></tr>'; }
       }
     }
 
@@ -276,6 +278,21 @@
 
     function applyFilters() {
       const ft = filterTanggal.value;
+      if (!ft) {
+        document.getElementById('hasil-pencarian').innerHTML = '<em>Pilih tanggal dulu mas.</em>';
+        document.getElementById('jadwal-table-body').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 1.1em;"><em>📅 Pilih tanggal dulu mas untuk mulai mencari jadwal</em></td></tr>';
+        document.getElementById('active-lab-list').innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
+        document.getElementById('active-room-list').innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
+        
+        const statTm = document.getElementById('stat-tm');
+        const statOl = document.getElementById('stat-ol');
+        const statCc = document.getElementById('stat-cc');
+        if(statTm) statTm.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> TM: 0 Kelas`;
+        if(statOl) statOl.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> OL: 0 Kelas`;
+        if(statCc) statCc.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> CC: 0 Kelas`;
+        return;
+      }
+
       fetchNotifikasiLab(ft);
 
       const fw = filterWaktu.value;
