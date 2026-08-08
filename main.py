@@ -204,7 +204,7 @@ def get_ruangan():
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE '%lab%' OR nama_ruangan LIKE '%praktek%'")
+        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan")
         results = cursor.fetchall()
         return {"status": "success", "data": results}
     except Exception as e:
