@@ -2,152 +2,114 @@
 
 Sistem web komprehensif untuk memantau jadwal kuliah BAAK UNAMA, dilengkapi dengan sinkronisasi data otomatis, bypass proteksi Cloudflare (menggunakan Chrome Extension), dan Bot Notifikasi WhatsApp (menggunakan Baileys Node.js).
 
-Fitur Utama
+## Fitur Utama
 
-1. Dashboard Interaktif & Modern
+1. **Dashboard Interaktif & Modern**
    - Tampilan bersih, responsif (Mobile Friendly), dilengkapi fitur Dark/Light Mode.
    - Filter lengkap: Tanggal, Kategori, Status Kuliah, Mata Kuliah, dll.
    - Indikator status kelas "Online" atau sinkronisasi dengan otomatis.
 
-2. Otomatisasi Sinkronisasi Jadwal (Scraper)**
-   - Saat user membuka web pada tanggal yang datanya belum tersedia, sistem backend (FastAPI) akan memicu ekstensi Chrome lokal untuk otomatis mengambil data dari website BAAK (melewati blokir Cloudflare).
+2. **Otomatisasi Sinkronisasi Jadwal (Scraper)**
+   - Saat user menekan tombol sinkronisasi pada tanggal yang datanya belum tersedia, ekstensi Chrome lokal akan otomatis menarik data dari website BAAK (melewati blokir Cloudflare).
 
-3. Notifikasi WhatsApp Bot Terintegrasi
+3. **Notifikasi WhatsApp Bot Terintegrasi**
    - Menggunakan `@whiskeysockets/baileys` yang stabil di Node.js.
    - Pengecekan otomatis setiap menit untuk mengingatkan asisten lab 30 menit sebelum jadwal praktikum dimulai.
    - Fitur "Test WA" langsung dari website untuk menguji apakah bot siap beroperasi.
+
+4. **Dukungan Docker (Baru!) 🐳**
+   - Sistem kini dapat dijalankan secara instan hanya dengan 1 perintah Docker, tanpa perlu menginstal XAMPP, Python, atau Node.js secara terpisah.
 
 ---
 
 ## Prasyarat (Requirements)
 
-Pastikan Anda telah menginstal aplikasi berikut sebelum menjalankan sistem ini:
-1. Python 3.8+ (Untuk backend web)
-2. Node.js v16+ (Untuk Bot WhatsApp)
-3. **XAMPP** atau **Laragon** (Untuk Database MySQL)
-4. Google Chrome (Wajib untuk Chrome Extension)
-5. Akun Google AI Studio (Untuk mendapatkan API Key Gemini AI)
+Pilih salah satu metode instalasi di bawah ini (Docker sangat disarankan agar lebih praktis).
+
+1. **Metode Docker:** Install [Docker Desktop](https://www.docker.com/products/docker-desktop).
+2. **Metode Manual:** 
+   - Python 3.8+ (Untuk backend web)
+   - Node.js v16+ (Untuk Bot WhatsApp)
+   - XAMPP atau Laragon (Untuk Database MySQL)
+3. **Wajib (Semua Metode):** 
+   - Google Chrome (Untuk Chrome Extension)
+   - Akun Google AI Studio (Untuk mendapatkan API Key Gemini AI)
 
 ---
 
-## Langkah Instalasi
+## Instalasi & Cara Menjalankan
 
-### 1. Persiapan Database (XAMPP / Laragon)
-
-1. Buka aplikasi **XAMPP** atau **Laragon**, lalu jalankan modul/service **MySQL**.
-2. Buka pengelola database Anda:
-   - Jika pakai XAMPP: Buka browser dan masuk ke phpMyAdmin (`http://localhost/phpmyadmin`).
-   - Jika pakai Laragon: Klik tombol `Database` (biasanya membuka HeidiSQL) atau gunakan phpMyAdmin jika sudah diinstal.
-3. Buat database baru dengan nama `db_jadwal_kuliah`.
-4. Import file `database.sql` yang ada di dalam folder proyek ini ke database tersebut.
-
-### 2. Persiapan API Key (Gemini AI)
-
+### Langkah 1: Persiapan API Key (Gemini AI)
 1. Buka situs [Google AI Studio](https://aistudio.google.com/) dan buat API Key baru.
 2. Buka file `.env` di folder utama proyek (atau buat jika belum ada), lalu isi dengan:
    ```env
    GEMINI_API_KEY=KODE_API_KEY_ANDA_DISINI
    ```
-   > **TIPS (Load Balancing):** Jika bot Anda digunakan oleh banyak orang dan Anda takut kehabisan kuota, Anda bisa menggunakan banyak API Key sekaligus! AI akan memilih secara acak untuk setiap asisten lab. Cukup pisahkan dengan koma seperti ini:
-   > ```env
-   > GEMINI_API_KEYS=key_satu,key_dua,key_tiga
+   > **TIPS (Load Balancing):** Jika bot Anda digunakan oleh banyak orang dan Anda takut kehabisan kuota, Anda bisa menggunakan banyak API Key sekaligus! Cukup pisahkan dengan koma:
+   > `GEMINI_API_KEYS=key_satu,key_dua,key_tiga`
+
+### Langkah 2: Pemasangan Chrome Extension
+1. Buka browser Google Chrome, lalu ketik `chrome://extensions/` di address bar.
+2. Aktifkan **Developer Mode** di pojok kanan atas.
+3. Klik tombol **Load unpacked**.
+4. Pilih folder `extension` yang ada di dalam direktori proyek ini.
+5. Extension telah berhasil ditambahkan!
+
+### Langkah 3: Menjalankan Sistem (Pilih Metode)
+
+#### 🐳 METODE 1: MENGGUNAKAN DOCKER (SANGAT DIREKOMENDASIKAN)
+Metode ini akan secara otomatis mengunduh database MySQL, menjalankan Python Backend, dan menyalakan WA Bot tanpa ribet.
+
+1. Buka aplikasi **Docker Desktop** pastikan sudah berjalan (Engine running).
+2. Buka terminal (CMD/PowerShell) di dalam folder proyek, lalu ketik:
+   ```bash
+   docker-compose up -d --build
+   ```
+3. Tunggu hingga proses instalasi dan penyiapan container selesai.
+4. Selesai! Web sudah bisa diakses di `http://localhost:8000`. 
+   > **Catatan Scan WA Bot:** Untuk melakukan Scan QR perdana di Docker, ketik perintah ini untuk melihat QR Code WA di terminal: 
+   > ```bash
+   > docker logs -f jadwal_wa_bot
    > ```
+   > *(Tekan Ctrl+C untuk keluar dari log jika sudah berhasil Scan QR)*
 
-### 3. Instalasi Backend (Python)
+#### 💻 METODE 2: MANUAL (TANPA DOCKER)
+Gunakan cara ini jika Anda belum memiliki Docker.
 
-Buka terminal/command prompt di dalam folder proyek:
-
-  pip install -r requirements.txt
-
-(Ini akan menginstal "fastapi", "uvicorn", "mysql-connector-python", dll)
-
-### 4. Instalasi WhatsApp Bot (Node.js)
-
-Buka terminal/command prompt lalu masuk ke folder `wa-bot`:
-
-cd wa-bot
-npm install
-
-(Ini akan menginstal dependensi `@whiskeysockets/baileys` dan `express`)
-
-### 5. Pemasangan Chrome Extension
-
-1. Buka browser Google Chrome.
-2. Ketik `chrome://extensions/` di address bar.
-3. Aktifkan Developer Mode di pojok kanan atas.
-4. Klik tombol Load unpacked.
-5. Pilih folder `extension` yang ada di dalam direktori proyek ini.
-6. Extension telah berhasil ditambahkan!
+1. **Database:** Buka XAMPP/Laragon -> Jalankan MySQL. Buat database baru bernama `db_jadwal_kuliah`, lalu Import file `database.sql`.
+2. **Backend Python:**
+   - Buka terminal di folder utama: `pip install -r requirements.txt`
+   - Jalankan server: `uvicorn main:app --reload`
+3. **WA Bot Node.js:** 
+   - Buka terminal baru (atau jalankan file `start_bot.bat` jika ada).
+   - Masuk ke folder `wa-bot`, jalankan: `npm install` lalu `node server.js`
+   - Lakukan Scan QR Code WA Anda di layar terminal.
+4. Akses `http://localhost:8000` di browser Anda.
 
 ---
 
-## Cara Menjalankan Sistem (Pengoperasian Sehari-hari)
+## Langkah 4: Menjadikan Server Publik Menggunakan Ngrok (Opsional)
 
-Sistem ini terdiri dari dua bagian yang berjalan bersamaan: Backend Server (Python) dan WhatsApp Bot Server (Node.js). 
-Anda harus menyalakan keduanya agar semua fitur berfungsi.
-
-### Langkah 1: Menyalakan Backend Web
-
-Buka terminal di direktori utama proyek, lalu ketik perintah berikut:
-
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-- Server web akan berjalan.
-- Akses website melalui browser di: `http://localhost:8000` (atau gunakan Ngrok jika ingin diakses publik).
-
-### Langkah 2: Menyalakan WhatsApp Bot
-
-Ada dua cara untuk menyalakan bot:
-
-Cara A (Direkomendasikan - Menggunakan File Batch):
-1. Cukup klik ganda (double click) pada file `start_bot.bat` di direktori utama.
-2. Jendela CMD baru akan terbuka otomatis.
-
-Cara B (Manual via Terminal):
-1. Buka terminal baru (jangan tutup terminal Python!).
-2. Masuk ke folder bot dan jalankan:
-
-   cd wa-bot
-   node server.js
-
-
-### Langkah 3: Scan QR Code WhatsApp
-
-1. Pada saat pertama kali bot dijalankan, terminal akan memunculkan sebuah *QR Code*.
-2. Buka aplikasi WhatsApp di HP Anda.
-3. Masuk ke opsi Perangkat Tertaut (Linked Devices).
-4. Scan QR Code yang muncul di terminal komputer.
-5. Tunggu hingga muncul tulisan `✅ WhatsApp Client is READY!` di terminal.
-
-### Langkah 4: Menjadikan Server Publik Menggunakan Ngrok (Opsional)
-
-Jika Anda ingin website ini bisa diakses secara online dari mana saja (di luar jaringan WiFi lokal), Anda bisa menggunakan **Ngrok**.
-
+Jika Anda ingin website ini bisa diakses secara online dari mana saja, Anda bisa menggunakan **Ngrok**.
 1. Download dan instal [Ngrok](https://ngrok.com/).
-2. Buka terminal baru (Command Prompt) dan ketikkan perintah:
+2. Buka terminal (Command Prompt) dan ketikkan perintah: 
    ```bash
    ngrok http 8000
    ```
-3. Ngrok akan menampilkan sebuah URL publik berwarna hijau (contoh: `https://abcd-123.ngrok-free.app`).
-4. Bagikan link tersebut ke asisten lab lainnya. AI WhatsApp Bot juga otomatis akan mendeteksi link ini jika Aslab bertanya *"minta link ngrok dong"*!
-
-Selesai! Sistem jadwal dan notifikasi WhatsApp sudah aktif sepenuhnya.
+3. Ngrok akan menampilkan URL publik berwarna hijau. Bagikan link tersebut ke asisten lab lainnya. 
+   *(AI WhatsApp Bot juga otomatis akan mendeteksi link ini jika Aslab bertanya "minta link ngrok dong"!)*
 
 ---
 
 ## Troubleshooting (Penyelesaian Masalah)
 
-1. "Test WA" di web memunculkan Notifikasi GAGAL!
-- Pastikan jendela terminal untuk `start_bot.bat` sedang berjalan dan sudah muncul tulisan "READY!".
-- Jika muncul tulisan di terminal merah / `Koneksi terputus karena ter-disconnect`:
-  - Matikan terminal bot tersebut (Tekan `Ctrl + C`).
-  - Hapus folder `baileys_auth_info` di dalam folder `wa-bot`.
-  - Jalankan ulang `start_bot.bat` dan Scan ulang QR Code-nya.
-
-2. Jadwal tidak muncul saat membuka tanggal baru
-- Pastikan Google Chrome Anda aktif dan Chrome Extension sudah terpasang/di-reload dengan benar. Extension inilah yang bertanggung jawab membuka web BAAK dan mengisi database secara gaib (di balik layar).
-
-3. Error `[WinError 10061]` saat Test WA
-- Ini berarti Python gagal terhubung ke bot WA. Pastikan server Node.js sedang *running* (via `start_bot.bat`) di port 3000 dan tidak macet.
+1. **"Terjadi Kesalahan Jaringan" saat klik Sinkron**
+   - Pastikan backend server Anda menyala (entah itu container `jadwal_backend` di Docker atau Uvicorn di metode manual).
+2. **"Test WA" di web memunculkan Notifikasi GAGAL!**
+   - Pastikan WA Bot sudah aktif dan terkoneksi. Jika menggunakan metode manual, pastikan terminal Node.js tidak mati. Jika menggunakan Docker, periksa log dengan `docker logs jadwal_wa_bot`.
+   - Coba hapus folder `baileys_auth_info` (di metode manual) lalu restart bot, atau restart Container WA Bot di Docker Desktop lalu Scan ulang QR Code-nya.
+3. **Jadwal kosong atau ada lab yang tidak muncul di antarmuka**
+   - Pastikan Chrome Extension sudah menyala.
+   - Sistem HANYA menyimpan ruangan yang ada jadwalnya. Jika jadwal lab tersebut kosong pada hari-hari yang baru mas sinkronkan, dia belum akan terlihat di UI. Coba sinkronisasi data jadwal untuk hari/minggu di mana lab tersebut ada perkuliahan aktif, maka lab tersebut akan tersimpan permanen.
 
 *Dibuat untuk mempermudah monitoring Jadwal & Praktikum Labor UNAMA.*
