@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: jadwal_db
+    restart: always
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: "db_jadwal_kuliah"
+    volumes:
+      - db_data:/var/lib/mysql
+      # Auto-import schema when database is created for the first time
+      - ./database.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+
+  wa-bot:
+    build: 
+      context: ./wa-bot
+      dockerfile: Dockerfile
+    container_name: jadwal_wa_bot
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist WhatsApp login sessions
+      - ./wa-bot/baileys_auth_info:/app/baileys_auth_info
+      - ./wa-bot/.wwebjs_auth:/app/.wwebjs_auth
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: jadwal_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=
+      - DB_NAME=db_jadwal_kuliah
+      - WA_BOT_URL=http://wa-bot:3000/send
+    depends_on:
+      - db
+      - wa-bot
+
+volumes:
+  db_data:

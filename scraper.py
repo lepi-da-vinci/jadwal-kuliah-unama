@@ -10,12 +10,17 @@ BULAN_DICT = {
     "September": "09", "Oktober": "10", "November": "11", "Desember": "12"
 }
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def get_db():
     return mysql.connector.connect(
-        host="127.0.0.1",
-        user="root",
-        password="", # Ubah jika ada password
-        database="db_jadwal_kuliah"
+        host=os.getenv("DB_HOST", "127.0.0.1"),
+        user=os.getenv("DB_USER", "root"),
+        password=os.getenv("DB_PASSWORD", ""),
+        database=os.getenv("DB_NAME", "db_jadwal_kuliah")
     )
 
 

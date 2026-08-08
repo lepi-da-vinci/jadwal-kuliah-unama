@@ -44,7 +44,8 @@ def is_duplicate_message(sender, text):
 # Basic old functions
 def send_wa_message(no_wa, pesan):
     try:
-        url = "http://localhost:3000/send"
+        import os
+        url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         headers = {'Content-Type': 'application/json'}
         data = {'target': no_wa, 'message': pesan}
         response = requests.post(url, headers=headers, json=data)

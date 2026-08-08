@@ -23,12 +23,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def get_db():
     return mysql.connector.connect(
-        host="127.0.0.1",
-        user="root",
-        password="", # Ubah jika ada password
-        database="db_jadwal_kuliah"
+        host=os.getenv("DB_HOST", "127.0.0.1"),
+        user=os.getenv("DB_USER", "root"),
+        password=os.getenv("DB_PASSWORD", ""),
+        database=os.getenv("DB_NAME", "db_jadwal_kuliah")
     )
 
 
@@ -128,9 +133,9 @@ import webbrowser
 async def sync_data(req: SyncRequest):
     """Sinkronisasi data dengan memerintahkan browser lokal (PC) membuka tab"""
     try:
-        # Buka tab baru di browser PC
-        target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={req.tanggal}&auto_close=1"
-        webbrowser.open(target_url)
+        # Buka tab baru di browser PC sudah dipindahkan ke Frontend (script.js)
+        # target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={req.tanggal}&auto_close=1"
+        # webbrowser.open(target_url)
         
         sync_status[req.tanggal] = "pending"
         
@@ -350,32 +355,7 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
             if dt_obj.weekday() == 6:
                 return {"status": "error", "message": f"Libur mas, soalnya hari Minggu tanggal {tanggal}."}
             else:
-                import asyncio
-                import webbrowser
-                
-                # Buka tab untuk menarik data baru
-                target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tanggal}&auto_close=1"
-                webbrowser.open(target_url)
-                sync_status[tanggal] = "pending"
-                
-                # Tutup koneksi sementara selagi menunggu agar tidak menggantung resource
-                cursor.close()
-                conn.close()
-                
-                # Tunggu maksimal 40 detik
-                for _ in range(40):
-                    await asyncio.sleep(1)
-                    if sync_status.get(tanggal) == "done":
-                        break
-                
-                # Buka koneksi lagi
-                conn = get_db()
-                cursor = conn.cursor(dictionary=True)
-                
-                # Cek ulang setelah sinkronisasi
-                cursor.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = %s", (tanggal,))
-                if cursor.fetchone()['count'] == 0:
-                    return {"status": "error", "message": f"Belum ada data jadwal pada tanggal {tanggal}. (Auto-sync gagal/kosong)"}
+                return {"status": "error", "message": "Belum ada data untuk tanggal ini. Silakan klik tombol 'Sinkronkan Data' untuk menarik jadwal terbaru.", "need_sync": True}
         
         if jenis == "Kelas":
             filter_kondisi = "AND r.nama_ruangan NOT LIKE '%lab%' AND r.nama_ruangan NOT LIKE '%praktek%'"

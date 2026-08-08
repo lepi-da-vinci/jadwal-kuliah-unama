@@ -585,6 +585,9 @@
       `;
       syncBtn.disabled = true;
 
+      const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
+      window.open(targetUrl, '_blank');
+
       try {
         const response = await fetch(`${API_BASE_URL}/api/sync`, {
           method: 'POST',
