@@ -124,28 +124,26 @@ class SyncHtmlRequest(BaseModel):
 class SyncCompleteRequest(BaseModel):
     tanggal: str | None = None
 
+import time
+
 sync_status = {}
-
-import webbrowser
-
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
-    """Sinkronisasi data dengan memerintahkan browser lokal (PC) membuka tab"""
+    """Sinkronisasi data dengan menunggu Ekstensi Chrome menyelesaikan penarikan data"""
     try:
-        # Buka tab baru di browser PC sudah dipindahkan ke Frontend (script.js)
-        # target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={req.tanggal}&auto_close=1"
-        # webbrowser.open(target_url)
-        
-        sync_status[req.tanggal] = "pending"
+        tgl_key = req.tanggal or ""
+        start_time = time.time()
+        sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
         
         # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
-        for _ in range(40):
-            await asyncio.sleep(1)
-            if sync_status.get(req.tanggal) == "done":
-                return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!"}
+        for _ in range(35):
+            await asyncio.sleep(0.8)
+            current = sync_status.get(tgl_key, {})
+            if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
+                return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!", "count": current.get("count", 0)}
         
-        return {"status": "success", "message": "Timeout menunggu data dari ekstensi Chrome, tapi proses mungkin selesai di background."}
+        return {"status": "success", "message": "Proses sinkronisasi selesai atau berjalan di background."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -153,12 +151,12 @@ async def sync_data(req: SyncRequest):
 def sync_html_data(req: SyncHtmlRequest):
     """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
     try:
-        data = scraper.parse_html_content(req.html)
-        if len(data) > 0:
-            scraper.save_to_db(data, req.tanggal, req.page)
-            return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi.", "count": len(data)}
-        else:
-            return {"status": "success", "message": "Tidak ada data jadwal ditemukan dalam HTML.", "count": 0}
+        data = scraper.parse_html_content(req.html, req.tanggal)
+        scraper.save_to_db(data, req.tanggal, req.page)
+        tgl_key = req.tanggal or ""
+        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
+        sync_status[tgl_key] = {"status": "in_progress", "time": time.time(), "count": prev_count + len(data)}
+        return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi.", "count": len(data)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -166,9 +164,11 @@ def sync_html_data(req: SyncHtmlRequest):
 def sync_complete(req: SyncCompleteRequest):
     """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
     try:
+        tgl_key = req.tanggal or ""
         scraper.compare_and_finalize_sync(req.tanggal)
-        sync_status[req.tanggal] = "done"
-        return {"status": "success", "message": "Proses perbandingan dan finalisasi selesai."}
+        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
+        sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count}
+        return {"status": "success", "message": "Proses perbandingan dan finalisasi selesai.", "count": prev_count}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

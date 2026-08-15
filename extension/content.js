@@ -6,16 +6,38 @@ const currentPage = parseInt(urlParams.get('page') || '1', 10);
 if (isAutoClose) {
     console.log("Jadwal Kuliah Sync: Menunggu halaman selesai dimuat sepenuhnya...");
 
-    // Fungsi ini akan terus mengecek apakah tabel jadwal sudah muncul di layar
-    // Ini berguna untuk melewati halaman loading Cloudflare ("Just a moment...")
+    // Cek apakah halaman BAAK UNAMA sudah selesai dimuat dan melewati Cloudflare
+    function isBaakPageReady() {
+        // Jika masih di halaman verifikasi Cloudflare
+        const isCloudflare = document.title.includes('Just a moment') || 
+                             document.querySelector('#challenge-running') || 
+                             document.querySelector('#cf-challenge-running');
+        if (isCloudflare) return false;
+
+        // 1. Ditemukan baris tabel jadwal
+        if (document.querySelector('.table-content') !== null) return true;
+
+        // 2. Ditemukan elemen form pencarian / input tanggal BAAK
+        if (document.querySelector('input[name="tanggal"]') || document.querySelector('form[action*="jadwal"]') || document.querySelector('.card-body')) return true;
+
+        // 3. Ditemukan tabel atau elemen structural halaman
+        if (document.querySelector('table') || document.querySelector('.table') || document.querySelector('footer')) return true;
+
+        // 4. Cek teks konten
+        const html = document.documentElement.outerHTML.toLowerCase();
+        if (html.includes('jadwal kuliah') || html.includes('data tidak ditemukan') || html.includes('tidak ada data') || html.includes('unama')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    let retryCount = 0;
     const checkInterval = setInterval(() => {
+        retryCount++;
         
-        // Pastikan kita sudah masuk ke halaman asli, bukan halaman verifikasi keamanan Cloudflare
-        const hasScheduleTable = document.querySelector('.table-content') !== null;
-        const noDataFound = document.documentElement.outerHTML.includes('Data tidak ditemukan') || document.documentElement.outerHTML.includes('Data tidak ada'); // Jika memang hari libur/kosong
-        
-        if (hasScheduleTable || noDataFound) {
-            clearInterval(checkInterval); // Berhenti mengecek
+        if (isBaakPageReady() || retryCount >= 15) {
+            clearInterval(checkInterval);
             console.log("Halaman siap! Mengirim data ke lokal API...");
             
             // AMBIL DATA HTML SEBELUM MENGUBAH TAMPILAN
@@ -33,7 +55,7 @@ if (isAutoClose) {
         } else {
             console.log("Masih di halaman Cloudflare atau loading, menunggu...");
         }
-    }, 1000); // Cek setiap 1 detik
+    }, 1000);
 }
 
 function processPage(htmlContent, pageNum, docContext) {
@@ -58,7 +80,7 @@ function processPage(htmlContent, pageNum, docContext) {
                          docContext.querySelector('.page-item:last-child a');
                          
         if (!nextButton) {
-            // Fallback ekstrim: cari link apa saja yang teksnya Next/Selanjutnya/>
+            // Fallback: cari link pagination dengan teks Next/Selanjutnya/>
             const allLinks = Array.from(docContext.querySelectorAll('.pagination a, .page-link'));
             nextButton = allLinks.find(a => {
                 const t = a.textContent.trim().toLowerCase();
@@ -68,20 +90,17 @@ function processPage(htmlContent, pageNum, docContext) {
         
         let nextHref = nextButton ? nextButton.getAttribute('href') : null;
         
-        if (nextHref) {
+        if (nextHref && nextHref !== '#' && !nextHref.startsWith('javascript:')) {
             console.log(`Ditemukan halaman ${pageNum + 1}! Berpindah ke halaman selanjutnya...`);
             
-            // Konversi relative path ke absolute url
             const nextUrl = new URL(nextHref, 'https://baak.unama.ac.id');
-            // Tambahkan parameter auto_close agar script tetap berjalan di halaman berikutnya
             nextUrl.searchParams.set('auto_close', '1');
             nextUrl.searchParams.set('page', (pageNum + 1).toString());
-            nextUrl.searchParams.set('search', '1'); // Pastikan search=1 ikut agar filter tanggal tidak hilang
+            nextUrl.searchParams.set('search', '1');
             if (tanggal) {
                 nextUrl.searchParams.set('tanggal', tanggal);
             }
             
-            // Pindah halaman (ini akan mem-bypass Cloudflare karena menggunakan tab browser langsung)
             window.location.href = nextUrl.href;
             
         } else {
@@ -93,8 +112,8 @@ function processPage(htmlContent, pageNum, docContext) {
             })
             .then(() => {
                 if (isAutoClose) {
-                    document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Sinkronisasi Selesai!</h1><p style='font-size:18px;'>Menutup tab dalam 2 detik...</p></div>";
-                    setTimeout(() => chrome.runtime.sendMessage({action: "closeTab"}), 2000);
+                    document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Sinkronisasi Selesai!</h1><p style='font-size:18px;'>Menutup tab dalam 1 detik...</p></div>";
+                    setTimeout(() => chrome.runtime.sendMessage({action: "closeTab"}), 1000);
                 }
             })
             .catch(err => {
@@ -105,5 +124,15 @@ function processPage(htmlContent, pageNum, docContext) {
     })
     .catch(error => {
         console.error("Gagal sinkronisasi ke lokal API:", error);
+        // Fallback: tetap coba kirim sync-complete agar tidak menggantung
+        fetch('http://127.0.0.1:8000/api/sync-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tanggal: tanggal })
+        }).finally(() => {
+            if (isAutoClose) {
+                chrome.runtime.sendMessage({action: "closeTab"});
+            }
+        });
     });
 }

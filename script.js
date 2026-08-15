@@ -586,16 +586,39 @@
 
     setInterval(updateActiveLabPanel, 60000);
 
-    async function syncData(tanggal) {
-      const syncBtn = document.getElementById('sync-btn');
-      const originalHtml = syncBtn.innerHTML;
-      syncBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
-        Menarik Data...
-      `;
-      syncBtn.disabled = true;
+    let isCurrentlySyncing = false;
 
-      const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
+    function resetSyncBtn() {
+      const syncBtn = document.getElementById('sync-btn');
+      if (syncBtn) {
+        syncBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          Sinkronisasi
+        `;
+        syncBtn.disabled = false;
+      }
+    }
+
+    async function syncData(tanggal) {
+      if (isCurrentlySyncing) {
+        console.log("Sinkronisasi sedang berjalan, mengabaikan pemicu duplikat...");
+        return;
+      }
+      isCurrentlySyncing = true;
+
+      const syncBtn = document.getElementById('sync-btn');
+      if (syncBtn) {
+        syncBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+          Menarik Data...
+        `;
+        syncBtn.disabled = true;
+      }
+
+      const tgl = tanggal || document.getElementById('filter-tanggal')?.value || '';
+      const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tgl}&auto_close=1`;
       
       // Kirim pesan ke background Chrome Extension via bridge (tab dibuka di background)
       window.postMessage({ type: "START_UNAMA_SYNC", url: targetUrl }, "*");
@@ -604,27 +627,27 @@
         const response = await fetch(`${API_BASE_URL}/api/sync`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tanggal: tanggal || null })
+          body: JSON.stringify({ tanggal: tgl || null })
         });
         const result = await response.json();
 
-        if (result.status === 'success') {
+        if (syncBtn) {
           syncBtn.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
             Merender...
           `;
-          await fetchAllJadwal();
-          fetchNotifikasiLab(tanggal, true);
-        } else {
-          alert("Gagal sinkronisasi: " + result.message);
+        }
+        
+        await fetchAllJadwal();
+        if (tgl) {
+          fetchNotifikasiLab(tgl, false);
         }
       } catch (error) {
         console.error("Error saat sinkronisasi:", error);
-        alert("Terjadi kesalahan jaringan atau server.");
+      } finally {
+        isCurrentlySyncing = false;
+        resetSyncBtn();
       }
-
-      syncBtn.innerHTML = originalHtml;
-      syncBtn.disabled = false;
     }
 
     async function fetchNotifikasiLab(tanggal, showPopup = false) {
@@ -2181,6 +2204,11 @@
       onChange: function (selectedDates, dateStr, instance) {
         if (instance) instance.close();
         if (dateStr) {
+          const mainTanggal = document.getElementById('filter-tanggal');
+          if (mainTanggal) mainTanggal.value = dateStr;
+          updateRuanganFilterOptions();
+          applyFilters();
+          if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
           syncData(dateStr);
         }
       }

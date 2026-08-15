@@ -7,10 +7,19 @@ from bs4 import BeautifulSoup
 BULAN_DICT = {
     "Januari": "01", "Februari": "02", "Maret": "03", "April": "04",
     "Mei": "05", "Juni": "06", "Juli": "07", "Agustus": "08",
-    "September": "09", "Oktober": "10", "November": "11", "Desember": "12"
+    "September": "09", "Oktober": "10", "November": "11", "Desember": "12",
+    "January": "01", "February": "02", "March": "03", "May": "05",
+    "June": "06", "July": "07", "August": "08", "October": "10", "December": "12",
+    "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "Jun": "06", "Jul": "07",
+    "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
+}
+
+HARI_DICT = {
+    0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jumat", 5: "Sabtu", 6: "Minggu"
 }
 
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,25 +33,60 @@ def get_db():
     )
 
 
-def parse_html_content(html_content):
+def parse_html_content(html_content, fallback_tanggal=None):
     soup = BeautifulSoup(html_content, 'html.parser')
     rows = soup.find_all('tr', class_='table-content')
+    if not rows:
+        table = soup.find('table')
+        if table:
+            tbody = table.find('tbody')
+            target = tbody if tbody else table
+            rows = [tr for tr in target.find_all('tr') if len(tr.find_all('td')) >= 4]
     
     hasil_scraping = []
     
     for row in rows:
         cols = row.find_all('td')
-        if not cols or len(cols) < 5:
+        if not cols or len(cols) < 4:
             continue
             
         # 1. Parsing Kolom TANGGAL (Jumat, 17 Juli 2026 08:00) atau (Jum'at, 24 Juli 2026 14:00)
         waktu_raw = cols[1].text.strip()
-        match_waktu = re.match(r"^([^,]+),\s*(\d+)\s+([A-Za-z]+)\s+(\d+)\s+(\d{2}:\d{2})", waktu_raw)
         hari, tanggal_db, jam = "", "", ""
+        
+        match_waktu = re.search(r"([^,]+),\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(\d{2}:\d{2})", waktu_raw)
         if match_waktu:
-            hari, tgl, bln_text, thn, jam = match_waktu.groups()
-            bln = BULAN_DICT.get(bln_text, "01")
+            hari_raw, tgl, bln_text, thn, jam = match_waktu.groups()
+            hari = hari_raw.strip()
+            bln = BULAN_DICT.get(bln_text.capitalize(), BULAN_DICT.get(bln_text, "01"))
             tanggal_db = f"{thn}-{bln}-{tgl.zfill(2)}"
+        else:
+            match_iso = re.search(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})\s*(\d{2}:\d{2})?", waktu_raw)
+            if match_iso:
+                thn, bln, tgl, j = match_iso.groups()
+                tanggal_db = f"{thn}-{bln.zfill(2)}-{tgl.zfill(2)}"
+                jam = j or ""
+            else:
+                match_id = re.search(r"(\d{1,2})[-/](\d{1,2})[-/](\d{4})\s*(\d{2}:\d{2})?", waktu_raw)
+                if match_id:
+                    tgl, bln, thn, j = match_id.groups()
+                    tanggal_db = f"{thn}-{bln.zfill(2)}-{tgl.zfill(2)}"
+                    jam = j or ""
+            
+            if not jam:
+                match_jam = re.search(r"(\d{2}:\d{2})", waktu_raw)
+                if match_jam:
+                    jam = match_jam.group(1)
+
+        if not tanggal_db and fallback_tanggal:
+            tanggal_db = fallback_tanggal
+            
+        if not hari and tanggal_db:
+            try:
+                dt = datetime.strptime(tanggal_db, "%Y-%m-%d")
+                hari = HARI_DICT.get(dt.weekday(), "")
+            except Exception:
+                pass
             
         # 2. Parsing Kolom DOSEN & MATAKULIAH
         dosen_spans = cols[2].find_all('span', class_='font-weight-bold')
@@ -54,7 +98,11 @@ def parse_html_content(html_content):
             course_text = divs[1].get_text(" ", strip=True)
             if "::" in course_text:
                 kode_mk, nama_mk = [x.strip() for x in course_text.split("::", 1)]
-                kelas = kode_mk # Karena kode di web ternyata adalah nama kelasnya (contoh: 05PT4)
+                kelas = kode_mk
+            else:
+                nama_mk = course_text
+        elif len(divs) == 1:
+            nama_mk = divs[0].get_text(" ", strip=True)
         
         # 3. Parsing Kolom RUANG (Kampus Kobar, Labor 1.9)
         ruang_raw = cols[3].text.strip()
@@ -67,7 +115,7 @@ def parse_html_content(html_content):
             nama_ruangan = ruang_raw
             
         # 4. Parsing Kolom STATUS (OnSchedule (TM))
-        status_raw = cols[4].text.strip()
+        status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
         status_jadwal, metode = status_raw, "TM"
         match_status = re.match(r"(.*?)\s*\((TM|OL|CC)\)", status_raw)
         if match_status:
@@ -212,16 +260,18 @@ def save_to_db(data, target_date=None, page="1"):
                 id_ruangan = None
 
             # Insert ke tabel jadwal_temp
-            # Skip jika tanggal/jam kosong untuk mencegah error
-            if item['tanggal'] and item['jam']:
+            tgl_final = item.get('tanggal') or target_date
+            jam_final = item.get('jam') or "08:00"
+            
+            if tgl_final:
                 query_jadwal = """
                     INSERT INTO jadwal_temp (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(query_jadwal, (
-                    item['tanggal'], item['hari'], item['jam'], 
-                    id_dosen, kode_mk, item['nama_mk'], item['kelas'], id_ruangan, 
-                    item['status'], item['metode']
+                    tgl_final, item.get('hari', ''), jam_final, 
+                    id_dosen, kode_mk, item.get('nama_mk', ''), item.get('kelas', ''), id_ruangan, 
+                    item.get('status', 'OnSchedule'), item.get('metode', 'TM')
                 ))
 
         conn.commit()
