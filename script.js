@@ -1794,6 +1794,123 @@
       }
     });
 
+    // ─── Fullscreen Mode untuk Status Penggunaan Ruangan ───
+    let fsClockInterval = null;
+
+    function updateFullscreenClock() {
+      const clockTime = document.getElementById('fs-clock-time');
+      const clockDate = document.getElementById('fs-clock-date');
+      if (!clockTime || !clockDate) return;
+
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      const secs = String(now.getSeconds()).padStart(2, '0');
+      clockTime.textContent = `${hours}:${mins}:${secs}`;
+
+      const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const dayName = days[now.getDay()];
+      const dateNum = now.getDate();
+      const monthName = months[now.getMonth()];
+      const year = now.getFullYear();
+
+      clockDate.textContent = `${dayName}, ${dateNum} ${monthName} ${year}`;
+    }
+
+    function onFullscreenEnter() {
+      const section = document.getElementById('section-status-ruangan');
+      if (section) section.classList.add('is-fullscreen');
+
+      const iconEnter = document.getElementById('icon-fs-enter');
+      const iconExit = document.getElementById('icon-fs-exit');
+      const textBtn = document.getElementById('text-fs-button');
+      const clockContainer = document.getElementById('fullscreen-live-clock');
+
+      if (iconEnter) iconEnter.style.display = 'none';
+      if (iconExit) iconExit.style.display = 'inline-block';
+      if (textBtn) textBtn.textContent = 'Keluar Full Screen';
+      if (clockContainer) clockContainer.style.display = 'inline-flex';
+
+      updateFullscreenClock();
+      if (fsClockInterval) clearInterval(fsClockInterval);
+      fsClockInterval = setInterval(updateFullscreenClock, 1000);
+    }
+
+    function onFullscreenExit() {
+      const section = document.getElementById('section-status-ruangan');
+      if (section) section.classList.remove('is-fullscreen');
+
+      const iconEnter = document.getElementById('icon-fs-enter');
+      const iconExit = document.getElementById('icon-fs-exit');
+      const textBtn = document.getElementById('text-fs-button');
+      const clockContainer = document.getElementById('fullscreen-live-clock');
+
+      if (iconEnter) iconEnter.style.display = 'inline-block';
+      if (iconExit) iconExit.style.display = 'none';
+      if (textBtn) textBtn.textContent = 'Full Screen';
+      if (clockContainer) clockContainer.style.display = 'none';
+
+      if (fsClockInterval) {
+        clearInterval(fsClockInterval);
+        fsClockInterval = null;
+      }
+    }
+
+    window.toggleFullscreenRuangan = function () {
+      const section = document.getElementById('section-status-ruangan');
+      if (!section) return;
+
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || section.classList.contains('is-fullscreen');
+
+      if (!isFs) {
+        if (section.requestFullscreen) {
+          section.requestFullscreen().catch(() => {
+            onFullscreenEnter();
+          });
+        } else if (section.webkitRequestFullscreen) {
+          section.webkitRequestFullscreen();
+        } else if (section.mozRequestFullScreen) {
+          section.mozRequestFullScreen();
+        } else if (section.msRequestFullscreen) {
+          section.msRequestFullscreen();
+        } else {
+          onFullscreenEnter();
+        }
+      } else {
+        if (document.exitFullscreen && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {
+            onFullscreenExit();
+          });
+        } else if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+          document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen && document.mozFullScreenElement) {
+          document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen && document.msFullscreenElement) {
+          document.msExitFullscreen();
+        } else {
+          onFullscreenExit();
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) onFullscreenEnter();
+      else onFullscreenExit();
+    });
+    document.addEventListener('webkitfullscreenchange', () => {
+      if (document.webkitFullscreenElement) onFullscreenEnter();
+      else onFullscreenExit();
+    });
+    document.addEventListener('mozfullscreenchange', () => {
+      if (document.mozFullScreenElement) onFullscreenEnter();
+      else onFullscreenExit();
+    });
+    document.addEventListener('MSFullscreenChange', () => {
+      if (document.msFullscreenElement) onFullscreenEnter();
+      else onFullscreenExit();
+    });
+
     flatpickr("input[type='date']", {
       dateFormat: "Y-m-d",
       disableMobile: true,

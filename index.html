@@ -179,53 +179,62 @@
         </div>
       </div>
 
-      <div
-        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; margin-top: 24px;">
-        <h2 style="font-size: 1.1rem; color: var(--text-dark); margin: 0;">Status Penggunaan Ruangan</h2>
-        <div
-          style="font-size: 0.85em; display: flex; align-items: center; gap: 12px; font-weight: normal; font-family: inherit;">
-          <div style="display: flex; align-items: center; gap: 4px;"><span
-              style="display:inline-block; width:12px; height:12px; background-color: var(--badge-tm); border-radius:3px;"></span>
-            Dipakai</div>
-          <div style="display: flex; align-items: center; gap: 4px;"><span
-              style="display:inline-block; width:12px; height:12px; background-color: var(--badge-wa); border-radius:3px;"></span>
-            Jeda</div>
-          <div style="display: flex; align-items: center; gap: 4px;"><span
-              style="display:inline-block; width:12px; height:12px; background-color: var(--badge-cc); border-radius:3px;"></span>
-            Kosong</div>
-          <div style="display: flex; align-items: center; gap: 4px;"><span
-              style="display:inline-block; width:12px; height:12px; background: var(--lab-scheduled-bg); border-radius:3px;"></span>
-            Terjadwal</div>
-        </div>
-      </div>
-      <div class="panels-row">
-        <div class="panel panel-lab" id="active-lab-panel">
-          <h3 style="justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-              Labor yang lagi dipakai
+      <!-- Status Penggunaan Ruangan Section (With Fullscreen Mode) -->
+      <div id="section-status-ruangan" class="status-ruangan-section">
+        <div class="status-ruangan-header">
+          <div class="status-ruangan-title-area">
+            <h2 class="status-ruangan-title">Status Penggunaan Ruangan</h2>
+            <div id="fullscreen-live-clock" class="fullscreen-live-clock" style="display: none;">
+              <span id="fs-clock-time">00:00:00</span>
+              <span id="fs-clock-date">Sabtu, 15 Agustus 2026</span>
             </div>
-          </h3>
-          <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
+            <button id="btn-fullscreen-ruangan" class="btn-fullscreen-toggle" title="Layar Penuh / Fullscreen" onclick="toggleFullscreenRuangan()">
+              <svg id="icon-fs-enter" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+              </svg>
+              <svg id="icon-fs-exit" style="display:none;" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+              <span id="text-fs-button">Full Screen</span>
+            </button>
+          </div>
+          <div class="status-legend-group">
+            <div class="status-legend-item"><span class="legend-dot tm"></span> Dipakai</div>
+            <div class="status-legend-item"><span class="legend-dot wa"></span> Jeda</div>
+            <div class="status-legend-item"><span class="legend-dot cc"></span> Kosong</div>
+            <div class="status-legend-item"><span class="legend-dot scheduled"></span> Terjadwal</div>
+          </div>
         </div>
 
-        <div class="panel panel-lab" id="active-room-panel" style="border-color: rgba(59, 130, 246, 0.4);">
-          <h3 style="justify-content: space-between; width: 100%; color: var(--badge-ol);">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
-              </svg>
-              Ruangan yang lagi dipakai
-            </div>
-          </h3>
-          <div class="panel-content" id="active-room-list"><em>Memeriksa status ruangan...</em></div>
+        <div class="panels-row">
+          <div class="panel panel-lab" id="active-lab-panel">
+            <h3 style="justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+                Labor yang lagi dipakai
+              </div>
+            </h3>
+            <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
+          </div>
+
+          <div class="panel panel-lab" id="active-room-panel" style="border-color: rgba(59, 130, 246, 0.4);">
+            <h3 style="justify-content: space-between; width: 100%; color: var(--badge-ol);">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                Ruangan yang lagi dipakai
+              </div>
+            </h3>
+            <div class="panel-content" id="active-room-list"><em>Memeriksa status ruangan...</em></div>
+          </div>
         </div>
       </div>
 
