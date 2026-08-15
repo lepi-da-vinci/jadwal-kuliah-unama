@@ -1,12 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Jadwal Kuliah Unama Sync",
-  "version": "1.0",
-  "description": "Ekstensi untuk menyinkronkan data jadwal dari baak.unama.ac.id langsung ke Dashboard lokal Anda.",
+  "version": "1.2",
+  "description": "Ekstensi untuk menyinkronkan data jadwal dari baak.unama.ac.id langsung ke Dashboard lokal Anda di background tanpa mengganggu Full Screen.",
   "permissions": [
     "activeTab",
     "scripting",
     "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -16,6 +19,12 @@
       "matches": ["*://baak.unama.ac.id/jadwal-kuliah*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dashboard_bridge.js"],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ]
 }

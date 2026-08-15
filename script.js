@@ -22,15 +22,25 @@
     }
 
     function selectCustomOption(id, value, label) {
-      document.getElementById(`filter-${id}`).value = value;
-      document.getElementById(`label-${id}`).innerText = label;
+      const filterInput = document.getElementById(`filter-${id}`);
+      if (filterInput) filterInput.value = value;
+
+      const labelEl = document.getElementById(`label-${id}`);
+      if (labelEl) labelEl.innerText = label;
 
       const items = document.querySelectorAll(`#dropdown-${id} .aslab-list-item`);
-      items.forEach(item => item.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+      items.forEach(item => {
+        const itemVal = item.getAttribute('data-value') || item.innerText.trim();
+        if (itemVal === value || (value === 'semua' && (itemVal === 'semua' || itemVal.startsWith('Semua')))) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
 
       // Close the dropdown
-      document.getElementById(`dropdown-${id}`).classList.remove('open');
+      const dropdown = document.getElementById(`dropdown-${id}`);
+      if (dropdown) dropdown.classList.remove('open');
 
       // Trigger applyFilters or update dynamic options if necessary
       if (id === 'kampus' || id === 'kategori-ruang' || id === 'waktu' || id === 'metode') {
@@ -586,7 +596,9 @@
       syncBtn.disabled = true;
 
       const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tanggal || ''}&auto_close=1`;
-      window.open(targetUrl, '_blank');
+      
+      // Kirim pesan ke background Chrome Extension via bridge (tab dibuka di background)
+      window.postMessage({ type: "START_UNAMA_SYNC", url: targetUrl }, "*");
 
       try {
         const response = await fetch(`${API_BASE_URL}/api/sync`, {
@@ -1760,6 +1772,7 @@
       // lab-modal is already handled by its own listeners, but we can fallback here:
       else if (id === 'lab-modal') document.getElementById('modal-close-btn')?.click();
       else if (id === 'alert-modal') document.getElementById('alert-modal-close-btn')?.click();
+      else if (id === 'modal-fs-filter') closeFullscreenFilterModal();
       else modal.classList.remove('open');
     }
 
@@ -1785,14 +1798,265 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        const openModals = document.querySelectorAll('.modal-overlay.open');
+        const openModals = document.querySelectorAll('.modal-overlay.open, #modal-fs-filter');
         // Close the top-most modal first (last in DOM or highest z-index)
         if (openModals.length > 0) {
           const topModal = openModals[openModals.length - 1];
+          if (topModal.id === 'modal-fs-filter' && topModal.style.display !== 'none') {
+            closeFullscreenFilterModal();
+            return;
+          }
           closeAnyModal(topModal);
         }
       }
     });
+
+    // ─── Bridge Chrome Extension Listener ───
+    window.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "UNAMA_EXTENSION_READY") {
+        window.__UNAMA_EXTENSION_ACTIVE = true;
+      }
+    });
+
+    // ─── Modal Filter Fullscreen Logic ───
+    window.selectFsModalOption = function (type, value, label) {
+      // 1. Update FS Modal UI
+      const fsLabel = document.getElementById(`label-fs-${type}`);
+      if (fsLabel) fsLabel.innerText = label;
+
+      const fsVal = document.getElementById(`fs-val-${type}`);
+      if (fsVal) fsVal.value = value;
+
+      const fsItems = document.querySelectorAll(`#dropdown-fs-${type} .aslab-list-item`);
+      fsItems.forEach(item => {
+        const itemVal = item.getAttribute('data-value') || item.innerText.trim();
+        if (itemVal === value || (value === 'semua' && (itemVal === 'semua' || itemVal.startsWith('Semua')))) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+
+      // Close modal dropdown
+      const fsDropdown = document.getElementById(`dropdown-fs-${type}`);
+      if (fsDropdown) fsDropdown.classList.remove('open');
+
+      // 2. Sync to main dashboard controls
+      selectCustomOption(type, value, label);
+
+      // 3. Update ruangan dropdown inside modal if dependent filter changes
+      if (type === 'kampus' || type === 'kategori-ruang' || type === 'waktu' || type === 'metode') {
+        syncFsModalRuanganDropdown();
+      }
+    };
+
+    function syncFsModalRuanganDropdown() {
+      const fsRuangDropdown = document.getElementById('dropdown-fs-ruangan');
+      const mainRuanganItems = document.querySelectorAll('#dropdown-ruangan .aslab-list-item');
+      if (!fsRuangDropdown) return;
+
+      const curRuangVal = document.getElementById('filter-ruangan')?.value || 'semua';
+      const curRuangLabel = document.getElementById('label-ruangan')?.innerText || 'Semua Ruangan';
+
+      const labelFsRuangan = document.getElementById('label-fs-ruangan');
+      if (labelFsRuangan) labelFsRuangan.innerText = curRuangLabel;
+
+      let html = '';
+      mainRuanganItems.forEach(item => {
+        const val = item.getAttribute('data-value') || item.innerText.trim();
+        const text = item.innerText.trim();
+        const isActive = (val === curRuangVal || (curRuangVal === 'semua' && (val === 'semua' || val === 'Semua Ruangan')));
+        html += `<div class="aslab-list-item ${isActive ? 'active' : ''}" data-value="${val}" onclick="selectFsModalOption('ruangan', '${val}', '${text.replace(/'/g, "\\'")}')">${text}</div>`;
+      });
+
+      fsRuangDropdown.innerHTML = html;
+    }
+
+    window.openFullscreenFilterModal = function () {
+      const modal = document.getElementById('modal-fs-filter');
+      if (!modal) return;
+
+      try {
+        // Populate current values from main filter controls
+        const curTanggal = document.getElementById('filter-tanggal')?.value || '';
+        const curWaktu = document.getElementById('filter-waktu')?.value || 'semua';
+        const curWaktuLabel = document.getElementById('label-waktu')?.innerText || 'Semua Waktu';
+        const curMetode = document.getElementById('filter-metode')?.value || 'semua';
+        const curMetodeLabel = document.getElementById('label-metode')?.innerText || 'Semua Status';
+        const curKampus = document.getElementById('filter-kampus')?.value || 'semua';
+        const curKampusLabel = document.getElementById('label-kampus')?.innerText || 'Semua Kampus';
+        const curKategori = document.getElementById('filter-kategori-ruang')?.value || 'semua';
+        const curKategoriLabel = document.getElementById('label-kategori-ruang')?.innerText || 'Semua Kategori';
+        const curRuangan = document.getElementById('filter-ruangan')?.value || 'semua';
+        const curRuanganLabel = document.getElementById('label-ruangan')?.innerText || 'Semua Ruangan';
+
+        // 1. Tanggal Flatpickr
+        const fsTanggal = document.getElementById('fs-filter-tanggal');
+        if (fsTanggal) {
+          fsTanggal.value = curTanggal;
+          if (!fsTanggal._flatpickr && typeof flatpickr !== 'undefined') {
+            flatpickr(fsTanggal, {
+              dateFormat: "Y-m-d",
+              static: true,
+              disableMobile: true,
+              defaultDate: curTanggal || undefined,
+              onChange: function (selectedDates, dateStr, instance) {
+                if (instance) instance.close();
+                syncFilterFromModal('tanggal', dateStr);
+                // Langsung sinkron otomatis tanpa harus klik tombol
+                if (dateStr) {
+                  syncDataFromModal();
+                }
+              }
+            });
+          } else if (curTanggal && fsTanggal._flatpickr) {
+            fsTanggal._flatpickr.setDate(curTanggal, false);
+          } else if (fsTanggal._flatpickr) {
+            fsTanggal._flatpickr.clear();
+          }
+        }
+
+        // 2. Waktu
+        const fsLabelWaktu = document.getElementById('label-fs-waktu');
+        if (fsLabelWaktu) fsLabelWaktu.innerText = curWaktuLabel;
+        const mainWaktuItems = document.querySelectorAll('#dropdown-waktu .aslab-list-item');
+        const fsWaktuDropdown = document.getElementById('dropdown-fs-waktu');
+        if (fsWaktuDropdown && mainWaktuItems.length > 0) {
+          let htmlWaktu = '';
+          mainWaktuItems.forEach(item => {
+            const val = item.getAttribute('data-value') || '';
+            const text = item.innerText.trim();
+            const isActive = (val === curWaktu);
+            htmlWaktu += `<div class="aslab-list-item ${isActive ? 'active' : ''}" data-value="${val}" onclick="selectFsModalOption('waktu', '${val}', '${text.replace(/'/g, "\\'")}')">${text}</div>`;
+          });
+          fsWaktuDropdown.innerHTML = htmlWaktu;
+        }
+
+        // 3. Status Kuliah (Metode)
+        const fsLabelMetode = document.getElementById('label-fs-metode');
+        if (fsLabelMetode) fsLabelMetode.innerText = curMetodeLabel;
+        document.querySelectorAll('#dropdown-fs-metode .aslab-list-item').forEach(item => {
+          item.classList.toggle('active', item.getAttribute('data-value') === curMetode);
+        });
+
+        // 4. Lokasi Kampus
+        const fsLabelKampus = document.getElementById('label-fs-kampus');
+        if (fsLabelKampus) fsLabelKampus.innerText = curKampusLabel;
+        document.querySelectorAll('#dropdown-fs-kampus .aslab-list-item').forEach(item => {
+          item.classList.toggle('active', item.getAttribute('data-value') === curKampus);
+        });
+
+        // 5. Kategori Ruangan
+        const fsLabelKategori = document.getElementById('label-fs-kategori-ruang');
+        if (fsLabelKategori) fsLabelKategori.innerText = curKategoriLabel;
+        document.querySelectorAll('#dropdown-fs-kategori-ruang .aslab-list-item').forEach(item => {
+          item.classList.toggle('active', item.getAttribute('data-value') === curKategori);
+        });
+
+        // 6. Ruangan / Labor
+        syncFsModalRuanganDropdown();
+      } catch (err) {
+        console.error("Error setting up filter modal:", err);
+      }
+
+      const feedback = document.getElementById('fs-modal-sync-feedback');
+      if (feedback) feedback.style.display = 'none';
+
+      modal.classList.add('open');
+      modal.style.display = 'flex';
+    };
+
+    window.closeFullscreenFilterModal = function () {
+      const modal = document.getElementById('modal-fs-filter');
+      if (modal) {
+        modal.classList.remove('open');
+        modal.style.display = 'none';
+      }
+    };
+
+    window.syncFilterFromModal = function (type, value) {
+      if (type === 'tanggal') {
+        const mainTanggal = document.getElementById('filter-tanggal');
+        if (mainTanggal) {
+          mainTanggal.value = value;
+          if (mainTanggal._flatpickr) {
+            mainTanggal._flatpickr.setDate(value, false);
+          }
+        }
+        updateRuanganFilterOptions();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+        syncFsModalRuanganDropdown();
+        applyFilters();
+      }
+    };
+
+    window.syncDataFromModal = async function () {
+      const fsTanggal = document.getElementById('fs-filter-tanggal');
+      const tanggal = fsTanggal ? fsTanggal.value : '';
+      const feedback = document.getElementById('fs-modal-sync-feedback');
+      const btnSync = document.getElementById('btn-fs-modal-sync');
+
+      if (!tanggal) {
+        if (feedback) {
+          feedback.style.display = 'block';
+          feedback.style.background = 'var(--badge-cc-bg)';
+          feedback.style.color = 'var(--badge-cc)';
+          feedback.innerText = 'Pilih tanggal terlebih dahulu!';
+        }
+        return;
+      }
+
+      if (feedback) {
+        feedback.style.display = 'block';
+        feedback.style.background = 'var(--badge-ol-bg)';
+        feedback.style.color = 'var(--badge-ol)';
+        feedback.innerHTML = '<span style="display:inline-flex; align-items:center; gap:6px;">🔄 Sedang menyinkronkan data di background...</span>';
+      }
+
+      if (btnSync) btnSync.disabled = true;
+
+      try {
+        await syncData(tanggal);
+        if (feedback) {
+          feedback.style.background = 'var(--badge-tm-bg)';
+          feedback.style.color = 'var(--badge-tm)';
+          feedback.innerText = '✅ Sinkronisasi tanggal berhasil!';
+          setTimeout(() => {
+            if (feedback) feedback.style.display = 'none';
+          }, 3000);
+        }
+      } catch (e) {
+        if (feedback) {
+          feedback.style.background = 'var(--badge-cc-bg)';
+          feedback.style.color = 'var(--badge-cc)';
+          feedback.innerText = '❌ Gagal sinkronisasi.';
+        }
+      } finally {
+        if (btnSync) btnSync.disabled = false;
+      }
+    };
+
+    window.resetAllFiltersFromModal = function () {
+      const mainTanggal = document.getElementById('filter-tanggal');
+      if (mainTanggal) {
+        mainTanggal.value = '';
+        if (mainTanggal._flatpickr) mainTanggal._flatpickr.clear();
+      }
+
+      const fsTanggal = document.getElementById('fs-filter-tanggal');
+      if (fsTanggal) {
+        fsTanggal.value = '';
+        if (fsTanggal._flatpickr) fsTanggal._flatpickr.clear();
+      }
+
+      selectCustomOption('waktu', 'semua', 'Semua Waktu');
+      selectCustomOption('metode', 'semua', 'Semua Status');
+      selectCustomOption('kampus', 'semua', 'Semua Kampus');
+      selectCustomOption('kategori-ruang', 'semua', 'Semua Kategori');
+      selectCustomOption('ruangan', 'semua', 'Semua Ruangan');
+
+      openFullscreenFilterModal();
+    };
 
     // ─── Fullscreen Mode untuk Status Penggunaan Ruangan ───
     let fsClockInterval = null;
@@ -1911,11 +2175,14 @@
       else onFullscreenExit();
     });
 
-    flatpickr("input[type='date']", {
+    flatpickr("input[type='date'], #filter-tanggal", {
       dateFormat: "Y-m-d",
       disableMobile: true,
       onChange: function (selectedDates, dateStr, instance) {
-        instance.close();
+        if (instance) instance.close();
+        if (dateStr) {
+          syncData(dateStr);
+        }
       }
     });
 
