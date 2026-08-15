@@ -427,7 +427,7 @@ button, input, select, textarea { font-family: var(--font); }
 .legend-dot.tm { background-color: var(--badge-tm); }
 .legend-dot.wa { background-color: var(--badge-wa); }
 .legend-dot.cc { background-color: var(--badge-cc); }
-.legend-dot.scheduled { background: var(--lab-scheduled-bg); }
+.legend-dot.scheduled { background-color: var(--badge-ol); }
 
 /* Fullscreen Mode Overrides */
 .status-ruangan-section:fullscreen,
@@ -504,8 +504,9 @@ button, input, select, textarea { font-family: var(--font); }
   min-height: 100%;
 }
 
-/* ─── Fullscreen Filter Modal Dedicated Styles ─── */
-#modal-fs-filter {
+/* ─── Fullscreen Filter & Detail Modal Dedicated Styles ─── */
+#modal-fs-filter,
+#room-detail-modal {
   position: fixed !important;
   inset: 0 !important;
   top: 0 !important;
@@ -525,17 +526,24 @@ button, input, select, textarea { font-family: var(--font); }
 
 #modal-fs-filter.open,
 #modal-fs-filter[style*="display: block"],
-#modal-fs-filter[style*="display: flex"] {
+#modal-fs-filter[style*="display: flex"],
+#room-detail-modal.open,
+#room-detail-modal[style*="display: block"],
+#room-detail-modal[style*="display: flex"] {
   display: flex !important;
 }
 
-#modal-fs-filter .modal-box {
+#modal-fs-filter .modal-box,
+#room-detail-modal .modal-box {
   margin: auto !important;
   position: relative !important;
   z-index: 2147483647 !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border) !important;
-  overflow: visible !important;
   max-height: 90vh !important;
+}
+
+#modal-fs-filter .modal-box {
+  overflow: visible !important;
 }
 
 /* ─── Panels (Lab & Notification) ─── */
