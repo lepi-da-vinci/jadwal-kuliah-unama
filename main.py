@@ -42,6 +42,19 @@ def get_db():
 def get_semua_jadwal():
     """Mengembalikan daftar semua jadwal dengan join ke master tabel"""
     try:
+        # Jika ada data yang tertinggal di jadwal_temp, pindahkan otomatis
+        try:
+            conn_chk = get_db()
+            cur_chk = conn_chk.cursor()
+            cur_chk.execute("SELECT COUNT(*) FROM jadwal_temp")
+            cnt = cur_chk.fetchone()[0]
+            cur_chk.close()
+            conn_chk.close()
+            if cnt > 0:
+                scraper.compare_and_finalize_sync(None)
+        except Exception as ex_temp:
+            print("Auto-finalize error:", ex_temp)
+
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
@@ -169,6 +182,15 @@ def sync_complete(req: SyncCompleteRequest):
         prev_count = sync_status.get(tgl_key, {}).get("count", 0)
         sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count}
         return {"status": "success", "message": "Proses perbandingan dan finalisasi selesai.", "count": prev_count}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/finalize-temp")
+def finalize_temp():
+    """Memindahkan seluruh data yang ada di jadwal_temp ke tabel jadwal utama"""
+    try:
+        scraper.compare_and_finalize_sync(None)
+        return {"status": "success", "message": "Seluruh data dari jadwal_temp berhasil dipindahkan ke tabel jadwal."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
