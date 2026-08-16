@@ -290,7 +290,7 @@
       const ft = filterTanggal.value;
       if (!ft) {
         document.getElementById('hasil-pencarian').innerHTML = '<em>Pilih tanggal dulu mas.</em>';
-        document.getElementById('jadwal-table-body').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 1.1em;"><em>📅 Pilih tanggal dulu mas untuk mulai mencari jadwal</em></td></tr>';
+        document.getElementById('jadwal-table-body').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 1.1em;"><em style="display:inline-flex; align-items:center; gap:8px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Pilih tanggal dulu mas untuk mulai mencari jadwal</em></td></tr>';
         document.getElementById('active-lab-list').innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
         document.getElementById('active-room-list').innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
         
@@ -910,6 +910,7 @@
       document.getElementById('wa-modal-data').style.display = 'none';
       document.getElementById('wa-modal-edit').style.display = 'flex';
       document.getElementById('wa-modal-title').innerText = "Edit Aslab";
+      document.getElementById('wa-modal-icon').innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
     };
 
     document.getElementById('test-wa-btn').addEventListener('click', async () => {
@@ -944,7 +945,6 @@
             adminToggle.style.background = 'var(--primary)';
             btnShowTest.style.display = 'block';
             btnShowAdd.style.display = 'block';
-            document.getElementById('btn-test-notif-suara').style.display = 'block';
             document.getElementById('clear-db-btn').style.display = 'block';
           } else {
             adminToggle.innerText = 'Admin: OFF';
@@ -952,7 +952,6 @@
             adminToggle.style.background = 'var(--bg-elevated)';
             btnShowTest.style.display = 'none';
             btnShowAdd.style.display = 'none';
-            document.getElementById('btn-test-notif-suara').style.display = 'none';
             document.getElementById('clear-db-btn').style.display = 'none';
           }
           renderAslabTable();
@@ -987,6 +986,14 @@
           }
         };
 
+        const SVG_WA_ICONS = {
+          aslab: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+          chat: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
+          list: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`,
+          add: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>`,
+          edit: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`
+        };
+
         const showMenu = () => {
           menuView.style.display = 'flex';
           testView.style.display = 'none';
@@ -994,7 +1001,7 @@
           addView.style.display = 'none';
           editView.style.display = 'none';
           modalTitle.innerText = "Data WA Aslab";
-          modalIcon.innerText = "👥";
+          modalIcon.innerHTML = SVG_WA_ICONS.aslab;
           adminToggle.style.display = 'block';
           updateAdminUI();
         };
@@ -1015,7 +1022,7 @@
           testView.style.display = 'flex';
           adminToggle.style.display = 'none';
           modalTitle.innerText = "Uji Coba Pesan WA";
-          modalIcon.innerText = "💬";
+          modalIcon.innerHTML = SVG_WA_ICONS.chat;
 
           const listContainer = document.getElementById('aslab-list-container');
           document.getElementById('aslab-select').value = "";
@@ -1032,7 +1039,7 @@
           menuView.style.display = 'none';
           dataView.style.display = 'flex';
           modalTitle.innerText = "Daftar Nomor WA";
-          modalIcon.innerText = "📋";
+          modalIcon.innerHTML = SVG_WA_ICONS.list;
           renderAslabTable();
         };
 
@@ -1041,7 +1048,7 @@
           menuView.style.display = 'none';
           addView.style.display = 'flex';
           modalTitle.innerText = "Tambah Aslab";
-          modalIcon.innerText = "➕";
+          modalIcon.innerHTML = SVG_WA_ICONS.add;
 
           const selectRuangan = document.getElementById('add-aslab-ruangan');
           selectRuangan.innerHTML = '<option value="">-- Pilih Ruangan --</option>';
@@ -1281,6 +1288,31 @@
     roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('open'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal.classList.contains('open')) roomModal.classList.remove('open'); });
 
+    document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {
+      // Tutup modal Data WA Aslab
+      const testModal = document.getElementById('test-wa-modal');
+      if (testModal) testModal.classList.remove('open');
+
+      // Siapkan modal pesan notifikasi lab
+      const labModalBody = document.getElementById('lab-modal-body');
+      if (labModalBody) {
+        labModalBody.innerHTML = `
+          <div style="text-align: left;">
+            <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); padding: 8px 12px; border-radius: 4px; font-size: 0.85em; color: var(--primary); margin-bottom: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              <span>UJI COBA / SIMULASI NOTIFIKASI LAB</span>
+            </div>
+            <p style="margin-bottom: 8px; font-weight: 500;">Buka labor ni sekarang, kelas entar lagi mulai:</p>
+            <ul style="padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+              <li><b>Labor 1.4 (Thehok)</b> buat matkul <b>Pemrograman Web II (03PS4)</b> (Mulai jam 08:00) - <i style="color:var(--badge-cc);">Gass buka dalam 15 menit!</i></li>
+              <li><b>Labor Cisco 4.3 (Thehok)</b> buat matkul <b>Jaringan Komputer (02PS1)</b> (Mulai jam 10:00) - <i style="color:var(--badge-jeda);">Gass buka dalam 30 menit!</i></li>
+            </ul>
+          </div>
+        `;
+      }
+      openModal(false);
+    });
+
     document.getElementById('btn-test-notif-suara').addEventListener('click', () => {
       playNotificationSound();
     });
@@ -1308,22 +1340,22 @@
 
         const btn = document.getElementById('clear-db-btn');
         btn.disabled = true;
-        btn.innerHTML = `⏳ Menghapus...`;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menghapus...`;
         try {
           const response = await fetch(`${API_BASE_URL}/api/jadwal`, { method: 'DELETE' });
           const result = await response.json();
           if (result.status === 'success') { 
-            showCustomAlert("Berhasil Dihapus!", result.message, "✅");
+            showCustomAlert("Berhasil Dihapus!", result.message, "success");
             await fetchAllJadwal(); 
           }
           else { 
-            showCustomAlert("Gagal!", "Gagal menghapus database: " + result.message, "❌");
+            showCustomAlert("Gagal!", "Gagal menghapus database: " + result.message, "error");
           }
         } catch (e) { 
-          showCustomAlert("Error", "Terjadi kesalahan saat menghapus database.", "⚠️");
+          showCustomAlert("Error", "Terjadi kesalahan saat menghapus database.", "warning");
         }
         btn.disabled = false;
-        btn.innerHTML = `🗑️ Bersihkan Semua Jadwal DB`;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Bersihkan Semua Jadwal DB`;
       }
     });
 
@@ -1654,7 +1686,7 @@
             if (room.status === 'full kosong aja') {
               html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
                 <strong style="display:flex; align-items:center; gap:6px;">
-                  <span style="color:var(--badge-tm);">✅</span> ${room.ruangan}
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--badge-tm)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> ${room.ruangan}
                 </strong>
                 <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px;">Kosong seharian penuh</div>
               </div>`;
@@ -1663,7 +1695,7 @@
                 let gapsHtml = room.gaps.map(g => `<li>${g.start} - ${g.end} kosong ${g.note ? `<i>(${g.note})</i>` : ''}</li>`).join('');
                 html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
                   <strong style="display:flex; align-items:center; gap:6px;">
-                    <span style="color:var(--badge-wa);">⚠️</span> ${room.ruangan}
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--badge-wa)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> ${room.ruangan}
                   </strong>
                   <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.85em; margin-top:4px; margin-bottom: 4px;">Ada jam kosong pada:</div>
                   <ul style="padding-left: 44px; color: var(--text-muted); font-size: 0.85em; margin-top:0; margin-bottom: 0;">${gapsHtml}</ul>
@@ -1671,7 +1703,7 @@
               } else {
                 html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
                   <strong style="display:flex; align-items:center; gap:6px;">
-                    <span style="color:var(--badge-cc);">❌</span> ${room.ruangan}
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--badge-cc)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${room.ruangan}
                   </strong>
                   <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.85em; margin-top:4px;">Terpakai penuh (Full Kelas)</div>
                 </div>`;
@@ -1723,9 +1755,9 @@
             html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
               <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
               <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
-                <span style="display:flex; align-items:center; gap:4px;">⏱️ ${item.waktu}</span>
-                <span style="display:flex; align-items:center; gap:4px;">📍 ${item.nama_ruangan} (${item.kampus})</span>
-                <span style="display:flex; align-items:center; gap:4px;">🧑‍🏫 ${item.nama_dosen}</span>
+                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
+                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
+                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
               </div>
             </div>`;
           });
@@ -1768,9 +1800,9 @@
             html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
               <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
               <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
-                <span style="display:flex; align-items:center; gap:4px;">⏱️ ${item.waktu}</span>
-                <span style="display:flex; align-items:center; gap:4px;">📍 ${item.nama_ruangan} (${item.kampus})</span>
-                <span style="display:flex; align-items:center; gap:4px;">🧑‍🏫 ${item.nama_dosen}</span>
+                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
+                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
+                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
               </div>
             </div>`;
           });
@@ -1799,12 +1831,26 @@
       else modal.classList.remove('open');
     }
 
+    const ALERT_SVGS = {
+      success: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--badge-tm)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+      error: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--badge-cc)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+      warning: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--badge-wa)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+      info: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`
+    };
+
     // Generic Custom Alert function
-    function showCustomAlert(title, message, icon) {
+    function showCustomAlert(title, message, icon = 'info') {
       const alertModal = document.getElementById('alert-modal');
       document.getElementById('alert-modal-title').textContent = title;
       document.getElementById('alert-modal-message').textContent = message;
-      document.getElementById('alert-modal-icon').textContent = icon;
+      
+      const iconEl = document.getElementById('alert-modal-icon');
+      if (iconEl) {
+        if (icon === '✅' || icon === 'success') iconEl.innerHTML = ALERT_SVGS.success;
+        else if (icon === '❌' || icon === 'error') iconEl.innerHTML = ALERT_SVGS.error;
+        else if (icon === '⚠️' || icon === 'warning') iconEl.innerHTML = ALERT_SVGS.warning;
+        else iconEl.innerHTML = ALERT_SVGS.info;
+      }
       
       alertModal.classList.add('open');
       
@@ -2033,7 +2079,7 @@
         feedback.style.display = 'block';
         feedback.style.background = 'var(--badge-ol-bg)';
         feedback.style.color = 'var(--badge-ol)';
-        feedback.innerHTML = '<span style="display:inline-flex; align-items:center; gap:6px;">🔄 Sedang menyinkronkan data di background...</span>';
+        feedback.innerHTML = '<span style="display:inline-flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Sedang menyinkronkan data di background...</span>';
       }
 
       if (btnSync) btnSync.disabled = true;
@@ -2043,7 +2089,7 @@
         if (feedback) {
           feedback.style.background = 'var(--badge-tm-bg)';
           feedback.style.color = 'var(--badge-tm)';
-          feedback.innerText = '✅ Sinkronisasi tanggal berhasil!';
+          feedback.innerHTML = '<span style="display:inline-flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--badge-tm)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Sinkronisasi tanggal berhasil!</span>';
           setTimeout(() => {
             if (feedback) feedback.style.display = 'none';
           }, 3000);
@@ -2052,7 +2098,7 @@
         if (feedback) {
           feedback.style.background = 'var(--badge-cc-bg)';
           feedback.style.color = 'var(--badge-cc)';
-          feedback.innerText = '❌ Gagal sinkronisasi.';
+          feedback.innerHTML = '<span style="display:inline-flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--badge-cc)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Gagal sinkronisasi.</span>';
         }
       } finally {
         if (btnSync) btnSync.disabled = false;
