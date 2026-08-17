@@ -362,7 +362,8 @@ button, input, select, textarea { font-family: var(--font); }
 }
 
 .btn-fullscreen-toggle:hover,
-.btn-fs-filter:hover {
+.btn-fs-filter:hover,
+.btn-fs-info:hover {
   color: var(--primary);
   border-color: var(--primary-glow);
   transform: translateY(-1px);
@@ -370,9 +371,102 @@ button, input, select, textarea { font-family: var(--font); }
 }
 
 .btn-fullscreen-toggle:active,
-.btn-fs-filter:active {
+.btn-fs-filter:active,
+.btn-fs-info:active {
   transform: translateY(1px);
   box-shadow: var(--clay-inner-sm);
+}
+
+.btn-fs-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 0.82em;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--clay-outer-sm);
+  transition: all var(--transition);
+  user-select: none;
+}
+
+/* ─── Dynamic Info Mase Button States & Glow Animations ─── */
+.btn-info-mase-dynamic {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  position: relative;
+}
+
+.notif-badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  font-size: 0.78em;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  min-width: 18px;
+  height: 18px;
+  line-height: 1;
+  margin-left: 4px;
+  backdrop-filter: blur(4px);
+}
+
+/* Status 1: Kelas Tambahan (Prioritas Utama - Hijau / Green) */
+.btn-info-mase-dynamic.state-tambahan {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: #ffffff !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.55), var(--clay-outer-sm) !important;
+  animation: notifPulseTambahan 2s infinite ease-in-out;
+}
+.btn-info-mase-dynamic.state-tambahan svg {
+  stroke: #ffffff !important;
+}
+
+/* Status 2: Perubahan Jadwal (Prioritas Kedua - Biru / Blue) */
+.btn-info-mase-dynamic.state-perubahan {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+  color: #ffffff !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.55), var(--clay-outer-sm) !important;
+  animation: notifPulsePerubahan 2s infinite ease-in-out;
+}
+.btn-info-mase-dynamic.state-perubahan svg {
+  stroke: #ffffff !important;
+}
+
+/* Status 3: Jeda Panjang (Prioritas Ketiga - Oren / Orange) */
+.btn-info-mase-dynamic.state-jeda {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #ffffff !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.55), var(--clay-outer-sm) !important;
+  animation: notifPulseJeda 2s infinite ease-in-out;
+}
+.btn-info-mase-dynamic.state-jeda svg {
+  stroke: #ffffff !important;
+}
+
+@keyframes notifPulseTambahan {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+  50% { transform: scale(1.03); box-shadow: 0 0 18px rgba(16, 185, 129, 0.85); }
+}
+
+@keyframes notifPulsePerubahan {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(59, 130, 246, 0.4); }
+  50% { transform: scale(1.03); box-shadow: 0 0 18px rgba(59, 130, 246, 0.85); }
+}
+
+@keyframes notifPulseJeda {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+  50% { transform: scale(1.03); box-shadow: 0 0 18px rgba(245, 158, 11, 0.85); }
 }
 
 .fullscreen-live-clock {
@@ -504,9 +598,10 @@ button, input, select, textarea { font-family: var(--font); }
   min-height: 100%;
 }
 
-/* ─── Fullscreen Filter & Detail Modal Dedicated Styles ─── */
+/* ─── Fullscreen Filter, Info & Detail Modal Dedicated Styles ─── */
 #modal-fs-filter,
-#room-detail-modal {
+#room-detail-modal,
+#modal-fs-info {
   position: fixed !important;
   inset: 0 !important;
   top: 0 !important;
@@ -529,12 +624,16 @@ button, input, select, textarea { font-family: var(--font); }
 #modal-fs-filter[style*="display: flex"],
 #room-detail-modal.open,
 #room-detail-modal[style*="display: block"],
-#room-detail-modal[style*="display: flex"] {
+#room-detail-modal[style*="display: flex"],
+#modal-fs-info.open,
+#modal-fs-info[style*="display: block"],
+#modal-fs-info[style*="display: flex"] {
   display: flex !important;
 }
 
 #modal-fs-filter .modal-box,
-#room-detail-modal .modal-box {
+#room-detail-modal .modal-box,
+#modal-fs-info .modal-box {
   margin: auto !important;
   position: relative !important;
   z-index: 2147483647 !important;
@@ -997,12 +1096,12 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
 .skeleton-row td { height: 48px; }
 
 /* ─── Notification Item Variations ─── */
-.notif-item.tambah { background: #e1f5fe; border-color: #b3e5fc; color: #0277bd; }
-[data-theme="dark"] .notif-item.tambah { background: rgba(2, 119, 189, 0.2); border-color: rgba(2, 119, 189, 0.3); color: #90caf9; }
-.notif-item.perubahan { background: #fff3e0; border-color: #ffe0b2; color: #e65100; }
-[data-theme="dark"] .notif-item.perubahan { background: rgba(230, 81, 0, 0.2); border-color: rgba(230, 81, 0, 0.3); color: #ffcc80; }
-.notif-item.jeda { background: #ffebee; border-color: #ffcdd2; color: #c62828; }
-[data-theme="dark"] .notif-item.jeda { background: rgba(198, 40, 40, 0.2); border-color: rgba(198, 40, 40, 0.3); color: #ef9a9a; }
+.notif-item.tambah { background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.3); color: #047857; }
+[data-theme="dark"] .notif-item.tambah { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.35); color: #6ee7b7; }
+.notif-item.perubahan { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.3); color: #1d4ed8; }
+[data-theme="dark"] .notif-item.perubahan { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.35); color: #93c5fd; }
+.notif-item.jeda { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); color: #b45309; }
+[data-theme="dark"] .notif-item.jeda { background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.35); color: #fcd34d; }
 
 /* ─── Animations ─── */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

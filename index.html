@@ -210,6 +210,16 @@
               </svg>
               <span>Filter</span>
             </button>
+            <button id="btn-fs-info-modal" class="btn-fs-info btn-info-mase-dynamic" onclick="openFullscreenInfoModal()"
+              title="Buka Info Mase & Notifikasi Lab" style="display: none;">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span>Info Mase</span>
+              <span class="notif-badge-count" style="display:none;">0</span>
+            </button>
           </div>
           <div class="status-legend-group">
             <div class="status-legend-item"><span class="legend-dot tm"></span> Dipakai</div>
@@ -484,6 +494,51 @@
             </div>
           </div>
         </div>
+
+        <!-- Modal Info Mase Fullscreen -->
+        <div id="modal-fs-info" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Info Mase & Notifikasi Lab" style="display: none;">
+          <div class="modal-box"
+            style="margin: auto; width: 92%; max-width: 580px; padding: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border); overflow: hidden;">
+            <div
+              style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.06);">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div
+                  style="background: var(--badge-wa-bg); color: var(--badge-wa); width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 id="fs-info-title"
+                    style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">
+                    Info Mase & Notifikasi Lab</h3>
+                  <p id="fs-info-subtitle" style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Pemberitahuan kelas tambahan, perubahan jadwal, dan jeda kosong</p>
+                </div>
+              </div>
+              <span onclick="closeFullscreenInfoModal()"
+                style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 4px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </span>
+            </div>
+            <div
+              style="padding: 20px 24px; text-align: left; max-height: 60vh; overflow-y: auto; margin-bottom: 0;">
+              <div id="fs-live-warnings"></div>
+              <div id="fs-notifikasi-lab-list" class="panel-content">
+                <em>Memuat notifikasi...</em>
+              </div>
+            </div>
+            <div
+              style="padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: rgba(0,0,0,0.02);">
+              <button class="btn btn-ghost" onclick="closeFullscreenInfoModal()"
+                style="border-radius: var(--radius-sm); font-size: 0.85em; padding: 8px 20px;">Tutup</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Info Mase Collapsible Panel -->
@@ -516,13 +571,14 @@
 
       <div class="card-header">
         <div id="hasil-pencarian" class="search-result">Hasil Pencarian: 0 jadwal</div>
-        <button id="toggle-notif-btn" class="btn btn-secondary" aria-label="Info Mase">
+        <button id="toggle-notif-btn" class="btn btn-secondary btn-info-mase-dynamic" aria-label="Info Mase">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          Info Mase
+          <span>Info Mase</span>
+          <span class="notif-badge-count" style="display:none;">0</span>
         </button>
       </div>
 

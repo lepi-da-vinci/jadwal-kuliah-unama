@@ -650,11 +650,58 @@ async function syncData(tanggal) {
   }
 }
 
+let latestNotifikasiLabData = [];
+
+function updateInfoMaseDynamicButtons(notifs = []) {
+  latestNotifikasiLabData = notifs;
+  const toggleBtn = document.getElementById('toggle-notif-btn');
+  const fsInfoBtn = document.getElementById('btn-fs-info-modal');
+  const buttons = [toggleBtn, fsInfoBtn].filter(Boolean);
+
+  let hasTambahan = false;
+  let hasPerubahan = false;
+  let hasJeda = false;
+
+  notifs.forEach(n => {
+    if (n.tipe_notif === 'TAMBAHAN') hasTambahan = true;
+    else if (n.tipe_notif === 'PERUBAHAN') hasPerubahan = true;
+    else if (n.tipe_notif === 'JEDA') hasJeda = true;
+  });
+
+  buttons.forEach(btn => {
+    btn.classList.remove('state-tambahan', 'state-perubahan', 'state-jeda', 'state-normal');
+    const badge = btn.querySelector('.notif-badge-count');
+
+    if (notifs.length > 0) {
+      if (badge) {
+        badge.style.display = 'inline-flex';
+        badge.textContent = notifs.length;
+      }
+
+      if (hasTambahan) {
+        btn.classList.add('state-tambahan');
+        btn.title = `${notifs.length} Notifikasi (Ada Kelas Tambahan!)`;
+      } else if (hasPerubahan) {
+        btn.classList.add('state-perubahan');
+        btn.title = `${notifs.length} Notifikasi (Ada Perubahan Jadwal)`;
+      } else if (hasJeda) {
+        btn.classList.add('state-jeda');
+        btn.title = `${notifs.length} Notifikasi (Ada Jeda Lab Kosong)`;
+      }
+    } else {
+      btn.classList.add('state-normal');
+      btn.title = 'Info Mase (Tidak ada notifikasi khusus)';
+      if (badge) badge.style.display = 'none';
+    }
+  });
+}
+
 async function fetchNotifikasiLab(tanggal, showPopup = false) {
   const notifList = document.getElementById('notifikasi-lab-list');
   if (!notifList) return;
   if (!tanggal) {
     notifList.innerHTML = '<em>pilih tanggal tuk cek notif mas.</em>';
+    updateInfoMaseDynamicButtons([]);
     return;
   }
   try {
@@ -663,6 +710,7 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
     const data = await response.json();
 
     if (data.status === 'success' && data.data && data.data.length > 0) {
+      updateInfoMaseDynamicButtons(data.data);
       let html = '', popupContent = '';
       data.data.forEach(n => {
         let cls = '';
@@ -679,9 +727,11 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
         openModal();
       }
     } else {
+      updateInfoMaseDynamicButtons([]);
       notifList.innerHTML = '<em>Tidak ada notifikasi khusus pada tanggal ini.</em>';
     }
   } catch (e) {
+    updateInfoMaseDynamicButtons([]);
     notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
   }
 }
@@ -1403,14 +1453,14 @@ filterTanggal.addEventListener('change', () => {
   }
 });
 
-// 6. Auto-Sync setiap 30 menit
+// 6. Auto-Sync setiap 10 menit
 setInterval(() => {
   const currentDate = filterTanggal.value;
   if (currentDate) {
     // Menjalankan Auto-Sync untuk tanggal: currentDate
     syncData(currentDate);
   }
-}, 30 * 60 * 1000); // 30 menit dalam milidetik
+}, 10 * 60 * 1000); // 10 menit dalam milidetik
 
 // ─── Modal Logic ───
 const modal = document.getElementById('lab-modal');
@@ -1482,7 +1532,9 @@ function playDefaultTone() {
   } catch (e) { /* Browser memblokir autoplay suara */ }
 }
 
-// ─── Lab Check ───
+// ─── Lab Check (Hanya Notif Sekali Saja per Sesi/Waktu) ───
+const notifiedLabAlarmKeys = new Set();
+
 function checkLabNotifications() {
   const now = new Date();
   const currentTotalMin = now.getHours() * 60 + now.getMinutes();
@@ -1508,8 +1560,13 @@ function checkLabNotifications() {
 
   let labToNotify = [];
   for (const [ruang, dataClass] of Object.entries(firstClasses)) {
-    const diffMin = dataClass.startTotalMin - currentTotalMin; if (diffMin === 30 || diffMin === 15) {
-      labToNotify.push(`<b>${ruang}</b> buat matkul <b>${dataClass.nama_mk}</b> (Mulai jam ${dataClass.jam}) - <i>Gass buka dalam ${diffMin} menit!</i>`);
+    const diffMin = dataClass.startTotalMin - currentTotalMin;
+    if (diffMin === 30 || diffMin === 15) {
+      const alarmKey = `${currentDayStr}_${ruang}_${dataClass.jam}_${diffMin}`;
+      if (!notifiedLabAlarmKeys.has(alarmKey)) {
+        notifiedLabAlarmKeys.add(alarmKey);
+        labToNotify.push(`<b>${ruang}</b> buat matkul <b>${dataClass.nama_mk}</b> (Mulai jam ${dataClass.jam}) - <i>Gass buka dalam ${diffMin} menit!</i>`);
+      }
     }
   }
 
@@ -1860,6 +1917,7 @@ function closeAnyModal(modal) {
   else if (id === 'danger-modal') document.getElementById('danger-cancel-btn')?.click();
   else if (id === 'test-wa-modal') document.getElementById('wa-modal-close-btn')?.click();
   else if (id === 'room-detail-modal') document.getElementById('room-detail-close-btn')?.click();
+  else if (id === 'modal-fs-info') closeFullscreenInfoModal();
   // lab-modal is already handled by its own listeners, but we can fallback here:
   else if (id === 'lab-modal') document.getElementById('modal-close-btn')?.click();
   else if (id === 'alert-modal') document.getElementById('alert-modal-close-btn')?.click();
@@ -1903,12 +1961,16 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const openModals = document.querySelectorAll('.modal-overlay.open, #modal-fs-filter');
+    const openModals = document.querySelectorAll('.modal-overlay.open, #modal-fs-filter, #modal-fs-info');
     // Close the top-most modal first (last in DOM or highest z-index)
     if (openModals.length > 0) {
       const topModal = openModals[openModals.length - 1];
       if (topModal.id === 'modal-fs-filter' && topModal.style.display !== 'none') {
         closeFullscreenFilterModal();
+        return;
+      }
+      if (topModal.id === 'modal-fs-info' && topModal.style.display !== 'none') {
+        closeFullscreenInfoModal();
         return;
       }
       closeAnyModal(topModal);
@@ -2187,6 +2249,30 @@ function updateFullscreenClock() {
   clockDate.textContent = `${dayName}, ${dateNum} ${monthName} ${year}`;
 }
 
+window.openFullscreenInfoModal = function () {
+  const modal = document.getElementById('modal-fs-info');
+  if (!modal) return;
+
+  const liveWarnings = document.getElementById('live-warnings')?.innerHTML || '';
+  const notifList = document.getElementById('notifikasi-lab-list')?.innerHTML || '<em>Tidak ada notifikasi khusus.</em>';
+
+  const fsWarnings = document.getElementById('fs-live-warnings');
+  const fsList = document.getElementById('fs-notifikasi-lab-list');
+  if (fsWarnings) fsWarnings.innerHTML = liveWarnings;
+  if (fsList) fsList.innerHTML = notifList;
+
+  modal.style.display = 'flex';
+  modal.classList.add('open');
+};
+
+window.closeFullscreenInfoModal = function () {
+  const modal = document.getElementById('modal-fs-info');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('open');
+  }
+};
+
 function onFullscreenEnter() {
   const section = document.getElementById('section-status-ruangan');
   if (section) section.classList.add('is-fullscreen');
@@ -2195,11 +2281,13 @@ function onFullscreenEnter() {
   const iconExit = document.getElementById('icon-fs-exit');
   const textBtn = document.getElementById('text-fs-button');
   const clockContainer = document.getElementById('fullscreen-live-clock');
+  const fsInfoBtn = document.getElementById('btn-fs-info-modal');
 
   if (iconEnter) iconEnter.style.display = 'none';
   if (iconExit) iconExit.style.display = 'inline-block';
   if (textBtn) textBtn.textContent = 'Keluar Full Screen';
   if (clockContainer) clockContainer.style.display = 'inline-flex';
+  if (fsInfoBtn) fsInfoBtn.style.display = 'inline-flex';
 
   updateFullscreenClock();
   if (fsClockInterval) clearInterval(fsClockInterval);
@@ -2214,11 +2302,14 @@ function onFullscreenExit() {
   const iconExit = document.getElementById('icon-fs-exit');
   const textBtn = document.getElementById('text-fs-button');
   const clockContainer = document.getElementById('fullscreen-live-clock');
+  const fsInfoBtn = document.getElementById('btn-fs-info-modal');
 
   if (iconEnter) iconEnter.style.display = 'inline-block';
   if (iconExit) iconExit.style.display = 'none';
   if (textBtn) textBtn.textContent = 'Full Screen';
   if (clockContainer) clockContainer.style.display = 'none';
+  if (fsInfoBtn) fsInfoBtn.style.display = 'none';
+  closeFullscreenInfoModal();
 
   if (fsClockInterval) {
     clearInterval(fsClockInterval);
