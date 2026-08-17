@@ -57,6 +57,61 @@ document.addEventListener('click', (event) => {
   });
 });
 
+// Keyboard support for Custom Selects (Enter, Space, Arrow Keys, Escape)
+document.addEventListener('keydown', (e) => {
+  const activeEl = document.activeElement;
+  if (!activeEl) return;
+
+  // Jika sedang fokus pada trigger select custom
+  if (activeEl.classList && activeEl.classList.contains('custom-select-trigger')) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeEl.click();
+      const wrapper = activeEl.closest('.custom-select-wrapper');
+      const dropdown = wrapper ? wrapper.querySelector('.custom-select-dropdown') : null;
+      if (dropdown && dropdown.classList.contains('open')) {
+        const activeItem = dropdown.querySelector('.aslab-list-item.active') || dropdown.querySelector('.aslab-list-item');
+        if (activeItem) {
+          activeItem.setAttribute('tabindex', '0');
+          activeItem.focus();
+        }
+      }
+    }
+  }
+  // Jika sedang fokus pada item opsi di dalam dropdown
+  else if (activeEl.classList && activeEl.classList.contains('aslab-list-item')) {
+    const dropdown = activeEl.closest('.custom-select-dropdown');
+    if (dropdown) {
+      const items = Array.from(dropdown.querySelectorAll('.aslab-list-item'));
+      const currentIndex = items.indexOf(activeEl);
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = (currentIndex + 1) % items.length;
+        items[nextIndex].setAttribute('tabindex', '0');
+        items[nextIndex].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = (currentIndex - 1 + items.length) % items.length;
+        items[prevIndex].setAttribute('tabindex', '0');
+        items[prevIndex].focus();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activeEl.click();
+        const wrapper = dropdown.closest('.custom-select-wrapper');
+        const trigger = wrapper ? wrapper.querySelector('.custom-select-trigger') : null;
+        if (trigger) trigger.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.remove('open');
+        const wrapper = dropdown.closest('.custom-select-wrapper');
+        const trigger = wrapper ? wrapper.querySelector('.custom-select-trigger') : null;
+        if (trigger) trigger.focus();
+      }
+    }
+  }
+});
+
 const API_BASE_URL = (window.location.protocol === 'file:') ? 'http://127.0.0.1:8000' : window.location.origin;
 let allJadwal = [];
 let allRuanganData = [];

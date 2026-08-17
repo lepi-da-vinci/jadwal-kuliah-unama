@@ -305,11 +305,54 @@ button, input, select, textarea { font-family: var(--font); }
   padding-right: 36px;
   cursor: pointer;
 }
-.filter-group select:focus,
-.filter-group input:focus {
-  box-shadow: var(--clay-inner), 0 0 0 3px var(--primary-glow);
+.filter-group select:focus-visible,
+.filter-group input:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+  box-shadow: var(--clay-inner), 0 0 0 3px var(--primary-glow) !important;
 }
+
+.filter-group select:focus:not(:focus-visible),
+.filter-group input:focus:not(:focus-visible) {
+  outline: none !important;
+}
+
 .filter-group input[type="date"] { background-image: none; padding-right: 14px; }
+
+/* ─── Keyboard Accessibility & Clean Click Behavior ─── */
+:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+}
+
+:focus:not(:focus-visible) {
+  outline: none !important;
+}
+
+.custom-select-trigger:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+  box-shadow: var(--clay-inner), 0 0 0 3px var(--primary-glow) !important;
+}
+
+.custom-select-trigger:focus:not(:focus-visible) {
+  outline: none !important;
+}
+
+.btn:focus-visible,
+.btn-fullscreen-toggle:focus-visible,
+.btn-fs-filter:focus-visible,
+.btn-fs-info:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+}
+
+.btn:focus:not(:focus-visible),
+.btn-fullscreen-toggle:focus:not(:focus-visible),
+.btn-fs-filter:focus:not(:focus-visible),
+.btn-fs-info:focus:not(:focus-visible) {
+  outline: none !important;
+}
 
 /* ─── Status Penggunaan Ruangan & Fullscreen Mode ─── */
 .status-ruangan-section {

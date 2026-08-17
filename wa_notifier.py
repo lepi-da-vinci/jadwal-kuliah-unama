@@ -630,7 +630,7 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
 async def wa_notifier_loop():
     print("WA Notifier Loop Started. (Automatic notifications ENABLED)")
     while True:
-        check_lab_schedules() # Sesuai permintaan pengguna, fitur ini DIAKTIFKAN kembali secara permanen.
+        check_lab_schedules() # fitur ini DIAKTIFKAN kembali secara permanen.
         now = datetime.datetime.now()
         sleep_seconds = 60 - now.second
         await asyncio.sleep(sleep_seconds)

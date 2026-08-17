@@ -1,4 +1,7 @@
 import asyncio
+import os
+import re
+from dotenv import load_dotenv
 
 import mysql.connector
 from fastapi import FastAPI
@@ -22,9 +25,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
