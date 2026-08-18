@@ -1,3 +1,20 @@
+// Auto-bypass Ngrok Free Warning Page for API calls
+const originalFetch = window.fetch;
+window.fetch = function (url, options = {}) {
+  options = options || {};
+  options.headers = options.headers || {};
+  if (options.headers instanceof Headers) {
+    if (!options.headers.has('ngrok-skip-browser-warning')) {
+      options.headers.set('ngrok-skip-browser-warning', 'true');
+    }
+  } else if (Array.isArray(options.headers)) {
+    options.headers.push(['ngrok-skip-browser-warning', 'true']);
+  } else {
+    options.headers['ngrok-skip-browser-warning'] = 'true';
+  }
+  return originalFetch(url, options);
+};
+
 function selectAslabItem(element, value) {
   document.getElementById('aslab-select').value = value;
   const items = document.querySelectorAll('#aslab-list-container .aslab-list-item');

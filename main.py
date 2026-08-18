@@ -16,6 +16,7 @@ app = FastAPI(title="API Analitik Jadwal Kuliah")
 
 @app.on_event("startup")
 async def startup_event():
+    scraper.init_db_schema()
     asyncio.create_task(wa_notifier.wa_notifier_loop())
 
 # Mengizinkan Frontend mengakses API

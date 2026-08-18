@@ -32,6 +32,122 @@ def get_db():
         database=os.getenv("DB_NAME", "db_jadwal_kuliah")
     )
 
+def init_db_schema():
+    """Memastikan seluruh tabel dan master data dasar tersedia saat startup (terutama di Docker)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dosen (
+                id_dosen INT AUTO_INCREMENT PRIMARY KEY,
+                nama_dosen VARCHAR(150) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mata_kuliah (
+                kode_mk VARCHAR(50) PRIMARY KEY,
+                nama_mk VARCHAR(150) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ruangan (
+                id_ruangan INT AUTO_INCREMENT PRIMARY KEY,
+                kampus VARCHAR(50) NOT NULL,
+                nama_ruangan VARCHAR(50) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS jadwal (
+                id_jadwal INT AUTO_INCREMENT PRIMARY KEY,
+                tanggal DATE NOT NULL,
+                hari VARCHAR(20) NOT NULL,
+                jam TIME NOT NULL,
+                id_dosen INT,
+                kode_mk VARCHAR(50),
+                nama_mk VARCHAR(150),
+                kelas VARCHAR(50),
+                id_ruangan INT,
+                status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
+                metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (id_dosen) REFERENCES dosen(id_dosen) ON DELETE SET NULL,
+                FOREIGN KEY (kode_mk) REFERENCES mata_kuliah(kode_mk) ON DELETE SET NULL,
+                FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS jadwal_temp (
+                id_jadwal INT AUTO_INCREMENT PRIMARY KEY,
+                tanggal DATE NOT NULL,
+                hari VARCHAR(20) NOT NULL,
+                jam TIME NOT NULL,
+                id_dosen INT,
+                kode_mk VARCHAR(50),
+                nama_mk VARCHAR(150),
+                kelas VARCHAR(50),
+                id_ruangan INT,
+                status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
+                metode_pembelajaran VARCHAR(50) DEFAULT 'TM',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifikasi_lab (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                tanggal DATE NOT NULL,
+                tipe_notif VARCHAR(50) NOT NULL,
+                pesan TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS asisten_lab (
+                id_aslab INT AUTO_INCREMENT PRIMARY KEY,
+                nama_aslab VARCHAR(150) NOT NULL,
+                no_wa VARCHAR(50) NOT NULL,
+                id_ruangan INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        cursor.execute("SELECT COUNT(*) FROM ruangan")
+        if cursor.fetchone()[0] == 0:
+            default_rooms = [
+                ('Thehok', 'Gedung Pasca, Lab. B2.3'), ('Thehok', 'Labor 1.3'), ('Thehok', 'Labor 1.4'),
+                ('Thehok', 'Labor 1.5'), ('Thehok', 'Labor 2.7'), ('Thehok', 'Labor 3.2'),
+                ('Thehok', 'Labor 4.1'), ('Thehok', 'Labor Cisco 4.3'), ('Thehok', 'R. Praktek 3.1'),
+                ('Thehok', 'R. Praktek 3.4'), ('Thehok', 'Gedung Pasca, R. B1.3'), ('Thehok', 'Gedung Pasca, R. B3.4'),
+                ('Thehok', 'R. 1.6'), ('Thehok', 'R. 1.7'), ('Thehok', 'R. 2.10'),
+                ('Thehok', 'R. 3.10'), ('Thehok', 'R. 3.5'), ('Thehok', 'R. 3.6'),
+                ('Thehok', 'R. 3.7'), ('Thehok', 'R. 3.8'), ('Thehok', 'R. 3.9'),
+                ('Thehok', 'R. 4.2'), ('Thehok', 'R. 4.5'), ('Thehok', 'R. 4.6'),
+                ('Thehok', 'R. 4.7'), ('Thehok', 'R. 4.8'),
+                ('Kobar', 'Labor 1.1'), ('Kobar', 'Labor 1.2'), ('Kobar', 'Labor 2.1'),
+                ('Kobar', 'Labor 2.2'), ('Kobar', 'Labor 3.1'), ('Kobar', 'Labor 3.2'),
+                ('Kobar', 'R. 1.1'), ('Kobar', 'R. 1.2'), ('Kobar', 'R. 2.1'),
+                ('Kobar', 'R. 2.2'), ('Kobar', 'R. 3.1'), ('Kobar', 'R. 3.2')
+            ]
+            cursor.executemany("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", default_rooms)
+            conn.commit()
+            
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("[Database] Skema tabel & master data berhasil divalidasi!")
+    except Exception as e:
+        print(f"[Database] Info skema: {e}")
+
 
 def parse_html_content(html_content, fallback_tanggal=None):
     soup = BeautifulSoup(html_content, 'html.parser')
