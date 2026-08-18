@@ -1,115 +1,147 @@
 # Jadwal Kuliah UNAMA & Bot Notifikasi WhatsApp
 
-Sistem web komprehensif untuk memantau jadwal kuliah BAAK UNAMA, dilengkapi dengan sinkronisasi data otomatis, bypass proteksi Cloudflare (menggunakan Chrome Extension), dan Bot Notifikasi WhatsApp (menggunakan Baileys Node.js).
+Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan laboratorium BAAK Universitas Dinamika Bangsa (UNAMA). Dilengkapi dengan sinkronisasi otomatis, bypass proteksi Cloudflare (menggunakan Chrome Extension), AI Chatbot Aslab (Gemini AI), integrasi Docker, serta Bot Notifikasi WhatsApp (menggunakan Baileys Node.js).
 
-## Fitur Utama
+---
 
-1. **Dashboard Interaktif & Modern**
-   - Tampilan bersih, responsif (Mobile Friendly), dilengkapi fitur Dark/Light Mode.
-   - Filter lengkap: Tanggal, Kategori, Status Kuliah, Mata Kuliah, dll.
-   - Indikator status kelas "Online" atau sinkronisasi dengan otomatis.
+## 🚀 Fitur Utama
 
-2. **Otomatisasi Sinkronisasi Jadwal (Scraper)**
-   - Saat user menekan tombol sinkronisasi pada tanggal yang datanya belum tersedia, ekstensi Chrome lokal akan otomatis menarik data dari website BAAK (melewati blokir Cloudflare).
+1. **Dashboard Interaktif & Modern (Claymorphism UI)**
+   - Tampilan bersih, elegan, responsif (*Mobile & Desktop Friendly*), dilengkapi tema **Dark Mode** dan **Light Mode**.
+   - **Status Penggunaan Ruangan Realtime:** Memisahkan panel Laboratorium dan Ruang Kelas, dengan indikator warna:
+     - 🟢 **Dipakai:** Kelas Tatap Muka (TM) sedang berlangsung.
+     - 🟠 **Jeda:** Ada jeda kosong antar jam perkuliahan di ruangan tersebut.
+     - 🔴 **Kosong:** Tidak ada perkuliahan pada jam saat ini.
+     - 🔵 **Terjadwal:** Ruangan memiliki jadwal kuliah pada hari tersebut.
 
-3. **Notifikasi WhatsApp Bot Terintegrasi**
+2. **Mode Full Screen Khusus Layar Lab / TV Monitor**
+   - Mode layar penuh (*Fullscreen Display*) yang dilengkapi **Jam Digital Realtime**, tanggal otomatis, tombol Filter Popup Cepat, serta tombol **Info Mase** di bagian atas.
+
+3. **Tombol "Info Mase" Dinamis**
+   - Tombol otomatis berubah warna dan berdenyut (*pulsing animation*) sesuai kondisi notifikasi terkini:
+     - 🟢 **Hijau (`TAMBAHAN`):** Ada pemberitahuan kelas tambahan.
+     - 🔵 **Biru (`PERUBAHAN`):** Ada informasi perubahan jadwal atau ruangan.
+     - 🟠 **Oren (`JEDA`):** Ada jeda kosong panjang di laboratorium.
+   - **Alarm:** Suara alarm dan popup hanya berbunyi di waktu H-30 menit dan H-15 menit sebelum kelas dimulai (tidak berulang saat sinkronisasi background).
+
+4. **Auto-Sync Otomatis Setiap 10 Menit**
+   - Background scraper otomatis memeriksa dan memperbarui jadwal BAAK setiap 10 menit.
+
+5. **Manajemen Data Aslab & Pengelompokan Ruangan Alami**
+   - Penambahan dan pengeditan kontak WhatsApp Aslab dengan nomor otomatis diformat standar internasional (`62`).
+   - Pilihan ruangan dikelompokkan secara rapi berdasarkan *Laboratorium* dan *Ruang Kelas* per kampus (*Kampus Kobar* & *Kampus Thehok*) serta diurutkan secara numerik alami (1.1, 1.2, ..., 1.10).
+
+6. **Aksesibilitas Navigasi Keyboard Penuh**
+   - Navigasi dropdown select, input, dan tombol menggunakan keyboard (`Tab`, `Enter`, `Spasi`, `Panah Atas/Bawah`) dengan indikator fokus tegas (`:focus-visible`), tanpa perubahan warna biru saat diklik mouse.
+
+7. **Notifikasi & AI Bot WhatsApp Terintegrasi**
    - Menggunakan `@whiskeysockets/baileys` yang stabil di Node.js.
-   - Pengecekan otomatis setiap menit untuk mengingatkan asisten lab 30 menit sebelum jadwal praktikum dimulai.
-   - Fitur "Test WA" langsung dari website untuk menguji apakah bot siap beroperasi.
+   - Pengingat otomatis untuk Aslab yang memegang lab terkait menjelang kelas praktikum.
+   - Fitur AI Chatbot (Gemini AI) yang mampu menjawab pertanyaan jadwal, posisi dosen, informasi lab, dan link server.
 
-4. **Dukungan Docker (Baru!) 🐳**
-   - Sistem kini dapat dijalankan secara instan hanya dengan 1 perintah Docker, tanpa perlu menginstal XAMPP, Python, atau Node.js secara terpisah.
+8. **Dukungan Penuh Docker & Docker Desktop ngrok Extension 🐳**
+   - Dapat dijalankan instan menggunakan Docker Compose.
+   - Terintegrasi dengan ekstensi ngrok Docker Desktop untuk tunneling publik dengan Static Domain gratis.
 
 ---
 
-## Prasyarat (Requirements)
+## 🛠️ Prasyarat (Requirements)
 
-Pilih salah satu metode instalasi di bawah ini (Docker sangat disarankan agar lebih praktis).
+Pilih salah satu metode instalasi (Docker sangat disarankan):
 
-1. **Metode Docker:** Install [Docker Desktop](https://www.docker.com/products/docker-desktop).
+1. **Metode Docker (Disarankan):** Install [Docker Desktop](https://www.docker.com/products/docker-desktop).
 2. **Metode Manual:** 
-   - Python 3.8+ (Untuk backend web)
-   - Node.js v16+ (Untuk Bot WhatsApp)
-   - XAMPP atau Laragon (Untuk Database MySQL)
+   - Python 3.8+ (Untuk backend FastAPI)
+   - Node.js v18+ (Untuk Bot WhatsApp)
+   - MySQL / XAMPP / Laragon (Untuk Database)
 3. **Wajib (Semua Metode):** 
-   - Google Chrome (Untuk Chrome Extension)
-   - Akun Google AI Studio (Untuk mendapatkan API Key Gemini AI)
+   - Google Chrome (Untuk Chrome Extension Scraper)
+   - Akun [Google AI Studio](https://aistudio.google.com/) (Untuk API Key Gemini AI)
 
 ---
 
-## Instalasi & Cara Menjalankan
+## 📦 Instalasi & Cara Menjalankan
 
-### Langkah 1: Persiapan API Key (Gemini AI)
+### Langkah 1: Konfigurasi API Key & File `.env`
 1. Buka situs [Google AI Studio](https://aistudio.google.com/) dan buat API Key baru.
-2. Buka file `.env` di folder utama proyek (atau buat jika belum ada), lalu isi dengan:
+2. Buat file `.env` di direktori utama proyek (jika belum ada), lalu isi:
    ```env
    GEMINI_API_KEY=KODE_API_KEY_ANDA_DISINI
    ```
-   > **TIPS (Load Balancing):** Jika bot Anda digunakan oleh banyak orang dan Anda takut kehabisan kuota, Anda bisa menggunakan banyak API Key sekaligus! Cukup pisahkan dengan koma:
+   > **TIPS Multi-Account:** Untuk mengalikan kuota API, gunakan banyak API Key dari akun berbeda yang dipisahkan tanda koma:
    > `GEMINI_API_KEYS=key_satu,key_dua,key_tiga`
 
-### Langkah 2: Pemasangan Chrome Extension
-1. Buka browser Google Chrome, lalu ketik `chrome://extensions/` di address bar.
-2. Aktifkan **Developer Mode** di pojok kanan atas.
+### Langkah 2: Pemasangan Chrome Extension (Bypass Cloudflare)
+1. Buka Google Chrome, lalu akses `chrome://extensions/`.
+2. Aktifkan toggle **Developer Mode** di pojok kanan atas.
 3. Klik tombol **Load unpacked**.
-4. Pilih folder `extension` yang ada di dalam direktori proyek ini.
-5. Extension telah berhasil ditambahkan!
+4. Pilih folder `extension` yang berada di dalam folder proyek ini.
 
-### Langkah 3: Menjalankan Sistem (Pilih Metode)
+---
 
-#### 🐳 METODE 1: MENGGUNAKAN DOCKER (SANGAT DIREKOMENDASIKAN)
-Metode ini akan secara otomatis mengunduh database MySQL, menjalankan Python Backend, dan menyalakan WA Bot tanpa ribet.
+### Langkah 3: Menjalankan Sistem
 
-1. Buka aplikasi **Docker Desktop** pastikan sudah berjalan (Engine running).
-2. Buka terminal (CMD/PowerShell) di dalam folder proyek, lalu ketik:
+#### 🐳 METODE 1: MENGGUNAKAN DOCKER (DIREKOMENDASIKAN)
+1. Pastikan **Docker Desktop** sudah berjalan (*Engine running*).
+2. Buka terminal (CMD/PowerShell) di folder proyek, lalu jalankan:
    ```bash
    docker-compose up -d --build
    ```
-3. Tunggu hingga proses instalasi dan penyiapan container selesai.
-4. Selesai! Web sudah bisa diakses di `http://localhost:8000`. 
-   > **Catatan Scan WA Bot:** Untuk melakukan Scan QR perdana di Docker, ketik perintah ini untuk melihat QR Code WA di terminal: 
-   > ```bash
-   > docker logs -f jadwal_wa_bot
-   > ```
-   > *(Tekan Ctrl+C untuk keluar dari log jika sudah berhasil Scan QR)*
+3. Web Dashboard langsung aktif di: `http://localhost:8000`.
+4. **Scan QR WA Bot:** Jalankan perintah berikut untuk menampilkan QR Code WhatsApp di terminal:
+   ```bash
+   docker logs -f jadwal_wa_bot
+   ```
+   *(Tekan `Ctrl+C` setelah selesai melakukan scan).*
+
+---
 
 #### 💻 METODE 2: MANUAL (TANPA DOCKER)
-Gunakan cara ini jika Anda belum memiliki Docker.
-
-1. **Database:** Buka XAMPP/Laragon -> Jalankan MySQL. Buat database baru bernama `db_jadwal_kuliah`, lalu Import file `database.sql`.
+1. **Database:** Buka XAMPP/Laragon -> Jalankan MySQL. Buat database `db_jadwal_kuliah` lalu import file `database.sql`.
 2. **Backend Python:**
-   - Buka terminal di folder utama: `pip install -r requirements.txt`
-   - Jalankan server: `uvicorn main:app --reload`
-3. **WA Bot Node.js:** 
-   - Buka terminal baru (atau jalankan file `start_bot.bat` jika ada).
-   - Masuk ke folder `wa-bot`, jalankan: `npm install` lalu `node server.js`
-   - Lakukan Scan QR Code WA Anda di layar terminal.
-4. Akses `http://localhost:8000` di browser Anda.
-
----
-
-## Langkah 4: Menjadikan Server Publik Menggunakan Ngrok (Opsional)
-
-Jika Anda ingin website ini bisa diakses secara online dari mana saja, Anda bisa menggunakan **Ngrok**.
-1. Download dan instal [Ngrok](https://ngrok.com/).
-2. Buka terminal (Command Prompt) dan ketikkan perintah: 
-   ```bash
-   ngrok http 8000
+   ```powershell
+   pip install -r requirements.txt
+   uvicorn main:app --reload
    ```
-3. Ngrok akan menampilkan URL publik berwarna hijau. Bagikan link tersebut ke asisten lab lainnya. 
-   *(AI WhatsApp Bot juga otomatis akan mendeteksi link ini jika Aslab bertanya "minta link ngrok dong"!)*
+3. **WA Bot Node.js:** 
+   ```powershell
+   cd wa-bot
+   npm install
+   node server.js
+   ```
+   *(Scan QR Code yang muncul di layar terminal).*
+4. Buka browser dan akses `http://localhost:8000`.
 
 ---
 
-## Troubleshooting (Penyelesaian Masalah)
+## 🌐 Menjadikan Server Publik Menggunakan Ngrok (Online dari HP)
 
-1. **"Terjadi Kesalahan Jaringan" saat klik Sinkron**
-   - Pastikan backend server Anda menyala (entah itu container `jadwal_backend` di Docker atau Uvicorn di metode manual).
-2. **"Test WA" di web memunculkan Notifikasi GAGAL!**
-   - Pastikan WA Bot sudah aktif dan terkoneksi. Jika menggunakan metode manual, pastikan terminal Node.js tidak mati. Jika menggunakan Docker, periksa log dengan `docker logs jadwal_wa_bot`.
-   - Coba hapus folder `baileys_auth_info` (di metode manual) lalu restart bot, atau restart Container WA Bot di Docker Desktop lalu Scan ulang QR Code-nya.
-3. **Jadwal kosong atau ada lab yang tidak muncul di antarmuka**
-   - Pastikan Chrome Extension sudah menyala.
-   - Sistem HANYA menyimpan ruangan yang ada jadwalnya. Jika jadwal lab tersebut kosong pada hari-hari yang baru mas sinkronkan, dia belum akan terlihat di UI. Coba sinkronisasi data jadwal untuk hari/minggu di mana lab tersebut ada perkuliahan aktif, maka lab tersebut akan tersimpan permanen.
+### Opsi A: Menggunakan Ekstensi ngrok di Docker Desktop (Praktis)
+1. Di **Docker Desktop**, buka tab **Extensions** $\rightarrow$ cari dan pasang **ngrok**.
+2. Masukkan **Authtoken ngrok** Anda.
+3. Pada baris container `jadwal_backend` (Port 8000), klik titik tiga (`⋮`) $\rightarrow$ **Edit Endpoint**.
+4. Masukkan **Static Domain** gratis Anda dari [ngrok Dashboard](https://dashboard.ngrok.com/cloud-edge/domains) (contoh: `domain-anda.ngrok-free.app`).
+5. Geser toggle ke **ON**. Link publik sekarang aktif dan permanen!
 
-*Dibuat untuk mempermudah monitoring Jadwal & Praktikum Labor UNAMA.*
+### Opsi B: Menggunakan CLI Ngrok Manual
+Jalankan di Command Prompt / Terminal:
+```bash
+ngrok http 8000 --domain=domain-anda.ngrok-free.app
+```
+
+---
+
+## 🔧 Panduan Masalah (Troubleshooting)
+
+1. **Gagal menambahkan data Aslab (`name 're' is not defined`)**
+   - Pastikan modul `import re` sudah tersedia di bagian atas file `main.py`.
+2. **Peringatan Koneksi Jaringan saat Klik Sinkron**
+   - Pastikan server backend Anda menyala (`jadwal_backend` di Docker atau Uvicorn di manual) dan ekstensi Chrome aktif.
+3. **Uji Coba WA / Test WA Gagal Terkirim**
+   - Periksa apakah status WA Bot sudah terkoneksi (*Connected*). Cek log container dengan `docker logs jadwal_wa_bot` atau terminal Node.js.
+4. **Jadwal Ruangan Kosong**
+   - Sistem hanya menampilkan ruangan yang memiliki aktivitas pada tanggal terpilih. Lakukan sinkronisasi pada tanggal aktif perkuliahan.
+
+---
+
+*Dikembangkan untuk kemudahan monitoring jadwal dan operasional Asisten Laboratorium UNAMA.*
