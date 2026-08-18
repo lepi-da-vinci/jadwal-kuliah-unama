@@ -42,19 +42,6 @@ def get_db():
 def get_semua_jadwal():
     """Mengembalikan daftar semua jadwal dengan join ke master tabel"""
     try:
-        # Jika ada data yang tertinggal di jadwal_temp, pindahkan otomatis
-        try:
-            conn_chk = get_db()
-            cur_chk = conn_chk.cursor()
-            cur_chk.execute("SELECT COUNT(*) FROM jadwal_temp")
-            cnt = cur_chk.fetchone()[0]
-            cur_chk.close()
-            conn_chk.close()
-            if cnt > 0:
-                scraper.compare_and_finalize_sync(None)
-        except Exception as ex_temp:
-            print("Auto-finalize error:", ex_temp)
-
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
@@ -140,17 +127,27 @@ class SyncCompleteRequest(BaseModel):
 import time
 
 sync_status = {}
+pending_sync_queue = {}
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
-    """Sinkronisasi data dengan menunggu Ekstensi Chrome menyelesaikan penarikan data"""
+    """Sinkronisasi data: Menaruh task di queue dan menunggu Ekstensi Chrome menyelesaikan penarikan data"""
     try:
         tgl_key = req.tanggal or ""
         start_time = time.time()
         sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
         
+        target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
+        
+        # Simpan ke pending queue agar diambil oleh Chrome Extension di PC
+        pending_sync_queue[tgl_key] = {
+            "tanggal": tgl_key,
+            "url": target_url,
+            "time": start_time
+        }
+        
         # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
-        for _ in range(35):
+        for _ in range(40):
             await asyncio.sleep(0.8)
             current = sync_status.get(tgl_key, {})
             if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
@@ -159,6 +156,26 @@ async def sync_data(req: SyncRequest):
         return {"status": "success", "message": "Proses sinkronisasi selesai atau berjalan di background."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/sync/pending")
+def get_pending_sync():
+    """Mengambil tugas sinkronisasi yang diminta (misal dari HP) untuk dijalankan oleh Chrome Extension"""
+    now = time.time()
+    for tgl, task in list(pending_sync_queue.items()):
+        if now - task.get("time", 0) < 60:
+            return {"status": "success", "task": task}
+        else:
+            pending_sync_queue.pop(tgl, None)
+    return {"status": "empty"}
+
+@app.post("/api/sync/pending/clear")
+def clear_pending_sync(req: dict = None):
+    """Menghapus tugas sinkronisasi setelah diambil oleh ekstensi"""
+    if req and isinstance(req, dict) and "tanggal" in req and req["tanggal"] in pending_sync_queue:
+        pending_sync_queue.pop(req["tanggal"], None)
+    else:
+        pending_sync_queue.clear()
+    return {"status": "success"}
 
 @app.post("/api/sync-html")
 def sync_html_data(req: SyncHtmlRequest):
@@ -535,5 +552,20 @@ def cari_kelas(kode: str, tanggal: str | None = None):
             cursor.close()
             conn.close()
 
-# MENGABUNGKAN FRONTEND & BACKEND UNTUK NGROK
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+from fastapi.responses import FileResponse
+
+@app.get("/")
+def serve_index():
+    return FileResponse("index.html")
+
+@app.get("/style.css")
+def serve_css():
+    return FileResponse("style.css", media_type="text/css")
+
+@app.get("/script.js")
+def serve_js():
+    return FileResponse("script.js", media_type="application/javascript")
+
+@app.get("/notif.mp3")
+def serve_notif():
+    return FileResponse("notif.mp3", media_type="audio/mpeg")
