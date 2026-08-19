@@ -111,7 +111,7 @@ Jika PC Lab menggunakan instalasi manual (tanpa Docker):
 
 ---
 
-## 🔒 TAHAP 4: Tips Maintenance & Keamanan Lab
+## 🔒 TAHAP 4: Tips Maintenance & Keamanan
 
 1. **Keluar dari Mode Kiosk Chrome:**
    - Jika aslab/admin ingin keluar dari tampilan Fullscreen Kiosk, cukup tekan tombol **`Alt + F4`** atau **`F11`**.
