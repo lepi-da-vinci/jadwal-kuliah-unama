@@ -593,11 +593,12 @@ function updateActiveLabPanel() {
     targetDict[cleanName] = { state, text, jamText };
   });
 
-  // Live warnings only for Labs (keep existing behavior for tutup lab)
-  let warningsHTML = '';
+  // Live warnings for both Labor and Ruang Kelas
+  currentLabWarnings = [];
+  currentRuangWarnings = [];
   if (isToday) {
     for (const [room, schedules] of Object.entries(roomSchedules)) {
-      if (!isLab(room)) continue;
+      if (!schedules || schedules.length === 0) continue;
       const startTimes = schedules.map(s => s.start);
       const lastStartTime = Math.max(...startTimes);
       const lastClassEndTime = lastStartTime + 135;
@@ -607,15 +608,39 @@ function updateActiveLabPanel() {
         const color = minsLeft <= 15 ? 'var(--badge-cc)' : '#f39c12';
         const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
         const m = (lastClassEndTime % 60).toString().padStart(2, '0');
-        warningsHTML += `<div class="notif-item" style="border-left: 4px solid ${color};"><div class="notif-header"><span class="notif-type" style="color: ${color}; font-weight:bold;">TUTUP LAB (${minsLeft} mnt lagi)</span></div><div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.</div></div>`;
+        const roomIsLab = isLab(room);
+        const titleText = roomIsLab ? `TUTUP LABOR (${minsLeft} mnt lagi)` : `SELESAI KELAS (${minsLeft} mnt lagi)`;
+        const badgeHTML = roomIsLab 
+          ? `<span class="notif-cat-badge labor">Labor</span>` 
+          : `<span class="notif-cat-badge kelas">Kelas</span>`;
+
+        const itemHTML = `
+          <div class="notif-item" style="border-left: 4px solid ${color};">
+            <div class="notif-header">
+              <div style="display:flex; align-items:center;">
+                <span class="notif-type" style="color: ${color}; font-weight:bold;">${titleText}</span>
+                ${badgeHTML}
+              </div>
+            </div>
+            <div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.</div>
+          </div>
+        `;
+
+        if (roomIsLab) {
+          currentLabWarnings.push(itemHTML);
+        } else {
+          currentRuangWarnings.push(itemHTML);
+        }
       }
     }
   }
 
+  const activeWarnings = activeInfoMaseTab === 'ruang' ? currentRuangWarnings : currentLabWarnings;
+  const warningsHTML = activeWarnings.join('');
   const liveWarningsContainer = document.getElementById('live-warnings');
-  if (liveWarningsContainer) {
-    liveWarningsContainer.innerHTML = warningsHTML;
-  }
+  const fsWarnings = document.getElementById('fs-live-warnings');
+  if (liveWarningsContainer) liveWarningsContainer.innerHTML = warningsHTML;
+  if (fsWarnings) fsWarnings.innerHTML = warningsHTML;
 
   const renderBlocks = (dict, kampusStr) => {
     const sortedRooms = Object.keys(dict).sort();
@@ -699,7 +724,7 @@ async function syncData(tanggal) {
     const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tanggal: tgl || null })
+      body: JSON.stringify({ tanggal: tgl || null, from_dashboard: true })
     });
     const result = await response.json();
 
@@ -712,7 +737,7 @@ async function syncData(tanggal) {
 
     await fetchAllJadwal();
     if (tgl) {
-      fetchNotifikasiLab(tgl, false);
+      await fetchNotifikasiLab(tgl, false);
     }
   } catch (error) {
     console.error("Error saat sinkronisasi:", error);
@@ -723,6 +748,56 @@ async function syncData(tanggal) {
 }
 
 let latestNotifikasiLabData = [];
+let activeInfoMaseTab = 'lab'; // 'lab' | 'ruang'
+let currentLabWarnings = [];
+let currentRuangWarnings = [];
+
+function isLabNotification(pesan = '') {
+  const p = String(pesan).toLowerCase();
+  return p.includes('labor') || p.includes('lab ') || p.includes('lab.') || p.includes('praktek') || p.includes('cisco');
+}
+
+function calculateClientSideGaps(targetDate) {
+  if (!targetDate || !allJadwal || allJadwal.length === 0) return [];
+  const roomSchedules = {};
+  allJadwal.forEach(item => {
+    if (item.tanggal === targetDate && item.jam && item.nama_ruangan && item.metode_pembelajaran !== 'CC') {
+      const ruang = item.nama_ruangan;
+      if (!roomSchedules[ruang]) roomSchedules[ruang] = [];
+      const parts = item.jam.split(':');
+      const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      roomSchedules[ruang].push({
+        jam: item.jam,
+        nama_mk: item.nama_mk,
+        start: startMin,
+        end: startMin + 135
+      });
+    }
+  });
+
+  const generatedGaps = [];
+  for (const [room, scheds] of Object.entries(roomSchedules)) {
+    scheds.sort((a, b) => a.start - b.start);
+    for (let i = 0; i < scheds.length - 1; i++) {
+      const curr = scheds[i];
+      const nxt = scheds[i+1];
+      const gap = nxt.start - curr.end;
+      if (gap >= 90) {
+        const hours = Math.floor(gap / 60);
+        const mins = gap % 60;
+        const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} menit` : '');
+        const eh = Math.floor(curr.end / 60).toString().padStart(2, '0');
+        const em = (curr.end % 60).toString().padStart(2, '0');
+        generatedGaps.push({
+          tipe_notif: 'JEDA',
+          pesan: `JEDA PANJANG (${durStr}): Ruang ${room} kosong antara ${eh}:${em} s/d ${nxt.jam}.`,
+          waktu: 'Otomatis'
+        });
+      }
+    }
+  }
+  return generatedGaps;
+}
 
 function updateInfoMaseDynamicButtons(notifs = []) {
   latestNotifikasiLabData = notifs;
@@ -752,13 +827,13 @@ function updateInfoMaseDynamicButtons(notifs = []) {
 
       if (hasTambahan) {
         btn.classList.add('state-tambahan');
-        btn.title = `${notifs.length} Notifikasi (Ada Kelas Tambahan!)`;
+        btn.title = `${notifs.length} Notifikasi (Ada Kelas Tambahan)`;
       } else if (hasPerubahan) {
         btn.classList.add('state-perubahan');
         btn.title = `${notifs.length} Notifikasi (Ada Perubahan Jadwal)`;
       } else if (hasJeda) {
         btn.classList.add('state-jeda');
-        btn.title = `${notifs.length} Notifikasi (Ada Jeda Lab Kosong)`;
+        btn.title = `${notifs.length} Notifikasi (Ada Jeda Ruangan/Lab Kosong)`;
       }
     } else {
       btn.classList.add('state-normal');
@@ -768,43 +843,146 @@ function updateInfoMaseDynamicButtons(notifs = []) {
   });
 }
 
+window.switchInfoMaseTab = function (tab) {
+  activeInfoMaseTab = tab;
+
+  // Update active state on all tab buttons across panel and modal
+  document.querySelectorAll('.info-mase-tab-btn').forEach(btn => {
+    const btnTab = btn.getAttribute('data-tab');
+    btn.classList.toggle('active', btnTab === tab);
+  });
+
+  renderInfoMaseNotifications(false);
+};
+
+function renderInfoMaseNotifications(showPopup = false) {
+  const panelList = document.getElementById('notifikasi-lab-list');
+  const fsList = document.getElementById('fs-notifikasi-lab-list');
+
+  const labCount = latestNotifikasiLabData.filter(n => isLabNotification(n.pesan)).length;
+  const ruangCount = latestNotifikasiLabData.filter(n => !isLabNotification(n.pesan)).length;
+
+  // Update badges on buttons
+  const badges = [
+    { id: 'fs-tab-badge-lab', count: labCount },
+    { id: 'panel-tab-badge-lab', count: labCount },
+    { id: 'fs-tab-badge-ruang', count: ruangCount },
+    { id: 'panel-tab-badge-ruang', count: ruangCount },
+  ];
+
+  badges.forEach(({ id, count }) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = count;
+  });
+
+  // Render live warnings according to active tab
+  const activeWarnings = activeInfoMaseTab === 'ruang' ? currentRuangWarnings : currentLabWarnings;
+  const warningsHTML = activeWarnings.join('');
+  const liveWarningsContainer = document.getElementById('live-warnings');
+  const fsWarnings = document.getElementById('fs-live-warnings');
+  if (liveWarningsContainer) liveWarningsContainer.innerHTML = warningsHTML;
+  if (fsWarnings) fsWarnings.innerHTML = warningsHTML;
+
+  // Filter list based on selected active tab (default 'lab', or 'ruang')
+  let filtered = latestNotifikasiLabData.filter(n => {
+    return activeInfoMaseTab === 'ruang' ? !isLabNotification(n.pesan) : isLabNotification(n.pesan);
+  });
+
+  if (filtered.length === 0) {
+    const emptyMsg = activeInfoMaseTab === 'ruang'
+      ? '<em>Tidak ada notifikasi khusus untuk Ruang Kelas pada tanggal ini.</em>'
+      : '<em>Tidak ada notifikasi khusus untuk Laboratorium pada tanggal ini.</em>';
+
+    if (panelList) panelList.innerHTML = emptyMsg;
+    if (fsList) fsList.innerHTML = emptyMsg;
+    return;
+  }
+
+  let html = '', popupContent = '';
+  filtered.forEach(n => {
+    let cls = '';
+    const isLab = isLabNotification(n.pesan);
+    const categoryBadge = isLab 
+      ? '<span class="notif-cat-badge labor">Labor</span>' 
+      : '<span class="notif-cat-badge kelas">Kelas</span>';
+
+    if (n.tipe_notif === 'TAMBAHAN') {
+      cls = 'tambah';
+      if (showPopup) popupContent += `<div class="notif-item tambah"><strong>KELAS TAMBAHAN</strong><br>${n.pesan}</div>`;
+    } else if (n.tipe_notif === 'PERUBAHAN') {
+      cls = 'perubahan';
+    } else if (n.tipe_notif === 'JEDA') {
+      cls = 'jeda';
+    }
+
+    html += `
+      <div class="notif-item ${cls}">
+        <div class="notif-header">
+          <div style="display:flex; align-items:center;">
+            <span>${n.tipe_notif}</span>
+            ${categoryBadge}
+          </div>
+          <span class="notif-time">${n.waktu}</span>
+        </div>
+        <div>${n.pesan}</div>
+      </div>
+    `;
+  });
+
+  if (panelList) panelList.innerHTML = html;
+  if (fsList) fsList.innerHTML = html;
+
+  if (showPopup && popupContent) {
+    const modalBody = document.getElementById('lab-modal-body');
+    if (modalBody) modalBody.innerHTML = popupContent;
+    openModal();
+  }
+}
+
 async function fetchNotifikasiLab(tanggal, showPopup = false) {
   const notifList = document.getElementById('notifikasi-lab-list');
-  if (!notifList) return;
   if (!tanggal) {
-    notifList.innerHTML = '<em>pilih tanggal tuk cek notif mas.</em>';
+    if (notifList) notifList.innerHTML = '<em>pilih tanggal tuk cek notif mas.</em>';
     updateInfoMaseDynamicButtons([]);
+    renderInfoMaseNotifications(false);
     return;
   }
   try {
-    notifList.innerHTML = '<em>Memuat notifikasi...</em>';
+    if (notifList) notifList.innerHTML = '<em>Memuat notifikasi...</em>';
     const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}`);
     const data = await response.json();
 
-    if (data.status === 'success' && data.data && data.data.length > 0) {
-      updateInfoMaseDynamicButtons(data.data);
-      let html = '', popupContent = '';
-      data.data.forEach(n => {
-        let cls = '';
-        if (n.tipe_notif === 'TAMBAHAN') {
-          cls = 'tambah';
-          if (showPopup) popupContent += `<div class="notif-item tambah"><strong>KELAS TAMBAHAN!</strong><br>${n.pesan}</div>`;
-        } else if (n.tipe_notif === 'PERUBAHAN') { cls = 'perubahan'; }
-        else if (n.tipe_notif === 'JEDA') { cls = 'jeda'; }
-        html += `<div class="notif-item ${cls}"><div class="notif-header"><span>${n.tipe_notif}</span><span class="notif-time">${n.waktu}</span></div><div>${n.pesan}</div></div>`;
+    let notifData = (data.status === 'success' && data.data) ? data.data : [];
+    
+    // Jika dari server belum ada notif jeda tapi jadwal ada, hitung otomatis dari client-side
+    const clientGaps = calculateClientSideGaps(tanggal);
+    if (clientGaps.length > 0) {
+      const existingMessages = new Set(notifData.map(n => n.pesan));
+      clientGaps.forEach(g => {
+        if (!existingMessages.has(g.pesan)) {
+          notifData.push(g);
+        }
       });
-      notifList.innerHTML = html;
-      if (showPopup && popupContent) {
-        document.getElementById('lab-modal-body').innerHTML = popupContent;
-        openModal();
-      }
+    }
+
+    if (notifData.length > 0) {
+      updateInfoMaseDynamicButtons(notifData);
+      renderInfoMaseNotifications(showPopup);
     } else {
       updateInfoMaseDynamicButtons([]);
-      notifList.innerHTML = '<em>Tidak ada notifikasi khusus pada tanggal ini.</em>';
+      renderInfoMaseNotifications(false);
     }
   } catch (e) {
-    updateInfoMaseDynamicButtons([]);
-    notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
+    // Fallback offline / client-side calculation
+    const clientGaps = calculateClientSideGaps(tanggal);
+    if (clientGaps.length > 0) {
+      updateInfoMaseDynamicButtons(clientGaps);
+      renderInfoMaseNotifications(showPopup);
+    } else {
+      updateInfoMaseDynamicButtons([]);
+      renderInfoMaseNotifications(false);
+      if (notifList) notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
+    }
   }
 }
 
@@ -1451,19 +1629,25 @@ document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {
   const testModal = document.getElementById('test-wa-modal');
   if (testModal) testModal.classList.remove('open');
 
-  // Siapkan modal pesan notifikasi lab
+  // Siapkan modal pesan notifikasi ruangan
   const labModalBody = document.getElementById('lab-modal-body');
+  const modalTitle = document.getElementById('lab-modal-title');
+  if (modalTitle) modalTitle.textContent = 'Simulasi Pemberitahuan Ruangan';
+
   if (labModalBody) {
     labModalBody.innerHTML = `
           <div style="text-align: left;">
             <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); padding: 8px 12px; border-radius: 4px; font-size: 0.85em; color: var(--primary); margin-bottom: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              <span>UJI COBA / SIMULASI NOTIFIKASI LAB</span>
+              <span>UJI COBA / SIMULASI NOTIFIKASI RUANGAN</span>
             </div>
-            <p style="margin-bottom: 8px; font-weight: 500;">Buka labor ni sekarang, kelas entar lagi mulai:</p>
-            <ul style="padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 8px;">
-              <li><b>Labor 1.4 (Thehok)</b> buat matkul <b>Pemrograman Web II (03PS4)</b> (Mulai jam 08:00) - <i style="color:var(--badge-cc);">Gass buka dalam 15 menit!</i></li>
-              <li><b>Labor Cisco 4.3 (Thehok)</b> buat matkul <b>Jaringan Komputer (02PS1)</b> (Mulai jam 10:00) - <i style="color:var(--badge-jeda);">Gass buka dalam 30 menit!</i></li>
+            <p style="margin-bottom: 6px; font-weight: 600; color: var(--primary);">Laboratorium segera mulai:</p>
+            <ul style="padding-left: 18px; margin: 0 0 10px 0; display: flex; flex-direction: column; gap: 6px;">
+              <li><b>Labor 1.4 (Thehok)</b> <span class="notif-cat-badge labor">Labor</span> buat matkul <b>Pemrograman Web II (03PS4)</b> (Mulai 08:00) - <i style="color:var(--badge-cc);">Buka dalam 15 menit!</i></li>
+            </ul>
+            <p style="margin-bottom: 6px; font-weight: 600; color: #10b981;">Ruang Kelas segera mulai:</p>
+            <ul style="padding-left: 18px; margin: 0; display: flex; flex-direction: column; gap: 6px;">
+              <li><b>R. 2.18 (Kobar)</b> <span class="notif-cat-badge kelas">Kelas</span> buat matkul <b>Perencanaan Bisnis (03PM6)</b> (Mulai 08:00) - <i style="color:var(--badge-jeda);">Buka dalam 30 menit!</i></li>
             </ul>
           </div>
         `;
@@ -1521,6 +1705,7 @@ filterTanggal.addEventListener('change', () => {
   updateRuanganFilterOptions();
   applyFilters();
   if (filterTanggal.value) {
+    fetchNotifikasiLab(filterTanggal.value, false);
     syncData(filterTanggal.value);
   }
 });
@@ -1604,7 +1789,7 @@ function playDefaultTone() {
   } catch (e) { /* Browser memblokir autoplay suara */ }
 }
 
-// ─── Lab Check (Hanya Notif Sekali Saja per Sesi/Waktu) ───
+// ─── Room & Lab Check (Notifikasi Mulai Ruangan/Labor) ───
 const notifiedLabAlarmKeys = new Set();
 
 function checkLabNotifications() {
@@ -1617,33 +1802,64 @@ function checkLabNotifications() {
 
   let firstClasses = {};
   allJadwal.forEach(item => {
-    if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL' && item.jam && isLab(item.nama_ruangan)) {
+    if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL' && item.jam && item.nama_ruangan) {
       const parts = item.jam.split(':');
       const startTotalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 
       // Hanya cek kelas yang belum lewat waktu mulainya
       if (startTotalMin >= currentTotalMin) {
         if (!firstClasses[item.nama_ruangan] || startTotalMin < firstClasses[item.nama_ruangan].startTotalMin) {
-          firstClasses[item.nama_ruangan] = { nama_mk: item.nama_mk, jam: item.jam, startTotalMin };
+          firstClasses[item.nama_ruangan] = {
+            nama_mk: item.nama_mk,
+            jam: item.jam,
+            startTotalMin,
+            isLab: isLab(item.nama_ruangan)
+          };
         }
       }
     }
   });
 
   let labToNotify = [];
+  let kelasToNotify = [];
   for (const [ruang, dataClass] of Object.entries(firstClasses)) {
     const diffMin = dataClass.startTotalMin - currentTotalMin;
     if (diffMin === 30 || diffMin === 15) {
       const alarmKey = `${currentDayStr}_${ruang}_${dataClass.jam}_${diffMin}`;
       if (!notifiedLabAlarmKeys.has(alarmKey)) {
         notifiedLabAlarmKeys.add(alarmKey);
-        labToNotify.push(`<b>${ruang}</b> buat matkul <b>${dataClass.nama_mk}</b> (Mulai jam ${dataClass.jam}) - <i>Gass buka dalam ${diffMin} menit!</i>`);
+        const badgeHTML = dataClass.isLab ? '<span class="notif-cat-badge labor">Labor</span>' : '<span class="notif-cat-badge kelas">Kelas</span>';
+        const itemMsg = `<b>${ruang}</b> ${badgeHTML} untuk matkul <b>${dataClass.nama_mk}</b> (Mulai ${dataClass.jam}) - <i style="color:var(--primary);">Buka dalam ${diffMin} menit!</i>`;
+        if (dataClass.isLab) {
+          labToNotify.push(itemMsg);
+        } else {
+          kelasToNotify.push(itemMsg);
+        }
       }
     }
   }
 
-  if (labToNotify.length > 0) {
-    modalBody.innerHTML = '<p>Buka labor ni sekarang, kelas entar lagi mulai:</p><ul>' + labToNotify.map(l => `<li style="margin-bottom:8px;">${l}</li>`).join('') + '</ul>';
+  if (labToNotify.length > 0 || kelasToNotify.length > 0) {
+    let contentHTML = '';
+    const modalTitle = document.getElementById('lab-modal-title');
+
+    if (labToNotify.length > 0 && kelasToNotify.length === 0) {
+      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Laboratorium';
+      contentHTML += '<p style="font-weight:600; margin-bottom:8px;">Buka labor sekarang, praktikum segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
+    } else if (kelasToNotify.length > 0 && labToNotify.length === 0) {
+      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Ruang Kelas';
+      contentHTML += '<p style="font-weight:600; margin-bottom:8px;">Persiapkan ruang kelas, perkuliahan segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + kelasToNotify.map(k => `<li>${k}</li>`).join('') + '</ul>';
+    } else {
+      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Ruangan & Labor';
+      if (labToNotify.length > 0) {
+        contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:var(--primary);">Laboratorium segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
+      }
+      if (kelasToNotify.length > 0) {
+        contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:#10b981;">Ruang Kelas segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + kelasToNotify.map(k => `<li>${k}</li>`).join('') + '</ul>';
+      }
+    }
+
+    modalBody.innerHTML = contentHTML;
     openModal(true); // Ulangi alarm untuk notifikasi asli
   }
 }
@@ -2326,12 +2542,16 @@ window.openFullscreenInfoModal = function () {
   if (!modal) return;
 
   const liveWarnings = document.getElementById('live-warnings')?.innerHTML || '';
-  const notifList = document.getElementById('notifikasi-lab-list')?.innerHTML || '<em>Tidak ada notifikasi khusus.</em>';
-
   const fsWarnings = document.getElementById('fs-live-warnings');
-  const fsList = document.getElementById('fs-notifikasi-lab-list');
   if (fsWarnings) fsWarnings.innerHTML = liveWarnings;
-  if (fsList) fsList.innerHTML = notifList;
+
+  // Sync active tab buttons state
+  document.querySelectorAll('.info-mase-tab-btn').forEach(btn => {
+    const btnTab = btn.getAttribute('data-tab');
+    btn.classList.toggle('active', btnTab === activeInfoMaseTab);
+  });
+
+  renderInfoMaseNotifications(false);
 
   modal.style.display = 'flex';
   modal.classList.add('open');

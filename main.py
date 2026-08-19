@@ -116,6 +116,7 @@ def clear_jadwal():
 
 class SyncRequest(BaseModel):
     tanggal: str | None = None
+    from_dashboard: bool | None = False
 
 class SyncHtmlRequest(BaseModel):
     html: str
@@ -132,7 +133,7 @@ pending_sync_queue = {}
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
-    """Sinkronisasi data: Menaruh task di queue dan menunggu Ekstensi Chrome menyelesaikan penarikan data"""
+    """Sinkronisasi data: Menunggu Ekstensi Chrome menyelesaikan penarikan data"""
     try:
         tgl_key = req.tanggal or ""
         start_time = time.time()
@@ -140,12 +141,14 @@ async def sync_data(req: SyncRequest):
         
         target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
         
-        # Simpan ke pending queue agar diambil oleh Chrome Extension di PC
-        pending_sync_queue[tgl_key] = {
-            "tanggal": tgl_key,
-            "url": target_url,
-            "time": start_time
-        }
+        # Hanya simpan ke pending queue jika BUKAN dipicu langsung dari dashboard (misal dari HP / WA Bot)
+        # untuk mencegah Chrome Extension membuka 2 tab sekaligus
+        if not req.from_dashboard:
+            pending_sync_queue[tgl_key] = {
+                "tanggal": tgl_key,
+                "url": target_url,
+                "time": start_time
+            }
         
         # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
         for _ in range(40):
@@ -214,10 +217,16 @@ def finalize_temp():
 
 @app.get("/api/notifikasi-lab")
 def get_notifikasi_lab(tanggal: str):
-    """Ambil notifikasi lab untuk tanggal tertentu"""
+    """Ambil notifikasi ruangan (Labor & Ruang Kelas) untuk tanggal tertentu"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
+        # Hitung dan pastikan jeda ruangan untuk tanggal ini selalu sinkron & up-to-date
+        try:
+            scraper.calculate_and_save_gaps(conn, cursor, tanggal)
+        except Exception as e_gap:
+            print(f"Error calculating gaps on fetch: {e_gap}")
+
         cursor.execute("""
             SELECT tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu
             FROM notifikasi_lab 

@@ -1,13 +1,35 @@
+// Menyimpan waktu buka tab terakhir untuk mencegah tab ganda/duplikat
+const recentOpenedUrls = new Map();
+
+function shouldOpenTab(url) {
+    const now = Date.now();
+    const lastOpened = recentOpenedUrls.get(url) || 0;
+    if (now - lastOpened < 5000) {
+        console.log("[Extension Background] Mengabaikan pembukaan tab duplikat untuk URL:", url);
+        return false;
+    }
+    recentOpenedUrls.set(url, now);
+    // Bersihkan cache lama
+    for (const [u, t] of recentOpenedUrls.entries()) {
+        if (now - t > 30000) recentOpenedUrls.delete(u);
+    }
+    return true;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "closeTab" && sender.tab) {
         chrome.tabs.remove(sender.tab.id);
         sendResponse({ status: "closed" });
     } else if (request.action === "openBackgroundTab" && request.url) {
-        chrome.tabs.create({
-            url: request.url,
-            active: false
-        });
-        sendResponse({ status: "opened" });
+        if (shouldOpenTab(request.url)) {
+            chrome.tabs.create({
+                url: request.url,
+                active: false
+            });
+            sendResponse({ status: "opened" });
+        } else {
+            sendResponse({ status: "skipped_duplicate" });
+        }
     }
     return true;
 });
@@ -33,11 +55,13 @@ async function checkPendingSync() {
                 body: JSON.stringify({ tanggal: task.tanggal })
             });
 
-            // Buka background tab untuk scraping BAAK di PC
-            chrome.tabs.create({
-                url: task.url,
-                active: false
-            });
+            // Buka background tab untuk scraping BAAK di PC jika belum dibuka baru-baru ini
+            if (shouldOpenTab(task.url)) {
+                chrome.tabs.create({
+                    url: task.url,
+                    active: false
+                });
+            }
 
             // Beri jeda 4 detik sebelum memproses task baru
             setTimeout(() => {
