@@ -1,192 +1,58 @@
-# Analisis & Detail Proyek: Jadwal Kuliah UNAMA
+# Analisis Mendalam Sistem Jadwal Kuliah UNAMA
 
-Dokumen ini berisi analisis teknis mendalam mengenai arsitektur, alur kerja (*workflow*), dan struktur dari proyek **Jadwal Kuliah UNAMA & Bot Notifikasi WhatsApp**.
+Dokumen ini berisi tinjauan komprehensif atas arsitektur, alur kerja (workflow), serta analisis potensi masalah pada proyek Jadwal Kuliah UNAMA, dengan fokus khusus pada stabilitas sinkronisasi data, notifikasi, dan pengelolaan bot WhatsApp.
 
----
+## 1. Arsitektur Sistem
 
-## 1. Ringkasan Eksekutif (Overview)
-Proyek ini adalah sebuah sistem cerdas untuk memonitor jadwal perkuliahan dan penggunaan laboratorium di lingkungan Universitas Dinamika Bangsa (UNAMA). Sistem ini tidak hanya menampilkan jadwal secara interaktif, tetapi juga memiliki kemampuan:
-1. **Otomatisasi Penarikan Data Multi-User:** Memungkinkan pengguna mengakses dari HP (lewat internet/Ngrok) dan memicu sinkronisasi otomatis jadwal baru di server host tanpa intervensi manual.
-2. **Cloudflare Bot Bypass:** Melewati sistem keamanan Cloudflare BAAK secara sah menggunakan Chrome Extension Service Worker.
-3. **Pengingat Cerdas Aslab via WhatsApp:** Mengirimkan notifikasi pembukaan laboratorium ke nomor WhatsApp Asisten Lab secara berkala menggunakan AI (Google Gemini).
+Proyek ini dibangun dengan pendekatan hibrida yang memanfaatkan ekstensi browser (client-side) dan server backend lokal.
 
----
+*   **Backend API & Logika Utama:** FastAPI (Python). Menangani endpoint API, integrasi dengan database, logika perbandingan jadwal, dan chatbot AI.
+*   **Database:** MySQL (`db_jadwal_kuliah`). Terdiri dari tabel master (dosen, mata kuliah, ruangan, asisten lab) dan tabel transaksional (`jadwal`, `jadwal_temp`, `notifikasi_lab`).
+*   **Frontend (Dashboard):** HTML, CSS, Vanilla JS murni tanpa framework besar. Menangani rendering tabel, filter dinamis, dan kalkulasi peringatan (alarm) client-side.
+*   **Scraper Data (Bypass Cloudflare):** Ekstensi Chrome (Manifest V3). Bertugas menarik data dari website BAAK UNAMA karena adanya proteksi Cloudflare yang sulit dilewati langsung oleh backend biasa.
+*   **WhatsApp Notifier & Bot:** Node.js (dengan library Baileys) bertindak sebagai jembatan (bridge) WhatsApp, sementara otak pemrosesan pesannya (Webhook) dan logika AI (Google Gemini) berada di backend Python.
 
-## 2. Arsitektur Sistem & Stack Teknologi
+## 2. Alur Kerja Sinkronisasi Data (Scraping Flow)
 
-Sistem ini dibangun dengan arsitektur **Microservices (Hybrid-Cloud Enabled)** yang memisahkan antarmuka pengguna, pemrosesan data, agen scraping latar belakang, dan bot WhatsApp.
+Merespons keluhan mengenai sinkronisasi yang lambat, duplikasi proses, dan harus diklik berkali-kali:
 
-```
-┌───────────────────────────────────────────────────────────┐
-│                    Pengguna Luar / HP                     │
-│           (Akses via Browser HP / Remote Device)          │
-└─────────────────────────────┬─────────────────────────────┘
-                              │ HTTPS (via Ngrok Tunnel)
-                              ▼
-┌───────────────────────────────────────────────────────────┐
-│                 FastAPI Backend (Port 8000)               │
-│  - REST API Jadwal & Ruangan                              │
-│  - Antrian Remote Sync (/api/sync/pending)                │
-│  - Parser HTML BeautifulSoup (scraper.py)                 │
-│  - Notifier Background Loop (wa_notifier.py)              │
-└──────────────┬──────────────────────────────┬─────────────┘
-               │                              │
-               ▼                              ▼
-┌──────────────────────────────┐ ┌───────────────────────────┐
-│   Chrome Extension di PC     │ │      WhatsApp Bot         │
-│  - background.js (Worker)    │ │  (Node.js + Baileys)      │
-│  - content.js (DOM Scraper)  │ │  - Server Port 3000       │
-│  - dashboard_bridge.js       │ │  - Kirim WA ke Aslab      │
-└──────────────┬───────────────┘ └───────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│       baak.unama.ac.id       │
-│  (Bypass Cloudflare Sah)     │
-└──────────────────────────────┘
-```
+**Alur yang Telah Diperbaiki:**
+1.  **Trigger:** Pengguna mengklik tombol "Sinkronisasi" di Dashboard Frontend.
+2.  **Bridge:** `script.js` mengirim pesan (postMessage `START_UNAMA_SYNC`) yang ditangkap oleh `dashboard_bridge.js` milik Ekstensi Chrome.
+3.  **Background Deduplication:** `background.js` ekstensi membuka *background tab* rahasia ke BAAK UNAMA. **[PENTING]** Di sini telah diterapkan mekanisme *debouncing* (jeda 5 detik) untuk mencegah ekstensi membuka banyak tab yang sama jika pengguna menekan tombol sinkronisasi berkali-kali. Di saat bersamaan, backend FastAPI `/api/sync` hanya berstatus *menunggu* (tidak lagi memicu pembuatan antrean sinkronisasi duplikat).
+4.  **Content Scraping:** Tab BAAK yang terbuka di-*inject* oleh `content.js`. Script ini menunggu Cloudflare selesai (*bypass*), lalu mengambil HTML murni dari tabel jadwal.
+5.  **Data Transmission:** HTML murni dikirim ke backend `/api/sync-html`. Backend (`scraper.py`) mem-*parsing* HTML tersebut dan menyimpannya sementara ke tabel `jadwal_temp`.
+6.  **Pagination & Finalization:** Jika ada banyak halaman jadwal (next page), ekstensi akan berpindah halaman dan mengulang langkah 4. Setelah semua halaman selesai, ekstensi mengirim POST ke `/api/sync-complete`.
+7.  **Data Compare & Transfer:** Backend membandingkan data di `jadwal_temp` dengan `jadwal` utama.
+    *   Mendeteksi kelas baru -> Buat Notifikasi `TAMBAHAN`.
+    *   Mendeteksi perubahan jam/metode -> Buat Notifikasi `PERUBAHAN`.
+    *   Setelah itu, data resmi dipindahkan dari `jadwal_temp` ke `jadwal`.
+8.  **Auto Close:** Ekstensi Chrome menutup background tab secara otomatis.
 
-### A. Frontend (Antarmuka Pengguna)
-- **Teknologi:** HTML5, Vanilla CSS3 (Design Tokens, Glassmorphism, Dark/Light Mode), Vanilla JavaScript.
-- **Fungsi:** 
-  - Menyediakan UI modern dengan navigasi keyboard (`Tab`, `Enter`, `Arrow`).
-  - Menampilkan status penggunaan ruangan & lab (Merah = Kosong, Biru = Terjadwal, Hijau = Dipakai).
-  - Mengirim perintah sinkronisasi tanggal yang dipilih baik dari PC maupun dari HP.
+## 3. Alur "Info Mase" dan Notifikasi Jeda
 
-### B. Backend (API & Core Logic)
-- **Teknologi:** Python 3.11+, FastAPI, Uvicorn, MySQL Connector.
-- **Fungsi:** 
-  - Menyediakan *endpoints* data (`/api/jadwal`, `/api/ruangan`, `/api/aslab`, `/api/cek_kosong`).
-  - Mengelola antrian sinkronisasi remote (`/api/sync`, `/api/sync/pending`, `/api/sync/pending/clear`).
-  - Parsing HTML jadwal BAAK (`scraper.py`) dan pemindahan data atomik dari tabel `jadwal_temp` ke `jadwal`.
-  - Background scheduler pengingat lab & integrasi AI (`wa_notifier.py`).
+Sistem notifikasi ("Info Mase") telah diseragamkan untuk mengakomodasi pemisahan antara "Laboratorium" dan "Ruang Kelas" sesuai permintaan.
 
-### C. Chrome Extension (Scraper Proxy & Remote Worker)
-- **Teknologi:** JavaScript (Chrome Manifest V3).
-- **Fungsi:**
-  - `background.js`: Service worker yang selalu memantau antrian lokal (`/api/sync/pending`). Ketika ada pengguna di HP meminta tanggal baru, service worker otomatis membuka tab background BAAK di laptop host.
-  - `content.js`: Menunggu Cloudflare selesai, mengekstrak tabel jadwal dari DOM HTML, mengirim ke `/api/sync-html`, menangani penomoran halaman (*pagination*), lalu menutup tab otomatis.
-  - `dashboard_bridge.js`: Jembatan pengirim pesan langsung antara tab dashboard lokal dengan background worker.
+*   **Tiga Jenis Notifikasi Tersimpan (Database):**
+    1.  **TAMBAHAN:** Ketika ada jadwal dadakan yang masuk ke sistem.
+    2.  **PERUBAHAN:** Ketika status kelas berubah (misal dari TM ke CC/Cancel) atau jam berubah.
+    3.  **JEDA:** Dihitung oleh fungsi `calculate_and_save_gaps()` di `scraper.py` saat proses sinkronisasi selesai. Jika ditemukan kekosongan jadwal (gap) >= 90 menit di antara dua kelas dalam satu ruangan, sistem akan mencatatnya sebagai waktu jeda (kosong).
+*   **Live Warnings (Frontend):** Selain notifikasi tersimpan, `script.js` memiliki timer (`setInterval`) yang berjalan setiap menit untuk menghitung mundur kapan sebuah kelas atau lab akan selesai (sisa 30 menit & 15 menit), sehingga menampilkan peringatan pop-up "Siap-siap tutup/buka lab".
+*   **Pemisahan Kategori:** Sekarang, UI "Info Mase" membagi tab antara **Labor** dan **Kelas**. Ikon dan desain pop-up telah disamakan agar tidak ada ketimpangan visual antar kategori.
 
-### D. WhatsApp Bot Service
-- **Teknologi:** Node.js v18+, `@whiskeysockets/baileys`, Express.js.
-- **Fungsi:** Berkomunikasi langsung via protokol WebSocket WhatsApp untuk mengirimkan pesan pengingat jadwal praktikum kepada Aslab.
+## 4. Analisis Potensi Masalah & Kerentanan
 
-### E. Artificial Intelligence (AI)
-- **Teknologi:** Google Gemini AI (`google.generativeai`).
-- **Fungsi:** Menyusun pesan pengingat yang variatif, santai, dan komunikatif ke WhatsApp Aslab agar tidak terasa kaku seperti bot tradisional.
+1.  **Ketergantungan Ekstensi (Single Point of Failure):**
+    *   Sistem ini lumpuh secara sinkronisasi jika Ekstensi Chrome dimatikan atau pengguna mengakses dashboard dari perangkat tanpa ekstensi (misal: HP), kecuali ada server PC yang menyala 24/7 untuk menangani antrean (`pending_sync_queue`).
+2.  **Perubahan Struktur DOM BAAK:**
+    *   Jika pihak UNAMA mengubah nama class HTML (seperti `.table-content` atau form filter), script *parsing* regex dan BeautifulSoup di `scraper.py` serta `content.js` akan gagal menarik data (menghasilkan jadwal kosong). Hal ini membutuhkan perbaikan manual pada kode scraping.
+3.  **Integritas `jadwal_temp` (Race Conditions):**
+    *   Meskipun sudah menggunakan penampungan sementara, jika proses scraping terputus di tengah jalan (koneksi mati, tab tertutup paksa), data di `jadwal_temp` bisa tertinggal dan menyebabkan anomali pada siklus sinkronisasi berikutnya jika tidak dibersihkan dengan benar.
+4.  **Keterbatasan API Gemini (Chatbot WA):**
+    *   Layanan bot WA aslab menggunakan Google Gemini API. Jika *rate limit* tercapai atau *API Key* kadaluwarsa, chatbot pintar akan lumpuh dan kembali ke mode perintah kaku.
+5.  **Nomor WA Terblokir:**
+    *   Penggunaan modul Baileys rentan terhadap pemblokiran oleh sistem anti-spam WhatsApp Meta jika bot mengirim pesan notifikasi secara massal (broadcast jeda/tutup lab) ke banyak aslab dalam waktu yang sangat berdekatan tanpa jeda acak (delay).
 
----
+## 5. Kesimpulan
 
-## 3. Alur Kerja Utama (Core Workflows)
-
-### A. Alur Sinkronisasi Multi-User (Remote Cloud-Triggering dari HP)
-
-Sistem ini dirancang agar dapat digunakan oleh banyak user secara bersamaan dari perangkat HP tanpa harus membuka laptop secara manual setiap kali butuh data tanggal baru:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User di HP (Ngrok)
-    participant Server as FastAPI Backend (PC)
-    participant Extension as Chrome Extension (PC)
-    participant BAAK as baak.unama.ac.id
-    participant DB as MySQL Database
-
-    User->>Server: 1. POST /api/sync (Tanggal: 2026-06-11)
-    Server->>Server: 2. Daftarkan Task di pending_sync_queue & Mulai Menunggu
-    Note over Server,Extension: Extension Background Worker polling setiap 1.5 detik
-    Extension->>Server: 3. GET /api/sync/pending
-    Server-->>Extension: Kirim Task (URL BAAK Tanggal 2026-06-11)
-    Extension->>Server: 4. POST /api/sync/pending/clear (Cegah Dobel Tab)
-    Extension->>BAAK: 5. Buka Background Tab (active: false)
-    BAAK-->>Extension: Lewati Cloudflare & Tampilkan Jadwal
-    Extension->>Server: 6. POST /api/sync-html (Kirim HTML Mentah Halaman 1, 2, dst)
-    Server->>DB: Simpan ke tabel jadwal_temp
-    Extension->>Server: 7. POST /api/sync-complete
-    Server->>DB: Finalisasi & Pindah Data ke Tabel Utama (jadwal)
-    Extension->>Extension: 8. Tutup Background Tab Otomatis
-    Server-->>User: 9. Respon Sukses (count: 120 jadwal)
-    User->>Server: 10. GET /api/jadwal & Tampilkan Hasil Lengkap di Layar HP!
-```
-
----
-
-### B. Alur Notifikasi Pengingat Aslab via WhatsApp
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Cron as Scheduler (wa_notifier.py)
-    participant DB as MySQL Database
-    participant Gemini as Google Gemini AI
-    participant Bot as WhatsApp Bot (Node.js)
-    actor Aslab as WhatsApp Aslab
-
-    loop Setiap 60 Detik
-        Cron->>DB: Periksa jadwal praktikum hari ini (TM & Ruang Lab)
-        DB-->>Cron: Ditemukan kelas Labor 1.4 mulai dalam 15 / 30 Menit
-        Cron->>DB: Ambil Nomor WA & Nama Asisten Lab penanggung jawab
-        Cron->>Gemini: Kirim Prompt Kondisi (Nama, Lab, Jam, Matkul)
-        Gemini-->>Cron: Hasil Teks Pesan Santai & Alami
-        Cron->>Bot: POST /send (No HP & Pesan)
-        Bot->>Aslab: Kirim Chat WhatsApp Langsung
-    end
-```
-
----
-
-## 4. Struktur Folder & Modul Sistem
-
-```text
-jadwal-kuliah-unama/
-├── .env                     # Kunci API Gemini, Kredensial DB MySQL
-├── docker-compose.yml       # Konfigurasi Multi-Container Docker (DB, Backend, WA Bot)
-├── Dockerfile               # Blueprint Container Backend Python
-├── PROJECT_ANALYSIS.md      # Dokumen arsitektur teknis lengkap (file ini)
-├── README.md                # Panduan instalasi dan penggunaan cepat
-├── requirements.txt         # Daftar pustaka Python (fastapi, uvicorn, beautifulsoup4, dll)
-├── database.sql             # Skema tabel database MySQL
-│
-├── main.py                  # API FastAPI, routing statis, dan endpoint antrian sinkronisasi
-├── scraper.py               # Algoritma pembersih teks, parsing tabel BAAK, & kalkulasi jeda lab
-├── wa_notifier.py           # Background loop pengingat WhatsApp & integrasi Gemini AI
-│
-├── index.html               # Frontend dashboard utama
-├── style.css                # Desain visual, glassmorphism, responsive mobile, focus-ring
-├── script.js                # Logika client-side (Filter, rendering kartu ruangan, sinkronisasi)
-├── notif.mp3                # Audio efek notifikasi pembukaan lab
-│
-├── extension/               # Ekstensi Google Chrome (Cloudflare Bypass Proxy)
-│   ├── manifest.json        # Konfigurasi Chrome Extension Manifest V3
-│   ├── background.js        # Background Service Worker penerima remote sync dari HP
-│   ├── content.js           # Scraper DOM BAAK, penanganan pagination, & auto-close
-│   └── dashboard_bridge.js  # Jembatan komunikasi tab dashboard lokal
-│
-└── wa-bot/                  # Modul Layanan WhatsApp Bot (Node.js)
-    ├── server.js            # Express server penerima webhook pengiriman pesan
-    ├── package.json         # Dependensi Baileys & Express
-    └── baileys_auth_info/   # (Auto-generated) Cache sesi autentikasi WhatsApp
-```
-
----
-
-## 5. Mode Eksekusi Sistem
-
-Proyek ini dirancang fleksibel untuk dijalankan dalam dua mode:
-
-### 1. Bare-metal / Manual (Development Mode)
-- **Database:** MySQL Lokal (XAMPP / Laragon di port `3306` atau Docker DB di port `3307`).
-- **Backend:** `uvicorn main:app --reload`
-- **Ekstensi:** Google Chrome Developer Mode (`chrome://extensions/`).
-- **Ngrok:** `ngrok http 8000 --domain=fitting-caribou-saving.ngrok-free.app`
-
-### 2. Containerized (Docker Mode)
-- Menjalankan seluruh stack layanan secara terisolasi via:
-  ```powershell
-  docker-compose up -d
-  ```
-- Layanan otomatis terhubung via internal Docker network (`jadwal_network`).
-
----
-*Dokumentasi ini terus diperbarui seiring pengembangan arsitektur dan penambahan fitur baru pada sistem Jadwal Kuliah UNAMA.*
+Proyek Jadwal Kuliah UNAMA ini telah berevolusi menjadi sistem *monitoring* yang canggih dengan integrasi WhatsApp AI dan ekstensi *anti-Cloudflare*. Isu terkait tab ganda dan jeda data telah diatasi dengan penambahan *debouncing* di ekstensi dan pemisahan logika `jadwal_temp`. Untuk pemeliharaan jangka panjang, pengembang harus bersiap jika sewaktu-waktu struktur web BAAK UNAMA diperbarui.
