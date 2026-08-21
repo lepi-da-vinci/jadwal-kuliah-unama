@@ -1124,7 +1124,7 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   margin-bottom: var(--space-md);
   text-align: left;
   overflow-y: auto;
-  max-height: 52vh;
+  max-height: 65vh;
   padding-right: 6px;
   flex-grow: 1;
 }
