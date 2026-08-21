@@ -275,9 +275,9 @@ def get_aslab():
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT a.id_aslab, a.nama_aslab, a.no_wa, r.nama_ruangan 
+            SELECT a.id_aslab, a.nama_aslab, a.no_wa, r.nama_ruangan, r.kampus, a.id_ruangan 
             FROM asisten_lab a
-            JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
         """)
         results = cursor.fetchall()
         return {"status": "success", "data": results}
@@ -287,7 +287,6 @@ def get_aslab():
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
-
 @app.delete("/api/aslab/{id_aslab}")
 def delete_aslab(id_aslab: int):
     """Menghapus data asisten lab berdasarkan ID"""
@@ -300,6 +299,62 @@ def delete_aslab(id_aslab: int):
             return {"status": "success", "message": "Data asisten lab berhasil dihapus."}
         else:
             return {"status": "error", "message": "Data tidak ditemukan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+class AddRuanganRequest(BaseModel):
+    kampus: str
+    nama_ruangan: str
+
+@app.post("/api/ruangan/add")
+def add_ruangan(req: AddRuanganRequest):
+    """Menambahkan data ruangan baru"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Cek apakah ruangan sudah ada
+        cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s", (req.nama_ruangan,))
+        if cursor.fetchone():
+            return {"status": "error", "message": "Nama ruangan sudah ada di database."}
+            
+        cursor.execute(
+            "INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", 
+            (req.kampus, req.nama_ruangan)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Ruangan berhasil ditambahkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/ruangan/{id_ruangan}")
+def delete_ruangan(id_ruangan: int):
+    """Menghapus data ruangan"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Cek apakah ruangan sedang dipakai oleh aslab
+        cursor.execute("SELECT COUNT(*) FROM asisten_lab WHERE id_ruangan = %s", (id_ruangan,))
+        if cursor.fetchone()[0] > 0:
+            return {"status": "error", "message": "Ruangan tidak dapat dihapus karena sedang dipakai oleh Asisten Lab."}
+            
+        cursor.execute("DELETE FROM ruangan WHERE id_ruangan = %s", (id_ruangan,))
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            return {"status": "success", "message": "Ruangan berhasil dihapus."}
+        else:
+            return {"status": "error", "message": "Ruangan tidak ditemukan."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:

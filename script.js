@@ -135,7 +135,7 @@ let allRuanganData = [];
 
 async function fetchAllRuangan() {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ruangan`);
+    const response = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
     const result = await response.json();
     if (result.status === 'success') {
       allRuanganData = result.data;
@@ -224,7 +224,7 @@ function showSkeleton() {
 async function fetchAllJadwal() {
   try {
     showSkeleton();
-    const response = await fetch(`${API_BASE_URL}/api/jadwal`);
+    const response = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}`);
     const data = await response.json();
     if (data.status === 'success') {
       allJadwal = data.data.map(item => {
@@ -951,11 +951,15 @@ function renderInfoMaseNotifications(showPopup = false) {
 
     if (n.tipe_notif === 'TAMBAHAN') {
       cls = 'tambah';
-      if (showPopup) popupContent += `<div class="notif-item tambah"><strong>KELAS TAMBAHAN</strong><br>${n.pesan}</div>`;
     } else if (n.tipe_notif === 'PERUBAHAN') {
       cls = 'perubahan';
     } else if (n.tipe_notif === 'JEDA') {
       cls = 'jeda';
+    }
+    
+    // Fix Bug Visual: Semua tipe notif dimasukkan ke popupContent, bukan cuma TAMBAHAN
+    if (showPopup) {
+      popupContent += `<div class="notif-item ${cls}"><strong>${n.tipe_notif}</strong><br>${n.pesan}</div>`;
     }
 
     html += `
@@ -992,7 +996,7 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
   }
   try {
     if (notifList) notifList.innerHTML = '<em>Memuat notifikasi...</em>';
-    const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}`);
+    const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}&_t=${Date.now()}`);
     const data = await response.json();
 
     let notifData = (data.status === 'success' && data.data) ? data.data : [];
@@ -1162,42 +1166,80 @@ let isAslabAdmin = false;
 function renderAslabTable() {
   const tbody = document.getElementById('aslab-data-tbody');
   tbody.innerHTML = '';
-  if (globalAslabData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" style="padding: 15px; text-align: center; color: var(--text-muted);">Tidak ada data asisten lab.</td></tr>';
+  
+  let sortedAslab = [];
+  if (globalAslabData && globalAslabData.length > 0) {
+    sortedAslab = [...globalAslabData].sort((a, b) => {
+      const getKampus = (item) => {
+        if (item.kampus) return item.kampus.toLowerCase();
+        if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) return 'kobar';
+        return 'thehok'; // fallback
+      };
+      
+      const kampusA = getKampus(a);
+      const kampusB = getKampus(b);
+      
+      const ruangA = a.nama_ruangan || '';
+      const ruangB = b.nama_ruangan || '';
+      
+      const isLabA = isLab(ruangA);
+      const isLabB = isLab(ruangB);
+      
+      if (isLabA !== isLabB) return isLabA ? -1 : 1;
+      
+      if (kampusA !== kampusB) return kampusA.includes('kobar') ? -1 : 1;
+      
+      return ruangA.localeCompare(ruangB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }
+
+  if (sortedAslab.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${isAslabAdmin ? 6 : 5}" style="padding: 15px; text-align: center; color: var(--text-muted);">Tidak ada data asisten lab.</td></tr>`;
     return;
   }
-  globalAslabData.forEach(a => {
+  
+  let html = '';
+  sortedAslab.forEach((a, idx) => {
     let displayWa = a.no_wa || '-';
 
-    // Sembunyikan akun @lid (grup/akun bot internal) jika bukan Admin
     if (!isAslabAdmin && displayWa.includes('@lid')) {
       return;
     }
 
     if (!isAslabAdmin && displayWa.length > 7) {
-      // Mask WA number: 62812****890
       displayWa = displayWa.substring(0, 5) + '****' + displayWa.substring(displayWa.length - 3);
     }
+    
+    const adminColStyle = isAslabAdmin ? 'table-cell' : 'none';
+    let actionHtml = `
+      <td style="padding: 10px; text-align: center; display: ${adminColStyle};" class="admin-only-col">
+        <button class="btn" style="padding: 5px 10px; font-size: 0.85em; background: var(--bg-elevated); border: 1px solid var(--border); margin-right: 5px;" onclick="editAslab(${a.id_aslab})">Edit</button>
+        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deleteAslab(${a.id_aslab}, '${a.nama_aslab}')">Hapus</button>
+      </td>
+    `;
+    
+    const getKampusDisplay = (item) => {
+        if (item.kampus) return item.kampus;
+        if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) return 'Kobar';
+        if (item.nama_ruangan) return 'Thehok';
+        return '-';
+    };
+    
+    const kampusDisplay = getKampusDisplay(a);
+    const ruangDisplay = a.nama_ruangan || '-';
 
-    let actionHtml = '-';
-    if (isAslabAdmin) {
-      actionHtml = `
-            <button class="btn" style="padding: 5px 10px; font-size: 0.85em; background: var(--bg-elevated); border: 1px solid var(--border); margin-right: 5px;" onclick="editAslab(${a.id_aslab})">Edit</button>
-            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deleteAslab(${a.id_aslab}, '${a.nama_aslab}')">Hapus</button>
-          `;
-    }
-
-    tbody.innerHTML += `
+    html += `
             <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 10px; text-align: center;">${idx + 1}</td>
               <td style="padding: 10px;">${a.nama_aslab}</td>
-              <td style="padding: 10px;">${a.nama_ruangan}</td>
+              <td style="padding: 10px; font-weight: 500;">${kampusDisplay}</td>
+              <td style="padding: 10px;">${ruangDisplay}</td>
               <td style="padding: 10px;">${displayWa}</td>
-              <td style="padding: 10px; text-align: center;">
-                ${actionHtml}
-              </td>
+              ${actionHtml}
             </tr>
           `;
   });
+  tbody.innerHTML = html;
 }
 
 window.deleteAslab = async function (id_aslab, nama) {
@@ -1208,7 +1250,7 @@ window.deleteAslab = async function (id_aslab, nama) {
       if (result.status === 'success') {
         alert(result.message);
         // Refresh data aslab
-        const resAslab = await fetch(`${API_BASE_URL}/api/aslab`);
+        const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
         const dataAslab = await resAslab.json();
         if (dataAslab.status === 'success') {
           globalAslabData = dataAslab.data;
@@ -1250,10 +1292,10 @@ function populateSortedRuanganSelect(selectElement, selectedValue = "") {
     selectElement.appendChild(group);
   }
 
-  if (kobarKelas.length > 0) {
+  if (thehokLabs.length > 0) {
     const group = document.createElement('optgroup');
-    group.label = "Ruangan Kelas (Kobar)";
-    kobarKelas.forEach(r => {
+    group.label = "Labor (Thehok)";
+    thehokLabs.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id_ruangan;
       opt.textContent = `${r.nama_ruangan}`;
@@ -1262,10 +1304,10 @@ function populateSortedRuanganSelect(selectElement, selectedValue = "") {
     selectElement.appendChild(group);
   }
 
-  if (thehokLabs.length > 0) {
+  if (kobarKelas.length > 0) {
     const group = document.createElement('optgroup');
-    group.label = "Labor (Thehok)";
-    thehokLabs.forEach(r => {
+    group.label = "Ruangan Kelas (Kobar)";
+    kobarKelas.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id_ruangan;
       opt.textContent = `${r.nama_ruangan}`;
@@ -1311,7 +1353,7 @@ window.editAslab = function (id_aslab) {
 document.getElementById('test-wa-btn').addEventListener('click', async () => {
   // Buka modal secara gratis (Guest Mode)
   try {
-    const resAslab = await fetch(`${API_BASE_URL}/api/aslab`);
+    const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
     const dataAslab = await resAslab.json();
 
     if (dataAslab.status !== 'success') {
@@ -1338,18 +1380,21 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         adminToggle.innerText = 'Admin: ON';
         adminToggle.style.color = '#fff';
         adminToggle.style.background = 'var(--primary)';
-        btnShowTest.style.display = 'block';
-        btnShowAdd.style.display = 'block';
-        document.getElementById('clear-db-btn').style.display = 'block';
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
+        document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'table-cell');
+        btnShowTest.style.display = 'flex';
       } else {
         adminToggle.innerText = 'Admin: OFF';
         adminToggle.style.color = 'var(--text-muted)';
         adminToggle.style.background = 'var(--bg-elevated)';
-        btnShowTest.style.display = 'none';
-        btnShowAdd.style.display = 'none';
-        document.getElementById('clear-db-btn').style.display = 'none';
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'none');
+        btnShowTest.style.display = 'flex';
       }
       renderAslabTable();
+      if (document.getElementById('wa-modal-data-ruangan') && document.getElementById('wa-modal-data-ruangan').style.display === 'flex') {
+        renderRuanganTable();
+      }
     };
 
     adminToggle.onclick = async () => {
@@ -1395,6 +1440,8 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       dataView.style.display = 'none';
       addView.style.display = 'none';
       editView.style.display = 'none';
+      if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
+      if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
       modalTitle.innerText = "Data WA Aslab";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
@@ -1430,20 +1477,192 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     };
 
     // Navigasi ke Data WA
-    document.getElementById('btn-show-data-wa').onclick = () => {
+    document.getElementById('btn-show-data-wa').onclick = async () => {
       menuView.style.display = 'none';
+      addView.style.display = 'none';
+      if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
+      if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
       dataView.style.display = 'flex';
       modalTitle.innerText = "Daftar Nomor WA";
       modalIcon.innerHTML = SVG_WA_ICONS.list;
+      // Fetch latest Aslab data to ensure foreign key safety
+      try {
+        const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+        const dataAslab = await resAslab.json();
+        if (dataAslab.status === 'success') {
+          globalAslabData = dataAslab.data;
+        }
+      } catch (err) {
+        console.error("Gagal menarik data aslab:", err);
+      }
       renderAslabTable();
     };
 
+    
+    const dataRuanganView = document.getElementById('wa-modal-data-ruangan');
+    const addRuanganView = document.getElementById('wa-modal-add-ruangan');
+    
+    // Render Ruangan Table
+    const renderRuanganTable = () => {
+      const tbody = document.getElementById('ruangan-data-tbody');
+      
+      let sortedRuangan = [];
+      if (allRuanganData && allRuanganData.length > 0) {
+        sortedRuangan = [...allRuanganData].sort((a, b) => {
+          const isLabA = isLab(a.nama_ruangan);
+          const isLabB = isLab(b.nama_ruangan);
+          
+          if (isLabA !== isLabB) return isLabA ? -1 : 1;
+          
+          const kampusA = a.kampus ? a.kampus.toLowerCase() : (a.nama_ruangan.toLowerCase().includes('kobar') ? 'kobar' : 'thehok');
+          const kampusB = b.kampus ? b.kampus.toLowerCase() : (b.nama_ruangan.toLowerCase().includes('kobar') ? 'kobar' : 'thehok');
+          
+          if (kampusA !== kampusB) return kampusA.includes('kobar') ? -1 : 1;
+          
+          return a.nama_ruangan.localeCompare(b.nama_ruangan, undefined, { numeric: true, sensitivity: 'base' });
+        });
+      }
+
+      if (sortedRuangan.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${isAslabAdmin ? 4 : 3}" style="text-align:center; padding:15px;">Belum ada data Ruangan.</td></tr>`;
+        return;
+      }
+      
+      let html = '';
+      sortedRuangan.forEach((r, idx) => {
+        const adminColStyle = isAslabAdmin ? 'table-cell' : 'none';
+        const kampusDisplay = r.kampus ? r.kampus : (r.nama_ruangan.toLowerCase().includes('kobar') ? 'Kobar' : 'Thehok');
+        html += `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 10px; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px; font-weight: 500;">${kampusDisplay}</td>
+            <td style="padding: 10px; font-weight: 500;">${r.nama_ruangan}</td>
+            <td style="padding: 10px; text-align: center; display: ${adminColStyle};" class="admin-only-col">
+              <button class="btn-delete-ruangan" data-id="${r.id_ruangan}" data-nama="${r.nama_ruangan}" style="background:var(--badge-cc); color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85em;">Hapus</button>
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+      
+      // Bind Delete Ruangan
+      document.querySelectorAll('.btn-delete-ruangan').forEach(btn => {
+        btn.onclick = async (e) => {
+          const id = e.target.getAttribute('data-id');
+          const nama = e.target.getAttribute('data-nama');
+          if (confirm(`Yakin ingin menghapus Ruangan "${nama}"? (Tidak bisa dihapus jika sedang dipakai Aslab)`)) {
+            try {
+              const res = await fetch(`${API_BASE_URL}/api/ruangan/${id}`, { method: 'DELETE' });
+              const data = await res.json();
+              if (data.status === 'success') {
+                alert(data.message);
+                document.getElementById('btn-show-data-ruangan').click(); // Refresh
+              } else {
+                alert("Gagal: " + data.message);
+              }
+            } catch (err) {
+              alert("Terjadi kesalahan jaringan.");
+            }
+          }
+        };
+      });
+    };
+
+    // Navigasi ke Data Ruangan
+    const btnShowDataRuangan = document.getElementById('btn-show-data-ruangan');
+    if (btnShowDataRuangan) {
+      btnShowDataRuangan.onclick = async () => {
+        menuView.style.display = 'none';
+        dataView.style.display = 'none'; // Fix overlap
+        addView.style.display = 'none';
+        dataRuanganView.style.display = 'flex';
+        modalTitle.innerText = "Daftar Ruangan";
+        
+        try {
+          const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
+          const dataRuangan = await resRuangan.json();
+          if (dataRuangan.status === 'success') {
+            allRuanganData = dataRuangan.data;
+          }
+        } catch (err) { console.error(err); }
+        
+        renderRuanganTable();
+      };
+    }
+
+    // Navigasi ke Tambah Ruangan
+    const btnShowAddRuangan = document.getElementById('btn-show-add-ruangan');
+    if (btnShowAddRuangan) {
+      btnShowAddRuangan.onclick = () => {
+        menuView.style.display = 'none';
+        dataView.style.display = 'none';
+        addView.style.display = 'none';
+        dataRuanganView.style.display = 'none';
+        addRuanganView.style.display = 'flex';
+        modalTitle.innerText = "Tambah Ruangan";
+      };
+    }
+
+    // Kembali dari Ruangan
+    document.getElementById('data-ruangan-back-btn')?.addEventListener('click', showMenu);
+    document.getElementById('add-ruangan-back-btn')?.addEventListener('click', showMenu);
+
+    // Submit Tambah Ruangan
+    const btnAddRuanganSubmit = document.getElementById('add-ruangan-submit-btn');
+    if (btnAddRuanganSubmit) {
+      btnAddRuanganSubmit.onclick = async () => {
+        const nama = document.getElementById('add-ruangan-nama').value;
+        const kampus = document.getElementById('add-ruangan-kampus').value;
+        if (!nama) {
+          alert("Harap isi nama ruangan!");
+          return;
+        }
+        
+        const originalHtml = btnAddRuanganSubmit.innerHTML;
+        btnAddRuanganSubmit.disabled = true;
+        btnAddRuanganSubmit.innerHTML = 'Menyimpan...';
+        
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/ruangan/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kampus: kampus, nama_ruangan: nama })
+          });
+          const data = await res.json();
+          if (data.status === 'success') {
+            alert(data.message);
+            document.getElementById('add-ruangan-nama').value = '';
+            document.getElementById('btn-show-data-ruangan').click();
+          } else {
+            alert("Gagal menambahkan ruangan: " + data.message);
+          }
+        } catch (e) {
+          alert("Terjadi kesalahan jaringan.");
+        }
+        
+        btnAddRuanganSubmit.disabled = false;
+        btnAddRuanganSubmit.innerHTML = originalHtml;
+      };
+    }
+
     // Navigasi ke Tambah Data WA
-    document.getElementById('btn-show-add-wa').onclick = () => {
+    document.getElementById('btn-show-add-wa').onclick = async () => {
       menuView.style.display = 'none';
+      dataView.style.display = 'none';
+      if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
+      if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
       addView.style.display = 'flex';
       modalTitle.innerText = "Tambah Aslab";
       modalIcon.innerHTML = SVG_WA_ICONS.add;
+
+      // Fetch latest Ruangan data
+      try {
+        const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
+        const dataRuangan = await resRuangan.json();
+        if (dataRuangan.status === 'success') {
+          allRuanganData = dataRuangan.data;
+        }
+      } catch (err) {}
 
       const selectRuangan = document.getElementById('add-aslab-ruangan');
       populateSortedRuanganSelect(selectRuangan, "");
@@ -2722,3 +2941,58 @@ flatpickr("input[type='date'], #filter-tanggal", {
   }
 });
 
+
+// ==========================================
+// AUTO-REFRESH LOGIC (Untuk PC Server Lab 24/7)
+// ==========================================
+setInterval(async () => {
+  // Hanya lakukan auto-refresh jika tidak ada modal terbuka (agar tidak mengganggu Admin yang sedang edit data)
+  const modals = document.querySelectorAll('.modal.open, .modal-overlay.open');
+  let isModalOpen = false;
+  modals.forEach(m => {
+    if (m.style.display !== 'none' && getComputedStyle(m).display !== 'none') {
+      isModalOpen = true;
+    }
+  });
+  
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal && (testWaModal.classList.contains('open') || testWaModal.style.display === 'flex' || testWaModal.style.display === 'block')) {
+      isModalOpen = true;
+  }
+
+  if (isModalOpen) return;
+
+  try {
+    // 1. Refresh Jadwal
+    const resJadwal = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}`);
+    const dataJadwal = await resJadwal.json();
+    if (dataJadwal.status === 'success') {
+      allJadwal = dataJadwal.data;
+      updateJadwalTable();
+      if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+    }
+
+    // 2. Refresh Data Master (Ruangan)
+    const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
+    const dataRuangan = await resRuangan.json();
+    if (dataRuangan.status === 'success') {
+      allRuanganData = dataRuangan.data;
+    }
+
+    // 3. Refresh Data Aslab 
+    const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+    const dataAslab = await resAslab.json();
+    if (dataAslab.status === 'success') {
+      globalAslabData = dataAslab.data;
+    }
+
+    // 4. Refresh Notifikasi Info Mase
+    const tgl = document.getElementById('filter-tanggal')?.value;
+    if (tgl) {
+      await fetchNotifikasiLab(tgl, false);
+    }
+
+  } catch (err) {
+    console.error("Gagal melakukan auto-refresh background:", err);
+  }
+}, 60 * 1000); // Polling setiap 1 menit (60000ms)
