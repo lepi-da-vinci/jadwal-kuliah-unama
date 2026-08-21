@@ -538,6 +538,13 @@
               </span>
             </div>
 
+            <!-- Tab Filter Kampus -->
+            <div class="info-mase-kampus-filter" style="display: flex; gap: 4px; margin: 12px 24px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
+              <button type="button" class="info-mase-kampus-btn active" data-kampus="semua" onclick="switchInfoMaseKampus('semua')" style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Kampus</button>
+              <button type="button" class="info-mase-kampus-btn" data-kampus="thehok" onclick="switchInfoMaseKampus('thehok')" style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
+              <button type="button" class="info-mase-kampus-btn" data-kampus="kobar" onclick="switchInfoMaseKampus('kobar')" style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Kobar</button>
+            </div>
+
             <!-- Tab Filter Kategori: Labor vs Kelas -->
             <div class="info-mase-tabs-container">
               <div class="info-mase-tabs">
@@ -588,6 +595,13 @@
             <span>Info Mase</span>
           </div>
         </h3>
+
+        <!-- Tab Filter Kampus di Panel Inline -->
+        <div class="info-mase-kampus-filter" style="display: flex; gap: 4px; margin-bottom: 12px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
+          <button type="button" class="info-mase-kampus-btn active" data-kampus="semua" onclick="switchInfoMaseKampus('semua')" style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Kampus</button>
+          <button type="button" class="info-mase-kampus-btn" data-kampus="thehok" onclick="switchInfoMaseKampus('thehok')" style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
+          <button type="button" class="info-mase-kampus-btn" data-kampus="kobar" onclick="switchInfoMaseKampus('kobar')" style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Kobar</button>
+        </div>
 
         <!-- Tab Filter Kategori di Panel Inline: Labor vs Kelas -->
         <div class="info-mase-tabs-container" style="margin-bottom: 12px;">
@@ -1087,7 +1101,7 @@
       </div>
 
       <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-      <script src="script.js"></script>
+      <script src="script.js?v=2"></script>
 </body>
 
 </html>

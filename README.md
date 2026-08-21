@@ -144,4 +144,4 @@ ngrok http 8000 --domain=domain-anda.ngrok-free.app
 
 ---
 
-*Dikembangkan untuk kemudahan monitoring jadwal dan operasional Asisten Laboratorium UNAMA.*
+*Dikembangkan untuk kemudahan monitoring jadwal dan operasional Asisten Labor UNAMA.*

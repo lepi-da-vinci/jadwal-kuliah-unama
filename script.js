@@ -855,12 +855,45 @@ window.switchInfoMaseTab = function (tab) {
   renderInfoMaseNotifications(false);
 };
 
+let activeInfoMaseKampus = 'semua';
+
+window.switchInfoMaseKampus = function (kampus) {
+  activeInfoMaseKampus = kampus;
+
+  // Update button active states
+  document.querySelectorAll('.info-mase-kampus-btn').forEach(btn => {
+    const btnKampus = btn.getAttribute('data-kampus');
+    if (btnKampus === kampus) {
+      btn.classList.add('active');
+      btn.style.background = 'var(--bg-card)';
+      btn.style.color = 'var(--text)';
+      btn.style.boxShadow = 'var(--shadow-sm)';
+    } else {
+      btn.classList.remove('active');
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-muted)';
+      btn.style.boxShadow = 'none';
+    }
+  });
+
+  renderInfoMaseNotifications(false);
+};
+
 function renderInfoMaseNotifications(showPopup = false) {
   const panelList = document.getElementById('notifikasi-lab-list');
   const fsList = document.getElementById('fs-notifikasi-lab-list');
 
-  const labCount = latestNotifikasiLabData.filter(n => isLabNotification(n.pesan)).length;
-  const ruangCount = latestNotifikasiLabData.filter(n => !isLabNotification(n.pesan)).length;
+  // Filter by Kampus First
+  let filteredByKampus = latestNotifikasiLabData.filter(n => {
+    if (activeInfoMaseKampus === 'semua') return true;
+    const msg = n.pesan.toLowerCase();
+    if (activeInfoMaseKampus === 'thehok') return msg.includes('thehok');
+    if (activeInfoMaseKampus === 'kobar') return msg.includes('kobar');
+    return true; // if no campus identifier, show it
+  });
+
+  const labCount = filteredByKampus.filter(n => isLabNotification(n.pesan)).length;
+  const ruangCount = filteredByKampus.filter(n => !isLabNotification(n.pesan)).length;
 
   // Update badges on buttons
   const badges = [
@@ -877,14 +910,24 @@ function renderInfoMaseNotifications(showPopup = false) {
 
   // Render live warnings according to active tab
   const activeWarnings = activeInfoMaseTab === 'ruang' ? currentRuangWarnings : currentLabWarnings;
-  const warningsHTML = activeWarnings.join('');
+  
+  // Filter live warnings based on active campus filter
+  let filteredWarnings = activeWarnings;
+  if (activeInfoMaseKampus !== 'semua') {
+    filteredWarnings = activeWarnings.filter(wHtml => {
+       const lowHtml = wHtml.toLowerCase();
+       return lowHtml.includes(activeInfoMaseKampus);
+    });
+  }
+
+  const warningsHTML = filteredWarnings.join('');
   const liveWarningsContainer = document.getElementById('live-warnings');
   const fsWarnings = document.getElementById('fs-live-warnings');
   if (liveWarningsContainer) liveWarningsContainer.innerHTML = warningsHTML;
   if (fsWarnings) fsWarnings.innerHTML = warningsHTML;
 
   // Filter list based on selected active tab (default 'lab', or 'ruang')
-  let filtered = latestNotifikasiLabData.filter(n => {
+  let filtered = filteredByKampus.filter(n => {
     return activeInfoMaseTab === 'ruang' ? !isLabNotification(n.pesan) : isLabNotification(n.pesan);
   });
 
