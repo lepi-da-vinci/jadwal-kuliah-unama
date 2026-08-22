@@ -717,7 +717,18 @@ async function syncData(tanggal) {
   const tgl = tanggal || document.getElementById('filter-tanggal')?.value || '';
   const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tgl}&auto_close=1`;
 
-  // Kirim pesan ke background Chrome Extension via bridge (tab dibuka di background)
+  // Tampilkan indikator scraping pada tabel jika data untuk tanggal ini belum ada di memori
+  const existingForDate = allJadwal.filter(j => j.tanggal === tgl);
+  if (tgl && existingForDate.length === 0 && tbody) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding: 40px 20px; color: var(--primary); font-weight: 500;">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+        <span>Sedang meminta Server melakukan scraping jadwal tanggal <b>${tgl}</b> dari BAAK...</span>
+      </div>
+    </td></tr>`;
+  }
+
+  // Kirim pesan ke background Chrome Extension via bridge (tab dibuka di background jika ekstensi ada di browser ini)
   window.postMessage({ type: "START_UNAMA_SYNC", url: targetUrl }, "*");
 
   try {

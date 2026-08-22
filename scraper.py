@@ -25,12 +25,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_db():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "db_jadwal_kuliah")
-    )
+    pwd = os.getenv("DB_PASSWORD", "")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    user = os.getenv("DB_USER", "root")
+    db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
+    try:
+        return mysql.connector.connect(
+            host=host,
+            user=user,
+            password=pwd,
+            database=db_name
+        )
+    except mysql.connector.Error as err:
+        if err.errno == 1045 and pwd != "":
+            return mysql.connector.connect(
+                host=host,
+                user=user,
+                password="",
+                database=db_name
+            )
+        raise err
 
 def init_db_schema():
     """Memastikan seluruh tabel dan master data dasar tersedia saat startup (terutama di Docker)"""
@@ -109,6 +123,20 @@ def init_db_schema():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
+
+        # Migrasi kolom tabel jadwal
+        try:
+            cursor.execute("ALTER TABLE jadwal ADD COLUMN nama_mk VARCHAR(150) AFTER kode_mk")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE jadwal ADD COLUMN kelas VARCHAR(50) AFTER nama_mk")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE jadwal MODIFY COLUMN metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM'")
+        except Exception:
+            pass
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS asisten_lab (
@@ -526,4 +554,80 @@ def compare_and_finalize_sync(target_date=None):
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+def scrape_baak_direct(target_date=None):
+    """
+    Melakukan scraping data langsung dari BAAK UNAMA menggunakan HTTP request backend
+    (Sangat cepat & otomatis tanpa tergantung Chrome Extension dibuka di PC).
+    """
+    import requests
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'id,en-US;q=0.7,en;q=0.3',
+    }
+    
+    base_url = "https://baak.unama.ac.id/jadwal-kuliah?search=1"
+    if target_date:
+        base_url += f"&tanggal={target_date}"
+        
+    page = 1
+    total_scraped = 0
+    all_data = []
+    
+    try:
+        while True:
+            url = f"{base_url}&page={page}" if page > 1 else base_url
+            print(f"[Direct Scraper] Mengambil data dari: {url}")
+            response = requests.get(url, headers=headers, timeout=12)
+            if response.status_code != 200:
+                print(f"[Direct Scraper] Status code: {response.status_code}")
+                break
+                
+            html = response.text
+            # Jika terhalang Cloudflare challenge
+            if "challenge-running" in html or "just a moment" in html.lower():
+                print("[Direct Scraper] Terdeteksi Cloudflare challenge, menggunakan fallback ekstensi.")
+                return False, 0, "Cloudflare challenge"
+                
+            data = parse_html_content(html, target_date)
+            if not data:
+                print("[Direct Scraper] Tidak ada baris data pada halaman ini.")
+                break
+                
+            all_data.extend(data)
+            save_to_db(data, target_date, str(page))
+            total_scraped += len(data)
+            
+            # Cek tombol pagination
+            soup = BeautifulSoup(html, 'html.parser')
+            next_btn = soup.find('a', rel='next') or soup.select_one('.pagination .next a') or soup.select_one('.page-item:last-child a')
+            if not next_btn:
+                all_links = soup.select('.pagination a, .page-link')
+                for a in all_links:
+                    txt = a.get_text(strip=True).lower()
+                    if 'next' in txt or 'selanjutnya' in txt or txt == '>':
+                        next_btn = a
+                        break
+                        
+            next_href = next_btn.get('href') if next_btn else None
+            if next_href and next_href != '#' and not next_href.startswith('javascript:'):
+                page += 1
+                if page > 50:
+                    break
+            else:
+                break
+                
+        if total_scraped > 0 or target_date:
+            compare_and_finalize_sync(target_date)
+            print(f"[Direct Scraper] Berhasil finalisasi {total_scraped} jadwal untuk tanggal {target_date}.")
+            return True, total_scraped, f"Berhasil sinkronisasi {total_scraped} jadwal dari BAAK."
+        else:
+            return False, 0, "Tidak ada data jadwal ditemukan di BAAK."
+            
+    except Exception as e:
+        print(f"[Direct Scraper Error] {e}")
+        return False, 0, str(e)
+
 

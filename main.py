@@ -30,12 +30,26 @@ app.add_middleware(
 load_dotenv()
 
 def get_db():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "db_jadwal_kuliah")
-    )
+    pwd = os.getenv("DB_PASSWORD", "")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    user = os.getenv("DB_USER", "root")
+    db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
+    try:
+        return mysql.connector.connect(
+            host=host,
+            user=user,
+            password=pwd,
+            database=db_name
+        )
+    except mysql.connector.Error as err:
+        if err.errno == 1045 and pwd != "":
+            return mysql.connector.connect(
+                host=host,
+                user=user,
+                password="",
+                database=db_name
+            )
+        raise err
 
 
 
@@ -97,17 +111,19 @@ def get_semua_jadwal():
 def clear_jadwal():
     """Menghapus seluruh jadwal dari database (biarkan ruangan & dosen)"""
     try:
-        conn = scraper.get_db()
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-        cursor.execute("TRUNCATE TABLE jadwal")
-        cursor.execute("TRUNCATE TABLE jadwal_temp")
-        cursor.execute("TRUNCATE TABLE notifikasi_lab")
-        cursor.execute("TRUNCATE TABLE mata_kuliah")
+        tables_to_clear = ["jadwal", "jadwal_temp", "notifikasi_lab", "jeda_lab", "mata_kuliah"]
+        for tbl in tables_to_clear:
+            try:
+                cursor.execute(f"DELETE FROM {tbl}")
+            except Exception:
+                pass
         cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
         conn.commit()
         return {"status": "success", "message": "Jadwal dan mata kuliah berhasil dibersihkan."}
-    except mysql.connector.Error as err:
+    except Exception as err:
         return {"status": "error", "message": str(err)}
     finally:
         if 'conn' in locals() and conn.is_connected():
@@ -133,29 +149,35 @@ pending_sync_queue = {}
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
-    """Sinkronisasi data: Menunggu Ekstensi Chrome menyelesaikan penarikan data"""
+    """Sinkronisasi data: Mencoba scraping langsung terlebih dahulu, jika terhalang gunakan Ekstensi Chrome"""
     try:
         tgl_key = req.tanggal or ""
         start_time = time.time()
-        sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
         
+        # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
+        success, count, msg = scraper.scrape_baak_direct(req.tanggal)
+        if success:
+            sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
+            pending_sync_queue.pop(tgl_key, None)
+            return {"status": "success", "message": msg, "count": count}
+        
+        # 2. Fallback: Ekstensi Chrome di PC
+        print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
+        sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
         target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
         
-        # Hanya simpan ke pending queue jika BUKAN dipicu langsung dari dashboard (misal dari HP / WA Bot)
-        # untuk mencegah Chrome Extension membuka 2 tab sekaligus
-        if not req.from_dashboard:
-            pending_sync_queue[tgl_key] = {
-                "tanggal": tgl_key,
-                "url": target_url,
-                "time": start_time
-            }
+        pending_sync_queue[tgl_key] = {
+            "tanggal": tgl_key,
+            "url": target_url,
+            "time": start_time
+        }
         
         # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
         for _ in range(40):
             await asyncio.sleep(0.8)
             current = sync_status.get(tgl_key, {})
             if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
-                return {"status": "success", "message": "Berhasil sinkronisasi secara otomatis!", "count": current.get("count", 0)}
+                return {"status": "success", "message": "Berhasil sinkronisasi via Ekstensi Chrome!", "count": current.get("count", 0)}
         
         return {"status": "success", "message": "Proses sinkronisasi selesai atau berjalan di background."}
     except Exception as e:
@@ -175,8 +197,9 @@ def get_pending_sync():
 @app.post("/api/sync/pending/clear")
 def clear_pending_sync(req: dict = None):
     """Menghapus tugas sinkronisasi setelah diambil oleh ekstensi"""
-    if req and isinstance(req, dict) and "tanggal" in req and req["tanggal"] in pending_sync_queue:
-        pending_sync_queue.pop(req["tanggal"], None)
+    if req and isinstance(req, dict) and "tanggal" in req:
+        tgl_key = req.get("tanggal") or ""
+        pending_sync_queue.pop(tgl_key, None)
     else:
         pending_sync_queue.clear()
     return {"status": "success"}
