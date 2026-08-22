@@ -1,58 +1,154 @@
-# Analisis Mendalam Sistem Jadwal Kuliah UNAMA
+# Analisis Mendalam & Dokumentasi Arsitektur Sistem Jadwal Kuliah UNAMA
 
-Dokumen ini berisi tinjauan komprehensif atas arsitektur, alur kerja (workflow), serta analisis potensi masalah pada proyek Jadwal Kuliah UNAMA, dengan fokus khusus pada stabilitas sinkronisasi data, notifikasi, dan pengelolaan bot WhatsApp.
+Dokumen ini adalah **Buku Panduan Utama (Master Blueprint)** dari keseluruhan sistem proyek Jadwal Kuliah UNAMA. Seluruh struktur, hubungan antar modul, logika kode, serta aturan pengembangan (termasuk potensi *bug*) dicatat secara mendetail tanpa terkecuali. 
 
-## 1. Arsitektur Sistem
+**Tujuan Dokumen:** Memastikan tidak ada *blind spot* (titik buta) bagi developer di masa depan. Kesalahan sepele (seperti hilangnya class CSS atau salah logika pengurutan) dapat dicegah dengan merujuk pada dokumen ini.
 
-Proyek ini dibangun dengan pendekatan hibrida yang memanfaatkan ekstensi browser (client-side) dan server backend lokal.
+---
 
-*   **Backend API & Logika Utama:** FastAPI (Python). Menangani endpoint API, integrasi dengan database, logika perbandingan jadwal, dan chatbot AI.
-*   **Database:** MySQL (`db_jadwal_kuliah`). Terdiri dari tabel master (dosen, mata kuliah, ruangan, asisten lab) dan tabel transaksional (`jadwal`, `jadwal_temp`, `notifikasi_lab`).
-*   **Frontend (Dashboard):** HTML, CSS, Vanilla JS murni tanpa framework besar. Menangani rendering tabel, filter dinamis, dan kalkulasi peringatan (alarm) client-side.
-*   **Scraper Data (Bypass Cloudflare):** Ekstensi Chrome (Manifest V3). Bertugas menarik data dari website BAAK UNAMA karena adanya proteksi Cloudflare yang sulit dilewati langsung oleh backend biasa.
-*   **WhatsApp Notifier & Bot:** Node.js (dengan library Baileys) bertindak sebagai jembatan (bridge) WhatsApp, sementara otak pemrosesan pesannya (Webhook) dan logika AI (Google Gemini) berada di backend Python.
+## 1. Arsitektur Umum & Topologi Sistem
 
-## 2. Alur Kerja Sinkronisasi Data (Scraping Flow)
+Proyek ini menggunakan arsitektur hibrida yang menggabungkan Ekstensi Browser Chrome (sebagai Scraper) dan Server Backend Python (sebagai pemroses data dan pengontrol WA).
 
-Merespons keluhan mengenai sinkronisasi yang lambat, duplikasi proses, dan harus diklik berkali-kali:
+*   **Server Backend:** FastAPI (Port Default: 8000/54504). Berperan sebagai pusat lalu lintas data, REST API, Webhook WhatsApp, dan penjadwalan (*background tasks*).
+*   **Database:** MySQL Server (`db_jadwal_kuliah`).
+*   **Client/Dashboard:** Vanilla HTML, CSS, JS murni. Tanpa framework JS, berjalan langsung di peramban, mengandalkan manipulasi DOM secara langsung.
+*   **Scraper Engine:** Chrome Extension (Manifest V3). Membuka URL BAAK secara otomatis (*background tab*), menunggu *Cloudflare Challenge* selesai, dan menyuntikkan script untuk menyalin struktur HTML.
+*   **WhatsApp Gateway:** Node.js (menggunakan Baileys). Bertindak murni sebagai "pengirim" dan "penerima" sinyal WA, sedangkan otaknya berada di Python (Gemini AI).
 
-**Alur yang Telah Diperbaiki:**
-1.  **Trigger:** Pengguna mengklik tombol "Sinkronisasi" di Dashboard Frontend.
-2.  **Bridge:** `script.js` mengirim pesan (postMessage `START_UNAMA_SYNC`) yang ditangkap oleh `dashboard_bridge.js` milik Ekstensi Chrome.
-3.  **Background Deduplication:** `background.js` ekstensi membuka *background tab* rahasia ke BAAK UNAMA. **[PENTING]** Di sini telah diterapkan mekanisme *debouncing* (jeda 5 detik) untuk mencegah ekstensi membuka banyak tab yang sama jika pengguna menekan tombol sinkronisasi berkali-kali. Di saat bersamaan, backend FastAPI `/api/sync` hanya berstatus *menunggu* (tidak lagi memicu pembuatan antrean sinkronisasi duplikat).
-4.  **Content Scraping:** Tab BAAK yang terbuka di-*inject* oleh `content.js`. Script ini menunggu Cloudflare selesai (*bypass*), lalu mengambil HTML murni dari tabel jadwal.
-5.  **Data Transmission:** HTML murni dikirim ke backend `/api/sync-html`. Backend (`scraper.py`) mem-*parsing* HTML tersebut dan menyimpannya sementara ke tabel `jadwal_temp`.
-6.  **Pagination & Finalization:** Jika ada banyak halaman jadwal (next page), ekstensi akan berpindah halaman dan mengulang langkah 4. Setelah semua halaman selesai, ekstensi mengirim POST ke `/api/sync-complete`.
-7.  **Data Compare & Transfer:** Backend membandingkan data di `jadwal_temp` dengan `jadwal` utama.
-    *   Mendeteksi kelas baru -> Buat Notifikasi `TAMBAHAN`.
-    *   Mendeteksi perubahan jam/metode -> Buat Notifikasi `PERUBAHAN`.
-    *   Setelah itu, data resmi dipindahkan dari `jadwal_temp` ke `jadwal`.
-8.  **Auto Close:** Ekstensi Chrome menutup background tab secara otomatis.
+---
 
-## 3. Alur "Info Mase" dan Notifikasi Jeda
+## 2. Flowchart Alur Sinkronisasi & WhatsApp Bot
 
-Sistem notifikasi ("Info Mase") telah diseragamkan untuk mengakomodasi pemisahan antara "Laboratorium" dan "Ruang Kelas" sesuai permintaan.
+Berikut adalah diagram alir dari keseluruhan siklus jalannya sistem, mulai dari pengambilan jadwal hingga pengiriman WhatsApp.
 
-*   **Tiga Jenis Notifikasi Tersimpan (Database):**
-    1.  **TAMBAHAN:** Ketika ada jadwal dadakan yang masuk ke sistem.
-    2.  **PERUBAHAN:** Ketika status kelas berubah (misal dari TM ke CC/Cancel) atau jam berubah.
-    3.  **JEDA:** Dihitung oleh fungsi `calculate_and_save_gaps()` di `scraper.py` saat proses sinkronisasi selesai. Jika ditemukan kekosongan jadwal (gap) >= 90 menit di antara dua kelas dalam satu ruangan, sistem akan mencatatnya sebagai waktu jeda (kosong).
-*   **Live Warnings (Frontend):** Selain notifikasi tersimpan, `script.js` memiliki timer (`setInterval`) yang berjalan setiap menit untuk menghitung mundur kapan sebuah kelas atau lab akan selesai (sisa 30 menit & 15 menit), sehingga menampilkan peringatan pop-up "Siap-siap tutup/buka lab".
-*   **Pemisahan Kategori:** Sekarang, UI "Info Mase" membagi tab antara **Labor** dan **Kelas**. Ikon dan desain pop-up telah disamakan agar tidak ada ketimpangan visual antar kategori.
+```mermaid
+sequenceDiagram
+    participant Web as Dashboard (UI)
+    participant API as FastAPI (Backend)
+    participant Ext as Chrome Extension
+    participant BAAK as Website BAAK
+    participant DB as MySQL Database
+    participant WA as WA Bot (Node.js)
+    participant User as HP Aslab (User)
 
-## 4. Analisis Potensi Masalah & Kerentanan
+    %% Flow Sinkronisasi Data
+    rect rgb(240, 248, 255)
+        Note over Web, DB: ALUR SINKRONISASI JADWAL
+        Web->>API: POST /api/sync (Minta Sinkronisasi)
+        API->>API: Masukkan URL ke pending_sync_queue
+        Ext->>API: GET /api/sync/pending (Polling per detik)
+        API-->>Ext: Kembalikan URL Target
+        Ext->>BAAK: Buka Background Tab (Bypass Cloudflare)
+        BAAK-->>Ext: Render HTML Tabel Jadwal
+        Ext->>API: POST /api/sync-html (Kirim HTML Mentah)
+        API->>DB: Parsing & Simpan ke `jadwal_temp`
+        Ext->>API: POST /api/sync-complete (Selesai Scraping)
+        API->>DB: Compare `jadwal` vs `jadwal_temp`
+        DB-->>API: Deteksi Perubahan (Kelas Baru/Pindah Jam)
+        API->>DB: Insert `notifikasi_lab` (Jeda, Tambahan, Perubahan)
+        API->>DB: Timpa `jadwal_temp` ke `jadwal` permanen
+        API-->>Web: Response Sukses (Data Terkini)
+    end
 
-1.  **Ketergantungan Ekstensi (Single Point of Failure):**
-    *   Sistem ini lumpuh secara sinkronisasi jika Ekstensi Chrome dimatikan atau pengguna mengakses dashboard dari perangkat tanpa ekstensi (misal: HP), kecuali ada server PC yang menyala 24/7 untuk menangani antrean (`pending_sync_queue`).
-2.  **Perubahan Struktur DOM BAAK:**
-    *   Jika pihak UNAMA mengubah nama class HTML (seperti `.table-content` atau form filter), script *parsing* regex dan BeautifulSoup di `scraper.py` serta `content.js` akan gagal menarik data (menghasilkan jadwal kosong). Hal ini membutuhkan perbaikan manual pada kode scraping.
-3.  **Integritas `jadwal_temp` (Race Conditions):**
-    *   Meskipun sudah menggunakan penampungan sementara, jika proses scraping terputus di tengah jalan (koneksi mati, tab tertutup paksa), data di `jadwal_temp` bisa tertinggal dan menyebabkan anomali pada siklus sinkronisasi berikutnya jika tidak dibersihkan dengan benar.
-4.  **Keterbatasan API Gemini (Chatbot WA):**
-    *   Layanan bot WA aslab menggunakan Google Gemini API. Jika *rate limit* tercapai atau *API Key* kadaluwarsa, chatbot pintar akan lumpuh dan kembali ke mode perintah kaku.
-5.  **Nomor WA Terblokir:**
-    *   Penggunaan modul Baileys rentan terhadap pemblokiran oleh sistem anti-spam WhatsApp Meta jika bot mengirim pesan notifikasi secara massal (broadcast jeda/tutup lab) ke banyak aslab dalam waktu yang sangat berdekatan tanpa jeda acak (delay).
+    %% Flow Peringatan Otomatis 30 Menit
+    rect rgb(255, 245, 238)
+        Note over API, User: ALUR PERINGATAN OTOMATIS (Background Task)
+        loop Setiap 1 Menit
+            API->>DB: Cek jadwal hari ini yg akan mulai 30 menit lagi
+            alt Ada Kelas
+                API->>WA: HTTP POST: Kirim Pesan ke No. WA Aslab
+                WA->>User: "Peringatan! Kelas x mulai dalam 30 menit"
+            end
+        end
+    end
 
-## 5. Kesimpulan
+    %% Flow Interaksi Chatbot
+    rect rgb(240, 255, 240)
+        Note over User, API: ALUR CHATBOT AI (GEMINI)
+        User->>WA: Kirim Pesan WA ("ada lab kosong siang ini?")
+        WA->>API: POST /api/webhook/wa (Teruskan teks)
+        API->>DB: Tarik JSON Jadwal Hari ini
+        API->>API: Kirim Prompt + JSON ke Google Gemini AI
+        API-->>WA: Balasan bahasa manusia ("Lab 1.1 kosong kak!")
+        WA-->>User: Chat Balasan WA
+    end
+```
 
-Proyek Jadwal Kuliah UNAMA ini telah berevolusi menjadi sistem *monitoring* yang canggih dengan integrasi WhatsApp AI dan ekstensi *anti-Cloudflare*. Isu terkait tab ganda dan jeda data telah diatasi dengan penambahan *debouncing* di ekstensi dan pemisahan logika `jadwal_temp`. Untuk pemeliharaan jangka panjang, pengembang harus bersiap jika sewaktu-waktu struktur web BAAK UNAMA diperbarui.
+---
+
+## 3. Struktur Database (`database.sql`) Secara Terperinci
+
+Database `db_jadwal_kuliah` memiliki 7 tabel utama dengan relasi *Foreign Key* yang ketat (menggunakan `ON DELETE SET NULL`).
+
+### A. Tabel Master
+1.  **`dosen`**: `(id_dosen INT PK, nama_dosen VARCHAR(150))`
+2.  **`mata_kuliah`**: `(kode_mk VARCHAR(50) PK, nama_mk VARCHAR(150))`
+3.  **`ruangan`**: `(id_ruangan INT PK, kampus VARCHAR(50), nama_ruangan VARCHAR(50))`
+    *   **Penting**: Penamaan sangat kritikal karena fungsi JS `.includes('lab')` dan `isLab()` bergantung pada nama string ruangan.
+4.  **`asisten_lab`**: `(id_aslab INT PK, nama_aslab VARCHAR(150), no_wa VARCHAR(50), id_ruangan INT FK)`
+
+### B. Tabel Transaksional
+5.  **`jadwal`**: Tabel utama untuk menampilkan data ke layar.
+6.  **`jadwal_temp`**: Tabel transit / *staging* untuk penampung hasil *scraping* kotor.
+7.  **`notifikasi_lab`**: Menyimpan riwayat perubahan (`TAMBAHAN`, `PERUBAHAN`, dan `JEDA`).
+
+---
+
+## 4. Mesin Scraper & Finalisasi (`scraper.py`)
+
+*   **Parsing Regex**: Mengurai teks rumit dari web BAAK UNAMA. *Rule of thumb:* Jika BAAK mengubah format penanggalan dari `Jum'at, 17 Juli` menjadi `Jumat - 17 - Juli`, regex akan rusak dan butuh penyesuaian di blok `parse_html_content`.
+*   **Compare Logic**: Mencocokkan `JAM + NAMA_RUANGAN + KELAS`. Perubahan metode TM (Tatap Muka) ke CC (Cancel) direkam secara langsung.
+*   **Kalkulasi Jeda**: Fungsi `calculate_and_save_gaps()` mencari ruang kosong di satu lab berdurasi `>= 90 menit`.
+
+---
+
+## 5. Frontend & Manipulasi UI (`script.js` & `index.html`)
+
+Aplikasi mengandalkan Vanilla JS. 
+
+*   **State Admin (`isAslabAdmin`)**: Semua tombol yang sensitif (hapus aslab, tambah manual, clear DB) dikendalikan di UI dengan menambahkan class CSS `.admin-only`. 
+*   **Sorting Khusus**: Algoritma `naturalSort()` (`a.localeCompare(b, {numeric: true})`) memastikan `Labor 1.10` tampil sesudah `Labor 1.9`.
+*   **Client Polling Timer**: Interval 1 menit yang menghitung selisih jam saat ini dengan jadwal (`calculateClientSideGaps`). Memicu efek merah dan suara `notif.mp3` jika sisa waktu `< 15 menit`.
+
+---
+
+## 6. Panduan Modifikasi (Apa yang harus diubah jika...)
+
+Bagian ini memandu Anda jika di masa depan butuh penambahan/pengubahan fitur:
+
+1.  **Ingin Menambah Tombol Khusus Admin Baru?**
+    *   Buka `index.html`.
+    *   Buat tag `<button>` dan pastikan menyematkan class `admin-only` (contoh: `<button class="btn btn-danger admin-only" id="tombol-baru">`).
+    *   Jangan berikan style `display: none` secara *inline style* hardcode tanpa class tersebut, karena nanti JS tidak bisa memunculkannya saat mode Admin dihidupkan.
+2.  **Pihak Kampus Menambah Kampus Baru (Misal: Telanaipura)?**
+    *   Ubah HTML filter dropdown untuk memasukkan *option* `Telanaipura`.
+    *   Ubah fungsi JS `getKampusDisplay()` di `script.js` yang mengelola konversi string kobar/thehok.
+    *   Di database, saat tambah data manual, biarkan API menyimpannya apa adanya.
+3.  **Mengubah Durasi SKS?**
+    *   Saat ini sistem meng-*hardcode* durasi 1 pertemuan = 135 Menit (3 SKS).
+    *   Cari angka `135` di dalam file `main.py` (pada rute `/api/cari_dosen` dan `/api/cari_kelas`), serta `scraper.py` (pada `calculate_and_save_gaps`). Ubah angka tersebut sesuai durasi yang baru.
+4.  **Ingin Bot WA Menggunakan Format Pesan yang Beda?**
+    *   Buka `wa_notifier.py`.
+    *   Untuk Notifikasi Harian, ubah string `pesan_wa = f"⚠️ *PERINGATAN JADWAL* ⚠️..."`.
+    *   Untuk AI, ubah instruksi dasar pada `GEMINI_PROMPT_CONTEXT` agar Gojo menjawab dengan format yang Anda inginkan.
+
+---
+
+## 7. ZONA MERAH: Struktur Kode yang Sebaiknya JANGAN Diotak-atik
+
+Jika Anda belum memahami arsitekturnya 100%, sangat diharamkan mengubah baris-baris kode berikut karena dapat merusak integritas *flow* keseluruhan:
+
+1.  **`parse_html_content` pada `scraper.py` (Baris Regex TANGGAL dan JAM)**
+    *   *Kenapa?* Scraping bergantung penuh pada pola kalimat teks BAAK. Mengubah regex penangkap `(\d{2}:\d{2})` tanpa perhitungan matang akan menyebabkan semua data jadwal ditolak oleh database (karena kolom Jam akan NULL).
+2.  **`setInterval` di dalam Chrome Extension (`background.js`)**
+    *   *Kenapa?* Terdapat mekanisme *debouncing* (jeda waktu penarikan). Jika Anda mempersingkat jedanya, browser akan membuka puluhan *tab* secara bersamaan (Spam) yang menyebabkan IP internet Anda diblokir oleh sistem anti-DDoS Cloudflare BAAK UNAMA.
+3.  **Logika `.admin-only` di `script.js` (`updateAdminUI()`)**
+    *   *Kenapa?* Logika ini didesain me-looping *querySelectorAll*. Jika Anda mengubah cara kerjanya menjadi hard-code per ID elemen, maka kodenya akan membengkak dan sangat mudah menghasilkan *bug* di mana panel admin tidak tertutup saat mode admin dimatikan.
+4.  **Endpoint `/api/sync/pending` di `main.py`**
+    *   *Kenapa?* Ini adalah nadi komunikasi asinkron antara Backend Server dan Ekstensi Browser. Didesain menggunakan metode `list(pending_sync_queue.items())` dengan batas masa aktif `60 detik`. Jika diubah, Ekstensi Chrome mungkin tidak pernah tahu kapan harus jalan.
+5.  **Pemecah Jeda (Gap) Antar Kelas `calculate_and_save_gaps` di `scraper.py`**
+    *   *Kenapa?* Rumusnya mengonversi jam ke format total menit dalam hitungan menit *integer* harian (Misal: 08:00 = 480). Modifikasi pada logika penjumlahan/pengurangan di array ini dapat menyebabkan bot mengirim info palsu bahwa sebuah lab kosong padahal sedang terisi. 
+
+---
+**Dokumen Selesai.** Gunakan ini sebagai kompas (acuan wajib) dalam memodifikasi program.
