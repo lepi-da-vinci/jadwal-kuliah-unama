@@ -114,20 +114,46 @@ Pilih salah satu metode instalasi (Docker sangat disarankan):
 
 ---
 
-## 🌐 Menjadikan Server Publik Menggunakan Ngrok (Online dari HP)
+## 🌐 Menjadikan Server Publik (Online dari HP / Luar Jaringan)
 
-### Opsi A: Menggunakan Ekstensi ngrok di Docker Desktop (Praktis)
+### 🥇 METODE 1: MENGGUNAKAN CLOUDFLARE TUNNEL (SANGAT DIREKOMENDASIKAN)
+Cloudflare Tunnel adalah solusi terbaik untuk menjadikan web jadwal kuliah Anda online 24/7 secara publik tanpa batas kuota (*Unlimited Bandwidth*), tanpa halaman peringatan, dan dilengkapi proteksi SSL/Anti-DDoS tingkat enterprise dari Cloudflare.
+
+#### A. Menjalankan Quick Tunnel (Instan & Gratis):
+Buka terminal PowerShell/CMD, lalu jalankan:
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8000
+```
+> **Catatan Penting:** Gunakan `http://127.0.0.1:8000` (bukan `localhost`) untuk memastikan koneksi IPv4 di Windows terhubung instan tanpa *timeout*.
+
+Salin link publik `https://xxxx.trycloudflare.com` yang muncul di terminal. Link tersebut siap diakses siapa saja dari HP!
+
+#### B. Integrasi Docker Compose (Otomatis Nyala di Background):
+Jika menggunakan Docker, Anda cukup menambahkan service `cloudflared` resmi di file `docker-compose.yml`:
+```yaml
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token <TUNNEL_TOKEN_DARI_DASHBOARD_CLOUDFLARE>
+```
+Dengan Docker, seluruh backend FastAPI, MySQL, Bot WA, dan Cloudflare Tunnel akan berjalan otomatis 24/7 di latar belakang hanya dengan 1 perintah: `docker compose up -d`.
+
+---
+
+### 🥈 METODE 2: MENGGUNAKAN NGROK (ALTERNATIF TESTING CEPAT)
+
+#### Opsi A: Menggunakan Ekstensi ngrok di Docker Desktop
 1. Di **Docker Desktop**, buka tab **Extensions** $\rightarrow$ cari dan pasang **ngrok**.
 2. Masukkan **Authtoken ngrok** Anda.
 3. Pada baris container `jadwal_backend` (Port 8000), klik titik tiga (`⋮`) $\rightarrow$ **Edit Endpoint**.
 4. Masukkan **Static Domain** gratis Anda dari [ngrok Dashboard](https://dashboard.ngrok.com/cloud-edge/domains) (contoh: `domain-anda.ngrok-free.app`).
-5. Geser toggle ke **ON**. Link publik sekarang aktif dan permanen!
+5. Geser toggle ke **ON**.
 
-### Opsi B: Menggunakan CLI Ngrok Manual
-Jalankan di Command Prompt / Terminal:
+#### Opsi B: Menggunakan CLI Ngrok Manual
 ```bash
 ngrok http 8000 --domain=domain-anda.ngrok-free.app
 ```
+*(Catatan: Akun gratis ngrok memiliki batas transfer data 1 GB/bulan).*
 
 ---
 

@@ -13,6 +13,7 @@ Proyek ini menggunakan arsitektur **Dual-Engine Scraping** yang menggabungkan Me
 *   **Server Backend:** FastAPI (Port Default: 8000/54504). Berperan sebagai pusat lalu lintas data, REST API, Webhook WhatsApp, dan penjadwalan (*background tasks*).
 *   **Database:** MySQL Server (`db_jadwal_kuliah`).
 *   **Client/Dashboard:** Vanilla HTML, CSS, JS murni. Tanpa framework JS, berjalan langsung di peramban, mengandalkan manipulasi DOM secara langsung.
+*   **Public Gateway / Reverse Proxy:** Cloudflare Tunnel (`cloudflared`) sebagai gateway utama untuk ekspos publik 24/7 tanpa batas kuota (*Unlimited Bandwidth*) dan proteksi DDoS/SSL resmi. Tersedia juga integrasi ngrok sebagai opsi sekunder.
 *   **Scraper Engine Utama (Direct Backend - Senyap / Headless):** Python HTTP Engine (`requests` + `BeautifulSoup`) di `scraper.py`. Menembak langsung website BAAK UNAMA di latar belakang secara senyap (hanya butuh 1–2 detik) tanpa perlu membuka/menutup tab di browser Chrome laptop server.
 *   **Scraper Engine Cadangan (Chrome Extension - Manifest V3):** Membuka URL BAAK di *background tab* Chrome jika sewaktu-waktu BAAK memunculkan proteksi *Cloudflare Challenge*.
 *   **WhatsApp Gateway:** Node.js (menggunakan Baileys). Bertindak murni sebagai "pengirim" dan "penerima" sinyal WA, sedangkan otaknya berada di Python (Gemini AI).

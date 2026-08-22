@@ -48,5 +48,15 @@ services:
       - db
       - wa-bot
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: jadwal_tunnel
+    restart: always
+    command: tunnel --url http://backend:8000
+    # Jika nanti punya Custom Domain sendiri, ganti baris command di atas dengan:
+    # command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
+
 volumes:
   db_data:
