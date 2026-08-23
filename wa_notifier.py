@@ -251,17 +251,34 @@ def get_info_mase():
             conn.close()
 
 def get_ngrok_link():
-    """Mendapatkan link ngrok server yang aktif saat ini."""
+    """Mendapatkan link server aktif (Cloudflare Tunnel atau Ngrok) saat ini."""
+    # 1. Cek apakah ada URL Publik di .env (misal domain custom Cloudflare)
+    env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
+    if env_url:
+        return f"Link Server Web Jadwal: {env_url}"
+
+    # 2. Cek file last_tunnel.txt jika ada
+    if os.path.exists("last_tunnel.txt"):
+        try:
+            with open("last_tunnel.txt", "r") as f:
+                saved_url = f.read().strip()
+                if saved_url.startswith("http"):
+                    return f"Link Server Cloudflare: {saved_url}"
+        except Exception:
+            pass
+
+    # 3. Cek API Ngrok lokal jika sedang memakai ngrok
     try:
-        response = requests.get("http://localhost:4040/api/tunnels", timeout=3)
+        response = requests.get("http://localhost:4040/api/tunnels", timeout=2)
         if response.status_code == 200:
             tunnels = response.json().get('tunnels', [])
             for tunnel in tunnels:
                 if tunnel['public_url'].startswith("https"):
                     return f"Link Server Ngrok: {tunnel['public_url']}"
-        return "Server ngrok berjalan tapi tidak ada URL https."
     except Exception:
-        return "Server ngrok saat ini belum aktif atau tidak terdeteksi."
+        pass
+
+    return "Server berjalan lokal di http://127.0.0.1:8000 (Gunakan Cloudflare Tunnel atau Ngrok untuk link publik HP)."
 
 current_sender_context = threading.local()
 

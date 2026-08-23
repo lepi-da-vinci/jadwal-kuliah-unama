@@ -129,13 +129,33 @@ cloudflared tunnel --url http://127.0.0.1:8000
 Salin link publik `https://xxxx.trycloudflare.com` yang muncul di terminal. Link tersebut siap diakses siapa saja dari HP!
 
 #### B. Integrasi Docker Compose (Otomatis Nyala di Background):
-Jika menggunakan Docker, Anda cukup menambahkan service `cloudflared` resmi di file `docker-compose.yml`:
-```yaml
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token <TUNNEL_TOKEN_DARI_DASHBOARD_CLOUDFLARE>
-```
+Jika menggunakan Docker, buka file `docker-compose.yml` pada bagian service `tunnel`:
+
+* **Opsi 1: Mode Cepat Otomatis (URL Acak Gratis Tanpa Token)**
+  Cocok untuk penggunaan langsung tanpa perlu daftar domain / token apapun:
+  ```yaml
+    tunnel:
+      image: cloudflare/cloudflared:latest
+      container_name: jadwal_tunnel
+      restart: always
+      command: tunnel --url http://backend:8000
+      depends_on:
+        - backend
+  ```
+  *(Untuk melihat link publik yang didapat, jalankan `docker logs jadwal_tunnel` atau cek tab Logs di Docker Desktop).*
+
+* **Opsi 2: Mode Domain Tetap / Custom URL (Memakai Token Cloudflare)**
+  Cocok jika Anda sudah punya domain sendiri (misal: `https://jadwal.namamu.my.id`) agar URL-nya permanen dan tidak pernah berubah:
+  ```yaml
+    tunnel:
+      image: cloudflare/cloudflared:latest
+      container_name: jadwal_tunnel
+      restart: always
+      command: tunnel --no-autoupdate run --token <TOKEN_DARI_CLOUDFLARE_ZERO_TRUST>
+      depends_on:
+        - backend
+  ```
+
 Dengan Docker, seluruh backend FastAPI, MySQL, Bot WA, dan Cloudflare Tunnel akan berjalan otomatis 24/7 di latar belakang hanya dengan 1 perintah: `docker compose up -d`.
 
 ---
