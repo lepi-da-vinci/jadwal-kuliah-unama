@@ -120,6 +120,7 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
 
 Aplikasi mengandalkan Vanilla JS. 
 
+*   **Akses QR Code & Link HP (Monitor Standby)**: Fitur "Scan QR Code / Link Akses HP" di dalam Modal Setting yang otomatis mendeteksi URL aktif (Cloudflare Tunnel, Ngrok, atau IP Wi-Fi Lokal Lab `192.168.x.x`) dan me-render QR Code tajam di layar monitor. Siapa pun di ruang lab dapat langsung scan barcode dengan kamera HP atau menyalin link URL dengan 1 klik.
 *   **State Admin (`isAslabAdmin`)**: Semua tombol yang sensitif (hapus aslab, tambah manual, clear DB) dikendalikan di UI dengan menambahkan class CSS `.admin-only`. 
 *   **Sorting Khusus**: Algoritma `naturalSort()` (`a.localeCompare(b, {numeric: true})`) memastikan `Labor 1.10` tampil sesudah `Labor 1.9`.
 *   **Client Polling Timer**: Interval 1 menit yang menghitung selisih jam saat ini dengan jadwal (`calculateClientSideGaps`). Memicu efek merah dan suara `notif.mp3` jika sisa waktu `< 15 menit`.

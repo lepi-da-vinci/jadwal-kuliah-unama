@@ -251,11 +251,11 @@ def get_info_mase():
             conn.close()
 
 def get_ngrok_link():
-    """Mendapatkan link server aktif (Cloudflare Tunnel atau Ngrok) saat ini."""
+    """Mendapatkan link server aktif (Cloudflare Tunnel atau Ngrok) saat ini dan info scan QR di monitor."""
     # 1. Cek apakah ada URL Publik di .env (misal domain custom Cloudflare)
     env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
-    if env_url:
-        return f"Link Server Web Jadwal: {env_url}"
+    if env_url and env_url.startswith("http"):
+        return f"Link Server Web Jadwal: {env_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
 
     # 2. Cek file last_tunnel.txt jika ada
     if os.path.exists("last_tunnel.txt"):
@@ -263,7 +263,7 @@ def get_ngrok_link():
             with open("last_tunnel.txt", "r") as f:
                 saved_url = f.read().strip()
                 if saved_url.startswith("http"):
-                    return f"Link Server Cloudflare: {saved_url}"
+                    return f"Link Server Cloudflare: {saved_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
         except Exception:
             pass
 
@@ -274,11 +274,20 @@ def get_ngrok_link():
             tunnels = response.json().get('tunnels', [])
             for tunnel in tunnels:
                 if tunnel['public_url'].startswith("https"):
-                    return f"Link Server Ngrok: {tunnel['public_url']}"
+                    return f"Link Server Ngrok: {tunnel['public_url']}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
     except Exception:
         pass
 
-    return "Server berjalan lokal di http://127.0.0.1:8000 (Gunakan Cloudflare Tunnel atau Ngrok untuk link publik HP)."
+    if os.path.exists("last_ngrok.txt"):
+        try:
+            with open("last_ngrok.txt", "r") as f:
+                saved_url = f.read().strip()
+                if saved_url.startswith("http"):
+                    return f"Link Server Ngrok: {saved_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+        except Exception:
+            pass
+
+    return "Server saat ini berjalan lokal di http://127.0.0.1:8000 (atau scan Barcode QR di layar monitor ruang Aslab)."
 
 current_sender_context = threading.local()
 

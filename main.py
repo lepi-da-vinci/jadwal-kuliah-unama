@@ -1,6 +1,8 @@
 import asyncio
 import os
 import re
+import socket
+import requests
 from dotenv import load_dotenv
 
 import mysql.connector
@@ -50,6 +52,90 @@ def get_db():
                 database=db_name
             )
         raise err
+
+@app.get("/api/server-urls")
+def get_server_urls():
+    """Mengembalikan daftar link akses server (Cloudflare, Ngrok, LAN IP, Localhost) untuk QR Code & Link HP"""
+    urls = []
+    seen = set()
+
+    # 1. Domain kustom / URL dari .env
+    env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
+    if env_url and env_url.startswith("http"):
+        urls.append({"label": "Cloudflare / Custom Domain (Internet)", "url": env_url, "primary": True})
+        seen.add(env_url)
+
+    # 2. File last_tunnel.txt (Cloudflare Quick Tunnel)
+    if os.path.exists("last_tunnel.txt"):
+        try:
+            with open("last_tunnel.txt", "r") as f:
+                saved = f.read().strip()
+                if saved.startswith("http") and saved not in seen:
+                    urls.append({"label": "Cloudflare Tunnel (Internet)", "url": saved, "primary": True})
+                    seen.add(saved)
+        except Exception:
+            pass
+
+    # 2b. Auto-detect Cloudflare Tunnel dari Docker log jika belum terdeteksi
+    if not any("cloudflare" in u["label"].lower() for u in urls):
+        try:
+            import subprocess
+            res = subprocess.run(['docker', 'logs', '--tail', '50', 'jadwal_tunnel'], capture_output=True, text=True, timeout=2)
+            matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', res.stdout + res.stderr)
+            if matches:
+                latest_url = matches[-1]
+                if latest_url not in seen:
+                    urls.append({"label": "Cloudflare Tunnel (Internet)", "url": latest_url, "primary": True})
+                    seen.add(latest_url)
+                    with open("last_tunnel.txt", "w") as f:
+                        f.write(latest_url)
+        except Exception:
+            pass
+
+    # 3. Ngrok API & last_ngrok.txt
+    try:
+        r = requests.get("http://localhost:4040/api/tunnels", timeout=1)
+        if r.status_code == 200:
+            for t in r.json().get('tunnels', []):
+                pub = t.get('public_url', '')
+                if pub.startswith("https") and pub not in seen:
+                    urls.append({"label": "Ngrok Tunnel (Internet)", "url": pub, "primary": len(urls) == 0})
+                    seen.add(pub)
+                    break
+    except Exception:
+        pass
+
+    if os.path.exists("last_ngrok.txt"):
+        try:
+            with open("last_ngrok.txt", "r") as f:
+                saved = f.read().strip()
+                if saved.startswith("http") and saved not in seen:
+                    urls.append({"label": "Ngrok Tunnel (Internet)", "url": saved, "primary": len(urls) == 0})
+                    seen.add(saved)
+        except Exception:
+            pass
+
+    # 4. Local LAN IP (Wi-Fi / Ethernet di Ruang Lab)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        lan_url = f"http://{local_ip}:8000"
+        if lan_url not in seen:
+            urls.append({"label": f"Wi-Fi / LAN Ruang Aslab ({local_ip})", "url": lan_url, "primary": len(urls) == 0})
+            seen.add(lan_url)
+    except Exception:
+        pass
+
+    urls.append({"label": "Localhost (Komputer Server)", "url": "http://localhost:8000", "primary": len(urls) == 0})
+    best_url = urls[0]["url"] if urls else "http://localhost:8000"
+
+    return {
+        "status": "success",
+        "best_url": best_url,
+        "urls": urls
+    }
 
 
 

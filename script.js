@@ -1230,10 +1230,11 @@ function renderAslabTable() {
     `;
     
     const getKampusDisplay = (item) => {
-        if (item.kampus) return item.kampus;
-        if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) return 'Kobar';
-        if (item.nama_ruangan) return 'Thehok';
-        return '-';
+        let val = item.kampus;
+        if (!val && item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) val = 'Kobar';
+        if (!val && item.nama_ruangan) val = 'Thehok';
+        if (!val) return '-';
+        return val.replace(/kampus\s+/gi, "").trim();
     };
     
     const kampusDisplay = getKampusDisplay(a);
@@ -1380,6 +1381,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     const dataView = document.getElementById('wa-modal-data');
     const addView = document.getElementById('wa-modal-add');
     const editView = document.getElementById('wa-modal-edit');
+    const qrView = document.getElementById('wa-modal-qr');
     const modalTitle = document.getElementById('wa-modal-title');
     const modalIcon = document.getElementById('wa-modal-icon');
     const adminToggle = document.getElementById('admin-mode-toggle');
@@ -1438,7 +1440,8 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     };
 
     const SVG_WA_ICONS = {
-      aslab: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+      aslab: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
+      qr: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M7 17h.01M17 17h.01M7 7h.01M17 7h.01"></path></svg>`,
       chat: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
       list: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`,
       add: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>`,
@@ -1451,9 +1454,10 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       dataView.style.display = 'none';
       addView.style.display = 'none';
       editView.style.display = 'none';
+      if (qrView) qrView.style.display = 'none';
       if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
-      modalTitle.innerText = "Data WA Aslab";
+      modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
       updateAdminUI();
@@ -1468,6 +1472,139 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       updateAdminUI();
       testModal.classList.remove('open');
     };
+
+    // Navigasi ke QR Code Akses HP
+    const btnShowQr = document.getElementById('btn-show-qr-access');
+    if (btnShowQr) {
+      btnShowQr.onclick = async () => {
+        menuView.style.display = 'none';
+        if (qrView) qrView.style.display = 'flex';
+        adminToggle.style.display = 'none';
+        modalTitle.innerText = "Akses Dashboard HP";
+        modalIcon.innerHTML = SVG_WA_ICONS.qr;
+
+        // Fetch available server URLs
+        let detectedUrls = [];
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/server-urls`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.status === 'success' && json.urls && json.urls.length > 0) {
+              detectedUrls = json.urls;
+            }
+          }
+        } catch (err) {
+          console.warn("Gagal menarik server-urls dari API, gunakan fallback:", err);
+        }
+
+        // Fallback jika API kosong
+        const origin = window.location.origin;
+        if (detectedUrls.length === 0) {
+          if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+            detectedUrls.push({ label: "URL Web Ini (Aktif)", url: origin, primary: true });
+          } else {
+            detectedUrls.push({ label: "Localhost (Laptop Server)", url: "http://localhost:8000", primary: false });
+          }
+        }
+
+        // Urutkan & prioritaskan: Cloudflare Tunnel > Ngrok > Wi-Fi LAN > Origin Non-Localhost > Localhost
+        let defaultIndex = 0;
+        let foundPriority = false;
+
+        const urlSelect = document.getElementById('qr-url-select');
+        urlSelect.innerHTML = '';
+        detectedUrls.forEach((item, idx) => {
+          const opt = document.createElement('option');
+          opt.value = item.url;
+          opt.textContent = `${item.label} ➔ ${item.url}`;
+          urlSelect.appendChild(opt);
+
+          const lowerLabel = item.label.toLowerCase();
+          const lowerUrl = item.url.toLowerCase();
+
+          if (!foundPriority && (lowerLabel.includes('cloudflare') || lowerUrl.includes('trycloudflare.com'))) {
+            defaultIndex = idx;
+            foundPriority = true;
+          } else if (!foundPriority && (lowerLabel.includes('ngrok') || lowerUrl.includes('ngrok'))) {
+            defaultIndex = idx;
+          } else if (!foundPriority && defaultIndex === 0 && lowerLabel.includes('wi-fi')) {
+            defaultIndex = idx;
+          }
+        });
+
+        if (urlSelect.options[defaultIndex]) {
+          urlSelect.options[defaultIndex].selected = true;
+        }
+
+        // Helper render QR
+        const renderQrForUrl = (targetUrl) => {
+          const qrInput = document.getElementById('qr-link-input');
+          const qrOpen = document.getElementById('qr-open-link');
+          const qrDisplay = document.getElementById('qrcode-display');
+          const qrFallbackImg = document.getElementById('qrcode-img-fallback');
+
+          qrInput.value = targetUrl;
+          qrOpen.href = targetUrl;
+
+          qrDisplay.innerHTML = '';
+          qrFallbackImg.style.display = 'none';
+
+          if (typeof QRCode !== 'undefined') {
+            try {
+              new QRCode(qrDisplay, {
+                text: targetUrl,
+                width: 190,
+                height: 190,
+                colorDark: "#1e1b4b",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
+              });
+              qrDisplay.style.display = 'block';
+            } catch (e) {
+              console.error("QRCode.js error, using fallback image:", e);
+              qrDisplay.style.display = 'none';
+              qrFallbackImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(targetUrl)}`;
+              qrFallbackImg.style.display = 'block';
+            }
+          } else {
+            qrDisplay.style.display = 'none';
+            qrFallbackImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(targetUrl)}`;
+            qrFallbackImg.style.display = 'block';
+          }
+        };
+
+        renderQrForUrl(urlSelect.value);
+
+        urlSelect.onchange = () => {
+          renderQrForUrl(urlSelect.value);
+        };
+
+        // Copy button
+        const copyBtn = document.getElementById('qr-copy-btn');
+        const copyText = document.getElementById('qr-copy-btn-text');
+        copyBtn.onclick = async () => {
+          const val = document.getElementById('qr-link-input').value;
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(val);
+            } else {
+              const input = document.getElementById('qr-link-input');
+              input.select();
+              document.execCommand('copy');
+            }
+            copyText.textContent = "Tersalin! ✔";
+            setTimeout(() => {
+              copyText.textContent = "Salin Link";
+            }, 2000);
+          } catch (err) {
+            alert("Link: " + val);
+          }
+        };
+
+        // Back button
+        document.getElementById('qr-back-btn').onclick = showMenu;
+      };
+    }
 
     // Navigasi ke Uji Coba WA
     document.getElementById('btn-show-test-wa').onclick = () => {
@@ -1542,7 +1679,8 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       let html = '';
       sortedRuangan.forEach((r, idx) => {
         const adminColStyle = isAslabAdmin ? 'table-cell' : 'none';
-        const kampusDisplay = r.kampus ? r.kampus : (r.nama_ruangan.toLowerCase().includes('kobar') ? 'Kobar' : 'Thehok');
+        const rawKampus = r.kampus ? r.kampus : (r.nama_ruangan.toLowerCase().includes('kobar') ? 'Kobar' : 'Thehok');
+        const kampusDisplay = rawKampus.replace(/kampus\s+/gi, "").trim();
         html += `
           <tr style="border-bottom: 1px solid var(--border);">
             <td style="padding: 10px; text-align: center;">${idx + 1}</td>
