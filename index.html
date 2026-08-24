@@ -1098,15 +1098,27 @@
         </div>
 
         <div style="width: 100%; text-align: left;">
-          <label
-            style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.85em; color: var(--text-muted);">Pilih
-            Jalur Akses URL:</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label
+              style="font-weight: 500; font-size: 0.85em; color: var(--text-muted);">Pilih
+              Jalur Akses URL:</label>
+            <button id="qr-refresh-btn" type="button" title="Perbarui link Cloudflare / Ngrok terbaru"
+              style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); border-radius: 6px; padding: 4px 10px; font-size: 0.78em; color: var(--primary); cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 600; transition: all 0.2s ease;">
+              <svg id="qr-refresh-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span id="qr-refresh-text">Refresh Link</span>
+            </button>
+          </div>
           <select id="qr-url-select"
             style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; margin-bottom: 10px; font-size: 0.9em;">
             <!-- Opsi diisi dinamis oleh JS -->
           </select>
 
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
             <input type="text" id="qr-link-input" readonly
               style="flex: 1; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none;">
             <button class="btn btn-primary" id="qr-copy-btn"
@@ -1128,6 +1140,11 @@
               </svg>
               <span>Buka</span>
             </a>
+          </div>
+
+          <div id="qr-status-info" style="font-size: 0.78em; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px;">
+            <span id="qr-status-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+            <span id="qr-status-text">Link Real-Time Aktif</span>
           </div>
         </div>
 
@@ -1277,7 +1294,7 @@
 
       <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
       <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-      <script src="script.js?v=20260823_clean_kampus"></script>
+      <script src="script.js?v=20260824_refresh"></script>
 </body>
 
 </html>

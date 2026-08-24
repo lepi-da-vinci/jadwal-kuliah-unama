@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: mysql:8.0
@@ -52,7 +50,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: jadwal_tunnel
     restart: always
-    command: tunnel --url http://backend:8000
+    command: tunnel --url http://backend:8000 --logfile /var/log/cloudflared/tunnel.log
+    volumes:
+      - ./tunnel_logs:/var/log/cloudflared
     # Jika nanti punya Custom Domain sendiri, ganti baris command di atas dengan:
     # command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:

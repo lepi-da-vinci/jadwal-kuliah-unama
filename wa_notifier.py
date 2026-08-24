@@ -257,7 +257,18 @@ def get_ngrok_link():
     if env_url and env_url.startswith("http"):
         return f"Link Server Web Jadwal: {env_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
 
-    # 2. Cek file last_tunnel.txt jika ada
+    # 2. Cek live tunnel_logs/tunnel.log
+    for lp in ["tunnel_logs/tunnel.log", "/var/log/cloudflared/tunnel.log", "/app/tunnel_logs/tunnel.log", "tunnel.log"]:
+        if os.path.exists(lp):
+            try:
+                with open(lp, "r", encoding="utf-8", errors="ignore") as f:
+                    matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', f.read())
+                    if matches:
+                        return f"Link Server Cloudflare: {matches[-1]}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+            except Exception:
+                pass
+
+    # 2b. Cek file last_tunnel.txt jika ada
     if os.path.exists("last_tunnel.txt"):
         try:
             with open("last_tunnel.txt", "r") as f:

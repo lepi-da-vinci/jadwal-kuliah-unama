@@ -1378,3 +1378,8 @@ html body .flatpickr-calendar.arrowBottom:after {
 #result-lab-kosong, #result-cari-dosen, #result-cari-kelas {
   padding-bottom: 24px;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,7 +1,9 @@
 import asyncio
+import datetime
 import os
 import re
 import socket
+import time
 import requests
 from dotenv import load_dotenv
 
@@ -54,8 +56,8 @@ def get_db():
         raise err
 
 @app.get("/api/server-urls")
-def get_server_urls():
-    """Mengembalikan daftar link akses server (Cloudflare, Ngrok, LAN IP, Localhost) untuk QR Code & Link HP"""
+def get_server_urls(refresh: bool = False):
+    """Mengembalikan daftar link akses server real-time (Cloudflare, Ngrok, LAN IP, Localhost) untuk QR Code & Link HP"""
     urls = []
     seen = set()
 
@@ -65,32 +67,41 @@ def get_server_urls():
         urls.append({"label": "Cloudflare / Custom Domain (Internet)", "url": env_url, "primary": True})
         seen.add(env_url)
 
-    # 2. File last_tunnel.txt (Cloudflare Quick Tunnel)
-    if os.path.exists("last_tunnel.txt"):
+    # 2. Live Cloudflare Quick Tunnel dari tunnel_logs/tunnel.log
+    cf_url = None
+    log_paths = [
+        "tunnel_logs/tunnel.log",
+        "/var/log/cloudflared/tunnel.log",
+        "/app/tunnel_logs/tunnel.log",
+        "tunnel.log"
+    ]
+    for lp in log_paths:
+        if os.path.exists(lp):
+            try:
+                with open(lp, "r", encoding="utf-8", errors="ignore") as f:
+                    log_data = f.read()
+                    matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', log_data)
+                    if matches:
+                        cf_url = matches[-1]
+                        with open("last_tunnel.txt", "w", encoding="utf-8") as tf:
+                            tf.write(cf_url)
+                        break
+            except Exception:
+                pass
+
+    # 2b. Fallback ke last_tunnel.txt
+    if not cf_url and os.path.exists("last_tunnel.txt"):
         try:
-            with open("last_tunnel.txt", "r") as f:
+            with open("last_tunnel.txt", "r", encoding="utf-8") as f:
                 saved = f.read().strip()
-                if saved.startswith("http") and saved not in seen:
-                    urls.append({"label": "Cloudflare Tunnel (Internet)", "url": saved, "primary": True})
-                    seen.add(saved)
+                if saved.startswith("http"):
+                    cf_url = saved
         except Exception:
             pass
 
-    # 2b. Auto-detect Cloudflare Tunnel dari Docker log jika belum terdeteksi
-    if not any("cloudflare" in u["label"].lower() for u in urls):
-        try:
-            import subprocess
-            res = subprocess.run(['docker', 'logs', '--tail', '50', 'jadwal_tunnel'], capture_output=True, text=True, timeout=2)
-            matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', res.stdout + res.stderr)
-            if matches:
-                latest_url = matches[-1]
-                if latest_url not in seen:
-                    urls.append({"label": "Cloudflare Tunnel (Internet)", "url": latest_url, "primary": True})
-                    seen.add(latest_url)
-                    with open("last_tunnel.txt", "w") as f:
-                        f.write(latest_url)
-        except Exception:
-            pass
+    if cf_url and cf_url not in seen:
+        urls.append({"label": "Cloudflare Tunnel (Internet)", "url": cf_url, "primary": True})
+        seen.add(cf_url)
 
     # 3. Ngrok API & last_ngrok.txt
     try:
@@ -107,7 +118,7 @@ def get_server_urls():
 
     if os.path.exists("last_ngrok.txt"):
         try:
-            with open("last_ngrok.txt", "r") as f:
+            with open("last_ngrok.txt", "r", encoding="utf-8") as f:
                 saved = f.read().strip()
                 if saved.startswith("http") and saved not in seen:
                     urls.append({"label": "Ngrok Tunnel (Internet)", "url": saved, "primary": len(urls) == 0})
@@ -134,7 +145,8 @@ def get_server_urls():
     return {
         "status": "success",
         "best_url": best_url,
-        "urls": urls
+        "urls": urls,
+        "updated_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
 
 

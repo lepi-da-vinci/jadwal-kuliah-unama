@@ -1483,59 +1483,6 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         modalTitle.innerText = "Akses Dashboard HP";
         modalIcon.innerHTML = SVG_WA_ICONS.qr;
 
-        // Fetch available server URLs
-        let detectedUrls = [];
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/server-urls`);
-          if (res.ok) {
-            const json = await res.json();
-            if (json.status === 'success' && json.urls && json.urls.length > 0) {
-              detectedUrls = json.urls;
-            }
-          }
-        } catch (err) {
-          console.warn("Gagal menarik server-urls dari API, gunakan fallback:", err);
-        }
-
-        // Fallback jika API kosong
-        const origin = window.location.origin;
-        if (detectedUrls.length === 0) {
-          if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
-            detectedUrls.push({ label: "URL Web Ini (Aktif)", url: origin, primary: true });
-          } else {
-            detectedUrls.push({ label: "Localhost (Laptop Server)", url: "http://localhost:8000", primary: false });
-          }
-        }
-
-        // Urutkan & prioritaskan: Cloudflare Tunnel > Ngrok > Wi-Fi LAN > Origin Non-Localhost > Localhost
-        let defaultIndex = 0;
-        let foundPriority = false;
-
-        const urlSelect = document.getElementById('qr-url-select');
-        urlSelect.innerHTML = '';
-        detectedUrls.forEach((item, idx) => {
-          const opt = document.createElement('option');
-          opt.value = item.url;
-          opt.textContent = `${item.label} ➔ ${item.url}`;
-          urlSelect.appendChild(opt);
-
-          const lowerLabel = item.label.toLowerCase();
-          const lowerUrl = item.url.toLowerCase();
-
-          if (!foundPriority && (lowerLabel.includes('cloudflare') || lowerUrl.includes('trycloudflare.com'))) {
-            defaultIndex = idx;
-            foundPriority = true;
-          } else if (!foundPriority && (lowerLabel.includes('ngrok') || lowerUrl.includes('ngrok'))) {
-            defaultIndex = idx;
-          } else if (!foundPriority && defaultIndex === 0 && lowerLabel.includes('wi-fi')) {
-            defaultIndex = idx;
-          }
-        });
-
-        if (urlSelect.options[defaultIndex]) {
-          urlSelect.options[defaultIndex].selected = true;
-        }
-
         // Helper render QR
         const renderQrForUrl = (targetUrl) => {
           const qrInput = document.getElementById('qr-link-input');
@@ -1573,11 +1520,98 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           }
         };
 
-        renderQrForUrl(urlSelect.value);
+        // Function to load and render server URLs with Refresh support
+        const loadAndRenderServerUrls = async (isRefresh = false) => {
+          const refreshIcon = document.getElementById('qr-refresh-icon');
+          const refreshText = document.getElementById('qr-refresh-text');
+          const statusText = document.getElementById('qr-status-text');
+          const statusDot = document.getElementById('qr-status-dot');
 
+          if (isRefresh) {
+            if (refreshIcon) refreshIcon.style.animation = 'spin 0.8s linear infinite';
+            if (refreshText) refreshText.innerText = 'Memperbarui...';
+            if (statusText) statusText.innerText = 'Mencari link tunnel terbaru...';
+          }
+
+          let detectedUrls = [];
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/server-urls?refresh=1&_t=${Date.now()}`);
+            if (res.ok) {
+              const json = await res.json();
+              if (json.status === 'success' && json.urls && json.urls.length > 0) {
+                detectedUrls = json.urls;
+              }
+            }
+          } catch (err) {
+            console.warn("Gagal menarik server-urls dari API, gunakan fallback:", err);
+          }
+
+          // Fallback jika API kosong
+          const origin = window.location.origin;
+          if (detectedUrls.length === 0) {
+            if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+              detectedUrls.push({ label: "URL Web Ini (Aktif)", url: origin, primary: true });
+            } else {
+              detectedUrls.push({ label: "Localhost (Laptop Server)", url: "http://localhost:8000", primary: false });
+            }
+          }
+
+          // Urutkan & prioritaskan: Cloudflare Tunnel > Ngrok > Wi-Fi LAN > Origin Non-Localhost > Localhost
+          let defaultIndex = 0;
+          let foundPriority = false;
+
+          const urlSelect = document.getElementById('qr-url-select');
+          urlSelect.innerHTML = '';
+          detectedUrls.forEach((item, idx) => {
+            const opt = document.createElement('option');
+            opt.value = item.url;
+            opt.textContent = `${item.label} ➔ ${item.url}`;
+            urlSelect.appendChild(opt);
+
+            const lowerLabel = item.label.toLowerCase();
+            const lowerUrl = item.url.toLowerCase();
+
+            if (!foundPriority && (lowerLabel.includes('cloudflare') || lowerUrl.includes('trycloudflare.com'))) {
+              defaultIndex = idx;
+              foundPriority = true;
+            } else if (!foundPriority && (lowerLabel.includes('ngrok') || lowerUrl.includes('ngrok'))) {
+              defaultIndex = idx;
+            } else if (!foundPriority && defaultIndex === 0 && lowerLabel.includes('wi-fi')) {
+              defaultIndex = idx;
+            }
+          });
+
+          if (urlSelect.options[defaultIndex]) {
+            urlSelect.options[defaultIndex].selected = true;
+          }
+
+          renderQrForUrl(urlSelect.value);
+
+          if (isRefresh) {
+            setTimeout(() => {
+              if (refreshIcon) refreshIcon.style.animation = 'none';
+              if (refreshText) refreshText.innerText = 'Refresh Link';
+              if (statusText) statusText.innerText = 'Link & QR Berhasil Diperbarui! ✅';
+              if (statusDot) statusDot.style.background = '#10b981';
+            }, 500);
+          } else {
+            if (statusText) statusText.innerText = 'Link Real-Time Aktif';
+            if (statusDot) statusDot.style.background = '#10b981';
+          }
+        };
+
+        const refreshBtn = document.getElementById('qr-refresh-btn');
+        if (refreshBtn) {
+          refreshBtn.onclick = () => loadAndRenderServerUrls(true);
+        }
+
+        const urlSelect = document.getElementById('qr-url-select');
         urlSelect.onchange = () => {
           renderQrForUrl(urlSelect.value);
         };
+
+        // Initial load
+        loadAndRenderServerUrls(false);
 
         // Copy button
         const copyBtn = document.getElementById('qr-copy-btn');
@@ -1594,7 +1628,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
             }
             copyText.textContent = "Tersalin! ✔";
             setTimeout(() => {
-              copyText.textContent = "Salin Link";
+              copyText.textContent = "Salin";
             }, 2000);
           } catch (err) {
             alert("Link: " + val);
