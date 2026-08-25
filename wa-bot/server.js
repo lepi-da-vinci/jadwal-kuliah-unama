@@ -10,6 +10,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = 3000;
+const BOT_SECRET = process.env.WA_BOT_SECRET_KEY || 'unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a';
 let sock;
 
 async function connectToWhatsApp () {
@@ -51,7 +52,7 @@ async function connectToWhatsApp () {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Menerima pesan masuk dan meneruskannya ke backend Python
+    // Menerima pesan masuk dan meneruskannya ke backend Python dengan Secret Token
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         // Abaikan pesan kosong atau pesan yang dikirim oleh bot sendiri
@@ -61,10 +62,6 @@ async function connectToWhatsApp () {
             const sender = msg.key.participant || msg.key.remoteJid;
             // Abaikan pesan dari grup
             if (sender.endsWith('@g.us')) return;
-            
-            console.log("DEBUG MSG KEY:", JSON.stringify(msg.key));
-            console.log("DEBUG PARTICIPANT:", msg.key.participant);
-            console.log("DEBUG REMOTE JID:", msg.key.remoteJid);
 
             // Ambil isi teks pesan
             const text = msg.message.conversation || 
@@ -74,22 +71,42 @@ async function connectToWhatsApp () {
             
             console.log(`\n[PESAN MASUK] Dari ${sender}: ${text}`);
 
-            // Kirim webhook ke FastAPI Python
-            const response = await fetch('http://127.0.0.1:8000/api/webhook/wa', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sender: sender, text: text.trim() })
-            });
-            
-            console.log(`[WEBHOOK] Status dikirim ke Backend Python: HTTP ${response.status}`);
+            // Kirim webhook ke FastAPI Python (coba endpoint docker lalu localhost)
+            const webhookUrls = [
+                process.env.BACKEND_WEBHOOK_URL,
+                'http://backend:8000/api/webhook/wa',
+                'http://127.0.0.1:8000/api/webhook/wa'
+            ].filter(Boolean);
+
+            for (const url of webhookUrls) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'x-bot-secret': BOT_SECRET
+                        },
+                        body: JSON.stringify({ sender: sender, text: text.trim() })
+                    });
+                    console.log(`[WEBHOOK] Status dikirim ke ${url}: HTTP ${response.status}`);
+                    if (response.ok) break;
+                } catch (err) {
+                    // Fallback ke url berikutnya
+                }
+            }
         } catch (e) {
             console.error('Webhook error:', e);
         }
     });
 }
 
-// Endpoint untuk mengirim pesan
+// Endpoint untuk mengirim pesan (Diproteksi dengan Secret Token)
 app.post('/send', async (req, res) => {
+    const reqSecret = req.headers['x-bot-secret'] || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (!reqSecret || reqSecret !== BOT_SECRET) {
+        return res.status(401).json({ status: 'error', message: 'Akses ditolak: Bot secret token tidak valid.' });
+    }
+
     let { target, message } = req.body;
     
     if (!target || !message) {
@@ -108,8 +125,6 @@ app.post('/send', async (req, res) => {
     }
     
     try {
-        // Coba kirim langsung tanpa cek onWhatsApp karena onWhatsApp kadang gagal 
-        // mengenali nomor yang tidak ada di kontak hp.
         await sock.sendMessage(jid, { text: message });
         res.json({ status: 'success', message: 'Pesan berhasil dikirim' });
     } catch (error) {

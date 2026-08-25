@@ -1,14 +1,16 @@
 import asyncio
 import datetime
+import hmac
 import os
 import re
+import secrets
 import socket
 import time
 import requests
 from dotenv import load_dotenv
 
 import mysql.connector
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -23,15 +25,152 @@ async def startup_event():
     scraper.init_db_schema()
     asyncio.create_task(wa_notifier.wa_notifier_loop())
 
-# Mengizinkan Frontend mengakses API
+# ==================== SECURITY HEADERS MIDDLEWARE (SEC-10) ====================
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+# Mengizinkan Frontend mengakses API dengan batasan origin yang aman
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"^https?:\/\/([a-zA-Z0-9-]+\.)*(trycloudflare\.com|ngrok-free\.app|ngrok\.io|unama\.ac\.id)(:[0-9]+)?$",
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 load_dotenv()
+
+# ==================== ADMIN AUTH, RATE LIMITER & TOKEN STORE ====================
+admin_tokens = {}  # token -> expiry_timestamp
+login_failed_attempts = {}  # ip -> [timestamp, timestamp, ...]
+
+class LoginRequest(BaseModel):
+    password: str
+    master_password: str | None = None
+
+def verify_admin_token(authorization: str = Header(None)) -> str:
+    """Memvalidasi Bearer Token Admin untuk endpoint mutasi data sensitif"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Memerlukan otentikasi Admin."
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    now = time.time()
+    if token not in admin_tokens or admin_tokens[token] < now:
+        # Hapus token kadaluwarsa dari memory
+        if token in admin_tokens:
+            del admin_tokens[token]
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Token Admin tidak valid atau telah kedaluwarsa. Silakan login ulang."
+        )
+    return token
+
+def verify_bot_secret(x_bot_secret: str = Header(None)) -> bool:
+    """Memvalidasi secret header dari Node.js WhatsApp bot"""
+    expected_secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
+    if not x_bot_secret or not hmac.compare_digest(x_bot_secret.strip(), expected_secret.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Bot secret token tidak valid."
+        )
+    return True
+
+def is_admin_authenticated(authorization: str = Header(None)) -> bool:
+    """Cek status admin tanpa exception untuk keperluan PII masking"""
+    if not authorization or not authorization.startswith("Bearer "):
+        return False
+    token = authorization.split(" ", 1)[1].strip()
+    now = time.time()
+    return token in admin_tokens and admin_tokens[token] >= now
+
+@app.post("/api/auth/login")
+def admin_login(req: LoginRequest, request: Request):
+    """Verifikasi password Admin & Master dengan Rate Limiting anti brute-force"""
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+        
+    now = time.time()
+    # Bersihkan percobaan yang lebih lama dari 5 menit (300 detik)
+    attempts = [t for t in login_failed_attempts.get(client_ip, []) if now - t < 300]
+    login_failed_attempts[client_ip] = attempts
+    
+    # Blokir jika sudah 5 kali gagal dalam 5 menit
+    if len(attempts) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Terlalu banyak percobaan login gagal. Akses login dikunci sementara selama 5 menit untuk keamanan."
+        )
+
+    expected_admin_pass = os.getenv("ADMIN_PASSWORD", "unama123")
+    expected_master_pass = os.getenv("MASTER_PASSWORD", "makannasipadangdepangang!")
+    
+    # 1. Validasi Password Admin
+    if not hmac.compare_digest(req.password.strip(), expected_admin_pass.strip()):
+        attempts.append(now)
+        login_failed_attempts[client_ip] = attempts
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Password Admin salah! (Percobaan gagal {len(attempts)}/5)"
+        )
+    
+    # 2. Validasi Password Master jika disertakan
+    if req.master_password is not None:
+        if not hmac.compare_digest(req.master_password.strip(), expected_master_pass.strip()):
+            attempts.append(now)
+            login_failed_attempts[client_ip] = attempts
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Password Master salah! (Percobaan gagal {len(attempts)}/5)"
+            )
+    else:
+        # Mengindikasikan langkah 2 (Master Password) diperlukan
+        return {"status": "need_master", "message": "Memerlukan otorisasi Password Master."}
+    
+    # Sukses -> Reset failed attempts untuk IP ini
+    login_failed_attempts.pop(client_ip, None)
+    
+    # 3. Terbitkan Secure Random Token (64-char Hex)
+    token = secrets.token_hex(32)
+    # Berlaku selama 12 jam (43200 detik)
+    admin_tokens[token] = time.time() + 43200
+    
+    return {
+        "status": "success",
+        "message": "Autentikasi Admin berhasil!",
+        "token": token,
+        "expires_in": 43200
+    }
+
+@app.post("/api/auth/logout")
+def admin_logout(authorization: str = Header(None)):
+    """Menghapus token admin saat logout"""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        admin_tokens.pop(token, None)
+    return {"status": "success", "message": "Logout admin berhasil."}
+
+@app.get("/api/auth/verify")
+def admin_verify(token: str = Depends(verify_admin_token)):
+    """Memeriksa keabsahan token admin saat ini"""
+    return {"status": "success", "message": "Token admin valid."}
+
+# ==================================================================
 
 def get_db():
     pwd = os.getenv("DB_PASSWORD", "")
@@ -206,8 +345,8 @@ def get_semua_jadwal():
             conn.close()
 
 @app.delete("/api/jadwal")
-def clear_jadwal():
-    """Menghapus seluruh jadwal dari database (biarkan ruangan & dosen)"""
+def clear_jadwal(admin: str = Depends(verify_admin_token)):
+    """Menghapus seluruh jadwal dari database (memerlukan token Admin)"""
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -244,42 +383,58 @@ import time
 
 sync_status = {}
 pending_sync_queue = {}
+last_sync_times = {}
+sync_lock = asyncio.Lock()
 
 @app.post("/api/sync")
 async def sync_data(req: SyncRequest):
-    """Sinkronisasi data: Mencoba scraping langsung terlebih dahulu, jika terhalang gunakan Ekstensi Chrome"""
-    try:
-        tgl_key = req.tanggal or ""
-        start_time = time.time()
-        
-        # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
-        success, count, msg = scraper.scrape_baak_direct(req.tanggal)
-        if success:
-            sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
-            pending_sync_queue.pop(tgl_key, None)
-            return {"status": "success", "message": msg, "count": count}
-        
-        # 2. Fallback: Ekstensi Chrome di PC
-        print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
-        sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
-        target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
-        
-        pending_sync_queue[tgl_key] = {
-            "tanggal": tgl_key,
-            "url": target_url,
-            "time": start_time
+    """Sinkronisasi data dengan proteksi anti-DoS Cooldown & Async Lock (SEC-07)"""
+    tgl_key = req.tanggal or ""
+    now = time.time()
+    
+    # 1. Cek Cooldown (Minimal jeda 15 detik untuk tanggal yang sama)
+    last_time = last_sync_times.get(tgl_key, 0)
+    if now - last_time < 15:
+        sisa = int(15 - (now - last_time))
+        return {
+            "status": "cooldown",
+            "message": f"Sinkronisasi baru saja dilakukan. Harap tunggu {sisa} detik sebelum sinkronisasi ulang.",
+            "count": 0
         }
-        
-        # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
-        for _ in range(40):
-            await asyncio.sleep(0.8)
-            current = sync_status.get(tgl_key, {})
-            if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
-                return {"status": "success", "message": "Berhasil sinkronisasi via Ekstensi Chrome!", "count": current.get("count", 0)}
-        
-        return {"status": "success", "message": "Proses sinkronisasi selesai atau berjalan di background."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+
+    async with sync_lock:
+        try:
+            start_time = time.time()
+            last_sync_times[tgl_key] = start_time
+            
+            # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
+            success, count, msg = scraper.scrape_baak_direct(req.tanggal)
+            if success:
+                sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
+                pending_sync_queue.pop(tgl_key, None)
+                return {"status": "success", "message": msg, "count": count}
+            
+            # 2. Fallback: Ekstensi Chrome di PC
+            print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
+            sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
+            target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
+            
+            pending_sync_queue[tgl_key] = {
+                "tanggal": tgl_key,
+                "url": target_url,
+                "time": start_time
+            }
+            
+            # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
+            for _ in range(40):
+                await asyncio.sleep(0.8)
+                current = sync_status.get(tgl_key, {})
+                if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
+                    return {"status": "success", "message": "Berhasil sinkronisasi via Ekstensi Chrome!", "count": current.get("count", 0)}
+            
+            return {"status": "success", "message": "Proses sinkronisasi selesai atau berjalan di background."}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
 @app.get("/api/sync/pending")
 def get_pending_sync():
@@ -390,8 +545,9 @@ def get_ruangan():
             conn.close()
 
 @app.get("/api/aslab")
-def get_aslab():
-    """Mengambil daftar asisten lab beserta nama ruangannya dan nomor WA"""
+def get_aslab(authorization: str = Header(None)):
+    """Mengambil daftar asisten lab beserta nama ruangannya dan nomor WA (nomor disensor jika bukan admin)"""
+    is_admin = is_admin_authenticated(authorization)
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
@@ -401,16 +557,25 @@ def get_aslab():
             LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
         """)
         results = cursor.fetchall()
-        return {"status": "success", "data": results}
+        
+        # PII Protection: Sensor nomor WA di level backend jika bukan admin terotentikasi
+        for item in results:
+            if not is_admin:
+                wa = item.get('no_wa', '')
+                if wa and len(wa) > 6:
+                    item['no_wa'] = wa[:4] + '****' + wa[-3:]
+                    
+        return {"status": "success", "data": results, "is_admin": is_admin}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
 @app.delete("/api/aslab/{id_aslab}")
-def delete_aslab(id_aslab: int):
-    """Menghapus data asisten lab berdasarkan ID"""
+def delete_aslab(id_aslab: int, admin: str = Depends(verify_admin_token)):
+    """Menghapus data asisten lab berdasarkan ID (memerlukan token Admin)"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
@@ -433,8 +598,8 @@ class AddRuanganRequest(BaseModel):
     nama_ruangan: str
 
 @app.post("/api/ruangan/add")
-def add_ruangan(req: AddRuanganRequest):
-    """Menambahkan data ruangan baru"""
+def add_ruangan(req: AddRuanganRequest, admin: str = Depends(verify_admin_token)):
+    """Menambahkan data ruangan baru (memerlukan token Admin)"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
@@ -458,8 +623,8 @@ def add_ruangan(req: AddRuanganRequest):
             conn.close()
 
 @app.delete("/api/ruangan/{id_ruangan}")
-def delete_ruangan(id_ruangan: int):
-    """Menghapus data ruangan"""
+def delete_ruangan(id_ruangan: int, admin: str = Depends(verify_admin_token)):
+    """Menghapus data ruangan (memerlukan token Admin)"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
@@ -484,8 +649,8 @@ def delete_ruangan(id_ruangan: int):
             conn.close()
 
 @app.post("/api/aslab/add")
-def add_aslab(req: AddAslabRequest):
-    """Menambahkan data asisten lab secara manual"""
+def add_aslab(req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
+    """Menambahkan data asisten lab secara manual (memerlukan token Admin)"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
@@ -511,8 +676,8 @@ def add_aslab(req: AddAslabRequest):
             conn.close()
 
 @app.put("/api/aslab/{id_aslab}")
-def edit_aslab(id_aslab: int, req: AddAslabRequest):
-    """Mengubah data asisten lab secara manual"""
+def edit_aslab(id_aslab: int, req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
+    """Mengubah data asisten lab secara manual (memerlukan token Admin)"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
@@ -541,8 +706,8 @@ def edit_aslab(id_aslab: int, req: AddAslabRequest):
             conn.close()
 
 @app.post("/api/test-wa")
-def test_wa(req: TestWARequest):
-    """Mengirim pesan WA percobaan ke aslab tertentu atau semua"""
+def test_wa(req: TestWARequest, admin: str = Depends(verify_admin_token)):
+    """Mengirim pesan WA percobaan ke aslab tertentu atau semua (memerlukan token Admin)"""
     results = wa_notifier.test_send(req.id_aslab, req.action_type, req.ngrok_link)
     if isinstance(results, dict) and "error" in results:
         return {"status": "error", "message": results["error"]}
@@ -555,8 +720,8 @@ class WebhookRequest(BaseModel):
     text: str
 
 @app.post("/api/webhook/wa")
-def wa_webhook(req: WebhookRequest):
-    """Menerima pesan masuk dari WA Bot (Node.js)"""
+def wa_webhook(req: WebhookRequest, valid: bool = Depends(verify_bot_secret)):
+    """Menerima pesan masuk dari WA Bot (Node.js) dengan proteksi Secret Token"""
     response_msg = wa_notifier.handle_incoming_message(req.sender, req.text)
     if response_msg:
         # Kirim balasan

@@ -15,6 +15,17 @@ window.fetch = function (url, options = {}) {
   return originalFetch(url, options);
 };
 
+// ==================== DOM XSS SANITIZATION (SEC-08) ====================
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function selectAslabItem(element, value) {
   document.getElementById('aslab-select').value = value;
   const items = document.querySelectorAll('#aslab-list-container .aslab-list-item');
@@ -335,18 +346,18 @@ function renderTable(data) {
     if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
     else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
     else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
-    let displayStatus = item.status_jadwal;
+    let displayStatus = item.status_jadwal || '';
     if (item.metode_pembelajaran === 'OL') {
       displayStatus = 'Online';
     }
     const row = document.createElement('tr');
     row.innerHTML = `
-          <td><strong>${item.jam}</strong><br><small>${item.hari}, ${item.tanggal_format || item.tanggal}</small></td>
-          <td>${item.nama_mk || '-'} ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${item.kelas})</small>` : ''}</td>
-          <td>${item.nama_dosen || '-'}</td>
-          <td>${item.nama_ruangan || '-'}</td>
-          <td>${displayStatus}</td>
-          <td><span class="badge ${badgeClass}">${item.metode_pembelajaran}</span></td>
+          <td><strong>${escapeHtml(item.jam)}</strong><br><small>${escapeHtml(item.hari)}, ${escapeHtml(item.tanggal_format || item.tanggal)}</small></td>
+          <td>${escapeHtml(item.nama_mk || '-')} ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${escapeHtml(item.kelas)})</small>` : ''}</td>
+          <td>${escapeHtml(item.nama_dosen || '-')}</td>
+          <td>${escapeHtml(item.nama_ruangan || '-')}</td>
+          <td>${escapeHtml(displayStatus)}</td>
+          <td><span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran)}</span></td>
         `;
     tbody.appendChild(row);
   });
@@ -1170,9 +1181,59 @@ function promptFinalConfirmDanger() {
 
 document.getElementById('sync-btn').addEventListener('click', () => syncData(filterTanggal.value));
 
-// --- Data WA Aslab Modal Endpoint ---
+// --- Data WA Aslab Modal Endpoint & Security Helpers ---
 let globalAslabData = [];
 let isAslabAdmin = false;
+
+function getAdminToken() {
+  return sessionStorage.getItem('admin_token') || '';
+}
+
+function setAdminToken(token) {
+  if (token) {
+    sessionStorage.setItem('admin_token', token);
+    isAslabAdmin = true;
+  } else {
+    sessionStorage.removeItem('admin_token');
+    isAslabAdmin = false;
+  }
+}
+
+function getAdminHeaders(customHeaders = {}) {
+  const headers = { ...customHeaders };
+  const token = getAdminToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+async function requestAdminLogin() {
+  const pass = await promptPassword("Masukkan password Admin untuk masuk ke Mode Admin:");
+  if (pass === null) return null; // Dibatalkan
+  
+  const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:");
+  if (pass2 === null) return null; // Dibatalkan
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass, master_password: pass2 })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success' && data.token) {
+      setAdminToken(data.token);
+      return data.token;
+    } else {
+      alert(data.detail || data.message || "Password Admin / Master salah!");
+      return null;
+    }
+  } catch (err) {
+    alert("Gagal menghubungi server untuk verifikasi otentikasi.");
+    return null;
+  }
+}
 
 function renderAslabTable() {
   const tbody = document.getElementById('aslab-data-tbody');
@@ -1243,10 +1304,10 @@ function renderAslabTable() {
     html += `
             <tr style="border-bottom: 1px solid var(--border);">
               <td style="padding: 10px; text-align: center;">${idx + 1}</td>
-              <td style="padding: 10px;">${a.nama_aslab}</td>
-              <td style="padding: 10px; font-weight: 500;">${kampusDisplay}</td>
-              <td style="padding: 10px;">${ruangDisplay}</td>
-              <td style="padding: 10px;">${displayWa}</td>
+              <td style="padding: 10px;">${escapeHtml(a.nama_aslab)}</td>
+              <td style="padding: 10px; font-weight: 500;">${escapeHtml(kampusDisplay)}</td>
+              <td style="padding: 10px;">${escapeHtml(ruangDisplay)}</td>
+              <td style="padding: 10px;">${escapeHtml(displayWa)}</td>
               ${actionHtml}
             </tr>
           `;
@@ -1257,19 +1318,24 @@ function renderAslabTable() {
 window.deleteAslab = async function (id_aslab, nama) {
   if (confirm(`Yakin ingin menghapus data asisten lab ${nama}?`)) {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/aslab/${id_aslab}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/api/aslab/${id_aslab}`, {
+        method: 'DELETE',
+        headers: getAdminHeaders()
+      });
       const result = await res.json();
-      if (result.status === 'success') {
+      if (res.ok && result.status === 'success') {
         alert(result.message);
-        // Refresh data aslab
-        const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+        // Refresh data aslab dengan token admin
+        const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`, {
+          headers: getAdminHeaders()
+        });
         const dataAslab = await resAslab.json();
         if (dataAslab.status === 'success') {
           globalAslabData = dataAslab.data;
           renderAslabTable();
         }
       } else {
-        alert("Gagal menghapus: " + result.message);
+        alert("Gagal menghapus: " + (result.detail || result.message));
       }
     } catch (e) {
       alert("Terjadi kesalahan jaringan.");
@@ -1363,9 +1429,11 @@ window.editAslab = function (id_aslab) {
 };
 
 document.getElementById('test-wa-btn').addEventListener('click', async () => {
-  // Buka modal secara gratis (Guest Mode)
+  // Buka modal Data & Pengaturan WA Aslab
   try {
-    const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+    const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`, {
+      headers: getAdminHeaders()
+    });
     const dataAslab = await resAslab.json();
 
     if (dataAslab.status !== 'success') {
@@ -1374,6 +1442,13 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     }
 
     globalAslabData = dataAslab.data;
+
+    // Sinkronisasi status admin dari token
+    if (getAdminToken()) {
+      isAslabAdmin = true;
+    } else {
+      isAslabAdmin = false;
+    }
 
     const testModal = document.getElementById('test-wa-modal');
     const menuView = document.getElementById('wa-modal-menu');
@@ -1412,30 +1487,36 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 
     adminToggle.onclick = async () => {
       if (isAslabAdmin) {
-        isAslabAdmin = false;
+        // Logout Admin
+        try {
+          await fetch(`${API_BASE_URL}/api/auth/logout`, {
+            method: 'POST',
+            headers: getAdminHeaders()
+          });
+        } catch (err) {}
+        setAdminToken(null);
+        // Refresh data aslab menjadi nomor yang disensor
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+          const json = await res.json();
+          if (json.status === 'success') globalAslabData = json.data;
+        } catch (err) {}
         updateAdminUI();
       } else {
         testModal.classList.remove('open');
-        const pass = await promptPassword("Masukkan password Admin untuk masuk ke Mode Admin:");
-        if (pass === "unama123") {
-          // 2-Step Verification
-          const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:");
-          if (pass2 === "makannasipadangdepangang!") {
-            isAslabAdmin = true;
-            updateAdminUI();
-            testModal.classList.add('open');
-          } else if (pass2 !== null) {
-            alert("Password Master salah!");
-            testModal.classList.add('open');
-          } else {
-            testModal.classList.add('open');
-          }
-        } else if (pass !== null) {
-          alert("Password salah!");
-          testModal.classList.add('open');
-        } else {
-          testModal.classList.add('open');
+        const token = await requestAdminLogin();
+        if (token) {
+          // Refresh data aslab untuk mendapatkan nomor telepon lengkap tanpa sensor
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`, {
+              headers: getAdminHeaders()
+            });
+            const json = await res.json();
+            if (json.status === 'success') globalAslabData = json.data;
+          } catch (err) {}
+          updateAdminUI();
         }
+        testModal.classList.add('open');
       }
     };
 
@@ -1718,10 +1799,10 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         html += `
           <tr style="border-bottom: 1px solid var(--border);">
             <td style="padding: 10px; text-align: center;">${idx + 1}</td>
-            <td style="padding: 10px; font-weight: 500;">${kampusDisplay}</td>
-            <td style="padding: 10px; font-weight: 500;">${r.nama_ruangan}</td>
+            <td style="padding: 10px; font-weight: 500;">${escapeHtml(kampusDisplay)}</td>
+            <td style="padding: 10px; font-weight: 500;">${escapeHtml(r.nama_ruangan)}</td>
             <td style="padding: 10px; text-align: center; display: ${adminColStyle};" class="admin-only-col">
-              <button class="btn-delete-ruangan" data-id="${r.id_ruangan}" data-nama="${r.nama_ruangan}" style="background:var(--badge-cc); color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85em;">Hapus</button>
+              <button class="btn-delete-ruangan" data-id="${r.id_ruangan}" data-nama="${escapeHtml(r.nama_ruangan)}" style="background:var(--badge-cc); color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85em;">Hapus</button>
             </td>
           </tr>
         `;
@@ -1735,13 +1816,16 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           const nama = e.target.getAttribute('data-nama');
           if (confirm(`Yakin ingin menghapus Ruangan "${nama}"? (Tidak bisa dihapus jika sedang dipakai Aslab)`)) {
             try {
-              const res = await fetch(`${API_BASE_URL}/api/ruangan/${id}`, { method: 'DELETE' });
+              const res = await fetch(`${API_BASE_URL}/api/ruangan/${id}`, {
+                method: 'DELETE',
+                headers: getAdminHeaders()
+              });
               const data = await res.json();
-              if (data.status === 'success') {
+              if (res.ok && data.status === 'success') {
                 alert(data.message);
                 document.getElementById('btn-show-data-ruangan').click(); // Refresh
               } else {
-                alert("Gagal: " + data.message);
+                alert("Gagal: " + (data.detail || data.message));
               }
             } catch (err) {
               alert("Terjadi kesalahan jaringan.");
@@ -1808,16 +1892,16 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         try {
           const res = await fetch(`${API_BASE_URL}/api/ruangan/add`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ kampus: kampus, nama_ruangan: nama })
           });
           const data = await res.json();
-          if (data.status === 'success') {
+          if (res.ok && data.status === 'success') {
             alert(data.message);
             document.getElementById('add-ruangan-nama').value = '';
             document.getElementById('btn-show-data-ruangan').click();
           } else {
-            alert("Gagal menambahkan ruangan: " + data.message);
+            alert("Gagal menambahkan ruangan: " + (data.detail || data.message));
           }
         } catch (e) {
           alert("Terjadi kesalahan jaringan.");
@@ -1877,11 +1961,11 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/aslab/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ nama_aslab: nama, no_wa: noWa, id_ruangan: parseInt(idRuangan) })
         });
         const data = await res.json();
-        if (data.status === 'success') {
+        if (res.ok && data.status === 'success') {
           alert(data.message);
           // Update local data
           const index = globalAslabData.findIndex(a => a.id_aslab == id);
@@ -1896,7 +1980,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           // Return to data view to see changes
           document.getElementById('btn-show-data-wa').click();
         } else {
-          alert("Gagal mengubah data: " + data.message);
+          alert("Gagal mengubah data: " + (data.detail || data.message));
         }
       } catch (e) {
         alert("Terjadi kesalahan jaringan.");
@@ -1924,11 +2008,11 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/aslab/add`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ nama_aslab: nama, no_wa: noWa, id_ruangan: parseInt(idRuangan) })
         });
         const data = await res.json();
-        if (data.status === 'success') {
+        if (res.ok && data.status === 'success') {
           alert(data.message);
           // Clear inputs
           document.getElementById('add-aslab-nama').value = '';
@@ -1937,7 +2021,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           // Return to data view to see changes
           document.getElementById('btn-show-data-wa').click();
         } else {
-          alert("Gagal menambahkan data: " + data.message);
+          alert("Gagal menambahkan data: " + (data.detail || data.message));
         }
       } catch (e) {
         alert("Terjadi kesalahan jaringan.");
@@ -1965,16 +2049,16 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 
         const response = await fetch(`${API_BASE_URL}/api/test-wa`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if (result.status === 'success') {
+        if (response.ok && result.status === 'success') {
           let report = result.message + "\\n\\nDetail:\\n";
           result.data.forEach(d => report += `- ${d.ruangan} (${d.nama}): ${d.success ? 'TERKIRIM' : 'GAGAL'}\\n`);
           alert(report);
         } else {
-          alert("Gagal kirim test WA: " + result.message);
+          alert("Gagal kirim test WA: " + (result.detail || result.message));
         }
       } catch (e) {
         alert("Terjadi kesalahan koneksi saat kirim WA.");
@@ -2051,9 +2135,9 @@ window.showRoomDetail = function (roomName, kampusStr) {
       return `
             <li style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); box-shadow: var(--shadow-xs);">
               <div>
-                <div style="font-weight: bold; font-size: 1.05em; color: var(--text-dark); margin-bottom: 4px;">${s.jam} - Selesai ${methodBadge}</div>
-                <div style="color: var(--text);">${s.nama_mk}</div>
-                <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Kelas ${s.kelas} • ${s.nama_dosen}</div>
+                <div style="font-weight: bold; font-size: 1.05em; color: var(--text-dark); margin-bottom: 4px;">${escapeHtml(s.jam)} - Selesai ${methodBadge}</div>
+                <div style="color: var(--text);">${escapeHtml(s.nama_mk)}</div>
+                <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Kelas ${escapeHtml(s.kelas)} • ${escapeHtml(s.nama_dosen)}</div>
               </div>
               ${statusBadge}
             </li>
@@ -2105,19 +2189,11 @@ document.getElementById('btn-test-notif-suara').addEventListener('click', () => 
 });
 
 document.getElementById('clear-db-btn').addEventListener('click', async () => {
-  const pass = await promptPassword("Masukkan password Admin untuk menghapus Database:");
-  if (pass === null) return; // Dibatalkan
-  if (pass !== "unama123") {
-    alert("Password salah! Anda tidak memiliki izin.");
-    return;
-  }
-
-  // 2-Step Verification
-  const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master untuk menghapus Database:");
-  if (pass2 === null) return;
-  if (pass2 !== "makannasipadangdepangang!") {
-    alert("Password Master salah! Penghapusan dibatalkan.");
-    return;
+  // Pastikan user terotentikasi sebagai Admin di level Backend
+  let token = getAdminToken();
+  if (!token) {
+    token = await requestAdminLogin();
+    if (!token) return; // Login dibatalkan atau gagal
   }
 
   const isSure = await promptConfirmDanger("Yakin ingin menghapus SELURUH data jadwal dari database?");
@@ -2129,14 +2205,17 @@ document.getElementById('clear-db-btn').addEventListener('click', async () => {
     btn.disabled = true;
     btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menghapus...`;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/jadwal`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}/api/jadwal`, {
+        method: 'DELETE',
+        headers: getAdminHeaders()
+      });
       const result = await response.json();
-      if (result.status === 'success') {
+      if (response.ok && result.status === 'success') {
         showCustomAlert("Berhasil Dihapus!", result.message, "success");
         await fetchAllJadwal();
       }
       else {
-        showCustomAlert("Gagal!", "Gagal menghapus database: " + result.message, "error");
+        showCustomAlert("Gagal!", "Gagal menghapus database: " + (result.detail || result.message), "error");
       }
     } catch (e) {
       showCustomAlert("Error", "Terjadi kesalahan saat menghapus database.", "warning");
