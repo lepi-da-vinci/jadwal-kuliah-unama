@@ -5,3 +5,7 @@ wa-bot/.wwebjs_auth/
 wa-bot/.wwebjs_cache/
 baileys_auth_info/  
 .env
+last_ngrok.txt
+last_tunnel.txt
+tunnel_logs/*.log
+*.log
