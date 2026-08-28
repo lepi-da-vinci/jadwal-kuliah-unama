@@ -3332,7 +3332,12 @@ function openSingleGoogleCalendar(item) {
   window.open(url, '_blank');
 }
 
+let _isExportingExcel = false;
 function exportFilteredSchedulesToExcel() {
+  if (_isExportingExcel) return;
+  _isExportingExcel = true;
+  setTimeout(() => { _isExportingExcel = false; }, 1500);
+
   const targetData = (Array.isArray(window._currentFilteredJadwal) && window._currentFilteredJadwal.length > 0)
     ? window._currentFilteredJadwal
     : (Array.isArray(allJadwal) ? allJadwal : []);
@@ -3442,7 +3447,11 @@ function exportFilteredSchedulesToExcel() {
   document.body.removeChild(downloadLink);
 }
 
+let _isExportingICS = false;
 function exportFilteredSchedulesToICS() {
+  if (_isExportingICS) return;
+  _isExportingICS = true;
+  setTimeout(() => { _isExportingICS = false; }, 1500);
   const targetData = (Array.isArray(window._currentFilteredJadwal) && window._currentFilteredJadwal.length > 0)
     ? window._currentFilteredJadwal
     : (allJadwal || []);
@@ -3748,22 +3757,39 @@ function renderSpotlightResults(query) {
   // 3. RUANGAN & LABOR (KAMPUS THEHOK -> KOBAR -> LAB -> KELAS)
   // ==========================================
   if (cat === 'all' || cat === 'ruangan') {
-    const roomSet = new Set();
-    if (Array.isArray(allJadwal)) {
-      allJadwal.forEach(j => { if (j.nama_ruangan && j.nama_ruangan.trim()) roomSet.add(j.nama_ruangan.trim()); });
-    }
-    if (Array.isArray(allRuanganData)) {
-      allRuanganData.forEach(r => {
-        const rName = (r.nama_ruangan || r.nama || '').trim();
-        if (rName) roomSet.add(rName);
-      });
-    }
+    const roomMap = new Map();
 
-    const roomTemp = [];
-    roomSet.forEach(rName => {
-      const isThehok = rName.toLowerCase().includes('thehok');
-      const isKobar = rName.toLowerCase().includes('kobar');
-      const isLaboratorium = isLab(rName);
+    const processRoom = (rawRoomName, explicitKampus = '') => {
+      if (!rawRoomName || !rawRoomName.trim()) return;
+      const originalName = rawRoomName.trim();
+
+      // Bersihkan teks kampus berulang dari nama ruangan (misal: "Labor 1.3 (Kampus Thehok)" -> "Labor 1.3")
+      const cleanTitle = originalName
+        .replace(/\s*\(Kampus\s+(?:Thehok|Kobar)\)/gi, '')
+        .replace(/\s*\((?:Thehok|Kobar)\)/gi, '')
+        .trim();
+
+      if (!cleanTitle) return;
+
+      // Tentukan Kampus
+      let kampus = (explicitKampus || '').trim();
+      const lowerOrig = originalName.toLowerCase();
+      if (!kampus) {
+        if (lowerOrig.includes('thehok')) {
+          kampus = 'Thehok';
+        } else if (lowerOrig.includes('kobar')) {
+          kampus = 'Kobar';
+        }
+      }
+
+      // Jika belum terdeteksi, cari dari master allRuanganData
+      if (!kampus && Array.isArray(allRuanganData)) {
+        const found = allRuanganData.find(r => (r.nama_ruangan || '').toLowerCase().includes(cleanTitle.toLowerCase()));
+        if (found && found.kampus) kampus = found.kampus;
+      }
+
+      const isThehok = kampus.toLowerCase().includes('thehok') || lowerOrig.includes('thehok');
+      const isKobar = kampus.toLowerCase().includes('kobar') || lowerOrig.includes('kobar');
 
       let kampusLabel = 'UNAMA';
       let kampusPriority = 3;
@@ -3775,23 +3801,58 @@ function renderSpotlightResults(query) {
         kampusPriority = 2;
       }
 
-      const tipeLabel = isLaboratorium ? 'Laboratorium Komputer' : 'Ruang Perkuliahan Teori';
-      const badgeClass = isLaboratorium ? 'badge-type-lab' : 'badge-type-ruang';
-      const badgeText = isLaboratorium ? 'LAB' : 'KELAS';
-      const svgIcon = isLaboratorium ? svgSearchIcons.lab : svgSearchIcons.ruangan;
+      const isLaboratorium = isLab(cleanTitle);
+      const uniqueKey = `${cleanTitle.toLowerCase()}__${kampusLabel.toLowerCase()}`;
 
-      if (!query || rName.toLowerCase().includes(query) || kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
+      if (!roomMap.has(uniqueKey)) {
+        roomMap.set(uniqueKey, {
+          cleanTitle,
+          rawNames: new Set([originalName]),
+          kampusLabel,
+          kampusPriority,
+          isLaboratorium,
+          typePriority: isLaboratorium ? 1 : 2
+        });
+      } else {
+        roomMap.get(uniqueKey).rawNames.add(originalName);
+      }
+    };
+
+    // Proses master data ruangan
+    if (Array.isArray(allRuanganData)) {
+      allRuanganData.forEach(r => {
+        const rName = r.nama_ruangan || r.nama;
+        processRoom(rName, r.kampus || '');
+      });
+    }
+
+    // Proses data jadwal
+    if (Array.isArray(allJadwal)) {
+      allJadwal.forEach(j => {
+        processRoom(j.nama_ruangan, j.kampus || '');
+      });
+    }
+
+    const roomTemp = [];
+    roomMap.forEach(r => {
+      const tipeLabel = r.isLaboratorium ? 'Laboratorium Komputer' : 'Ruang Perkuliahan Teori';
+      const badgeClass = r.isLaboratorium ? 'badge-type-lab' : 'badge-type-ruang';
+      const badgeText = r.isLaboratorium ? 'LAB' : 'KELAS';
+      const svgIcon = r.isLaboratorium ? svgSearchIcons.lab : svgSearchIcons.ruangan;
+
+      if (!query || r.cleanTitle.toLowerCase().includes(query) || r.kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
         roomTemp.push({
           type: 'ruangan',
-          rawValue: rName,
+          rawValue: r.cleanTitle,
+          rawNames: Array.from(r.rawNames),
           badgeClass,
           badgeText,
           svgIcon,
-          title: rName,
-          subtitle: `${kampusLabel} • ${tipeLabel}`,
-          kampusPriority,
-          typePriority: isLaboratorium ? 1 : 2,
-          rawName: rName
+          title: r.cleanTitle,
+          subtitle: `${r.kampusLabel} • ${tipeLabel}`,
+          kampusPriority: r.kampusPriority,
+          typePriority: r.typePriority,
+          rawName: r.cleanTitle
         });
       }
     });
@@ -3903,7 +3964,13 @@ function openSpotlightDetailModal(item) {
     } else if (item.type === 'mk') {
       matchingSchedules = allJadwal.filter(j => j.nama_mk && j.nama_mk.toLowerCase().includes(item.rawValue.toLowerCase()));
     } else if (item.type === 'ruangan') {
-      matchingSchedules = allJadwal.filter(j => j.nama_ruangan && j.nama_ruangan.toLowerCase().includes(item.rawValue.toLowerCase()));
+      matchingSchedules = allJadwal.filter(j => {
+        if (!j.nama_ruangan) return false;
+        const jRoomLower = j.nama_ruangan.toLowerCase();
+        const rawLower = item.rawValue.toLowerCase();
+        if (Array.isArray(item.rawNames) && item.rawNames.some(rn => jRoomLower.includes(rn.toLowerCase()))) return true;
+        return jRoomLower.includes(rawLower);
+      });
     }
   }
 
