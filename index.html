@@ -1463,13 +1463,19 @@
         <!-- Injected dynamically by JS -->
       </div>
 
-      <div class="spotlight-footer" style="gap: 10px; justify-content: flex-end;">
-        <button id="spotlight-detail-apply-btn" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.88em;">
-          Filter di Tabel Utama
+      <div class="spotlight-footer" style="gap: 10px; justify-content: space-between; align-items: center;">
+        <button class="btn btn-secondary" onclick="backToSpotlightModal()"
+          style="padding: 8px 16px; font-size: 0.88em; display: inline-flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          Kembali
         </button>
-        <button class="btn btn-secondary" onclick="closeSpotlightDetailModal()"
-          style="padding: 8px 16px; font-size: 0.88em;">
-          Tutup
+        <button id="spotlight-detail-apply-btn" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.88em; display: inline-flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+          Filter di Tabel Utama
         </button>
       </div>
     </div>

@@ -3579,7 +3579,7 @@ document.addEventListener('keydown', (e) => {
 
   if (isDetailOpen && e.key === 'Escape') {
     e.preventDefault();
-    closeSpotlightDetailModal();
+    backToSpotlightModal();
     return;
   }
 
@@ -3652,9 +3652,6 @@ function renderSpotlightResults(query) {
       if (!item.nama_dosen) return;
       // Split multi-dosen (e.g. "Yovi Pratama, Lazuardi Yudha Pradana" or "Dr. X, M.Kom / Y, S.Kom")
       const rawNames = item.nama_dosen.split(/[,/&]/).map(n => n.trim()).filter(Boolean);
-      if (rawNames.length > 1 && !rawNames.includes(item.nama_dosen.trim())) {
-        rawNames.push(item.nama_dosen.trim());
-      }
 
       rawNames.forEach(name => {
         if (!name || name === '-' || name.toLowerCase() === 'null') return;
@@ -3841,7 +3838,7 @@ function renderSpotlightResults(query) {
 
   window._spotlightCurrentResults = finalResults;
 
-  container.innerHTML = finalResults.slice(0, 30).map((r, i) => `
+  container.innerHTML = finalResults.map((r, i) => `
     <div class="spotlight-item ${i === spotlightActiveIndex ? 'selected' : ''}" onclick="executeSpotlightAction(${i})">
       <div class="spotlight-item-left">
         <div class="spotlight-icon">${r.svgIcon}</div>
@@ -3923,15 +3920,18 @@ function openSpotlightDetailModal(item) {
     const totalKelas = matchingSchedules.length;
     const uniqueRuangan = [...new Set(matchingSchedules.map(j => j.nama_ruangan).filter(Boolean))].length;
 
-    let scheduleCardsHtml = matchingSchedules.slice(0, 10).map(s => `
+    // Render SEMUA jadwal yang sesuai tanpa potongan/limit
+    let scheduleCardsHtml = matchingSchedules.map(s => `
       <div class="spotlight-detail-card-item">
         <div>
-          <div style="font-weight: 700; color: var(--text); font-size: 0.95em;">${escapeHtml(s.nama_mk || '-')} ${s.kelas ? `(Kelas: ${escapeHtml(s.kelas)})` : ''}</div>
+          <div style="font-weight: 700; color: var(--text); font-size: 0.95em;">
+            ${escapeHtml(s.nama_mk || '-')} ${s.kelas ? `<span style="color:var(--primary); font-size:0.85em; font-weight:700;">(Kelas: ${escapeHtml(s.kelas)})</span>` : ''}
+          </div>
           <div style="font-size: 0.82em; color: var(--text-muted); margin-top: 2px;">
             ${escapeHtml(s.nama_ruangan || '-')} • ${escapeHtml(s.hari || '-')}, ${escapeHtml(s.tanggal || '')}
           </div>
         </div>
-        <div style="text-align: right;">
+        <div style="text-align: right; white-space: nowrap;">
           <div style="font-weight: 700; color: var(--primary); font-size: 0.88em;">Pukul ${escapeHtml(s.jam || '-')}</div>
           <span class="badge ${s.metode_pembelajaran === 'TM' ? 'tm' : (s.metode_pembelajaran === 'OL' ? 'ol' : 'cc')}" style="font-size:0.7em;">
             ${escapeHtml(s.metode_pembelajaran || '-')}
@@ -3955,19 +3955,34 @@ function openSpotlightDetailModal(item) {
           <div class="spotlight-detail-stat-lbl">Ruangan Terkait</div>
         </div>
       </div>
-      <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 8px; color: var(--text);">Daftar Jadwal Kuliah Terkait:</div>
-      ${scheduleCardsHtml}
-      ${matchingSchedules.length > 10 ? `<div style="text-align:center; font-size:0.8em; color:var(--text-muted); padding:6px;">Dan ${matchingSchedules.length - 10} jadwal lainnya...</div>` : ''}
+      <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 8px; color: var(--text);">Daftar Semua Jadwal Terkait (${totalKelas} Sesi):</div>
+      <div style="max-height: 380px; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 6px;">
+        ${scheduleCardsHtml}
+      </div>
     `;
 
-    applyBtn.style.display = 'inline-block';
+    applyBtn.style.display = 'inline-flex';
     applyBtn.onclick = () => {
       applySpotlightFilterToMainTable(item.type, item.rawValue, matchingSchedules);
     };
   }
 
-  closeSpotlightModal();
+  // Tutup spotlight modal sementara & buka detail modal
+  const spotlightBackdrop = document.getElementById('spotlight-backdrop');
+  if (spotlightBackdrop) spotlightBackdrop.classList.remove('open');
   backdrop.classList.add('open');
+}
+
+function backToSpotlightModal() {
+  const detailBackdrop = document.getElementById('spotlight-detail-backdrop');
+  if (detailBackdrop) detailBackdrop.classList.remove('open');
+
+  const spotlightBackdrop = document.getElementById('spotlight-backdrop');
+  if (spotlightBackdrop) {
+    spotlightBackdrop.classList.add('open');
+    const input = document.getElementById('spotlight-input');
+    if (input) input.focus();
+  }
 }
 
 function closeSpotlightDetailModal(e) {
@@ -4011,13 +4026,33 @@ function resetSpotlightFilter() {
 
 
 // =========================================================================
-// TV / KIOSK DISPLAY MODE (ANIMATED, ALL ROOMS, THEME-ADAPTIVE)
+// TV / KIOSK DISPLAY MODE (ANIMATED ROLLING QUEUE TICKER & REALTIME TODAY SCRAPER)
 // =========================================================================
+const TV_VISIBLE_ROWS_COUNT = 7;
 let tvClockTimer = null;
 let tvAutoRefreshTimer = null;
-let tvScrollInterval = null;
+let tvTickerInterval = null;
+let tvAllDayJadwal = [];
+let tvCurrentHeadIndex = 0;
+let isTvTickerPaused = false;
+let isTvAutoSyncing = false;
 
-function openTvMode() {
+function getTodayLocalDateStr() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatTanggalIndo(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+async function openTvMode() {
   const overlay = document.getElementById('tv-mode-overlay');
   if (!overlay) return;
 
@@ -4027,16 +4062,58 @@ function openTvMode() {
     document.documentElement.requestFullscreen().catch(() => {});
   }
 
-  updateTvModeData();
+  const selectedDate = document.getElementById('filter-tanggal')?.value;
+  const todayStr = getTodayLocalDateStr();
+  const targetDate = selectedDate || todayStr;
 
   if (tvClockTimer) clearInterval(tvClockTimer);
   tvClockTimer = setInterval(updateTvClock, 1000);
   updateTvClock();
 
-  if (tvAutoRefreshTimer) clearInterval(tvAutoRefreshTimer);
-  tvAutoRefreshTimer = setInterval(updateTvModeData, 10000);
+  // Setup hover pause
+  const container = document.getElementById('tv-grid-container');
+  if (container && !container._hoverBound) {
+    container.addEventListener('mouseenter', () => { isTvTickerPaused = true; });
+    container.addEventListener('mouseleave', () => { isTvTickerPaused = false; });
+    container._hoverBound = true;
+  }
 
-  startTvAutoScroll();
+  // Cek apakah data untuk tanggal tersebut sudah ada di memori allJadwal
+  let dayJadwal = (Array.isArray(allJadwal)) ? allJadwal.filter(j => j.tanggal === targetDate) : [];
+
+  // Jika data tanggal hari ini belum ada, otomatis jalankan Realtime Direct Scraper BAAK!
+  if (dayJadwal.length === 0 && !isTvAutoSyncing) {
+    isTvAutoSyncing = true;
+    if (container) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text); padding: 80px 20px;">
+          <div style="margin: 0 auto 20px; width: 46px; height: 46px; border: 4px solid rgba(99, 102, 241, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+          <div style="font-size: 1.25em; font-weight: 800; color: var(--text);">Menyinkronkan Jadwal Hari Ini Realtime...</div>
+          <div style="font-size: 0.9em; margin-top: 6px; color: var(--text-muted);">
+            Mengambil data perkuliahan langsung dari BAAK UNAMA untuk tanggal <strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>.
+          </div>
+        </div>
+      `;
+    }
+
+    try {
+      await fetch(`${API_BASE_URL}/api/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tanggal: targetDate, from_dashboard: true })
+      });
+      await fetchAllJadwal();
+    } catch (err) {
+      console.error("Gagal realtime auto-sync TV mode:", err);
+    } finally {
+      isTvAutoSyncing = false;
+    }
+  }
+
+  updateTvModeData(true);
+
+  if (tvAutoRefreshTimer) clearInterval(tvAutoRefreshTimer);
+  tvAutoRefreshTimer = setInterval(() => updateTvModeData(false), 30000);
 }
 
 function closeTvMode(exitFullscreen = true) {
@@ -4049,7 +4126,7 @@ function closeTvMode(exitFullscreen = true) {
 
   if (tvClockTimer) { clearInterval(tvClockTimer); tvClockTimer = null; }
   if (tvAutoRefreshTimer) { clearInterval(tvAutoRefreshTimer); tvAutoRefreshTimer = null; }
-  if (tvScrollInterval) { clearInterval(tvScrollInterval); tvScrollInterval = null; }
+  if (tvTickerInterval) { clearInterval(tvTickerInterval); tvTickerInterval = null; }
 }
 
 // Listen to fullscreen changes to handle ESC key properly!
@@ -4064,29 +4141,64 @@ document.addEventListener('webkitfullscreenchange', () => {
   }
 });
 
-function startTvAutoScroll() {
-  const container = document.getElementById('tv-grid-container');
-  if (!container) return;
-  if (tvScrollInterval) clearInterval(tvScrollInterval);
+function createTvRowHtml(item, isEnter = false) {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  let direction = 1;
-  let isPaused = false;
-
-  tvScrollInterval = setInterval(() => {
-    if (!container || isPaused) return;
-    const maxScroll = container.scrollHeight - container.clientHeight;
-    if (maxScroll <= 10) return;
-
-    container.scrollTop += direction * 1.5;
-
-    if (container.scrollTop >= maxScroll - 2) {
-      isPaused = true;
-      setTimeout(() => { direction = -1; isPaused = false; }, 3000);
-    } else if (container.scrollTop <= 2) {
-      isPaused = true;
-      setTimeout(() => { direction = 1; isPaused = false; }, 3000);
+  let isActiveNow = false;
+  if (item.jam) {
+    const parts = item.jam.split(/[-–—]/).map(p => p.trim());
+    if (parts.length === 2) {
+      const [sh, sm] = parts[0].split(':').map(Number);
+      const [eh, em] = parts[1].split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      if (currentMinutes >= startMin && currentMinutes <= endMin) {
+        isActiveNow = true;
+      }
     }
-  }, 50);
+  }
+
+  let badgeClass = 'default';
+  if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+  else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+  else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+
+  let statusDisplay = item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : 'OnSchedule');
+  let statusHtml = `<span class="tv-row-status">${escapeHtml(statusDisplay)}</span>`;
+  if (isActiveNow) {
+    statusHtml = `
+      <span class="tv-row-status active-status">
+        <span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981;"></span>
+        Sedang Berlangsung
+      </span>
+    `;
+  }
+
+  return `
+    <div class="tv-schedule-row ${isActiveNow ? 'active-now' : ''}" ${isEnter ? 'style="animation: popUpFromBottom 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;"' : ''}>
+      <div class="tv-row-waktu">
+        <strong>${escapeHtml(item.jam || '-')}</strong>
+        <small>${escapeHtml(item.hari || '-')}, ${escapeHtml(item.tanggal_format || item.tanggal || '')}</small>
+      </div>
+      <div class="tv-row-mk">
+        <div>${escapeHtml(item.nama_mk || '-')}</div>
+        ${item.kelas ? `<div class="tv-row-kelas">(Kelas: ${escapeHtml(item.kelas)})</div>` : ''}
+      </div>
+      <div class="tv-row-dosen">
+        ${escapeHtml(item.nama_dosen || '-')}
+      </div>
+      <div class="tv-row-ruangan">
+        ${escapeHtml(item.nama_ruangan || '-')}
+      </div>
+      <div>
+        ${statusHtml}
+      </div>
+      <div class="tv-row-metode">
+        <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
+      </div>
+    </div>
+  `;
 }
 
 function updateTvClock() {
@@ -4102,17 +4214,12 @@ function updateTvClock() {
   }
 }
 
-function updateTvModeData() {
+function updateTvModeData(isInitial = false) {
   const grid = document.getElementById('tv-grid-container');
   if (!grid) return;
 
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
   const selectedDate = document.getElementById('filter-tanggal')?.value;
-  const todayStr = now.toISOString().slice(0, 10);
-  
-  // Gunakan tanggal yang dipilih di filter, atau tanggal hari ini jika tidak ada yang dipilih
+  const todayStr = getTodayLocalDateStr();
   const targetDate = selectedDate || todayStr;
 
   let dayJadwal = [];
@@ -4137,17 +4244,19 @@ function updateTvModeData() {
   if (totEl) totEl.innerText = totCount;
 
   if (dayJadwal.length === 0) {
+    if (tvTickerInterval) { clearInterval(tvTickerInterval); tvTickerInterval = null; }
+    tvAllDayJadwal = [];
     grid.innerHTML = `
-      <div style="text-align: center; color: var(--text-muted); padding: 60px 20px;">
-        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 14px; opacity: 0.4;">
+      <div style="text-align: center; color: var(--text-muted); padding: 70px 20px;">
+        <svg viewBox="0 0 24 24" width="50" height="50" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 14px; opacity: 0.4;">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
           <line x1="16" y1="2" x2="16" y2="6"></line>
           <line x1="8" y1="2" x2="8" y2="6"></line>
           <line x1="3" y1="10" x2="21" y2="10"></line>
         </svg>
-        <div style="font-size: 1.15em; font-weight: 700; color: var(--text);">Tidak Ada Jadwal Kuliah</div>
-        <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-muted);">
-          ${selectedDate ? `Tidak ada jadwal perkuliahan pada tanggal <strong>${escapeHtml(selectedDate)}</strong>.` : 'Tidak ada perkuliahan aktif untuk hari ini. Silakan pilih tanggal pada filter utama.'}
+        <div style="font-size: 1.2em; font-weight: 800; color: var(--text);">Tidak Ada Jadwal Kuliah</div>
+        <div style="font-size: 0.92em; margin-top: 6px; color: var(--text-muted);">
+          Tidak ada perkuliahan aktif pada tanggal <strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>.
         </div>
       </div>
     `;
@@ -4161,64 +4270,62 @@ function updateTvModeData() {
     return jamA.localeCompare(jamB);
   });
 
-  const rowsHtml = sortedJadwal.map(item => {
-    let isActiveNow = false;
-    if (item.jam) {
-      const parts = item.jam.split(/[-–—]/).map(p => p.trim());
-      if (parts.length === 2) {
-        const [sh, sm] = parts[0].split(':').map(Number);
-        const [eh, em] = parts[1].split(':').map(Number);
-        const startMin = sh * 60 + sm;
-        const endMin = eh * 60 + em;
-        if (currentMinutes >= startMin && currentMinutes <= endMin) {
-          isActiveNow = true;
-        }
+  tvAllDayJadwal = sortedJadwal;
+
+  if (isInitial || grid.children.length === 0) {
+    tvCurrentHeadIndex = 0;
+    const initialRows = sortedJadwal.slice(0, Math.min(TV_VISIBLE_ROWS_COUNT, sortedJadwal.length));
+    grid.innerHTML = initialRows.map((item, idx) => {
+      const delay = Math.min(idx * 0.05, 1.0);
+      return createTvRowHtml(item).replace('class="tv-schedule-row', `style="animation-delay: ${delay}s;" class="tv-schedule-row`);
+    }).join('');
+    
+    startTvRollingTicker();
+  }
+}
+
+function startTvRollingTicker() {
+  if (tvTickerInterval) clearInterval(tvTickerInterval);
+
+  if (!tvAllDayJadwal || tvAllDayJadwal.length <= TV_VISIBLE_ROWS_COUNT) {
+    return;
+  }
+
+  tvTickerInterval = setInterval(() => {
+    if (isTvTickerPaused) return;
+
+    const container = document.getElementById('tv-grid-container');
+    if (!container || tvAllDayJadwal.length <= TV_VISIBLE_ROWS_COUNT) return;
+
+    const firstCard = container.firstElementChild;
+    if (!firstCard) return;
+
+    // 1. Tambahkan kelas animasi keluar pada kartu teratas (fade out & slide up)
+    firstCard.classList.add('tv-row-exit');
+
+    // 2. Siapkan kartu berikutnya dari antrean jadwal (rolling carousel)
+    const nextIndex = (tvCurrentHeadIndex + TV_VISIBLE_ROWS_COUNT) % tvAllDayJadwal.length;
+    const nextItem = tvAllDayJadwal[nextIndex];
+
+    const newRowHtml = createTvRowHtml(nextItem, true);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = newRowHtml.trim();
+    const newCardEl = tempDiv.firstElementChild;
+
+    // Tambahkan kartu baru di baris paling bawah
+    container.appendChild(newCardEl);
+
+    // Geser index head
+    tvCurrentHeadIndex = (tvCurrentHeadIndex + 1) % tvAllDayJadwal.length;
+
+    // 3. Hapus elemen teratas setelah animasi exit selesai (620ms)
+    setTimeout(() => {
+      if (firstCard && firstCard.parentNode) {
+        firstCard.parentNode.removeChild(firstCard);
       }
-    }
+    }, 620);
 
-    let badgeClass = 'default';
-    if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
-    else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
-    else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
-
-    let statusDisplay = item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : 'OnSchedule');
-    let statusHtml = `<span class="tv-row-status">${escapeHtml(statusDisplay)}</span>`;
-    if (isActiveNow) {
-      statusHtml = `
-        <span class="tv-row-status active-status">
-          <span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981;"></span>
-          Sedang Berlangsung
-        </span>
-      `;
-    }
-
-    return `
-      <div class="tv-schedule-row ${isActiveNow ? 'active-now' : ''}">
-        <div class="tv-row-waktu">
-          <strong>${escapeHtml(item.jam || '-')}</strong>
-          <small>${escapeHtml(item.hari || '-')}, ${escapeHtml(item.tanggal_format || item.tanggal || '')}</small>
-        </div>
-        <div class="tv-row-mk">
-          <div>${escapeHtml(item.nama_mk || '-')}</div>
-          ${item.kelas ? `<div class="tv-row-kelas">(Kelas: ${escapeHtml(item.kelas)})</div>` : ''}
-        </div>
-        <div class="tv-row-dosen">
-          ${escapeHtml(item.nama_dosen || '-')}
-        </div>
-        <div class="tv-row-ruangan">
-          ${escapeHtml(item.nama_ruangan || '-')}
-        </div>
-        <div>
-          ${statusHtml}
-        </div>
-        <div class="tv-row-metode">
-          <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
-        </div>
-      </div>
-    `;
-  });
-
-  grid.innerHTML = rowsHtml.join('');
+  }, 5200); // Bergantian setiap 5.2 detik secara santai & berjiwa
 }
 
 // =========================================================================
@@ -4228,6 +4335,7 @@ window.openSpotlightModal = openSpotlightModal;
 window.closeSpotlightModal = closeSpotlightModal;
 window.openSpotlightDetailModal = openSpotlightDetailModal;
 window.closeSpotlightDetailModal = closeSpotlightDetailModal;
+window.backToSpotlightModal = backToSpotlightModal;
 window.clearSpotlightInput = clearSpotlightInput;
 window.filterSpotlightCategory = filterSpotlightCategory;
 window.resetSpotlightFilter = resetSpotlightFilter;

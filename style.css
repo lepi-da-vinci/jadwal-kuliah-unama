@@ -1814,24 +1814,50 @@ body.dark-theme .tv-table-header {
 }
 .tv-schedule-list-container {
   flex: 1;
-  overflow-y: auto;
-  padding-bottom: 60px;
-  scroll-behavior: smooth;
+  overflow: hidden;
+  padding-bottom: 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
+@keyframes popUpFromBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(35px) scale(0.96);
+    filter: blur(3px);
+  }
+  60% {
+    opacity: 0.95;
+    transform: translateY(-4px) scale(1.006);
+    filter: blur(0px);
+  }
+  85% {
+    transform: translateY(1.5px) scale(0.998);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
 .tv-schedule-row {
   display: grid;
-  grid-template-columns: 160px 2.2fr 1.6fr 1.6fr 140px 90px;
+  grid-template-columns: 150px 2.2fr 1.6fr 1.6fr 140px 85px;
   gap: 16px;
   align-items: center;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 16px;
-  padding: 16px 24px;
+  border-radius: 14px;
+  padding: 12px 22px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+              margin-top 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
+  animation: popUpFromBottom 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity, margin-top;
 }
 body.dark-theme .tv-schedule-row {
   background: rgba(30, 41, 59, 0.55);
@@ -1846,6 +1872,19 @@ body.dark-theme .tv-schedule-row {
 body.dark-theme .tv-schedule-row.active-now {
   background: rgba(20, 83, 45, 0.25);
   border-color: rgba(74, 222, 128, 0.4);
+}
+
+/* Animasi saat baris teratas keluar & baris bawah naik bergantian secara hidup & halus */
+.tv-schedule-row.tv-row-exit {
+  opacity: 0 !important;
+  transform: translateY(-24px) scale(0.95) !important;
+  margin-top: -76px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none;
+  filter: blur(3px) !important;
 }
 .tv-row-waktu strong {
   font-size: 1.05em;
