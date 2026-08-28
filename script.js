@@ -351,9 +351,19 @@ function renderTable(data) {
       displayStatus = 'Online';
     }
     const row = document.createElement('tr');
+    const safeItemJson = escapeHtml(JSON.stringify(item));
     row.innerHTML = `
           <td><strong>${escapeHtml(item.jam)}</strong><br><small>${escapeHtml(item.hari)}, ${escapeHtml(item.tanggal_format || item.tanggal)}</small></td>
-          <td>${escapeHtml(item.nama_mk || '-')} ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${escapeHtml(item.kelas)})</small>` : ''}</td>
+          <td>
+            ${escapeHtml(item.nama_mk || '-')} 
+            ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${escapeHtml(item.kelas)})</small>` : ''}
+            <div>
+              <button class="btn-cal-mini" data-item="${safeItemJson}" onclick="handleSingleCalClick(this)" title="Simpan jadwal kuliah ini ke Google Calendar">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                + Google Calendar
+              </button>
+            </div>
+          </td>
           <td>${escapeHtml(item.nama_dosen || '-')}</td>
           <td>${escapeHtml(item.nama_ruangan || '-')}</td>
           <td>${escapeHtml(displayStatus)}</td>
@@ -361,6 +371,18 @@ function renderTable(data) {
         `;
     tbody.appendChild(row);
   });
+}
+
+function handleSingleCalClick(btn) {
+  try {
+    const raw = btn.getAttribute('data-item');
+    const parser = new DOMParser();
+    const decoded = parser.parseFromString(raw, 'text/html').body.textContent;
+    const item = JSON.parse(decoded);
+    openSingleGoogleCalendar(item);
+  } catch (err) {
+    console.error('Gagal membuka kalender:', err);
+  }
 }
 
 function isLab(namaRuangan) {
@@ -3258,3 +3280,476 @@ setInterval(async () => {
     console.error("Gagal melakukan auto-refresh background:", err);
   }
 }, 60 * 1000); // Polling setiap 1 menit (60000ms)
+
+
+// =========================================================================
+// PWA SERVICE WORKER REGISTRATION
+// =========================================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.log('SW registration skipped:', err);
+    });
+  });
+}
+
+
+// =========================================================================
+// CALENDAR SYNC (.ICS & GOOGLE CALENDAR)
+// =========================================================================
+function parseDateAndTimeToISO(dateStr, timeRangeStr) {
+  let startHour = 8, startMin = 0, endHour = 10, endMin = 0;
+  if (timeRangeStr) {
+    const parts = timeRangeStr.split(/[-–—]/).map(p => p.trim());
+    if (parts[0]) {
+      const [h, m] = parts[0].split(':').map(Number);
+      if (!isNaN(h)) startHour = h;
+      if (!isNaN(m)) startMin = m;
+    }
+    if (parts[1]) {
+      const [h, m] = parts[1].split(':').map(Number);
+      if (!isNaN(h)) endHour = h;
+      if (!isNaN(m)) endMin = m;
+    } else {
+      endHour = startHour + 2;
+      endMin = startMin;
+    }
+  }
+
+  const cleanDate = (dateStr || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+  const pad = n => String(n).padStart(2, '0');
+  const startISO = `${cleanDate}T${pad(startHour)}${pad(startMin)}00`;
+  const endISO = `${cleanDate}T${pad(endHour)}${pad(endMin)}00`;
+  return { startISO, endISO, startHour, startMin, endHour, endMin };
+}
+
+function openSingleGoogleCalendar(item) {
+  if (!item) return;
+  const { startISO, endISO } = parseDateAndTimeToISO(item.tanggal, item.jam);
+  const title = encodeURIComponent(`${item.nama_mk || 'Kuliah'} (${item.kelas || '-'})`);
+  const details = encodeURIComponent(`Mata Kuliah: ${item.nama_mk || '-'}\nDosen: ${item.nama_dosen || '-'}\nStatus: ${item.status_jadwal || item.metode_pembelajaran || '-'}\nRuangan: ${item.nama_ruangan || '-'}`);
+  const location = encodeURIComponent(`${item.nama_ruangan || 'UNAMA'} - Kampus ${item.kampus || 'UNAMA'}`);
+  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startISO}/${endISO}&details=${details}&location=${location}`;
+  window.open(url, '_blank');
+}
+
+function exportFilteredSchedulesToICS() {
+  const targetData = (typeof currentFilteredJadwal !== 'undefined' && currentFilteredJadwal && currentFilteredJadwal.length > 0)
+    ? currentFilteredJadwal
+    : (allJadwal || []);
+
+  if (!targetData || targetData.length === 0) {
+    alert('Tidak ada data jadwal untuk diexport. Silakan pilih tanggal atau filter jadwal terlebih dahulu.');
+    return;
+  }
+
+  let icsLines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//UNAMA//Jadwal Kuliah UNAMA//ID',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Jadwal Kuliah UNAMA',
+    'X-WR-TIMEZONE:Asia/Jakarta'
+  ];
+
+  targetData.forEach((item, idx) => {
+    const { startISO, endISO } = parseDateAndTimeToISO(item.tanggal, item.jam);
+    const uid = `unama-${item.id || idx}-${Date.now()}@unama.ac.id`;
+    const summary = `${item.nama_mk || 'Kuliah'} (${item.kelas || '-'})`;
+    const description = `Dosen: ${item.nama_dosen || '-'}\\nRuangan: ${item.nama_ruangan || '-'}\\nMetode: ${item.metode_pembelajaran || '-'}`;
+    const location = `${item.nama_ruangan || 'UNAMA'}`;
+
+    icsLines.push(
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+      `DTSTART:${startISO}`,
+      `DTEND:${endISO}`,
+      `SUMMARY:${summary}`,
+      `DESCRIPTION:${description}`,
+      `LOCATION:${location}`,
+      'STATUS:CONFIRMED',
+      'BEGIN:VALARM',
+      'TRIGGER:-PT15M',
+      'ACTION:DISPLAY',
+      'DESCRIPTION:Pengingat Kuliah UNAMA (15 menit lagi)',
+      'END:VALARM',
+      'END:VEVENT'
+    );
+  });
+
+  icsLines.push('END:VCALENDAR');
+
+  const icsBlob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const downloadLink = document.createElement('a');
+  downloadLink.href = URL.createObjectURL(icsBlob);
+  const tglStr = document.getElementById('filter-tanggal')?.value || 'semua';
+  downloadLink.download = `jadwal_unama_${tglStr}.ics`;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+}
+
+
+// =========================================================================
+// SPOTLIGHT SEARCH (CTRL + K)
+// =========================================================================
+function openSpotlightModal() {
+  const backdrop = document.getElementById('spotlight-backdrop');
+  const input = document.getElementById('spotlight-input');
+  if (backdrop && input) {
+    backdrop.classList.add('open');
+    input.value = '';
+    input.focus();
+    renderSpotlightResults('');
+  }
+}
+
+function closeSpotlightModal(e) {
+  if (e && e.target && !e.target.classList.contains('spotlight-backdrop') && !e.target.classList.contains('kbd-badge')) {
+    return;
+  }
+  const backdrop = document.getElementById('spotlight-backdrop');
+  if (backdrop) backdrop.classList.remove('open');
+}
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    const backdrop = document.getElementById('spotlight-backdrop');
+    if (backdrop && backdrop.classList.contains('open')) {
+      closeSpotlightModal();
+    } else {
+      openSpotlightModal();
+    }
+  } else if (e.key === 'Escape') {
+    closeSpotlightModal();
+    if (typeof closeTvMode === 'function') closeTvMode();
+  }
+});
+
+const spotlightInput = document.getElementById('spotlight-input');
+if (spotlightInput) {
+  spotlightInput.addEventListener('input', (e) => {
+    renderSpotlightResults(e.target.value.trim().toLowerCase());
+  });
+}
+
+function renderSpotlightResults(query) {
+  const container = document.getElementById('spotlight-results');
+  if (!container) return;
+
+  if (!query) {
+    container.innerHTML = `
+      <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9em;">
+        Ketik nama dosen, mata kuliah, ruangan, atau aslab untuk pencarian cepat...
+      </div>
+    `;
+    return;
+  }
+
+  const results = [];
+  const addedKeys = new Set();
+
+  // 1. Cari Dosen
+  if (Array.isArray(allJadwal)) {
+    allJadwal.forEach(item => {
+      if (item.nama_dosen && item.nama_dosen.toLowerCase().includes(query)) {
+        const key = `dosen-${item.nama_dosen}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          results.push({
+            type: 'dosen',
+            icon: '👨‍🏫',
+            title: item.nama_dosen,
+            subtitle: `Dosen • Jadwal di ${item.nama_ruangan || '-'} (${item.jam || '-'})`,
+            action: () => {
+              closeSpotlightModal();
+              selectSpotlightItem('dosen', item.nama_dosen);
+            }
+          });
+        }
+      }
+    });
+
+    // 2. Cari Mata Kuliah
+    allJadwal.forEach(item => {
+      if (item.nama_mk && item.nama_mk.toLowerCase().includes(query)) {
+        const key = `mk-${item.nama_mk}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          results.push({
+            type: 'mk',
+            icon: '📚',
+            title: item.nama_mk,
+            subtitle: `Mata Kuliah • ${item.nama_dosen || '-'} • ${item.nama_ruangan || '-'}`,
+            action: () => {
+              closeSpotlightModal();
+              selectSpotlightItem('mk', item.nama_mk);
+            }
+          });
+        }
+      }
+    });
+
+    // 3. Cari Ruangan / Labor
+    allJadwal.forEach(item => {
+      if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes(query)) {
+        const key = `ruangan-${item.nama_ruangan}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          results.push({
+            type: 'ruangan',
+            icon: '🏢',
+            title: item.nama_ruangan,
+            subtitle: `Ruangan • Kampus ${item.kampus || 'UNAMA'}`,
+            action: () => {
+              closeSpotlightModal();
+              selectCustomOption('ruangan', item.nama_ruangan, item.nama_ruangan);
+            }
+          });
+        }
+      }
+    });
+  }
+
+  // 4. Cari Aslab
+  if (typeof globalAslabData !== 'undefined' && Array.isArray(globalAslabData)) {
+    globalAslabData.forEach(aslab => {
+      if ((aslab.nama && aslab.nama.toLowerCase().includes(query)) || (aslab.ruangan && aslab.ruangan.toLowerCase().includes(query))) {
+        const key = `aslab-${aslab.id || aslab.nama}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          results.push({
+            type: 'aslab',
+            icon: '👤',
+            title: aslab.nama,
+            subtitle: `Asisten Lab • ${aslab.ruangan || '-'} • WA: ${aslab.no_wa || '-'}`,
+            action: () => {
+              closeSpotlightModal();
+              if (aslab.no_wa) {
+                window.open(`https://wa.me/${aslab.no_wa.replace(/[^0-9]/g, '')}`, '_blank');
+              }
+            }
+          });
+        }
+      }
+    });
+  }
+
+  if (results.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9em;">
+        Tidak ada hasil untuk "<strong>${escapeHtml(query)}</strong>"
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = results.slice(0, 10).map((r, i) => `
+    <div class="spotlight-item ${i === 0 ? 'selected' : ''}" onclick="executeSpotlightAction(${i})">
+      <div class="spotlight-item-left">
+        <div class="spotlight-icon">${r.icon}</div>
+        <div>
+          <div class="spotlight-title">${escapeHtml(r.title)}</div>
+          <div class="spotlight-subtitle">${escapeHtml(r.subtitle)}</div>
+        </div>
+      </div>
+      <span style="font-size:0.8em; color:var(--primary); font-weight:600;">Pilih ↵</span>
+    </div>
+  `).join('');
+
+  window._spotlightCurrentResults = results;
+}
+
+function executeSpotlightAction(idx) {
+  if (window._spotlightCurrentResults && window._spotlightCurrentResults[idx]) {
+    window._spotlightCurrentResults[idx].action();
+  }
+}
+
+function selectSpotlightItem(type, val) {
+  if (!Array.isArray(allJadwal)) return;
+  const filtered = allJadwal.filter(j => {
+    if (type === 'dosen') return j.nama_dosen === val;
+    if (type === 'mk') return j.nama_mk === val;
+    return true;
+  });
+  renderTable(filtered);
+  const hasilLabel = document.getElementById('hasil-pencarian');
+  if (hasilLabel) {
+    hasilLabel.innerHTML = `Hasil Pencarian Spotlight [${escapeHtml(val)}]: <strong style="color:var(--primary);">${filtered.length} jadwal</strong>`;
+  }
+}
+
+
+// =========================================================================
+// TV / KIOSK DISPLAY MODE
+// =========================================================================
+let tvClockTimer = null;
+
+function openTvMode() {
+  const overlay = document.getElementById('tv-mode-overlay');
+  if (!overlay) return;
+
+  overlay.classList.add('active');
+
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+
+  updateTvModeData();
+
+  if (tvClockTimer) clearInterval(tvClockTimer);
+  tvClockTimer = setInterval(updateTvClock, 1000);
+  updateTvClock();
+}
+
+function closeTvMode() {
+  const overlay = document.getElementById('tv-mode-overlay');
+  if (overlay) overlay.classList.remove('active');
+
+  if (document.fullscreenElement && document.exitFullscreen) {
+    document.exitFullscreen().catch(() => {});
+  }
+
+  if (tvClockTimer) {
+    clearInterval(tvClockTimer);
+    tvClockTimer = null;
+  }
+}
+
+function updateTvClock() {
+  const now = new Date();
+  const timeEl = document.getElementById('tv-live-time');
+  const dateEl = document.getElementById('tv-live-date');
+
+  if (timeEl) {
+    timeEl.innerText = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  if (dateEl) {
+    dateEl.innerText = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+}
+
+function updateTvModeData() {
+  const grid = document.getElementById('tv-grid-container');
+  if (!grid || !Array.isArray(allJadwal)) return;
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const roomMap = {};
+  allJadwal.forEach(item => {
+    const rName = (item.nama_ruangan || 'Tanpa Ruangan').trim();
+    if (!roomMap[rName]) roomMap[rName] = [];
+    roomMap[rName].push(item);
+  });
+
+  let occupiedCount = 0;
+  let emptyCount = 0;
+  const cardsHtml = [];
+
+  Object.keys(roomMap).sort().forEach(roomName => {
+    const schedules = roomMap[roomName];
+    let activeClass = null;
+
+    schedules.forEach(s => {
+      if (s.jam) {
+        const parts = s.jam.split(/[-–—]/).map(p => p.trim());
+        if (parts.length === 2) {
+          const [sh, sm] = parts[0].split(':').map(Number);
+          const [eh, em] = parts[1].split(':').map(Number);
+          const startMin = sh * 60 + sm;
+          const endMin = eh * 60 + em;
+          if (currentMinutes >= startMin && currentMinutes <= endMin) {
+            activeClass = s;
+          }
+        }
+      }
+    });
+
+    if (activeClass) {
+      occupiedCount++;
+      const isOnline = activeClass.metode_pembelajaran === 'OL';
+      cardsHtml.push(`
+        <div class="tv-room-card occupied">
+          <div>
+            <div class="tv-room-name">
+              <span>${escapeHtml(roomName)}</span>
+              <span class="tv-room-badge ${isOnline ? 'wa' : 'tm'}">${isOnline ? 'ONLINE' : 'DIPAKAI'}</span>
+            </div>
+            <div class="tv-room-subject">${escapeHtml(activeClass.nama_mk || '-')}</div>
+            <div class="tv-room-lecturer">👨‍🏫 ${escapeHtml(activeClass.nama_dosen || '-')}</div>
+          </div>
+          <div class="tv-room-time">⏰ Pukul ${escapeHtml(activeClass.jam || '-')} (Kelas: ${escapeHtml(activeClass.kelas || '-')})</div>
+        </div>
+      `);
+    } else {
+      emptyCount++;
+      const nextClass = schedules[0];
+      cardsHtml.push(`
+        <div class="tv-room-card empty">
+          <div>
+            <div class="tv-room-name">
+              <span>${escapeHtml(roomName)}</span>
+              <span class="tv-room-badge cc">KOSONG</span>
+            </div>
+            <div class="tv-room-subject" style="color: #94a3b8; font-weight: normal;">Tidak ada perkuliahan aktif saat ini</div>
+          </div>
+          <div class="tv-room-time" style="color: #94a3b8;">${nextClass ? `Jadwal lain: ${escapeHtml(nextClass.jam || '')}` : 'Bebas praktikum'}</div>
+        </div>
+      `);
+    }
+  });
+
+  const occEl = document.getElementById('tv-stat-occupied');
+  const empEl = document.getElementById('tv-stat-empty');
+  const totEl = document.getElementById('tv-stat-total');
+
+  if (occEl) occEl.innerText = occupiedCount;
+  if (empEl) empEl.innerText = emptyCount;
+  if (totEl) totEl.innerText = allJadwal.length;
+
+  grid.innerHTML = cardsHtml.join('') || '<div style="color:#94a3b8; text-align:center; padding:40px;">Tidak ada data ruangan.</div>';
+}
+
+// =========================================================================
+// EXPOSE TO WINDOW & ATTACH DOM LISTENERS
+// =========================================================================
+window.openSpotlightModal = openSpotlightModal;
+window.closeSpotlightModal = closeSpotlightModal;
+window.openTvMode = openTvMode;
+window.closeTvMode = closeTvMode;
+window.exportFilteredSchedulesToICS = exportFilteredSchedulesToICS;
+window.openSingleGoogleCalendar = openSingleGoogleCalendar;
+window.executeSpotlightAction = executeSpotlightAction;
+
+// Attach click listeners on DOM ready as backup
+document.addEventListener('DOMContentLoaded', () => {
+  const btnSpotlight = document.getElementById('btn-spotlight');
+  if (btnSpotlight) {
+    btnSpotlight.addEventListener('click', (e) => {
+      e.preventDefault();
+      openSpotlightModal();
+    });
+  }
+
+  const btnTv = document.getElementById('btn-tv-mode');
+  if (btnTv) {
+    btnTv.addEventListener('click', (e) => {
+      e.preventDefault();
+      openTvMode();
+    });
+  }
+
+  const btnExp = document.getElementById('btn-export-cal');
+  if (btnExp) {
+    btnExp.addEventListener('click', (e) => {
+      e.preventDefault();
+      exportFilteredSchedulesToICS();
+    });
+  }
+});
+
