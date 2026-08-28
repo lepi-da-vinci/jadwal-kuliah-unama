@@ -1493,14 +1493,12 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         adminToggle.style.background = 'var(--primary)';
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
         document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'table-cell');
-        btnShowTest.style.display = 'flex';
       } else {
         adminToggle.innerText = 'Admin: OFF';
         adminToggle.style.color = 'var(--text-muted)';
         adminToggle.style.background = 'var(--bg-elevated)';
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'none');
-        btnShowTest.style.display = 'flex';
       }
       renderAslabTable();
       if (document.getElementById('wa-modal-data-ruangan') && document.getElementById('wa-modal-data-ruangan').style.display === 'flex') {
@@ -3514,6 +3512,7 @@ const svgSearchIcons = {
   dosen: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
   mk: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>',
   ruangan: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 7v14M21 7v14M6 3h12a2 2 0 0 1 2 2v2H4V5a2 2 0 0 1 2-2zM9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2"></path></svg>',
+  lab: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
   aslab: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>'
 };
 
@@ -3637,108 +3636,212 @@ function renderSpotlightResults(query) {
   const container = document.getElementById('spotlight-results');
   if (!container) return;
 
-  const results = [];
-  const addedKeys = new Set();
   const cat = spotlightActiveCategory;
+  const dosenResults = [];
+  const mkResults = [];
+  const roomResults = [];
+  const aslabResults = [];
 
-  // 1. Dosen
+  // ==========================================
+  // 1. DOSEN INDEXING (SEMUA DOSEN & TIM TEACHING)
+  // ==========================================
   if ((cat === 'all' || cat === 'dosen') && Array.isArray(allJadwal)) {
+    const dosenMap = new Map();
+
     allJadwal.forEach(item => {
-      if (item.nama_dosen && (!query || item.nama_dosen.toLowerCase().includes(query))) {
-        const key = `dosen-${item.nama_dosen}`;
-        if (!addedKeys.has(key)) {
-          addedKeys.add(key);
-          results.push({
-            type: 'dosen',
-            rawValue: item.nama_dosen,
-            badgeClass: 'badge-type-dosen',
-            badgeText: 'DOSEN',
-            svgIcon: svgSearchIcons.dosen,
-            title: item.nama_dosen,
-            subtitle: `Dosen Pengampu • Ruangan: ${item.nama_ruangan || '-'} • Jam: ${item.jam || '-'}`
+      if (!item.nama_dosen) return;
+      // Split multi-dosen (e.g. "Yovi Pratama, Lazuardi Yudha Pradana" or "Dr. X, M.Kom / Y, S.Kom")
+      const rawNames = item.nama_dosen.split(/[,/&]/).map(n => n.trim()).filter(Boolean);
+      if (rawNames.length > 1 && !rawNames.includes(item.nama_dosen.trim())) {
+        rawNames.push(item.nama_dosen.trim());
+      }
+
+      rawNames.forEach(name => {
+        if (!name || name === '-' || name.toLowerCase() === 'null') return;
+        if (!dosenMap.has(name)) {
+          dosenMap.set(name, {
+            name: name,
+            schedules: [],
+            mkSet: new Set(),
+            ruangSet: new Set()
           });
         }
-      }
+        const d = dosenMap.get(name);
+        d.schedules.push(item);
+        if (item.nama_mk) d.mkSet.add(item.nama_mk);
+        if (item.nama_ruangan) d.ruangSet.add(item.nama_ruangan);
+      });
     });
+
+    Array.from(dosenMap.values())
+      .filter(d => !query || d.name.toLowerCase().includes(query) || Array.from(d.mkSet).some(m => m.toLowerCase().includes(query)))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(d => {
+        const mkList = Array.from(d.mkSet);
+        const mkText = mkList.slice(0, 2).join(', ') + (mkList.length > 2 ? '...' : '');
+        dosenResults.push({
+          type: 'dosen',
+          rawValue: d.name,
+          badgeClass: 'badge-type-dosen',
+          badgeText: 'DOSEN',
+          svgIcon: svgSearchIcons.dosen,
+          title: d.name,
+          subtitle: `Dosen Pengampu • ${d.schedules.length} Sesi Kuliah • ${mkText || 'Jadwal Kuliah'}`
+        });
+      });
   }
 
-  // 2. Mata Kuliah
+  // ==========================================
+  // 2. MATA KULIAH INDEXING
+  // ==========================================
   if ((cat === 'all' || cat === 'mk') && Array.isArray(allJadwal)) {
+    const mkMap = new Map();
+
     allJadwal.forEach(item => {
-      if (item.nama_mk && (!query || item.nama_mk.toLowerCase().includes(query) || (item.kelas && item.kelas.toLowerCase().includes(query)))) {
-        const key = `mk-${item.nama_mk}`;
-        if (!addedKeys.has(key)) {
-          addedKeys.add(key);
-          results.push({
-            type: 'mk',
-            rawValue: item.nama_mk,
-            badgeClass: 'badge-type-mk',
-            badgeText: 'MATKUL',
-            svgIcon: svgSearchIcons.mk,
-            title: `${item.nama_mk || '-'}`,
-            subtitle: `Mata Kuliah • Pengampu: ${item.nama_dosen || '-'} • Ruangan: ${item.nama_ruangan || '-'}`
-          });
-        }
+      if (!item.nama_mk) return;
+      const mkName = item.nama_mk.trim();
+      if (!mkMap.has(mkName)) {
+        mkMap.set(mkName, {
+          name: mkName,
+          schedules: [],
+          dosenSet: new Set(),
+          kelasSet: new Set()
+        });
       }
+      const mk = mkMap.get(mkName);
+      mk.schedules.push(item);
+      if (item.nama_dosen) mk.dosenSet.add(item.nama_dosen);
+      if (item.kelas) mk.kelasSet.add(item.kelas);
     });
+
+    Array.from(mkMap.values())
+      .filter(mk => !query || mk.name.toLowerCase().includes(query) || Array.from(mk.dosenSet).some(d => d.toLowerCase().includes(query)) || Array.from(mk.kelasSet).some(k => k.toLowerCase().includes(query)))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(mk => {
+        const dosenList = Array.from(mk.dosenSet);
+        const dosenText = dosenList.slice(0, 2).join(', ') + (dosenList.length > 2 ? '...' : '');
+        mkResults.push({
+          type: 'mk',
+          rawValue: mk.name,
+          badgeClass: 'badge-type-mk',
+          badgeText: 'MATKUL',
+          svgIcon: svgSearchIcons.mk,
+          title: mk.name,
+          subtitle: `Mata Kuliah • ${mk.schedules.length} Kelas • Pengampu: ${dosenText || '-'}`
+        });
+      });
   }
 
-  // 3. Ruangan / Labor
-  if ((cat === 'all' || cat === 'ruangan') && Array.isArray(allJadwal)) {
-    allJadwal.forEach(item => {
-      if (item.nama_ruangan && (!query || item.nama_ruangan.toLowerCase().includes(query))) {
-        const key = `ruangan-${item.nama_ruangan}`;
-        if (!addedKeys.has(key)) {
-          addedKeys.add(key);
-          results.push({
-            type: 'ruangan',
-            rawValue: item.nama_ruangan,
-            badgeClass: 'badge-type-ruang',
-            badgeText: 'RUANG',
-            svgIcon: svgSearchIcons.ruangan,
-            title: item.nama_ruangan,
-            subtitle: `Ruangan / Laboratorium • Kampus ${item.kampus || 'UNAMA'}`
-          });
-        }
+  // ==========================================
+  // 3. RUANGAN & LABOR (KAMPUS THEHOK -> KOBAR -> LAB -> KELAS)
+  // ==========================================
+  if (cat === 'all' || cat === 'ruangan') {
+    const roomSet = new Set();
+    if (Array.isArray(allJadwal)) {
+      allJadwal.forEach(j => { if (j.nama_ruangan && j.nama_ruangan.trim()) roomSet.add(j.nama_ruangan.trim()); });
+    }
+    if (Array.isArray(allRuanganData)) {
+      allRuanganData.forEach(r => {
+        const rName = (r.nama_ruangan || r.nama || '').trim();
+        if (rName) roomSet.add(rName);
+      });
+    }
+
+    const roomTemp = [];
+    roomSet.forEach(rName => {
+      const isThehok = rName.toLowerCase().includes('thehok');
+      const isKobar = rName.toLowerCase().includes('kobar');
+      const isLaboratorium = isLab(rName);
+
+      let kampusLabel = 'UNAMA';
+      let kampusPriority = 3;
+      if (isThehok) {
+        kampusLabel = 'Kampus Thehok';
+        kampusPriority = 1;
+      } else if (isKobar) {
+        kampusLabel = 'Kampus Kobar';
+        kampusPriority = 2;
+      }
+
+      const tipeLabel = isLaboratorium ? 'Laboratorium Komputer' : 'Ruang Perkuliahan Teori';
+      const badgeClass = isLaboratorium ? 'badge-type-lab' : 'badge-type-ruang';
+      const badgeText = isLaboratorium ? 'LAB' : 'KELAS';
+      const svgIcon = isLaboratorium ? svgSearchIcons.lab : svgSearchIcons.ruangan;
+
+      if (!query || rName.toLowerCase().includes(query) || kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
+        roomTemp.push({
+          type: 'ruangan',
+          rawValue: rName,
+          badgeClass,
+          badgeText,
+          svgIcon,
+          title: rName,
+          subtitle: `${kampusLabel} • ${tipeLabel}`,
+          kampusPriority,
+          typePriority: isLaboratorium ? 1 : 2,
+          rawName: rName
+        });
       }
     });
+
+    // Urutkan Ruangan: Kampus Thehok dulu baru Kampus Kobar, dan dalam kampus: Laboratorium dulu baru Ruang Kelas
+    roomTemp.sort((a, b) => {
+      if (a.kampusPriority !== b.kampusPriority) return a.kampusPriority - b.kampusPriority;
+      if (a.typePriority !== b.typePriority) return a.typePriority - b.typePriority;
+      return a.rawName.localeCompare(b.rawName, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    roomResults.push(...roomTemp);
   }
 
-  // 4. Asisten Lab
+  // ==========================================
+  // 4. ASISTEN LAB (ASLAB)
+  // ==========================================
   if ((cat === 'all' || cat === 'aslab') && typeof globalAslabData !== 'undefined' && Array.isArray(globalAslabData)) {
     globalAslabData.forEach(aslab => {
       if (aslab.nama && (!query || aslab.nama.toLowerCase().includes(query) || (aslab.ruangan && aslab.ruangan.toLowerCase().includes(query)))) {
-        const key = `aslab-${aslab.id || aslab.nama}`;
-        if (!addedKeys.has(key)) {
-          addedKeys.add(key);
-          results.push({
-            type: 'aslab',
-            rawValue: aslab.nama,
-            aslabData: aslab,
-            badgeClass: 'badge-type-aslab',
-            badgeText: 'ASLAB',
-            svgIcon: svgSearchIcons.aslab,
-            title: aslab.nama,
-            subtitle: `Asisten Lab • Jaga di ${aslab.ruangan || '-'} • WA: ${aslab.no_wa || '-'}`
-          });
-        }
+        aslabResults.push({
+          type: 'aslab',
+          rawValue: aslab.nama,
+          aslabData: aslab,
+          badgeClass: 'badge-type-aslab',
+          badgeText: 'ASLAB',
+          svgIcon: svgSearchIcons.aslab,
+          title: aslab.nama,
+          subtitle: `Asisten Lab • Jaga di ${aslab.ruangan || '-'} • WA: ${aslab.no_wa || '-'}`
+        });
       }
     });
   }
 
-  if (results.length === 0) {
+  // Gabungkan hasil pencarian sesuai tab aktif
+  let finalResults = [];
+  if (cat === 'dosen') finalResults = dosenResults;
+  else if (cat === 'mk') finalResults = mkResults;
+  else if (cat === 'ruangan') finalResults = roomResults;
+  else if (cat === 'aslab') finalResults = aslabResults;
+  else {
+    finalResults = [...dosenResults, ...mkResults, ...roomResults, ...aslabResults];
+  }
+
+  if (finalResults.length === 0) {
     container.innerHTML = `
-      <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.95em;">
-        ${query ? `Tidak ada hasil untuk "<strong>${escapeHtml(query)}</strong>"` : 'Tidak ada data ditemukan.'}
+      <div style="padding: 36px 20px; text-align: center; color: var(--text-muted); font-size: 0.95em;">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.35; margin-bottom:10px;">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <div style="font-weight:600; color:var(--text);">Tidak ada hasil ditemukan</div>
+        <div style="font-size:0.85em; margin-top:3px;">Coba gunakan kata kunci nama dosen, mata kuliah, atau ruangan lainnya.</div>
       </div>
     `;
     window._spotlightCurrentResults = [];
     return;
   }
 
-  window._spotlightCurrentResults = results;
+  window._spotlightCurrentResults = finalResults;
 
-  container.innerHTML = results.slice(0, 15).map((r, i) => `
+  container.innerHTML = finalResults.slice(0, 30).map((r, i) => `
     <div class="spotlight-item ${i === spotlightActiveIndex ? 'selected' : ''}" onclick="executeSpotlightAction(${i})">
       <div class="spotlight-item-left">
         <div class="spotlight-icon">${r.svgIcon}</div>
@@ -3750,7 +3853,7 @@ function renderSpotlightResults(query) {
           <div class="spotlight-subtitle">${escapeHtml(r.subtitle)}</div>
         </div>
       </div>
-      <span style="font-size:0.82em; color:var(--primary); font-weight:700;">Lihat Detail</span>
+      <span style="font-size:0.82em; color:var(--primary); font-weight:700; white-space:nowrap;">Lihat Detail</span>
     </div>
   `).join('');
 }
@@ -3784,11 +3887,11 @@ function openSpotlightDetailModal(item) {
   let matchingSchedules = [];
   if (Array.isArray(allJadwal)) {
     if (item.type === 'dosen') {
-      matchingSchedules = allJadwal.filter(j => j.nama_dosen === item.rawValue);
+      matchingSchedules = allJadwal.filter(j => j.nama_dosen && j.nama_dosen.toLowerCase().includes(item.rawValue.toLowerCase()));
     } else if (item.type === 'mk') {
-      matchingSchedules = allJadwal.filter(j => j.nama_mk === item.rawValue);
+      matchingSchedules = allJadwal.filter(j => j.nama_mk && j.nama_mk.toLowerCase().includes(item.rawValue.toLowerCase()));
     } else if (item.type === 'ruangan') {
-      matchingSchedules = allJadwal.filter(j => j.nama_ruangan === item.rawValue);
+      matchingSchedules = allJadwal.filter(j => j.nama_ruangan && j.nama_ruangan.toLowerCase().includes(item.rawValue.toLowerCase()));
     }
   }
 
@@ -4001,121 +4104,121 @@ function updateTvClock() {
 
 function updateTvModeData() {
   const grid = document.getElementById('tv-grid-container');
-  if (!grid || !Array.isArray(allJadwal) || allJadwal.length === 0) {
-    if (grid) grid.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Memuat data jadwal ruangan...</div>';
-    return;
-  }
+  if (!grid) return;
 
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const selectedDate = document.getElementById('filter-tanggal')?.value;
   const todayStr = now.toISOString().slice(0, 10);
+  
+  // Gunakan tanggal yang dipilih di filter, atau tanggal hari ini jika tidak ada yang dipilih
   const targetDate = selectedDate || todayStr;
 
-  let dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
-  if (dayJadwal.length === 0) {
-    const dates = [...new Set(allJadwal.map(j => j.tanggal).filter(Boolean))].sort();
-    if (dates.length > 0) {
-      const fallbackDate = dates[dates.length - 1];
-      dayJadwal = allJadwal.filter(j => j.tanggal === fallbackDate);
-    } else {
-      dayJadwal = allJadwal;
-    }
+  let dayJadwal = [];
+  if (Array.isArray(allJadwal)) {
+    dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
   }
 
-  // Ambil SEMUA ruangan (Ruangan Kelas + Laboratorium dari Kobar & Thehok)
-  const roomMap = {};
-  
-  // 1. Masukkan semua ruangan yang ada jadwal hari ini
-  dayJadwal.forEach(item => {
-    const rName = (item.nama_ruangan || 'Tanpa Ruangan').trim();
-    if (!roomMap[rName]) roomMap[rName] = [];
-    roomMap[rName].push(item);
-  });
+  // Hitung Statistik Status (TM, OL, CC, Total)
+  const tmCount = dayJadwal.filter(j => j.metode_pembelajaran === 'TM').length;
+  const olCount = dayJadwal.filter(j => j.metode_pembelajaran === 'OL').length;
+  const ccCount = dayJadwal.filter(j => j.metode_pembelajaran === 'CC').length;
+  const totCount = dayJadwal.length;
 
-  // 2. Jika ada master ruangan, pastikan ruangan kosong lainnya juga tercantum
-  if (Array.isArray(allRuanganData)) {
-    allRuanganData.forEach(r => {
-      const rName = (r.nama_ruangan || r.nama || '').trim();
-      if (rName && !roomMap[rName]) {
-        roomMap[rName] = [];
-      }
-    });
-  }
-
-  let occupiedCount = 0;
-  let emptyCount = 0;
-  const cardsHtml = [];
-
-  Object.keys(roomMap).sort().forEach(roomName => {
-    const schedules = roomMap[roomName];
-    let activeClass = null;
-
-    schedules.forEach(s => {
-      if (s.jam) {
-        const parts = s.jam.split(/[-–—]/).map(p => p.trim());
-        if (parts.length === 2) {
-          const [sh, sm] = parts[0].split(':').map(Number);
-          const [eh, em] = parts[1].split(':').map(Number);
-          const startMin = sh * 60 + sm;
-          const endMin = eh * 60 + em;
-          if (currentMinutes >= startMin && currentMinutes <= endMin) {
-            activeClass = s;
-          }
-        }
-      }
-    });
-
-    if (activeClass) {
-      occupiedCount++;
-      const isOnline = activeClass.metode_pembelajaran === 'OL';
-      cardsHtml.push(`
-        <div class="tv-room-card occupied">
-          <div>
-            <div class="tv-room-name">
-              <span>${escapeHtml(roomName)}</span>
-              <span class="tv-room-badge ${isOnline ? 'wa' : 'tm'}">
-                <span class="tv-pulse-dot"></span>
-                ${isOnline ? 'ONLINE' : 'DIPAKAI'}
-              </span>
-            </div>
-            <div class="tv-room-subject">${escapeHtml(activeClass.nama_mk || '-')}</div>
-            <div class="tv-room-lecturer">Dosen: ${escapeHtml(activeClass.nama_dosen || '-')}</div>
-          </div>
-          <div class="tv-room-time">Pukul ${escapeHtml(activeClass.jam || '-')} (Kelas: ${escapeHtml(activeClass.kelas || '-')})</div>
-        </div>
-      `);
-    } else {
-      emptyCount++;
-      const nextClass = schedules[0];
-      cardsHtml.push(`
-        <div class="tv-room-card empty">
-          <div>
-            <div class="tv-room-name">
-              <span>${escapeHtml(roomName)}</span>
-              <span class="tv-room-badge cc">
-                <span class="tv-pulse-dot"></span>
-                KOSONG
-              </span>
-            </div>
-            <div class="tv-room-subject" style="color: var(--text-muted); font-weight: 500; font-size: 0.92em;">Tidak ada perkuliahan aktif</div>
-          </div>
-          <div class="tv-room-time" style="color: var(--text-muted); font-weight: 500;">${nextClass ? `Jadwal lain: Pukul ${escapeHtml(nextClass.jam || '')}` : 'Ruangan bebas praktikum'}</div>
-        </div>
-      `);
-    }
-  });
-
-  const occEl = document.getElementById('tv-stat-occupied');
-  const empEl = document.getElementById('tv-stat-empty');
+  const tmEl = document.getElementById('tv-stat-tm');
+  const olEl = document.getElementById('tv-stat-ol');
+  const ccEl = document.getElementById('tv-stat-cc');
   const totEl = document.getElementById('tv-stat-total');
 
-  if (occEl) occEl.innerText = occupiedCount;
-  if (empEl) empEl.innerText = emptyCount;
-  if (totEl) totEl.innerText = dayJadwal.length;
+  if (tmEl) tmEl.innerText = tmCount;
+  if (olEl) olEl.innerText = olCount;
+  if (ccEl) ccEl.innerText = ccCount;
+  if (totEl) totEl.innerText = totCount;
 
-  grid.innerHTML = cardsHtml.join('') || '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Tidak ada data ruangan.</div>';
+  if (dayJadwal.length === 0) {
+    grid.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 60px 20px;">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 14px; opacity: 0.4;">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <div style="font-size: 1.15em; font-weight: 700; color: var(--text);">Tidak Ada Jadwal Kuliah</div>
+        <div style="font-size: 0.9em; margin-top: 5px; color: var(--text-muted);">
+          ${selectedDate ? `Tidak ada jadwal perkuliahan pada tanggal <strong>${escapeHtml(selectedDate)}</strong>.` : 'Tidak ada perkuliahan aktif untuk hari ini. Silakan pilih tanggal pada filter utama.'}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Urutkan jadwal berdasarkan jam mulai
+  const sortedJadwal = [...dayJadwal].sort((a, b) => {
+    const jamA = (a.jam || '').split(/[-–—]/)[0].trim();
+    const jamB = (b.jam || '').split(/[-–—]/)[0].trim();
+    return jamA.localeCompare(jamB);
+  });
+
+  const rowsHtml = sortedJadwal.map(item => {
+    let isActiveNow = false;
+    if (item.jam) {
+      const parts = item.jam.split(/[-–—]/).map(p => p.trim());
+      if (parts.length === 2) {
+        const [sh, sm] = parts[0].split(':').map(Number);
+        const [eh, em] = parts[1].split(':').map(Number);
+        const startMin = sh * 60 + sm;
+        const endMin = eh * 60 + em;
+        if (currentMinutes >= startMin && currentMinutes <= endMin) {
+          isActiveNow = true;
+        }
+      }
+    }
+
+    let badgeClass = 'default';
+    if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+    else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+    else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+
+    let statusDisplay = item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : 'OnSchedule');
+    let statusHtml = `<span class="tv-row-status">${escapeHtml(statusDisplay)}</span>`;
+    if (isActiveNow) {
+      statusHtml = `
+        <span class="tv-row-status active-status">
+          <span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981;"></span>
+          Sedang Berlangsung
+        </span>
+      `;
+    }
+
+    return `
+      <div class="tv-schedule-row ${isActiveNow ? 'active-now' : ''}">
+        <div class="tv-row-waktu">
+          <strong>${escapeHtml(item.jam || '-')}</strong>
+          <small>${escapeHtml(item.hari || '-')}, ${escapeHtml(item.tanggal_format || item.tanggal || '')}</small>
+        </div>
+        <div class="tv-row-mk">
+          <div>${escapeHtml(item.nama_mk || '-')}</div>
+          ${item.kelas ? `<div class="tv-row-kelas">(Kelas: ${escapeHtml(item.kelas)})</div>` : ''}
+        </div>
+        <div class="tv-row-dosen">
+          ${escapeHtml(item.nama_dosen || '-')}
+        </div>
+        <div class="tv-row-ruangan">
+          ${escapeHtml(item.nama_ruangan || '-')}
+        </div>
+        <div>
+          ${statusHtml}
+        </div>
+        <div class="tv-row-metode">
+          <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
+        </div>
+      </div>
+    `;
+  });
+
+  grid.innerHTML = rowsHtml.join('');
 }
 
 // =========================================================================
@@ -4127,6 +4230,22 @@ window.openSpotlightDetailModal = openSpotlightDetailModal;
 window.closeSpotlightDetailModal = closeSpotlightDetailModal;
 window.clearSpotlightInput = clearSpotlightInput;
 window.filterSpotlightCategory = filterSpotlightCategory;
+window.resetSpotlightFilter = resetSpotlightFilter;
+window.openTvMode = openTvMode;
+function closeSettingAndOpenSpotlight() {
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+  openSpotlightModal();
+}
+
+function closeSettingAndOpenTvMode() {
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+  openTvMode();
+}
+
+window.closeSettingAndOpenSpotlight = closeSettingAndOpenSpotlight;
+window.closeSettingAndOpenTvMode = closeSettingAndOpenTvMode;
 window.resetSpotlightFilter = resetSpotlightFilter;
 window.openTvMode = openTvMode;
 window.closeTvMode = closeTvMode;
