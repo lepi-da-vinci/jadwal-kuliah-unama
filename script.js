@@ -334,6 +334,7 @@ function populateFilters() {
 }
 
 function renderTable(data) {
+  window._currentFilteredJadwal = data;
   const hasilLabel = document.getElementById('hasil-pencarian');
   hasilLabel.innerHTML = `Hasil Pencarian: <strong style="color:var(--primary);">${data.length} jadwal</strong> ditemukan`;
   tbody.innerHTML = '';
@@ -1694,7 +1695,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
             setTimeout(() => {
               if (refreshIcon) refreshIcon.style.animation = 'none';
               if (refreshText) refreshText.innerText = 'Refresh Link';
-              if (statusText) statusText.innerText = 'Link & QR Berhasil Diperbarui! ✅';
+              if (statusText) statusText.innerText = 'Link & QR Berhasil Diperbarui!';
               if (statusDot) statusDot.style.background = '#10b981';
             }, 500);
           } else {
@@ -1729,7 +1730,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
               input.select();
               document.execCommand('copy');
             }
-            copyText.textContent = "Tersalin! ✔";
+            copyText.textContent = "Tersalin!";
             setTimeout(() => {
               copyText.textContent = "Salin";
             }, 2000);
@@ -3333,9 +3334,119 @@ function openSingleGoogleCalendar(item) {
   window.open(url, '_blank');
 }
 
+function exportFilteredSchedulesToExcel() {
+  const targetData = (Array.isArray(window._currentFilteredJadwal) && window._currentFilteredJadwal.length > 0)
+    ? window._currentFilteredJadwal
+    : (Array.isArray(allJadwal) ? allJadwal : []);
+
+  if (targetData.length === 0) {
+    if (typeof showAlert === 'function') {
+      showAlert('warning', 'Peringatan', 'Tidak ada data jadwal untuk diexport.');
+    } else {
+      alert('Tidak ada data jadwal untuk diexport.');
+    }
+    return;
+  }
+
+  const selectedDate = document.getElementById('filter-tanggal')?.value;
+  const now = new Date();
+  const tanggalExportStr = selectedDate || now.toISOString().slice(0, 10);
+  const tanggalFormatIndo = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  let html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>Jadwal Kuliah UNAMA</x:Name>
+              <x:WorksheetOptions>
+                <x:DisplayGridlines/>
+              </x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
+      <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+      <style>
+        table { border-collapse: collapse; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10.5pt; }
+        th { background-color: #4f46e5; color: #ffffff; font-weight: bold; border: 1px solid #3730a3; padding: 10px 12px; text-align: left; }
+        td { border: 1px solid #cbd5e1; padding: 8px 10px; vertical-align: middle; }
+        tr:nth-child(even) td { background-color: #f8fafc; }
+        .text-center { text-align: center; }
+        .badge-tm { background-color: #d1fae5; color: #065f46; font-weight: bold; text-align: center; }
+        .badge-ol { background-color: #dbeafe; color: #1e40af; font-weight: bold; text-align: center; }
+        .badge-cc { background-color: #fee2e2; color: #991b1b; font-weight: bold; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <h2 style="color:#1e1b4b; margin-bottom:4px;">JADWAL PERKULIAHAN & LABORATORIUM UNAMA</h2>
+      <p style="color:#64748b; margin-top:0;">Universitas Dinamika Bangsa • Tanggal: ${escapeHtml(tanggalFormatIndo)} • Total: ${targetData.length} Jadwal</p>
+      <table>
+        <thead>
+          <tr>
+            <th class="text-center" style="width: 45px;">No</th>
+            <th style="width: 90px;">Hari</th>
+            <th style="width: 100px;">Tanggal</th>
+            <th style="width: 120px;">Jam Kuliah</th>
+            <th style="width: 260px;">Mata Kuliah</th>
+            <th style="width: 80px;">Kelas</th>
+            <th style="width: 220px;">Dosen Pengampu</th>
+            <th style="width: 180px;">Ruangan / Lab</th>
+            <th style="width: 130px;">Kampus</th>
+            <th style="width: 120px;">Status</th>
+            <th class="text-center" style="width: 90px;">Metode</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  targetData.forEach((item, index) => {
+    let metodeBadge = item.metode_pembelajaran || '-';
+    let metodeClass = '';
+    if (metodeBadge === 'TM') metodeClass = 'badge-tm';
+    else if (metodeBadge === 'OL') metodeClass = 'badge-ol';
+    else if (metodeBadge === 'CC') metodeClass = 'badge-cc';
+
+    html += `
+      <tr>
+        <td class="text-center">${index + 1}</td>
+        <td>${escapeHtml(item.hari || '-')}</td>
+        <td>${escapeHtml(item.tanggal || '-')}</td>
+        <td>${escapeHtml(item.jam || '-')}</td>
+        <td><strong>${escapeHtml(item.nama_mk || '-')}</strong></td>
+        <td>${escapeHtml(item.kelas || '-')}</td>
+        <td>${escapeHtml(item.nama_dosen || '-')}</td>
+        <td>${escapeHtml(item.nama_ruangan || '-')}</td>
+        <td>${escapeHtml(item.kampus || 'UNAMA')}</td>
+        <td>${escapeHtml(item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : '-'))}</td>
+        <td class="${metodeClass}">${escapeHtml(metodeBadge)}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const downloadLink = document.createElement('a');
+  downloadLink.href = URL.createObjectURL(blob);
+  downloadLink.download = `Jadwal_Kuliah_UNAMA_${tanggalExportStr}.xls`;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+}
+
 function exportFilteredSchedulesToICS() {
-  const targetData = (typeof currentFilteredJadwal !== 'undefined' && currentFilteredJadwal && currentFilteredJadwal.length > 0)
-    ? currentFilteredJadwal
+  const targetData = (Array.isArray(window._currentFilteredJadwal) && window._currentFilteredJadwal.length > 0)
+    ? window._currentFilteredJadwal
     : (allJadwal || []);
 
   if (!targetData || targetData.length === 0) {
@@ -3393,46 +3504,132 @@ function exportFilteredSchedulesToICS() {
 
 
 // =========================================================================
-// SPOTLIGHT SEARCH (CTRL + K)
+// SPOTLIGHT SEARCH (CTRL + K) — UPGRADED & RICH DETAILS (NO EMOJIS)
 // =========================================================================
+let spotlightActiveCategory = 'all';
+let spotlightActiveIndex = 0;
+window._spotlightCurrentResults = [];
+
+const svgSearchIcons = {
+  dosen: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
+  mk: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>',
+  ruangan: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 7v14M21 7v14M6 3h12a2 2 0 0 1 2 2v2H4V5a2 2 0 0 1 2-2zM9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2"></path></svg>',
+  aslab: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>'
+};
+
 function openSpotlightModal() {
   const backdrop = document.getElementById('spotlight-backdrop');
   const input = document.getElementById('spotlight-input');
   if (backdrop && input) {
     backdrop.classList.add('open');
     input.value = '';
+    spotlightActiveCategory = 'all';
+    spotlightActiveIndex = 0;
+    updateSpotlightCategoryTabs();
     input.focus();
     renderSpotlightResults('');
   }
 }
 
 function closeSpotlightModal(e) {
-  if (e && e.target && !e.target.classList.contains('spotlight-backdrop') && !e.target.classList.contains('kbd-badge')) {
+  if (e && e.target && e.target !== document.getElementById('spotlight-backdrop') && !e.target.closest('.kbd-badge')) {
     return;
   }
   const backdrop = document.getElementById('spotlight-backdrop');
   if (backdrop) backdrop.classList.remove('open');
 }
 
+function clearSpotlightInput() {
+  const input = document.getElementById('spotlight-input');
+  const clearBtn = document.getElementById('spotlight-clear-btn');
+  if (input) {
+    input.value = '';
+    input.focus();
+    if (clearBtn) clearBtn.style.display = 'none';
+    renderSpotlightResults('');
+  }
+}
+
+function filterSpotlightCategory(category) {
+  spotlightActiveCategory = category;
+  spotlightActiveIndex = 0;
+  updateSpotlightCategoryTabs();
+  const input = document.getElementById('spotlight-input');
+  renderSpotlightResults(input ? input.value.trim().toLowerCase() : '');
+}
+
+function updateSpotlightCategoryTabs() {
+  document.querySelectorAll('.spotlight-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-type') === spotlightActiveCategory);
+  });
+}
+
 document.addEventListener('keydown', (e) => {
+  const backdrop = document.getElementById('spotlight-backdrop');
+  const isSpotlightOpen = backdrop && backdrop.classList.contains('open');
+
+  const detailBackdrop = document.getElementById('spotlight-detail-backdrop');
+  const isDetailOpen = detailBackdrop && detailBackdrop.classList.contains('open');
+
   if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault();
-    const backdrop = document.getElementById('spotlight-backdrop');
-    if (backdrop && backdrop.classList.contains('open')) {
+    if (isSpotlightOpen) closeSpotlightModal();
+    else openSpotlightModal();
+    return;
+  }
+
+  if (isDetailOpen && e.key === 'Escape') {
+    e.preventDefault();
+    closeSpotlightDetailModal();
+    return;
+  }
+
+  if (isSpotlightOpen) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
       closeSpotlightModal();
-    } else {
-      openSpotlightModal();
+      return;
+    }
+
+    const items = window._spotlightCurrentResults || [];
+    if (items.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        spotlightActiveIndex = (spotlightActiveIndex + 1) % items.length;
+        highlightSpotlightItem();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        spotlightActiveIndex = (spotlightActiveIndex - 1 + items.length) % items.length;
+        highlightSpotlightItem();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        executeSpotlightAction(spotlightActiveIndex);
+      }
     }
   } else if (e.key === 'Escape') {
-    closeSpotlightModal();
     if (typeof closeTvMode === 'function') closeTvMode();
   }
 });
 
+function highlightSpotlightItem() {
+  const elements = document.querySelectorAll('.spotlight-item');
+  elements.forEach((el, idx) => {
+    const isSel = idx === spotlightActiveIndex;
+    el.classList.toggle('selected', isSel);
+    if (isSel) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
+}
+
 const spotlightInput = document.getElementById('spotlight-input');
 if (spotlightInput) {
   spotlightInput.addEventListener('input', (e) => {
-    renderSpotlightResults(e.target.value.trim().toLowerCase());
+    const val = e.target.value;
+    const clearBtn = document.getElementById('spotlight-clear-btn');
+    if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+    spotlightActiveIndex = 0;
+    renderSpotlightResults(val.trim().toLowerCase());
   });
 }
 
@@ -3440,98 +3637,89 @@ function renderSpotlightResults(query) {
   const container = document.getElementById('spotlight-results');
   if (!container) return;
 
-  if (!query) {
-    container.innerHTML = `
-      <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9em;">
-        Ketik nama dosen, mata kuliah, ruangan, atau aslab untuk pencarian cepat...
-      </div>
-    `;
-    return;
-  }
-
   const results = [];
   const addedKeys = new Set();
+  const cat = spotlightActiveCategory;
 
-  // 1. Cari Dosen
-  if (Array.isArray(allJadwal)) {
+  // 1. Dosen
+  if ((cat === 'all' || cat === 'dosen') && Array.isArray(allJadwal)) {
     allJadwal.forEach(item => {
-      if (item.nama_dosen && item.nama_dosen.toLowerCase().includes(query)) {
+      if (item.nama_dosen && (!query || item.nama_dosen.toLowerCase().includes(query))) {
         const key = `dosen-${item.nama_dosen}`;
         if (!addedKeys.has(key)) {
           addedKeys.add(key);
           results.push({
             type: 'dosen',
-            icon: '👨‍🏫',
+            rawValue: item.nama_dosen,
+            badgeClass: 'badge-type-dosen',
+            badgeText: 'DOSEN',
+            svgIcon: svgSearchIcons.dosen,
             title: item.nama_dosen,
-            subtitle: `Dosen • Jadwal di ${item.nama_ruangan || '-'} (${item.jam || '-'})`,
-            action: () => {
-              closeSpotlightModal();
-              selectSpotlightItem('dosen', item.nama_dosen);
-            }
-          });
-        }
-      }
-    });
-
-    // 2. Cari Mata Kuliah
-    allJadwal.forEach(item => {
-      if (item.nama_mk && item.nama_mk.toLowerCase().includes(query)) {
-        const key = `mk-${item.nama_mk}`;
-        if (!addedKeys.has(key)) {
-          addedKeys.add(key);
-          results.push({
-            type: 'mk',
-            icon: '📚',
-            title: item.nama_mk,
-            subtitle: `Mata Kuliah • ${item.nama_dosen || '-'} • ${item.nama_ruangan || '-'}`,
-            action: () => {
-              closeSpotlightModal();
-              selectSpotlightItem('mk', item.nama_mk);
-            }
-          });
-        }
-      }
-    });
-
-    // 3. Cari Ruangan / Labor
-    allJadwal.forEach(item => {
-      if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes(query)) {
-        const key = `ruangan-${item.nama_ruangan}`;
-        if (!addedKeys.has(key)) {
-          addedKeys.add(key);
-          results.push({
-            type: 'ruangan',
-            icon: '🏢',
-            title: item.nama_ruangan,
-            subtitle: `Ruangan • Kampus ${item.kampus || 'UNAMA'}`,
-            action: () => {
-              closeSpotlightModal();
-              selectCustomOption('ruangan', item.nama_ruangan, item.nama_ruangan);
-            }
+            subtitle: `Dosen Pengampu • Ruangan: ${item.nama_ruangan || '-'} • Jam: ${item.jam || '-'}`
           });
         }
       }
     });
   }
 
-  // 4. Cari Aslab
-  if (typeof globalAslabData !== 'undefined' && Array.isArray(globalAslabData)) {
+  // 2. Mata Kuliah
+  if ((cat === 'all' || cat === 'mk') && Array.isArray(allJadwal)) {
+    allJadwal.forEach(item => {
+      if (item.nama_mk && (!query || item.nama_mk.toLowerCase().includes(query) || (item.kelas && item.kelas.toLowerCase().includes(query)))) {
+        const key = `mk-${item.nama_mk}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          results.push({
+            type: 'mk',
+            rawValue: item.nama_mk,
+            badgeClass: 'badge-type-mk',
+            badgeText: 'MATKUL',
+            svgIcon: svgSearchIcons.mk,
+            title: `${item.nama_mk || '-'}`,
+            subtitle: `Mata Kuliah • Pengampu: ${item.nama_dosen || '-'} • Ruangan: ${item.nama_ruangan || '-'}`
+          });
+        }
+      }
+    });
+  }
+
+  // 3. Ruangan / Labor
+  if ((cat === 'all' || cat === 'ruangan') && Array.isArray(allJadwal)) {
+    allJadwal.forEach(item => {
+      if (item.nama_ruangan && (!query || item.nama_ruangan.toLowerCase().includes(query))) {
+        const key = `ruangan-${item.nama_ruangan}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          results.push({
+            type: 'ruangan',
+            rawValue: item.nama_ruangan,
+            badgeClass: 'badge-type-ruang',
+            badgeText: 'RUANG',
+            svgIcon: svgSearchIcons.ruangan,
+            title: item.nama_ruangan,
+            subtitle: `Ruangan / Laboratorium • Kampus ${item.kampus || 'UNAMA'}`
+          });
+        }
+      }
+    });
+  }
+
+  // 4. Asisten Lab
+  if ((cat === 'all' || cat === 'aslab') && typeof globalAslabData !== 'undefined' && Array.isArray(globalAslabData)) {
     globalAslabData.forEach(aslab => {
-      if ((aslab.nama && aslab.nama.toLowerCase().includes(query)) || (aslab.ruangan && aslab.ruangan.toLowerCase().includes(query))) {
+      if (aslab.nama && (!query || aslab.nama.toLowerCase().includes(query) || (aslab.ruangan && aslab.ruangan.toLowerCase().includes(query)))) {
         const key = `aslab-${aslab.id || aslab.nama}`;
         if (!addedKeys.has(key)) {
           addedKeys.add(key);
           results.push({
             type: 'aslab',
-            icon: '👤',
+            rawValue: aslab.nama,
+            aslabData: aslab,
+            badgeClass: 'badge-type-aslab',
+            badgeText: 'ASLAB',
+            svgIcon: svgSearchIcons.aslab,
             title: aslab.nama,
-            subtitle: `Asisten Lab • ${aslab.ruangan || '-'} • WA: ${aslab.no_wa || '-'}`,
-            action: () => {
-              closeSpotlightModal();
-              if (aslab.no_wa) {
-                window.open(`https://wa.me/${aslab.no_wa.replace(/[^0-9]/g, '')}`, '_blank');
-              }
-            }
+            subtitle: `Asisten Lab • Jaga di ${aslab.ruangan || '-'} • WA: ${aslab.no_wa || '-'}`
           });
         }
       }
@@ -3540,54 +3728,191 @@ function renderSpotlightResults(query) {
 
   if (results.length === 0) {
     container.innerHTML = `
-      <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9em;">
-        Tidak ada hasil untuk "<strong>${escapeHtml(query)}</strong>"
+      <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.95em;">
+        ${query ? `Tidak ada hasil untuk "<strong>${escapeHtml(query)}</strong>"` : 'Tidak ada data ditemukan.'}
       </div>
     `;
+    window._spotlightCurrentResults = [];
     return;
   }
 
-  container.innerHTML = results.slice(0, 10).map((r, i) => `
-    <div class="spotlight-item ${i === 0 ? 'selected' : ''}" onclick="executeSpotlightAction(${i})">
+  window._spotlightCurrentResults = results;
+
+  container.innerHTML = results.slice(0, 15).map((r, i) => `
+    <div class="spotlight-item ${i === spotlightActiveIndex ? 'selected' : ''}" onclick="executeSpotlightAction(${i})">
       <div class="spotlight-item-left">
-        <div class="spotlight-icon">${r.icon}</div>
+        <div class="spotlight-icon">${r.svgIcon}</div>
         <div>
-          <div class="spotlight-title">${escapeHtml(r.title)}</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="spotlight-title">${escapeHtml(r.title)}</span>
+            <span class="spotlight-badge ${r.badgeClass}">${r.badgeText}</span>
+          </div>
           <div class="spotlight-subtitle">${escapeHtml(r.subtitle)}</div>
         </div>
       </div>
-      <span style="font-size:0.8em; color:var(--primary); font-weight:600;">Pilih ↵</span>
+      <span style="font-size:0.82em; color:var(--primary); font-weight:700;">Lihat Detail</span>
     </div>
   `).join('');
-
-  window._spotlightCurrentResults = results;
 }
 
 function executeSpotlightAction(idx) {
   if (window._spotlightCurrentResults && window._spotlightCurrentResults[idx]) {
-    window._spotlightCurrentResults[idx].action();
+    openSpotlightDetailModal(window._spotlightCurrentResults[idx]);
   }
 }
 
-function selectSpotlightItem(type, val) {
-  if (!Array.isArray(allJadwal)) return;
-  const filtered = allJadwal.filter(j => {
+// =========================================================================
+// SPOTLIGHT DETAIL PREVIEW MODAL & FILTER APPLICATION
+// =========================================================================
+function openSpotlightDetailModal(item) {
+  const backdrop = document.getElementById('spotlight-detail-backdrop');
+  const iconEl = document.getElementById('spotlight-detail-icon');
+  const titleEl = document.getElementById('spotlight-detail-title');
+  const badgeEl = document.getElementById('spotlight-detail-badge');
+  const subEl = document.getElementById('spotlight-detail-subtitle');
+  const bodyEl = document.getElementById('spotlight-detail-body');
+  const applyBtn = document.getElementById('spotlight-detail-apply-btn');
+
+  if (!backdrop || !item) return;
+
+  titleEl.innerText = item.title;
+  badgeEl.className = `spotlight-badge ${item.badgeClass}`;
+  badgeEl.innerText = item.badgeText;
+  subEl.innerText = item.subtitle;
+  iconEl.innerHTML = item.svgIcon;
+
+  let matchingSchedules = [];
+  if (Array.isArray(allJadwal)) {
+    if (item.type === 'dosen') {
+      matchingSchedules = allJadwal.filter(j => j.nama_dosen === item.rawValue);
+    } else if (item.type === 'mk') {
+      matchingSchedules = allJadwal.filter(j => j.nama_mk === item.rawValue);
+    } else if (item.type === 'ruangan') {
+      matchingSchedules = allJadwal.filter(j => j.nama_ruangan === item.rawValue);
+    }
+  }
+
+  if (item.type === 'aslab') {
+    bodyEl.innerHTML = `
+      <div class="spotlight-detail-stat-row">
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${item.aslabData.ruangan || '-'}</div>
+          <div class="spotlight-detail-stat-lbl">Laboratorium / Ruangan Jaga</div>
+        </div>
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${item.aslabData.no_wa ? 'Tersedia' : '-'}</div>
+          <div class="spotlight-detail-stat-lbl">Kontak WhatsApp</div>
+        </div>
+      </div>
+      <div style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+        <div style="font-weight: 600; color: var(--text); margin-bottom: 6px;">Nomor WhatsApp Asisten Lab:</div>
+        <div style="font-size: 1.15em; color: var(--primary); font-weight: 700; margin-bottom: 12px;">${item.aslabData.no_wa || 'Belum ada nomor WA terdaftar'}</div>
+        ${item.aslabData.no_wa ? `
+          <a href="https://wa.me/${item.aslabData.no_wa.replace(/[^0-9]/g, '')}" target="_blank" class="btn btn-primary" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none; padding:8px 16px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+            Hubungi via WhatsApp
+          </a>
+        ` : ''}
+      </div>
+    `;
+    applyBtn.style.display = 'none';
+  } else {
+    const totalKelas = matchingSchedules.length;
+    const uniqueRuangan = [...new Set(matchingSchedules.map(j => j.nama_ruangan).filter(Boolean))].length;
+
+    let scheduleCardsHtml = matchingSchedules.slice(0, 10).map(s => `
+      <div class="spotlight-detail-card-item">
+        <div>
+          <div style="font-weight: 700; color: var(--text); font-size: 0.95em;">${escapeHtml(s.nama_mk || '-')} ${s.kelas ? `(Kelas: ${escapeHtml(s.kelas)})` : ''}</div>
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-top: 2px;">
+            ${escapeHtml(s.nama_ruangan || '-')} • ${escapeHtml(s.hari || '-')}, ${escapeHtml(s.tanggal || '')}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; color: var(--primary); font-size: 0.88em;">Pukul ${escapeHtml(s.jam || '-')}</div>
+          <span class="badge ${s.metode_pembelajaran === 'TM' ? 'tm' : (s.metode_pembelajaran === 'OL' ? 'ol' : 'cc')}" style="font-size:0.7em;">
+            ${escapeHtml(s.metode_pembelajaran || '-')}
+          </span>
+        </div>
+      </div>
+    `).join('');
+
+    if (matchingSchedules.length === 0) {
+      scheduleCardsHtml = `<div style="text-align:center; color:var(--text-muted); padding:20px;">Tidak ada detail jadwal terkait.</div>`;
+    }
+
+    bodyEl.innerHTML = `
+      <div class="spotlight-detail-stat-row">
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${totalKelas}</div>
+          <div class="spotlight-detail-stat-lbl">Total Sesi Perkuliahan</div>
+        </div>
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${uniqueRuangan}</div>
+          <div class="spotlight-detail-stat-lbl">Ruangan Terkait</div>
+        </div>
+      </div>
+      <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 8px; color: var(--text);">Daftar Jadwal Kuliah Terkait:</div>
+      ${scheduleCardsHtml}
+      ${matchingSchedules.length > 10 ? `<div style="text-align:center; font-size:0.8em; color:var(--text-muted); padding:6px;">Dan ${matchingSchedules.length - 10} jadwal lainnya...</div>` : ''}
+    `;
+
+    applyBtn.style.display = 'inline-block';
+    applyBtn.onclick = () => {
+      applySpotlightFilterToMainTable(item.type, item.rawValue, matchingSchedules);
+    };
+  }
+
+  closeSpotlightModal();
+  backdrop.classList.add('open');
+}
+
+function closeSpotlightDetailModal(e) {
+  if (e && e.target && e.target !== document.getElementById('spotlight-detail-backdrop') && !e.target.closest('.spotlight-btn-clear')) {
+    return;
+  }
+  const backdrop = document.getElementById('spotlight-detail-backdrop');
+  if (backdrop) backdrop.classList.remove('open');
+}
+
+function applySpotlightFilterToMainTable(type, val, schedules) {
+  closeSpotlightDetailModal();
+
+  const filtered = (schedules && schedules.length > 0) ? schedules : allJadwal.filter(j => {
     if (type === 'dosen') return j.nama_dosen === val;
     if (type === 'mk') return j.nama_mk === val;
+    if (type === 'ruangan') return j.nama_ruangan === val;
     return true;
   });
+
   renderTable(filtered);
-  const hasilLabel = document.getElementById('hasil-pencarian');
-  if (hasilLabel) {
-    hasilLabel.innerHTML = `Hasil Pencarian Spotlight [${escapeHtml(val)}]: <strong style="color:var(--primary);">${filtered.length} jadwal</strong>`;
+
+  const banner = document.getElementById('spotlight-active-banner');
+  const bannerText = document.getElementById('spotlight-banner-text');
+  if (banner && bannerText) {
+    bannerText.innerHTML = `Menampilkan jadwal untuk: <strong>${escapeHtml(val)}</strong> (${filtered.length} jadwal ditemukan)`;
+    banner.style.display = 'flex';
   }
+
+  const tableEl = document.getElementById('jadwal-table');
+  if (tableEl) {
+    tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function resetSpotlightFilter() {
+  const banner = document.getElementById('spotlight-active-banner');
+  if (banner) banner.style.display = 'none';
+  applyFilters();
 }
 
 
 // =========================================================================
-// TV / KIOSK DISPLAY MODE
+// TV / KIOSK DISPLAY MODE (ANIMATED, ALL ROOMS, THEME-ADAPTIVE)
 // =========================================================================
 let tvClockTimer = null;
+let tvAutoRefreshTimer = null;
+let tvScrollInterval = null;
 
 function openTvMode() {
   const overlay = document.getElementById('tv-mode-overlay');
@@ -3604,20 +3929,61 @@ function openTvMode() {
   if (tvClockTimer) clearInterval(tvClockTimer);
   tvClockTimer = setInterval(updateTvClock, 1000);
   updateTvClock();
+
+  if (tvAutoRefreshTimer) clearInterval(tvAutoRefreshTimer);
+  tvAutoRefreshTimer = setInterval(updateTvModeData, 10000);
+
+  startTvAutoScroll();
 }
 
-function closeTvMode() {
+function closeTvMode(exitFullscreen = true) {
   const overlay = document.getElementById('tv-mode-overlay');
   if (overlay) overlay.classList.remove('active');
 
-  if (document.fullscreenElement && document.exitFullscreen) {
+  if (exitFullscreen && document.fullscreenElement && document.exitFullscreen) {
     document.exitFullscreen().catch(() => {});
   }
 
-  if (tvClockTimer) {
-    clearInterval(tvClockTimer);
-    tvClockTimer = null;
+  if (tvClockTimer) { clearInterval(tvClockTimer); tvClockTimer = null; }
+  if (tvAutoRefreshTimer) { clearInterval(tvAutoRefreshTimer); tvAutoRefreshTimer = null; }
+  if (tvScrollInterval) { clearInterval(tvScrollInterval); tvScrollInterval = null; }
+}
+
+// Listen to fullscreen changes to handle ESC key properly!
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    closeTvMode(false);
   }
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  if (!document.webkitFullscreenElement) {
+    closeTvMode(false);
+  }
+});
+
+function startTvAutoScroll() {
+  const container = document.getElementById('tv-grid-container');
+  if (!container) return;
+  if (tvScrollInterval) clearInterval(tvScrollInterval);
+
+  let direction = 1;
+  let isPaused = false;
+
+  tvScrollInterval = setInterval(() => {
+    if (!container || isPaused) return;
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    if (maxScroll <= 10) return;
+
+    container.scrollTop += direction * 1.5;
+
+    if (container.scrollTop >= maxScroll - 2) {
+      isPaused = true;
+      setTimeout(() => { direction = -1; isPaused = false; }, 3000);
+    } else if (container.scrollTop <= 2) {
+      isPaused = true;
+      setTimeout(() => { direction = 1; isPaused = false; }, 3000);
+    }
+  }, 50);
 }
 
 function updateTvClock() {
@@ -3635,17 +4001,48 @@ function updateTvClock() {
 
 function updateTvModeData() {
   const grid = document.getElementById('tv-grid-container');
-  if (!grid || !Array.isArray(allJadwal)) return;
+  if (!grid || !Array.isArray(allJadwal) || allJadwal.length === 0) {
+    if (grid) grid.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Memuat data jadwal ruangan...</div>';
+    return;
+  }
 
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+  const selectedDate = document.getElementById('filter-tanggal')?.value;
+  const todayStr = now.toISOString().slice(0, 10);
+  const targetDate = selectedDate || todayStr;
+
+  let dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
+  if (dayJadwal.length === 0) {
+    const dates = [...new Set(allJadwal.map(j => j.tanggal).filter(Boolean))].sort();
+    if (dates.length > 0) {
+      const fallbackDate = dates[dates.length - 1];
+      dayJadwal = allJadwal.filter(j => j.tanggal === fallbackDate);
+    } else {
+      dayJadwal = allJadwal;
+    }
+  }
+
+  // Ambil SEMUA ruangan (Ruangan Kelas + Laboratorium dari Kobar & Thehok)
   const roomMap = {};
-  allJadwal.forEach(item => {
+  
+  // 1. Masukkan semua ruangan yang ada jadwal hari ini
+  dayJadwal.forEach(item => {
     const rName = (item.nama_ruangan || 'Tanpa Ruangan').trim();
     if (!roomMap[rName]) roomMap[rName] = [];
     roomMap[rName].push(item);
   });
+
+  // 2. Jika ada master ruangan, pastikan ruangan kosong lainnya juga tercantum
+  if (Array.isArray(allRuanganData)) {
+    allRuanganData.forEach(r => {
+      const rName = (r.nama_ruangan || r.nama || '').trim();
+      if (rName && !roomMap[rName]) {
+        roomMap[rName] = [];
+      }
+    });
+  }
 
   let occupiedCount = 0;
   let emptyCount = 0;
@@ -3678,12 +4075,15 @@ function updateTvModeData() {
           <div>
             <div class="tv-room-name">
               <span>${escapeHtml(roomName)}</span>
-              <span class="tv-room-badge ${isOnline ? 'wa' : 'tm'}">${isOnline ? 'ONLINE' : 'DIPAKAI'}</span>
+              <span class="tv-room-badge ${isOnline ? 'wa' : 'tm'}">
+                <span class="tv-pulse-dot"></span>
+                ${isOnline ? 'ONLINE' : 'DIPAKAI'}
+              </span>
             </div>
             <div class="tv-room-subject">${escapeHtml(activeClass.nama_mk || '-')}</div>
-            <div class="tv-room-lecturer">👨‍🏫 ${escapeHtml(activeClass.nama_dosen || '-')}</div>
+            <div class="tv-room-lecturer">Dosen: ${escapeHtml(activeClass.nama_dosen || '-')}</div>
           </div>
-          <div class="tv-room-time">⏰ Pukul ${escapeHtml(activeClass.jam || '-')} (Kelas: ${escapeHtml(activeClass.kelas || '-')})</div>
+          <div class="tv-room-time">Pukul ${escapeHtml(activeClass.jam || '-')} (Kelas: ${escapeHtml(activeClass.kelas || '-')})</div>
         </div>
       `);
     } else {
@@ -3694,11 +4094,14 @@ function updateTvModeData() {
           <div>
             <div class="tv-room-name">
               <span>${escapeHtml(roomName)}</span>
-              <span class="tv-room-badge cc">KOSONG</span>
+              <span class="tv-room-badge cc">
+                <span class="tv-pulse-dot"></span>
+                KOSONG
+              </span>
             </div>
-            <div class="tv-room-subject" style="color: #94a3b8; font-weight: normal;">Tidak ada perkuliahan aktif saat ini</div>
+            <div class="tv-room-subject" style="color: var(--text-muted); font-weight: 500; font-size: 0.92em;">Tidak ada perkuliahan aktif</div>
           </div>
-          <div class="tv-room-time" style="color: #94a3b8;">${nextClass ? `Jadwal lain: ${escapeHtml(nextClass.jam || '')}` : 'Bebas praktikum'}</div>
+          <div class="tv-room-time" style="color: var(--text-muted); font-weight: 500;">${nextClass ? `Jadwal lain: Pukul ${escapeHtml(nextClass.jam || '')}` : 'Ruangan bebas praktikum'}</div>
         </div>
       `);
     }
@@ -3710,9 +4113,9 @@ function updateTvModeData() {
 
   if (occEl) occEl.innerText = occupiedCount;
   if (empEl) empEl.innerText = emptyCount;
-  if (totEl) totEl.innerText = allJadwal.length;
+  if (totEl) totEl.innerText = dayJadwal.length;
 
-  grid.innerHTML = cardsHtml.join('') || '<div style="color:#94a3b8; text-align:center; padding:40px;">Tidak ada data ruangan.</div>';
+  grid.innerHTML = cardsHtml.join('') || '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Tidak ada data ruangan.</div>';
 }
 
 // =========================================================================
@@ -3720,13 +4123,18 @@ function updateTvModeData() {
 // =========================================================================
 window.openSpotlightModal = openSpotlightModal;
 window.closeSpotlightModal = closeSpotlightModal;
+window.openSpotlightDetailModal = openSpotlightDetailModal;
+window.closeSpotlightDetailModal = closeSpotlightDetailModal;
+window.clearSpotlightInput = clearSpotlightInput;
+window.filterSpotlightCategory = filterSpotlightCategory;
+window.resetSpotlightFilter = resetSpotlightFilter;
 window.openTvMode = openTvMode;
 window.closeTvMode = closeTvMode;
+window.exportFilteredSchedulesToExcel = exportFilteredSchedulesToExcel;
 window.exportFilteredSchedulesToICS = exportFilteredSchedulesToICS;
 window.openSingleGoogleCalendar = openSingleGoogleCalendar;
 window.executeSpotlightAction = executeSpotlightAction;
 
-// Attach click listeners on DOM ready as backup
 document.addEventListener('DOMContentLoaded', () => {
   const btnSpotlight = document.getElementById('btn-spotlight');
   if (btnSpotlight) {
@@ -3744,12 +4152,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const btnExp = document.getElementById('btn-export-cal');
-  if (btnExp) {
-    btnExp.addEventListener('click', (e) => {
+  const btnExpExcel = document.getElementById('btn-export-excel');
+  if (btnExpExcel) {
+    btnExpExcel.addEventListener('click', (e) => {
+      e.preventDefault();
+      exportFilteredSchedulesToExcel();
+    });
+  }
+
+  const btnExpCal = document.getElementById('btn-export-cal');
+  if (btnExpCal) {
+    btnExpCal.addEventListener('click', (e) => {
       e.preventDefault();
       exportFilteredSchedulesToICS();
     });
   }
 });
+
+
+
 
