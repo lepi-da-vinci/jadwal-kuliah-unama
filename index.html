@@ -882,7 +882,7 @@
 
   <!-- Notifikasi Toast -->
   <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Ruangan">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: 720px; width: 94%;">
       <div class="modal-icon" style="color: var(--primary);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -899,7 +899,7 @@
   <!-- Modal Password Admin -->
   <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin"
     style="z-index: 10000;">
-    <div class="modal-box" style="max-width: 400px;">
+    <div class="modal-box" style="max-width: 480px; width: 94%;">
       <div class="modal-icon" style="color: var(--primary);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -924,7 +924,7 @@
   <!-- Modal Konfirmasi Bahaya -->
   <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya"
     style="z-index: 10000;">
-    <div class="modal-box" style="max-width: 450px; border-top: 5px solid var(--badge-cc);">
+    <div class="modal-box" style="max-width: 540px; width: 94%; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -949,7 +949,7 @@
   <!-- Modal Konfirmasi Teks Final -->
   <div id="final-danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Akhir"
     style="z-index: 10001;">
-    <div class="modal-box" style="max-width: 450px; border-top: 5px solid var(--badge-cc);">
+    <div class="modal-box" style="max-width: 540px; width: 94%; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -978,7 +978,7 @@
 
   <!-- Modal Setting -->
   <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Setting">
-    <div class="modal-box" style="max-width: 600px; width: 90%;">
+    <div class="modal-box" style="max-width: 840px; width: 94%;">
       <div class="modal-icon" id="wa-modal-icon">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
@@ -1231,16 +1231,16 @@
       <!-- Tampilan Data Aslab -->
       <div id="wa-modal-data" class="modal-body"
         style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+        <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
             <thead>
-              <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.02);">
-                <th style="padding: 10px; text-align: center; width: 40px;">No</th>
-                <th style="padding: 10px; text-align: left;">Nama Aslab</th>
-                <th style="padding: 10px; text-align: left;">Kampus</th>
-                <th style="padding: 10px; text-align: left;">Ruangan</th>
-                <th style="padding: 10px; text-align: left;">No WA</th>
-                <th style="padding: 10px; text-align: center;" class="admin-only-col">Aksi</th>
+              <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
+                <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
+                <th style="padding: 12px 14px; text-align: left;">Nama Aslab</th>
+                <th style="padding: 12px 14px; text-align: left;">Kampus</th>
+                <th style="padding: 12px 14px; text-align: left;">Ruangan</th>
+                <th style="padding: 12px 14px; text-align: left;">No WA</th>
+                <th style="padding: 12px 14px; text-align: center;" class="admin-only-col">Aksi</th>
               </tr>
             </thead>
             <tbody id="aslab-data-tbody">
@@ -1279,18 +1279,17 @@
         </div>
       </div>
 
-
       <!-- Tampilan Data Ruangan -->
       <div id="wa-modal-data-ruangan" class="modal-body"
         style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+        <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
             <thead>
-              <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.02);">
-                <th style="padding: 10px; text-align: center; width: 40px;">No</th>
-                <th style="padding: 10px; text-align: left;">Kampus</th>
-                <th style="padding: 10px; text-align: left;">Nama Ruangan</th>
-                <th style="padding: 10px; text-align: center;" class="admin-only-col">Aksi</th>
+              <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
+                <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
+                <th style="padding: 12px 14px; text-align: left;">Kampus</th>
+                <th style="padding: 12px 14px; text-align: left;">Nama Ruangan</th>
+                <th style="padding: 12px 14px; text-align: center;" class="admin-only-col">Aksi</th>
               </tr>
             </thead>
             <tbody id="ruangan-data-tbody">
@@ -1355,23 +1354,29 @@
   <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
   <div id="spotlight-backdrop" class="spotlight-backdrop" onclick="closeSpotlightModal(event)">
     <div class="spotlight-modal" onclick="event.stopPropagation()">
-      <div class="spotlight-input-wrap">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+      <div class="spotlight-input-wrap" onclick="document.getElementById('spotlight-input')?.focus()">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); flex-shrink: 0;">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
         <input type="text" id="spotlight-input" class="spotlight-input"
-          placeholder="Cari dosen, mata kuliah, ruangan, atau aslab..." autocomplete="off">
-        <button id="spotlight-clear-btn" class="spotlight-btn-clear" onclick="clearSpotlightInput()"
+          placeholder="Cari dosen, mata kuliah, ruangan, atau aslab..." autocomplete="off"
+          oninput="handleSpotlightInput(this.value)">
+        <button id="spotlight-clear-btn" class="spotlight-btn-clear" onclick="clearSpotlightInput(); event.stopPropagation();"
           style="display:none;" title="Hapus teks">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-        <kbd class="kbd-badge" onclick="closeSpotlightModal()" style="cursor:pointer;"
-          title="Tutup Modal (ESC)">ESC</kbd>
+        <button class="spotlight-btn-close-wrap" onclick="closeSpotlightModal(); event.stopPropagation();" title="Tutup / Kembali (ESC)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <kbd class="kbd-badge" style="background:transparent; border:none; box-shadow:none; padding:0; margin:0; font-size:0.95em;">ESC</kbd>
+        </button>
       </div>
 
       <!-- Quick Category Filter Tabs with SVGs (No Emojis) -->
@@ -1439,7 +1444,14 @@
   <div id="spotlight-detail-backdrop" class="spotlight-backdrop" onclick="closeSpotlightDetailModal(event)">
     <div class="spotlight-modal spotlight-detail-modal" onclick="event.stopPropagation()">
       <div class="spotlight-detail-header">
-        <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button class="btn btn-secondary btn-icon-back" onclick="backToSpotlightModal()" title="Kembali ke Hasil Pencarian (ESC)"
+            style="padding: 6px 10px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 5px; border-radius: 8px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            Kembali
+          </button>
           <div id="spotlight-detail-icon" class="spotlight-icon"></div>
           <div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">

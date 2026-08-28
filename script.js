@@ -3525,14 +3525,29 @@ function openSpotlightModal() {
     spotlightActiveCategory = 'all';
     spotlightActiveIndex = 0;
     updateSpotlightCategoryTabs();
-    input.focus();
     renderSpotlightResults('');
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 60);
   }
 }
 
+function handleSpotlightInput(val) {
+  const clearBtn = document.getElementById('spotlight-clear-btn');
+  if (clearBtn) clearBtn.style.display = val ? 'inline-flex' : 'none';
+  spotlightActiveIndex = 0;
+  renderSpotlightResults((val || '').trim().toLowerCase());
+}
+window.handleSpotlightInput = handleSpotlightInput;
+
 function closeSpotlightModal(e) {
-  if (e && e.target && e.target !== document.getElementById('spotlight-backdrop') && !e.target.closest('.kbd-badge')) {
-    return;
+  if (e && e.target) {
+    const isBackdrop = e.target === document.getElementById('spotlight-backdrop');
+    const isCloseBtn = e.target.closest('.spotlight-btn-close-wrap') || e.target.closest('.kbd-badge') || e.target.closest('.spotlight-btn-back');
+    if (!isBackdrop && !isCloseBtn) {
+      return;
+    }
   }
   const backdrop = document.getElementById('spotlight-backdrop');
   if (backdrop) backdrop.classList.remove('open');
