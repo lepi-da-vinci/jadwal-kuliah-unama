@@ -20,7 +20,7 @@
 <body>
   <div class="container">
     <!-- HEADER & FILTERS -->
-        <header class="header">
+    <header class="header">
       <h1>Jadwal Kuliah</h1>
       <div class="header-actions">
         <button id="sync-btn" class="btn btn-primary" aria-label="Sinkron">
@@ -188,8 +188,8 @@
       </div>
 
 
-    <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
-          <!-- Status Penggunaan Ruangan Section (With Fullscreen Mode) -->
+      <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
+      <!-- Status Penggunaan Ruangan Section (With Fullscreen Mode) -->
       <div id="section-status-ruangan" class="status-ruangan-section">
         <div class="status-ruangan-header">
           <div class="status-ruangan-title-area">
@@ -272,8 +272,8 @@
       </div>
 
 
-    <!-- COLLAPSIBLE INFO MASE & MAIN SCHEDULE TABLE -->
-          <!-- Info Mase Collapsible Panel -->
+      <!-- COLLAPSIBLE INFO MASE & MAIN SCHEDULE TABLE -->
+      <!-- Info Mase Collapsible Panel -->
       <div class="panel panel-notif" id="info-mase-panel" style="display: none; margin-bottom: 24px;">
         <h3
           style="margin-bottom: 12px; border-bottom: 1px solid rgba(194, 65, 12, 0.15); padding-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
@@ -412,7 +412,7 @@
 
 
   <!-- MODALS: FILTER, INFO MASE & DETAIL RUANGAN -->
-    <!-- ==================== MODAL FILTER & INFO KOMPONEN ==================== -->
+  <!-- ==================== MODAL FILTER & INFO KOMPONEN ==================== -->
 
   <!-- Popup / Modal Filter (Dapat diakses saat Fullscreen maupun Normal) -->
   <div id="modal-fs-filter" class="modal-overlay" style="display: none;">
@@ -431,7 +431,8 @@
           <div>
             <h3 style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">
               Filter & Pengaturan Jadwal</h3>
-            <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Ubah filter ruangan atau sinkronkan data tanggal</p>
+            <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Ubah filter ruangan atau sinkronkan data
+              tanggal</p>
           </div>
         </div>
         <span onclick="closeFullscreenFilterModal()"
@@ -471,8 +472,7 @@
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-waktu', event)">
                 <span class="custom-select-label" id="label-fs-waktu">Semua Waktu</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -480,7 +480,8 @@
                 <div class="aslab-list-item active" data-value="semua"
                   onclick="selectFsModalOption('waktu', 'semua', 'Semua Waktu')">Semua Waktu</div>
                 <div class="aslab-list-item" data-value="sekarang"
-                  onclick="selectFsModalOption('waktu', 'sekarang', 'Jadwal Saat Ini (Otomatis)')">Jadwal Saat Ini (Otomatis)</div>
+                  onclick="selectFsModalOption('waktu', 'sekarang', 'Jadwal Saat Ini (Otomatis)')">Jadwal Saat Ini
+                  (Otomatis)</div>
               </div>
               <input type="hidden" id="fs-val-waktu" value="semua">
             </div>
@@ -490,13 +491,13 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Status Kuliah</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Status
+              Kuliah</label>
             <div class="custom-select-wrapper" id="wrapper-fs-metode">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-metode', event)">
                 <span class="custom-select-label" id="label-fs-metode">Semua Status</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -516,13 +517,13 @@
 
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Lokasi Kampus</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Lokasi
+              Kampus</label>
             <div class="custom-select-wrapper" id="wrapper-fs-kampus">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-kampus', event)">
                 <span class="custom-select-label" id="label-fs-kampus">Semua Kampus</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -542,13 +543,13 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Kategori Ruangan</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Kategori
+              Ruangan</label>
             <div class="custom-select-wrapper" id="wrapper-fs-kategori-ruang">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-kategori-ruang', event)">
                 <span class="custom-select-label" id="label-fs-kategori-ruang">Semua Kategori</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -566,13 +567,13 @@
 
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Ruangan / Labor</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Ruangan
+              / Labor</label>
             <div class="custom-select-wrapper" id="wrapper-fs-ruangan">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-ruangan', event)">
                 <span class="custom-select-label" id="label-fs-ruangan">Semua Ruangan</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                  stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -621,12 +622,12 @@
           </div>
           <div>
             <h3 id="room-detail-title"
-              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Detail Ruangan</h3>
+              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Detail
+              Ruangan</h3>
             <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Daftar jadwal kelas di ruangan ini</p>
           </div>
         </div>
-        <span id="room-detail-close-btn"
-          style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 4px;">
+        <span id="room-detail-close-btn" style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 4px;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -664,8 +665,10 @@
           </div>
           <div>
             <h3 id="fs-info-title"
-              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Info Mase & Notifikasi Ruangan</h3>
-            <p id="fs-info-subtitle" style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Pemberitahuan kelas tambahan, perubahan jadwal, dan jeda kosong</p>
+              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Info Mase
+              & Notifikasi Ruangan</h3>
+            <p id="fs-info-subtitle" style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Pemberitahuan kelas
+              tambahan, perubahan jadwal, dan jeda kosong</p>
           </div>
         </div>
         <span onclick="closeFullscreenInfoModal()"
@@ -682,20 +685,18 @@
         style="display: flex; gap: 4px; margin: 12px 24px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
         <button type="button" class="info-mase-kampus-btn active" data-kampus="semua"
           onclick="switchInfoMaseKampus('semua')"
-          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Kampus</button>
-        <button type="button" class="info-mase-kampus-btn" data-kampus="thehok"
-          onclick="switchInfoMaseKampus('thehok')"
+          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua
+          Kampus</button>
+        <button type="button" class="info-mase-kampus-btn" data-kampus="thehok" onclick="switchInfoMaseKampus('thehok')"
           style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
-        <button type="button" class="info-mase-kampus-btn" data-kampus="kobar"
-          onclick="switchInfoMaseKampus('kobar')"
+        <button type="button" class="info-mase-kampus-btn" data-kampus="kobar" onclick="switchInfoMaseKampus('kobar')"
           style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Kobar</button>
       </div>
 
       <!-- Tab Filter Kategori: Labor vs Kelas -->
       <div class="info-mase-tabs-container">
         <div class="info-mase-tabs">
-          <button type="button" class="info-mase-tab-btn active" data-tab="lab"
-            onclick="switchInfoMaseTab('lab')">
+          <button type="button" class="info-mase-tab-btn active" data-tab="lab" onclick="switchInfoMaseTab('lab')">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -881,7 +882,7 @@
 
 
   <!-- MODAL: NOTIFIKASI LAB & RUANGAN POPUP -->
-    <!-- ==================== MODAL NOTIFIKASI LAB & RUANGAN ==================== -->
+  <!-- ==================== MODAL NOTIFIKASI LAB & RUANGAN ==================== -->
   <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Ruangan">
     <div class="modal-box" style="max-width: 720px; width: 94%;">
       <div class="modal-icon" style="color: var(--primary);">
@@ -899,7 +900,7 @@
 
 
   <!-- MODAL: SECURITY & OTORISASI ADMIN -->
-    <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
+  <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
 
   <!-- Modal Password Admin -->
   <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin"
@@ -941,7 +942,8 @@
       <h2 style="color: var(--badge-cc);">Peringatan Berbahaya!</h2>
       <div class="modal-body" style="text-align: center;">
         <p id="danger-message" style="margin-bottom: 5px; font-weight: 500;"></p>
-        <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan ini sangat berisiko dan tidak bisa dikembalikan. Pastikan Anda benar-benar sadar akan dampaknya.</p>
+        <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan ini sangat berisiko dan
+          tidak bisa dikembalikan. Pastikan Anda benar-benar sadar akan dampaknya.</p>
       </div>
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="danger-cancel-btn">Batal</button>
@@ -966,7 +968,8 @@
       <div class="modal-body" style="text-align: center;">
         <p style="margin-bottom: 10px;">Ketik ulang kode unik berikut untuk melanjutkan:</p>
         <p id="final-danger-code"
-          style="font-weight: bold; letter-spacing: 2px; font-size: 1.2em; color: var(--primary); background: var(--bg-elevated); padding: 10px; border-radius: var(--radius-sm); user-select: none;">CODE</p>
+          style="font-weight: bold; letter-spacing: 2px; font-size: 1.2em; color: var(--primary); background: var(--bg-elevated); padding: 10px; border-radius: var(--radius-sm); user-select: none;">
+          CODE</p>
         <input type="text" id="final-danger-input" autocomplete="off"
           style="width: 100%; padding: 12px; margin-top: 15px; text-align: center; font-size: 1.1em; letter-spacing: 1px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="Ketik kode di sini">
@@ -981,7 +984,7 @@
 
 
   <!-- MODAL: SETTING & MASTER DATA ASLAB/RUANGAN -->
-    <!-- ==================== MODAL SETTING & DATA MASTER ASLAB/RUANGAN ==================== -->
+  <!-- ==================== MODAL SETTING & DATA MASTER ASLAB/RUANGAN ==================== -->
   <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Setting">
     <div class="modal-box" style="max-width: 840px; width: 94%;">
       <div class="modal-icon" id="wa-modal-icon">
@@ -1357,7 +1360,7 @@
 
 
   <!-- MODAL: SPOTLIGHT SEARCH (CTRL+K) -->
-    <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
+  <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
   <div id="spotlight-backdrop" class="spotlight-backdrop" onclick="closeSpotlightModal(event)">
     <div class="spotlight-modal" onclick="event.stopPropagation()">
       <div class="spotlight-input-wrap" onclick="document.getElementById('spotlight-input')?.focus()">
@@ -1451,7 +1454,7 @@
 
 
   <!-- MODAL: SPOTLIGHT DETAIL PREVIEW -->
-    <!-- ==================== SPOTLIGHT DETAIL PREVIEW MODAL ==================== -->
+  <!-- ==================== SPOTLIGHT DETAIL PREVIEW MODAL ==================== -->
   <div id="spotlight-detail-backdrop" class="spotlight-backdrop" onclick="closeSpotlightDetailModal(event)">
     <div class="spotlight-modal spotlight-detail-modal" onclick="event.stopPropagation()">
       <div class="spotlight-detail-header">
@@ -1502,7 +1505,7 @@
 
 
   <!-- MODAL: TV / KIOSK DISPLAY MODE -->
-    <!-- ==================== TV / KIOSK DISPLAY MODE OVERLAY (CLEAN KIOSK) ==================== -->
+  <!-- ==================== TV / KIOSK DISPLAY MODE OVERLAY (CLEAN KIOSK) ==================== -->
   <div id="tv-mode-overlay" class="tv-mode-overlay">
     <div class="tv-header">
       <div class="tv-title-area">

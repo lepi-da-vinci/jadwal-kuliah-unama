@@ -14,9 +14,8 @@ Proyek ini telah direstrukturisasi ke dalam folder-folder khusus sehingga bersih
 jadwal-kuliah-unama/
 │
 ├── 📁 backend/                          # Logika Server Backend Python & Database
-│   ├── main.py                          # API Server FastAPI, WebSocket/Polling, & Endpoint
 │   ├── scraper.py                       # Mesin Web Scraper Jadwal BAAK & DB Schema
-│   ├── wa_notifier.py                   # Background Daemon Pengirim Notifikasi WA
+│   ├── wa_notifier.py                   # Background Daemon Pengirim Notifikasi WA & Gemini AI
 │   └── database.sql                     # Skema Database & Master Data MySQL
 │
 ├── 📁 frontend/                         # Asset & Komponen Tampilan Web
@@ -36,15 +35,14 @@ jadwal-kuliah-unama/
 │   ├── 📁 css/
 │   │   └── style.css                    # Stylesheet utama & desain tema claymorphism
 │   ├── 📁 js/
-│   │   └── script.js                    # Logika Frontend, State Management, & DOM Handler
-│   ├── 📁 audio/
-│   │   └── notif.mp3                    # Efek audio peringatan jadwal lab
-│   └── index.html                       # Hasil kompilasi HTML di folder frontend
+│   │   └── script.js                    # Client-side JavaScript logika interaktif
+│   └── 📁 audio/
+│       └── notif.mp3                    # Efek audio peringatan jadwal lab
 │
 ├── 📁 wa-bot/                           # WhatsApp Gateway Bot (Node.js & Baileys)
 │   ├── server.js                        # Gateway handler pesan WA & webhook bridge
 │   ├── package.json                     # Dependensi Node.js Baileys
-│   └── session/                         # Data autentikasi login sesi WhatsApp
+│   └── baileys_auth_info/               # Data autentikasi login sesi WhatsApp
 │
 ├── 📁 extension/                        # Ekstensi Chrome (Engine Fallback Cloudflare)
 │   ├── manifest.json                    # Manifest V3 Extension
@@ -58,15 +56,17 @@ jadwal-kuliah-unama/
 │   ├── PANDUAN_AUTO_START.md            # Panduan auto-start & setup tunnel
 │   └── PROJECT_ANALYSIS.md              # Blueprint arsitektur proyek (file ini)
 │
-├── 📄 auto_start_server.bat             # Shortcut 1-Klik Start Server Lokal
+├── 📄 auto_start_server.bat             # Shortcut 1-Klik Start Server Lokal & Cloudflare Tunnel
 ├── 📄 auto_start_docker.bat             # Shortcut 1-Klik Start Docker Compose
+├── 📄 build_html.bat                    # Shortcut 1-Klik Re-compile Komponen HTML
 ├── 📄 start_bot.bat                     # Shortcut 1-Klik Start WhatsApp Bot
+├── 📄 main.py                           # Pusat Server API FastAPI & Auto-Build Hook
 ├── 📄 docker-compose.yml                # Orkestrasi Docker container
 ├── 📄 Dockerfile                        # Resep build container backend
 ├── 📄 requirements.txt                  # Daftar pustaka Python FastAPI
 ├── 📄 manifest.json                     # PWA (Progressive Web App) Manifest
 ├── 📄 sw.js                             # Service Worker PWA (Root Scope Cache)
-├── 📄 index.html                        # File HTML utama terkompilasi siap tayang
+├── 📄 index.html                        # File HTML utama terkompilasi (Satu-satunya di Root)
 └── 📄 README.md                         # Ringkasan proyek & fitur
 ```
 

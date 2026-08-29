@@ -11,7 +11,6 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(ROOT_DIR, "frontend")
 TEMPLATE_PATH = os.path.join(FRONTEND_DIR, "templates", "index.html")
 OUTPUT_ROOT_PATH = os.path.join(ROOT_DIR, "index.html")
-OUTPUT_FRONTEND_PATH = os.path.join(FRONTEND_DIR, "index.html")
 
 def build_html():
     if not os.path.exists(TEMPLATE_PATH):
@@ -35,15 +34,12 @@ def build_html():
 
     compiled_html = re.sub(pattern, replace_include, template_content)
 
-    # Simpan ke root index.html
+    # Simpan ke root index.html (satu-satunya file HTML output terkompilasi)
     with open(OUTPUT_ROOT_PATH, "w", encoding="utf-8") as f:
         f.write(compiled_html)
 
-    # Simpan juga salinan ke frontend/index.html
-    with open(OUTPUT_FRONTEND_PATH, "w", encoding="utf-8") as f:
-        f.write(compiled_html)
-
-    print(f" Berhasil mengompilasi HTML terpadu ke:\n  - {OUTPUT_ROOT_PATH}\n  - {OUTPUT_FRONTEND_PATH}")
+    print(f" Berhasil mengompilasi HTML terpadu ke: {OUTPUT_ROOT_PATH}")
+    return compiled_html
 
 if __name__ == "__main__":
     build_html()

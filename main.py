@@ -19,6 +19,13 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if os.path.exists(os.path.join(BASE_DIR, "backend")) and os.path.join(BASE_DIR, "backend") not in sys.path:
     sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
+if os.path.exists(os.path.join(BASE_DIR, "scripts")) and os.path.join(BASE_DIR, "scripts") not in sys.path:
+    sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+
+try:
+    from build_html import build_html
+except ImportError:
+    build_html = None
 
 import scraper
 import wa_notifier
@@ -27,6 +34,11 @@ app = FastAPI(title="API Analitik Jadwal Kuliah")
 
 @app.on_event("startup")
 async def startup_event():
+    if build_html:
+        try:
+            build_html()
+        except Exception as e:
+            print(f"Auto-build HTML notice: {e}")
     scraper.init_db_schema()
     asyncio.create_task(wa_notifier.wa_notifier_loop())
 
@@ -924,9 +936,14 @@ def get_file_path(relative_path: str) -> str:
 
 @app.get("/")
 def serve_index():
+    if build_html:
+        try:
+            build_html()
+        except Exception:
+            pass
     if os.path.exists("index.html"):
         return FileResponse("index.html")
-    return FileResponse("frontend/index.html")
+    return FileResponse(os.path.join("frontend", "templates", "index.html"))
 
 @app.get("/style.css")
 @app.get("/css/style.css")
