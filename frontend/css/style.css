@@ -668,7 +668,9 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 /* ─── Fullscreen Filter, Info & Detail Modal Dedicated Styles ─── */
 #modal-fs-filter,
 #room-detail-modal,
-#modal-fs-info {
+#modal-fs-info,
+#modal-fitur,
+#lab-modal {
   position: fixed !important;
   inset: 0 !important;
   top: 0 !important;
@@ -694,13 +696,21 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 #room-detail-modal[style*="display: flex"],
 #modal-fs-info.open,
 #modal-fs-info[style*="display: block"],
-#modal-fs-info[style*="display: flex"] {
+#modal-fs-info[style*="display: flex"],
+#modal-fitur.open,
+#modal-fitur[style*="display: block"],
+#modal-fitur[style*="display: flex"],
+#lab-modal.open,
+#lab-modal[style*="display: block"],
+#lab-modal[style*="display: flex"] {
   display: flex !important;
 }
 
 #modal-fs-filter .modal-box,
 #room-detail-modal .modal-box,
-#modal-fs-info .modal-box {
+#modal-fs-info .modal-box,
+#modal-fitur .modal-box,
+#lab-modal .modal-box {
   margin: auto !important;
   position: relative !important;
   z-index: 2147483647 !important;

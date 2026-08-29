@@ -32,7 +32,12 @@ def build_html():
             content = comp_file.read()
         return content
 
-    compiled_html = re.sub(pattern, replace_include, template_content)
+    compiled_html = template_content
+    # Recursively resolve includes
+    for _ in range(10):
+        if not re.search(pattern, compiled_html):
+            break
+        compiled_html = re.sub(pattern, replace_include, compiled_html)
 
     # Simpan ke root index.html (satu-satunya file HTML output terkompilasi)
     with open(OUTPUT_ROOT_PATH, "w", encoding="utf-8") as f:
