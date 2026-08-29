@@ -1,0 +1,91 @@
+  <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
+  <div id="spotlight-backdrop" class="spotlight-backdrop" onclick="closeSpotlightModal(event)">
+    <div class="spotlight-modal" onclick="event.stopPropagation()">
+      <div class="spotlight-input-wrap" onclick="document.getElementById('spotlight-input')?.focus()">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); flex-shrink: 0;">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="spotlight-input" class="spotlight-input"
+          placeholder="Cari dosen, mata kuliah, ruangan, atau aslab..." autocomplete="off"
+          oninput="handleSpotlightInput(this.value)">
+        <button id="spotlight-clear-btn" class="spotlight-btn-clear"
+          onclick="clearSpotlightInput(); event.stopPropagation();" style="display:none;" title="Hapus teks">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        <button class="spotlight-btn-close-wrap" onclick="closeSpotlightModal(); event.stopPropagation();"
+          title="Tutup / Kembali (ESC)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <kbd class="kbd-badge"
+            style="background:transparent; border:none; box-shadow:none; padding:0; margin:0; font-size:0.95em;">ESC</kbd>
+        </button>
+      </div>
+
+      <!-- Quick Category Filter Tabs with SVGs (No Emojis) -->
+      <div class="spotlight-tabs">
+        <button class="spotlight-tab-btn active" data-type="all" onclick="filterSpotlightCategory('all')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Semua
+        </button>
+        <button class="spotlight-tab-btn" data-type="dosen" onclick="filterSpotlightCategory('dosen')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          Dosen
+        </button>
+        <button class="spotlight-tab-btn" data-type="mk" onclick="filterSpotlightCategory('mk')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          Mata Kuliah
+        </button>
+        <button class="spotlight-tab-btn" data-type="ruangan" onclick="filterSpotlightCategory('ruangan')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M3 21h18M3 7v14M21 7v14M6 3h12a2 2 0 0 1 2 2v2H4V5a2 2 0 0 1 2-2zM9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2">
+            </path>
+          </svg>
+          Ruangan
+        </button>
+        <button class="spotlight-tab-btn" data-type="aslab" onclick="filterSpotlightCategory('aslab')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          Asisten Lab
+        </button>
+      </div>
+
+      <div id="spotlight-results" class="spotlight-results">
+        <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9em;">
+          Ketik nama dosen, mata kuliah, ruangan, atau aslab untuk pencarian cepat...
+        </div>
+      </div>
+      <div class="spotlight-footer">
+        <div class="spotlight-keys">
+          <span>Gunakan <kbd class="kbd-badge">↑</kbd> <kbd class="kbd-badge">↓</kbd> untuk memilih</span>
+          <span><kbd class="kbd-badge">Enter</kbd> untuk buka detail</span>
+        </div>
+        <span style="color: var(--primary); font-weight: 700;">Jadwal UNAMA Spotlight</span>
+      </div>
+    </div>
+  </div>

@@ -1207,6 +1207,7 @@ document.getElementById('sync-btn').addEventListener('click', () => syncData(fil
 // --- Data WA Aslab Modal Endpoint & Security Helpers ---
 let globalAslabData = [];
 let isAslabAdmin = false;
+let isTestingPopupNotif = false;
 
 function getAdminToken() {
   return sessionStorage.getItem('admin_token') || '';
@@ -1219,6 +1220,48 @@ function setAdminToken(token) {
   } else {
     sessionStorage.removeItem('admin_token');
     isAslabAdmin = false;
+  }
+}
+
+async function exitAdminMode(notifyBackend = true) {
+  if (isAslabAdmin || getAdminToken()) {
+    if (notifyBackend) {
+      try {
+        await fetch(`${API_BASE_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: getAdminHeaders()
+        });
+      } catch (err) {}
+    }
+    setAdminToken(null);
+    isAslabAdmin = false;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+      const json = await res.json();
+      if (json.status === 'success') globalAslabData = json.data;
+    } catch (err) {}
+
+    const adminToggle = document.getElementById('admin-mode-toggle');
+    if (adminToggle) {
+      adminToggle.innerText = 'Admin: OFF';
+      adminToggle.style.color = 'var(--text-muted)';
+      adminToggle.style.background = 'var(--bg-elevated)';
+    }
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'none');
+    if (typeof renderAslabTable === 'function') renderAslabTable();
+    if (typeof renderRuanganTable === 'function' && document.getElementById('wa-modal-data-ruangan') && document.getElementById('wa-modal-data-ruangan').style.display === 'flex') {
+      renderRuanganTable();
+    }
+  }
+}
+
+function closeSettingModal(keepAdminSession = false) {
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+
+  if (!keepAdminSession && !isTestingPopupNotif) {
+    exitAdminMode();
   }
 }
 
@@ -1570,9 +1613,13 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 
     // Tutup modal
     document.getElementById('wa-modal-close-btn').onclick = () => {
-      isAslabAdmin = false;
-      updateAdminUI();
-      testModal.classList.remove('open');
+      closeSettingModal(false);
+    };
+
+    testModal.onclick = (e) => {
+      if (e.target === testModal) {
+        closeSettingModal(false);
+      }
     };
 
     // Navigasi ke QR Code Akses HP
@@ -2175,9 +2222,9 @@ roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomMod
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal.classList.contains('open')) roomModal.classList.remove('open'); });
 
 document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {
-  // Tutup modal Data WA Aslab
-  const testModal = document.getElementById('test-wa-modal');
-  if (testModal) testModal.classList.remove('open');
+  // Tutup modal Data WA Aslab sementara untuk menampilkan simulasi notifikasi, status admin tetap aktif
+  isTestingPopupNotif = true;
+  closeSettingModal(true);
 
   // Siapkan modal pesan notifikasi ruangan
   const labModalBody = document.getElementById('lab-modal-body');
@@ -2301,6 +2348,7 @@ function closeModal() {
     clearTimeout(autoCloseTimeout);
     autoCloseTimeout = null;
   }
+  isTestingPopupNotif = false;
 }
 
 modalCloseBtn.addEventListener('click', closeModal);
@@ -3447,67 +3495,7 @@ function exportFilteredSchedulesToExcel() {
   document.body.removeChild(downloadLink);
 }
 
-let _isExportingICS = false;
-function exportFilteredSchedulesToICS() {
-  if (_isExportingICS) return;
-  _isExportingICS = true;
-  setTimeout(() => { _isExportingICS = false; }, 1500);
-  const targetData = (Array.isArray(window._currentFilteredJadwal) && window._currentFilteredJadwal.length > 0)
-    ? window._currentFilteredJadwal
-    : (allJadwal || []);
 
-  if (!targetData || targetData.length === 0) {
-    alert('Tidak ada data jadwal untuk diexport. Silakan pilih tanggal atau filter jadwal terlebih dahulu.');
-    return;
-  }
-
-  let icsLines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//UNAMA//Jadwal Kuliah UNAMA//ID',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    'X-WR-CALNAME:Jadwal Kuliah UNAMA',
-    'X-WR-TIMEZONE:Asia/Jakarta'
-  ];
-
-  targetData.forEach((item, idx) => {
-    const { startISO, endISO } = parseDateAndTimeToISO(item.tanggal, item.jam);
-    const uid = `unama-${item.id || idx}-${Date.now()}@unama.ac.id`;
-    const summary = `${item.nama_mk || 'Kuliah'} (${item.kelas || '-'})`;
-    const description = `Dosen: ${item.nama_dosen || '-'}\\nRuangan: ${item.nama_ruangan || '-'}\\nMetode: ${item.metode_pembelajaran || '-'}`;
-    const location = `${item.nama_ruangan || 'UNAMA'}`;
-
-    icsLines.push(
-      'BEGIN:VEVENT',
-      `UID:${uid}`,
-      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
-      `DTSTART:${startISO}`,
-      `DTEND:${endISO}`,
-      `SUMMARY:${summary}`,
-      `DESCRIPTION:${description}`,
-      `LOCATION:${location}`,
-      'STATUS:CONFIRMED',
-      'BEGIN:VALARM',
-      'TRIGGER:-PT15M',
-      'ACTION:DISPLAY',
-      'DESCRIPTION:Pengingat Kuliah UNAMA (15 menit lagi)',
-      'END:VALARM',
-      'END:VEVENT'
-    );
-  });
-
-  icsLines.push('END:VCALENDAR');
-
-  const icsBlob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-  const downloadLink = document.createElement('a');
-  downloadLink.href = URL.createObjectURL(icsBlob);
-  const tglStr = document.getElementById('filter-tanggal')?.value || 'semua';
-  downloadLink.download = `jadwal_unama_${tglStr}.ics`;
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
-}
 
 
 // =========================================================================
@@ -4413,6 +4401,16 @@ function startTvRollingTicker() {
 // =========================================================================
 // EXPOSE TO WINDOW & ATTACH DOM LISTENERS
 // =========================================================================
+function closeSettingAndOpenSpotlight() {
+  closeSettingModal(false);
+  openSpotlightModal();
+}
+
+function closeSettingAndOpenTvMode() {
+  closeSettingModal(false);
+  openTvMode();
+}
+
 window.openSpotlightModal = openSpotlightModal;
 window.closeSpotlightModal = closeSpotlightModal;
 window.openSpotlightDetailModal = openSpotlightDetailModal;
@@ -4422,25 +4420,10 @@ window.clearSpotlightInput = clearSpotlightInput;
 window.filterSpotlightCategory = filterSpotlightCategory;
 window.resetSpotlightFilter = resetSpotlightFilter;
 window.openTvMode = openTvMode;
-function closeSettingAndOpenSpotlight() {
-  const testModal = document.getElementById('test-wa-modal');
-  if (testModal) testModal.classList.remove('open');
-  openSpotlightModal();
-}
-
-function closeSettingAndOpenTvMode() {
-  const testModal = document.getElementById('test-wa-modal');
-  if (testModal) testModal.classList.remove('open');
-  openTvMode();
-}
-
+window.closeTvMode = closeTvMode;
 window.closeSettingAndOpenSpotlight = closeSettingAndOpenSpotlight;
 window.closeSettingAndOpenTvMode = closeSettingAndOpenTvMode;
-window.resetSpotlightFilter = resetSpotlightFilter;
-window.openTvMode = openTvMode;
-window.closeTvMode = closeTvMode;
 window.exportFilteredSchedulesToExcel = exportFilteredSchedulesToExcel;
-window.exportFilteredSchedulesToICS = exportFilteredSchedulesToICS;
 window.openSingleGoogleCalendar = openSingleGoogleCalendar;
 window.executeSpotlightAction = executeSpotlightAction;
 
@@ -4468,15 +4451,8 @@ document.addEventListener('DOMContentLoaded', () => {
       exportFilteredSchedulesToExcel();
     });
   }
-
-  const btnExpCal = document.getElementById('btn-export-cal');
-  if (btnExpCal) {
-    btnExpCal.addEventListener('click', (e) => {
-      e.preventDefault();
-      exportFilteredSchedulesToICS();
-    });
-  }
 });
+
 
 
 

@@ -9,7 +9,7 @@ services:
     volumes:
       - db_data:/var/lib/mysql
       # Auto-import schema when database is created for the first time
-      - ./database.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/database.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "127.0.0.1:3307:3306"
 
@@ -27,7 +27,6 @@ services:
     volumes:
       # Persist WhatsApp login sessions
       - ./wa-bot/baileys_auth_info:/app/baileys_auth_info
-      - ./wa-bot/.wwebjs_auth:/app/.wwebjs_auth
       - ./wa-bot/server.js:/app/server.js
 
   backend:

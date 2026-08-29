@@ -1,0 +1,48 @@
+  <!-- ==================== SPOTLIGHT DETAIL PREVIEW MODAL ==================== -->
+  <div id="spotlight-detail-backdrop" class="spotlight-backdrop" onclick="closeSpotlightDetailModal(event)">
+    <div class="spotlight-modal spotlight-detail-modal" onclick="event.stopPropagation()">
+      <div class="spotlight-detail-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div id="spotlight-detail-icon" class="spotlight-icon"></div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <h3 id="spotlight-detail-title"
+                style="margin: 0; font-size: 1.2em; font-weight: 700; color: var(--text);">Detail</h3>
+              <span id="spotlight-detail-badge" class="spotlight-badge"></span>
+            </div>
+            <div id="spotlight-detail-subtitle" style="font-size: 0.85em; color: var(--text-muted); margin-top: 3px;">
+            </div>
+          </div>
+        </div>
+        <button class="spotlight-btn-clear" onclick="closeSpotlightDetailModal()" title="Tutup Detail (ESC)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div id="spotlight-detail-body" class="spotlight-detail-body">
+        <!-- Injected dynamically by JS -->
+      </div>
+
+      <div class="spotlight-footer" style="gap: 10px; justify-content: space-between; align-items: center;">
+        <button class="btn btn-secondary" onclick="backToSpotlightModal()"
+          style="padding: 8px 16px; font-size: 0.88em; display: inline-flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          Kembali
+        </button>
+        <button id="spotlight-detail-apply-btn" class="btn btn-primary"
+          style="padding: 8px 16px; font-size: 0.88em; display: inline-flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+          Filter di Tabel Utama
+        </button>
+      </div>
+    </div>
+  </div>
