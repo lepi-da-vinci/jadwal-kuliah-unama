@@ -20,7 +20,7 @@
 <body>
   <div class="container">
     <!-- HEADER & FILTERS -->
-    <header class="header">
+        <header class="header">
       <h1>Jadwal Kuliah</h1>
       <div class="header-actions">
         <button id="sync-btn" class="btn btn-primary" aria-label="Sinkron">
@@ -188,8 +188,8 @@
       </div>
 
 
-      <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
-      <!-- Status Penggunaan Ruangan Section (With Fullscreen Mode) -->
+    <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
+          <!-- Status Penggunaan Ruangan Section (With Fullscreen Mode) -->
       <div id="section-status-ruangan" class="status-ruangan-section">
         <div class="status-ruangan-header">
           <div class="status-ruangan-title-area">
@@ -272,8 +272,8 @@
       </div>
 
 
-      <!-- COLLAPSIBLE INFO MASE & MAIN SCHEDULE TABLE -->
-      <!-- Info Mase Collapsible Panel -->
+    <!-- COLLAPSIBLE INFO MASE & MAIN SCHEDULE TABLE -->
+          <!-- Info Mase Collapsible Panel -->
       <div class="panel panel-notif" id="info-mase-panel" style="display: none; margin-bottom: 24px;">
         <h3
           style="margin-bottom: 12px; border-bottom: 1px solid rgba(194, 65, 12, 0.15); padding-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
@@ -412,7 +412,7 @@
 
 
   <!-- MODALS: FILTER, INFO MASE & DETAIL RUANGAN -->
-  <!-- ==================== MODAL FILTER & INFO KOMPONEN ==================== -->
+    <!-- ==================== MODAL FILTER & INFO KOMPONEN ==================== -->
 
   <!-- Popup / Modal Filter (Dapat diakses saat Fullscreen maupun Normal) -->
   <div id="modal-fs-filter" class="modal-overlay" style="display: none;">
@@ -431,8 +431,7 @@
           <div>
             <h3 style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">
               Filter & Pengaturan Jadwal</h3>
-            <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Ubah filter ruangan atau sinkronkan data
-              tanggal</p>
+            <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Ubah filter ruangan atau sinkronkan data tanggal</p>
           </div>
         </div>
         <span onclick="closeFullscreenFilterModal()"
@@ -472,7 +471,8 @@
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-waktu', event)">
                 <span class="custom-select-label" id="label-fs-waktu">Semua Waktu</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -480,8 +480,7 @@
                 <div class="aslab-list-item active" data-value="semua"
                   onclick="selectFsModalOption('waktu', 'semua', 'Semua Waktu')">Semua Waktu</div>
                 <div class="aslab-list-item" data-value="sekarang"
-                  onclick="selectFsModalOption('waktu', 'sekarang', 'Jadwal Saat Ini (Otomatis)')">Jadwal Saat Ini
-                  (Otomatis)</div>
+                  onclick="selectFsModalOption('waktu', 'sekarang', 'Jadwal Saat Ini (Otomatis)')">Jadwal Saat Ini (Otomatis)</div>
               </div>
               <input type="hidden" id="fs-val-waktu" value="semua">
             </div>
@@ -491,13 +490,13 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Status
-              Kuliah</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Status Kuliah</label>
             <div class="custom-select-wrapper" id="wrapper-fs-metode">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-metode', event)">
                 <span class="custom-select-label" id="label-fs-metode">Semua Status</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -517,13 +516,13 @@
 
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Lokasi
-              Kampus</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Lokasi Kampus</label>
             <div class="custom-select-wrapper" id="wrapper-fs-kampus">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-kampus', event)">
                 <span class="custom-select-label" id="label-fs-kampus">Semua Kampus</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -543,13 +542,13 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Kategori
-              Ruangan</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Kategori Ruangan</label>
             <div class="custom-select-wrapper" id="wrapper-fs-kategori-ruang">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-kategori-ruang', event)">
                 <span class="custom-select-label" id="label-fs-kategori-ruang">Semua Kategori</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -567,13 +566,13 @@
 
           <div>
             <label
-              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Ruangan
-              / Labor</label>
+              style="display: block; font-size: 0.8em; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Ruangan / Labor</label>
             <div class="custom-select-wrapper" id="wrapper-fs-ruangan">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-ruangan', event)">
                 <span class="custom-select-label" id="label-fs-ruangan">Semua Ruangan</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                  stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
@@ -622,12 +621,12 @@
           </div>
           <div>
             <h3 id="room-detail-title"
-              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Detail
-              Ruangan</h3>
+              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Detail Ruangan</h3>
             <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Daftar jadwal kelas di ruangan ini</p>
           </div>
         </div>
-        <span id="room-detail-close-btn" style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 4px;">
+        <span id="room-detail-close-btn"
+          style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 4px;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -665,10 +664,8 @@
           </div>
           <div>
             <h3 id="fs-info-title"
-              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Info Mase
-              & Notifikasi Ruangan</h3>
-            <p id="fs-info-subtitle" style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Pemberitahuan kelas
-              tambahan, perubahan jadwal, dan jeda kosong</p>
+              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Info Mase & Notifikasi Ruangan</h3>
+            <p id="fs-info-subtitle" style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Pemberitahuan kelas tambahan, perubahan jadwal, dan jeda kosong</p>
           </div>
         </div>
         <span onclick="closeFullscreenInfoModal()"
@@ -685,18 +682,20 @@
         style="display: flex; gap: 4px; margin: 12px 24px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
         <button type="button" class="info-mase-kampus-btn active" data-kampus="semua"
           onclick="switchInfoMaseKampus('semua')"
-          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua
-          Kampus</button>
-        <button type="button" class="info-mase-kampus-btn" data-kampus="thehok" onclick="switchInfoMaseKampus('thehok')"
+          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Kampus</button>
+        <button type="button" class="info-mase-kampus-btn" data-kampus="thehok"
+          onclick="switchInfoMaseKampus('thehok')"
           style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
-        <button type="button" class="info-mase-kampus-btn" data-kampus="kobar" onclick="switchInfoMaseKampus('kobar')"
+        <button type="button" class="info-mase-kampus-btn" data-kampus="kobar"
+          onclick="switchInfoMaseKampus('kobar')"
           style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Kobar</button>
       </div>
 
       <!-- Tab Filter Kategori: Labor vs Kelas -->
       <div class="info-mase-tabs-container">
         <div class="info-mase-tabs">
-          <button type="button" class="info-mase-tab-btn active" data-tab="lab" onclick="switchInfoMaseTab('lab')">
+          <button type="button" class="info-mase-tab-btn active" data-tab="lab"
+            onclick="switchInfoMaseTab('lab')">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -882,7 +881,7 @@
 
 
   <!-- MODAL: NOTIFIKASI LAB & RUANGAN POPUP -->
-  <!-- ==================== MODAL NOTIFIKASI LAB & RUANGAN ==================== -->
+    <!-- ==================== MODAL NOTIFIKASI LAB & RUANGAN ==================== -->
   <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Ruangan">
     <div class="modal-box" style="max-width: 720px; width: 94%;">
       <div class="modal-icon" style="color: var(--primary);">
@@ -900,7 +899,7 @@
 
 
   <!-- MODAL: SECURITY & OTORISASI ADMIN -->
-  <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
+    <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
 
   <!-- Modal Password Admin -->
   <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin"
@@ -942,8 +941,7 @@
       <h2 style="color: var(--badge-cc);">Peringatan Berbahaya!</h2>
       <div class="modal-body" style="text-align: center;">
         <p id="danger-message" style="margin-bottom: 5px; font-weight: 500;"></p>
-        <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan ini sangat berisiko dan
-          tidak bisa dikembalikan. Pastikan Anda benar-benar sadar akan dampaknya.</p>
+        <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan ini sangat berisiko dan tidak bisa dikembalikan. Pastikan Anda benar-benar sadar akan dampaknya.</p>
       </div>
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="danger-cancel-btn">Batal</button>
@@ -968,8 +966,7 @@
       <div class="modal-body" style="text-align: center;">
         <p style="margin-bottom: 10px;">Ketik ulang kode unik berikut untuk melanjutkan:</p>
         <p id="final-danger-code"
-          style="font-weight: bold; letter-spacing: 2px; font-size: 1.2em; color: var(--primary); background: var(--bg-elevated); padding: 10px; border-radius: var(--radius-sm); user-select: none;">
-          CODE</p>
+          style="font-weight: bold; letter-spacing: 2px; font-size: 1.2em; color: var(--primary); background: var(--bg-elevated); padding: 10px; border-radius: var(--radius-sm); user-select: none;">CODE</p>
         <input type="text" id="final-danger-input" autocomplete="off"
           style="width: 100%; padding: 12px; margin-top: 15px; text-align: center; font-size: 1.1em; letter-spacing: 1px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="Ketik kode di sini">
@@ -985,381 +982,380 @@
 
   <!-- MODAL: SETTING & MASTER DATA ASLAB/RUANGAN -->
   <!-- ==================== MODAL SETTING & DATA MASTER ASLAB/RUANGAN ==================== -->
-  <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Setting">
-    <div class="modal-box" style="max-width: 840px; width: 94%;">
-      <div class="modal-icon" id="wa-modal-icon">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path
-            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
-          </path>
-        </svg>
-      </div>
-      <div
-        style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
-        <h2 id="wa-modal-title" style="margin: 0;">Setting</h2>
-        <button id="admin-mode-toggle"
-          style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 0.85em; color: var(--text-muted); cursor: pointer;">Admin:
-          OFF</button>
-      </div>
+<div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Setting">
+  <div class="modal-box" style="max-width: 840px; width: 94%;">
+    <div class="modal-icon" id="wa-modal-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+        </path>
+      </svg>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+      <h2 id="wa-modal-title" style="margin: 0;">Setting</h2>
+      <button id="admin-mode-toggle"
+        style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 0.85em; color: var(--text-muted); cursor: pointer;">Admin:
+        OFF</button>
+    </div>
 
-      <!-- Tampilan Menu Utama -->
-      <div id="wa-modal-menu" class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
-        <!-- Kategori 0: Akses HP & Fitur Tampilan -->
-        <div
-          style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
-          <span>Dashboard & Fitur Tampilan</span>
-        </div>
-        <button class="btn btn-secondary" id="btn-show-qr-access"
-          style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12)); border: 1.5px solid var(--primary); color: var(--text); cursor: pointer;">
+    <!-- Tampilan Menu Utama -->
+    <div id="wa-modal-menu" class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
+      <!-- Kategori 0: Akses HP & Fitur Tampilan -->
+      <div
+        style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+        <span>Dashboard & Fitur Tampilan</span>
+      </div>
+      <button class="btn btn-secondary" id="btn-show-qr-access"
+        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12)); border: 1.5px solid var(--primary); color: var(--text); cursor: pointer;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+          <path d="M7 17h.01M17 17h.01M7 7h.01M17 7h.01"></path>
+        </svg>
+        <b>Scan QR Code / Link Akses HP</b>
+      </button>
+
+      <button class="btn btn-secondary" id="btn-setting-spotlight" onclick="closeSettingAndOpenSpotlight()"
+        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-            <rect x="3" y="3" width="7" height="7"></rect>
-            <rect x="14" y="3" width="7" height="7"></rect>
-            <rect x="14" y="14" width="7" height="7"></rect>
-            <rect x="3" y="14" width="7" height="7"></rect>
-            <path d="M7 17h.01M17 17h.01M7 7h.01M17 7h.01"></path>
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <b>Scan QR Code / Link Akses HP</b>
-        </button>
+          <span>Data Pencarian (Cari Dosen/MK)</span>
+        </div>
+        <kbd class="kbd-badge">Ctrl K</kbd>
+      </button>
 
-        <button class="btn btn-secondary" id="btn-setting-spotlight" onclick="closeSettingAndOpenSpotlight()"
-          style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      <button class="btn btn-secondary" id="btn-setting-tv-mode" onclick="closeSettingAndOpenTvMode()"
+        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" style="color: #0284c7;">
+          <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+          <polyline points="17 2 12 7 7 2"></polyline>
+        </svg>
+        <span>Mode Layar TV</span>
+      </button>
+
+      <!-- Kategori 1: Uji Coba Notifikasi & Suara -->
+      <div
+        style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--text-muted); margin-bottom: -5px; margin-top: 5px; text-transform: uppercase;">
+        Uji Coba Notifikasi & Suara
+      </div>
+      <button class="btn btn-secondary" id="btn-test-notif-lab"
+        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        Test Notifikasi Lab (Popup & Suara)
+      </button>
+      <button class="btn btn-secondary" id="btn-test-notif-suara"
+        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+        Test Notif Suara Saja
+      </button>
+
+      <button class="btn btn-primary admin-only" id="btn-show-test-wa"
+        style="display: none; padding: 14px; font-size: 1.02em; width: 100%; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        Uji Coba Pesan WA (Admin)
+      </button>
+
+      <!-- Kategori 2: Data Master -->
+      <div
+        style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--text-muted); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
+        Lihat Data
+      </div>
+      <button class="btn btn-secondary" id="btn-show-data-wa"
+        style="padding: 15px; font-size: 1.1em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"></line>
+          <line x1="8" y1="12" x2="21" y2="12"></line>
+          <line x1="8" y1="18" x2="21" y2="18"></line>
+          <line x1="3" y1="6" x2="3.01" y2="6"></line>
+          <line x1="3" y1="12" x2="3.01" y2="12"></line>
+          <line x1="3" y1="18" x2="3.01" y2="18"></line>
+        </svg>
+        Lihat Data WA Aslab
+      </button>
+      <button class="btn btn-secondary" id="btn-show-data-ruangan"
+        style="padding: 15px; font-size: 1.1em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+        Lihat Data Ruangan
+      </button>
+
+      <!-- Kategori 3: Master Data Admin -->
+      <div class="admin-only"
+        style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
+        Kelola Master Data (Admin)
+      </div>
+      <button class="btn btn-secondary admin-only" id="btn-show-add-wa"
+        style="display:none; padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05); align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="16"></line>
+          <line x1="8" y1="12" x2="16" y2="12"></line>
+        </svg>
+        Tambah Data Aslab Manual
+      </button>
+      <button class="btn btn-secondary admin-only" id="btn-show-add-ruangan"
+        style="display:none; padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05); align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="12" y1="8" x2="12" y2="16"></line>
+          <line x1="8" y1="12" x2="16" y2="12"></line>
+        </svg>
+        Tambah Ruangan Manual
+      </button>
+
+      <button class="btn btn-danger admin-only" id="clear-db-btn"
+        style="padding: 15px; font-size: 1.1em; width: 100%; display: none; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        Bersihkan Semua Jadwal DB
+      </button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
+      </div>
+    </div>
+
+    <!-- Tampilan QR Code & Link Akses HP -->
+    <div id="wa-modal-qr" class="modal-body"
+      style="display: none; text-align: center; flex-direction: column; align-items: center; gap: 16px;">
+      <div style="font-size: 0.9em; color: var(--text-muted);">
+        Scan QR Code di bawah menggunakan kamera HP atau salin link untuk membuka Jadwal Kuliah:
+      </div>
+
+      <div id="qrcode-box"
+        style="background: #ffffff; padding: 16px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 210px; min-height: 210px;">
+        <div id="qrcode-display"></div>
+        <img id="qrcode-img-fallback" style="display: none; width: 190px; height: 190px; border-radius: 8px;"
+          alt="QR Code Link" />
+      </div>
+
+      <div style="width: 100%; text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label style="font-weight: 500; font-size: 0.85em; color: var(--text-muted);">Pilih Jalur Akses URL:</label>
+          <button id="qr-refresh-btn" type="button" title="Perbarui link Cloudflare / Ngrok terbaru"
+            style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); border-radius: 6px; padding: 4px 10px; font-size: 0.78em; color: var(--primary); cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 600; transition: all 0.2s ease;">
+            <svg id="qr-refresh-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            <span>Data Pencarian (Cari Dosen/MK)</span>
-          </div>
-          <kbd class="kbd-badge">Ctrl K</kbd>
-        </button>
-
-        <button class="btn btn-secondary" id="btn-setting-tv-mode" onclick="closeSettingAndOpenTvMode()"
-          style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round" style="color: #0284c7;">
-            <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
-            <polyline points="17 2 12 7 7 2"></polyline>
-          </svg>
-          <span>Mode Layar TV</span>
-        </button>
-
-        <!-- Kategori 1: Uji Coba Notifikasi & Suara -->
-        <div
-          style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--text-muted); margin-bottom: -5px; margin-top: 5px; text-transform: uppercase;">
-          Uji Coba Notifikasi & Suara
+            <span id="qr-refresh-text">Refresh Link</span>
+          </button>
         </div>
-        <button class="btn btn-secondary" id="btn-test-notif-lab"
-          style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-          Test Notifikasi Lab (Popup & Suara)
-        </button>
-        <button class="btn btn-secondary" id="btn-test-notif-suara"
-          style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-          </svg>
-          Test Notif Suara Saja
-        </button>
+        <select id="qr-url-select"
+          style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; margin-bottom: 10px; font-size: 0.9em;">
+          <!-- Opsi diisi dinamis oleh JS -->
+        </select>
 
-        <button class="btn btn-primary admin-only" id="btn-show-test-wa"
-          style="display: none; padding: 14px; font-size: 1.02em; width: 100%; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-          Uji Coba Pesan WA (Admin)
-        </button>
-
-        <!-- Kategori 2: Data Master -->
-        <div
-          style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--text-muted); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
-          Lihat Data
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <input type="text" id="qr-link-input" readonly
+            style="flex: 1; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none;">
+          <button class="btn btn-primary" id="qr-copy-btn"
+            style="padding: 10px 14px; white-space: nowrap; display: flex; align-items: center; gap: 6px; font-size: 0.9em;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span id="qr-copy-btn-text">Salin</span>
+          </button>
+          <a id="qr-open-link" href="#" target="_blank" class="btn btn-secondary"
+            style="padding: 10px 14px; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.9em;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            <span>Buka</span>
+          </a>
         </div>
-        <button class="btn btn-secondary" id="btn-show-data-wa"
-          style="padding: 15px; font-size: 1.1em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <line x1="8" y1="6" x2="21" y2="6"></line>
-            <line x1="8" y1="12" x2="21" y2="12"></line>
-            <line x1="8" y1="18" x2="21" y2="18"></line>
-            <line x1="3" y1="6" x2="3.01" y2="6"></line>
-            <line x1="3" y1="12" x2="3.01" y2="12"></line>
-            <line x1="3" y1="18" x2="3.01" y2="18"></line>
-          </svg>
-          Lihat Data WA Aslab
-        </button>
-        <button class="btn btn-secondary" id="btn-show-data-ruangan"
-          style="padding: 15px; font-size: 1.1em; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            <polyline points="9 22 9 12 15 12 15 22"></polyline>
-          </svg>
-          Lihat Data Ruangan
-        </button>
 
-        <!-- Kategori 3: Master Data Admin -->
-        <div class="admin-only"
-          style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
-          Kelola Master Data (Admin)
-        </div>
-        <button class="btn btn-secondary admin-only" id="btn-show-add-wa"
-          style="display:none; padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05); align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="16"></line>
-            <line x1="8" y1="12" x2="16" y2="12"></line>
-          </svg>
-          Tambah Data Aslab Manual
-        </button>
-        <button class="btn btn-secondary admin-only" id="btn-show-add-ruangan"
-          style="display:none; padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05); align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="12" y1="8" x2="12" y2="16"></line>
-            <line x1="8" y1="12" x2="16" y2="12"></line>
-          </svg>
-          Tambah Ruangan Manual
-        </button>
-
-        <button class="btn btn-danger admin-only" id="clear-db-btn"
-          style="padding: 15px; font-size: 1.1em; width: 100%; display: none; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-          Bersihkan Semua Jadwal DB
-        </button>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
+        <div id="qr-status-info"
+          style="font-size: 0.78em; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px;">
+          <span id="qr-status-dot"
+            style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+          <span id="qr-status-text">Link Real-Time Aktif</span>
         </div>
       </div>
 
-      <!-- Tampilan QR Code & Link Akses HP -->
-      <div id="wa-modal-qr" class="modal-body"
-        style="display: none; text-align: center; flex-direction: column; align-items: center; gap: 16px;">
-        <div style="font-size: 0.9em; color: var(--text-muted);">
-          Scan QR Code di bawah menggunakan kamera HP atau salin link untuk membuka Jadwal Kuliah:
-        </div>
-
-        <div id="qrcode-box"
-          style="background: #ffffff; padding: 16px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 210px; min-height: 210px;">
-          <div id="qrcode-display"></div>
-          <img id="qrcode-img-fallback" style="display: none; width: 190px; height: 190px; border-radius: 8px;"
-            alt="QR Code Link" />
-        </div>
-
-        <div style="width: 100%; text-align: left;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label style="font-weight: 500; font-size: 0.85em; color: var(--text-muted);">Pilih Jalur Akses URL:</label>
-            <button id="qr-refresh-btn" type="button" title="Perbarui link Cloudflare / Ngrok terbaru"
-              style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); border-radius: 6px; padding: 4px 10px; font-size: 0.78em; color: var(--primary); cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 600; transition: all 0.2s ease;">
-              <svg id="qr-refresh-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-              <span id="qr-refresh-text">Refresh Link</span>
-            </button>
-          </div>
-          <select id="qr-url-select"
-            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; margin-bottom: 10px; font-size: 0.9em;">
-            <!-- Opsi diisi dinamis oleh JS -->
-          </select>
-
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <input type="text" id="qr-link-input" readonly
-              style="flex: 1; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none;">
-            <button class="btn btn-primary" id="qr-copy-btn"
-              style="padding: 10px 14px; white-space: nowrap; display: flex; align-items: center; gap: 6px; font-size: 0.9em;">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span id="qr-copy-btn-text">Salin</span>
-            </button>
-            <a id="qr-open-link" href="#" target="_blank" class="btn btn-secondary"
-              style="padding: 10px 14px; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.9em;">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
-              <span>Buka</span>
-            </a>
-          </div>
-
-          <div id="qr-status-info"
-            style="font-size: 0.78em; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px;">
-            <span id="qr-status-dot"
-              style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
-            <span id="qr-status-text">Link Real-Time Aktif</span>
-          </div>
-        </div>
-
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 5px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="qr-back-btn">Kembali ke Menu</button>
-        </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 5px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="qr-back-btn">Kembali ke Menu</button>
       </div>
+    </div>
 
-      <!-- Tampilan Uji Coba WA -->
-      <div id="wa-modal-test" class="modal-body"
-        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Asisten Lab:</label>
-          <div id="aslab-list-container" class="aslab-list-container">
-            <!-- Items injected by JS -->
-          </div>
-          <input type="hidden" id="aslab-select" value="">
+    <!-- Tampilan Uji Coba WA -->
+    <div id="wa-modal-test" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Asisten Lab:</label>
+        <div id="aslab-list-container" class="aslab-list-container">
+          <!-- Items injected by JS -->
         </div>
-        <input type="hidden" id="test-action-select" value="test">
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="test-wa-back-btn">Kembali</button>
-          <button class="modal-btn" id="test-wa-submit-btn">Kirim Pesan</button>
-        </div>
+        <input type="hidden" id="aslab-select" value="">
       </div>
-
-      <!-- Tampilan Data Aslab -->
-      <div id="wa-modal-data" class="modal-body"
-        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
-          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-            <thead>
-              <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
-                <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
-                <th style="padding: 12px 14px; text-align: left;">Nama Aslab</th>
-                <th style="padding: 12px 14px; text-align: left;">Kampus</th>
-                <th style="padding: 12px 14px; text-align: left;">Ruangan</th>
-                <th style="padding: 12px 14px; text-align: left;">No WA</th>
-                <th style="padding: 12px 14px; text-align: center;" class="admin-only-col">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="aslab-data-tbody">
-              <!-- Data akan diisi oleh JS -->
-            </tbody>
-          </table>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="data-wa-back-btn">Kembali</button>
-        </div>
+      <input type="hidden" id="test-action-select" value="test">
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="test-wa-back-btn">Kembali</button>
+        <button class="modal-btn" id="test-wa-submit-btn">Kirim Pesan</button>
       </div>
+    </div>
 
-      <!-- Tampilan Tambah Data WA Aslab -->
-      <div id="wa-modal-add" class="modal-body"
-        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Aslab:</label>
-          <input type="text" id="add-aslab-nama" placeholder="Contoh: Budi"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">No WhatsApp:</label>
-          <input type="text" id="add-aslab-wa" placeholder="Contoh: 081234567890"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Ruangan / Labor:</label>
-          <select id="add-aslab-ruangan"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-            <option value="">-- Pilih Ruangan / Labor --</option>
-          </select>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="add-wa-back-btn">Kembali</button>
-          <button class="modal-btn" id="add-wa-submit-btn">Simpan Data</button>
-        </div>
+    <!-- Tampilan Data Aslab -->
+    <div id="wa-modal-data" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
+              <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
+              <th style="padding: 12px 14px; text-align: left;">Nama Aslab</th>
+              <th style="padding: 12px 14px; text-align: left;">Kampus</th>
+              <th style="padding: 12px 14px; text-align: left;">Ruangan</th>
+              <th style="padding: 12px 14px; text-align: left;">No WA</th>
+              <th style="padding: 12px 14px; text-align: center;" class="admin-only-col">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="aslab-data-tbody">
+            <!-- Data akan diisi oleh JS -->
+          </tbody>
+        </table>
       </div>
-
-      <!-- Tampilan Data Ruangan -->
-      <div id="wa-modal-data-ruangan" class="modal-body"
-        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
-          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-            <thead>
-              <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
-                <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
-                <th style="padding: 12px 14px; text-align: left;">Kampus</th>
-                <th style="padding: 12px 14px; text-align: left;">Nama Ruangan</th>
-                <th style="padding: 12px 14px; text-align: center;" class="admin-only-col">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="ruangan-data-tbody">
-              <!-- Data akan diisi oleh JS -->
-            </tbody>
-          </table>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="data-ruangan-back-btn">Kembali</button>
-        </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="data-wa-back-btn">Kembali</button>
       </div>
+    </div>
 
-      <!-- Tampilan Tambah Ruangan -->
-      <div id="wa-modal-add-ruangan" class="modal-body"
-        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Kampus:</label>
-          <select id="add-ruangan-kampus"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; margin-bottom: 10px;">
-            <option value="Kobar">Kobar</option>
-            <option value="Thehok">Thehok</option>
-          </select>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Ruangan:</label>
-          <input type="text" id="add-ruangan-nama" placeholder="Contoh: Labor 1.1 atau R. 2.18"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="add-ruangan-back-btn">Kembali</button>
-          <button class="modal-btn" id="add-ruangan-submit-btn">Simpan Ruangan</button>
-        </div>
+    <!-- Tampilan Tambah Data WA Aslab -->
+    <div id="wa-modal-add" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Aslab:</label>
+        <input type="text" id="add-aslab-nama" placeholder="Contoh: Budi"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
       </div>
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">No WhatsApp:</label>
+        <input type="text" id="add-aslab-wa" placeholder="Contoh: 081234567890"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Ruangan / Labor:</label>
+        <select id="add-aslab-ruangan"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+          <option value="">-- Pilih Ruangan / Labor --</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="add-wa-back-btn">Kembali</button>
+        <button class="modal-btn" id="add-wa-submit-btn">Simpan Data</button>
+      </div>
+    </div>
 
-      <!-- Tampilan Edit Data WA Aslab -->
-      <div id="wa-modal-edit" class="modal-body"
-        style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-        <input type="hidden" id="edit-aslab-id">
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Aslab:</label>
-          <input type="text" id="edit-aslab-nama" placeholder="Contoh: Budi"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">No WhatsApp:</label>
-          <input type="text" id="edit-aslab-wa" placeholder="Contoh: 081234567890"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Ruangan / Labor:</label>
-          <select id="edit-aslab-ruangan"
-            style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
-            <option value="">-- Pilih Ruangan / Labor --</option>
-          </select>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-          <button class="modal-btn" style="background: var(--text-muted);" id="edit-wa-back-btn">Batal</button>
-          <button class="modal-btn" id="edit-wa-submit-btn">Update Data</button>
-        </div>
+    <!-- Tampilan Data Ruangan -->
+    <div id="wa-modal-data-ruangan" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
+              <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
+              <th style="padding: 12px 14px; text-align: left;">Kampus</th>
+              <th style="padding: 12px 14px; text-align: left;">Nama Ruangan</th>
+              <th style="padding: 12px 14px; text-align: center;" class="admin-only-col">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="ruangan-data-tbody">
+            <!-- Data akan diisi oleh JS -->
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="data-ruangan-back-btn">Kembali</button>
+      </div>
+    </div>
+
+    <!-- Tampilan Tambah Ruangan -->
+    <div id="wa-modal-add-ruangan" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Pilih Kampus:</label>
+        <select id="add-ruangan-kampus"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; margin-bottom: 10px;">
+          <option value="Kobar">Kobar</option>
+          <option value="Thehok">Thehok</option>
+        </select>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Ruangan:</label>
+        <input type="text" id="add-ruangan-nama" placeholder="Contoh: Labor 1.1 atau R. 2.18"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="add-ruangan-back-btn">Kembali</button>
+        <button class="modal-btn" id="add-ruangan-submit-btn">Simpan Ruangan</button>
+      </div>
+    </div>
+
+    <!-- Tampilan Edit Data WA Aslab -->
+    <div id="wa-modal-edit" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      <input type="hidden" id="edit-aslab-id">
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nama Aslab:</label>
+        <input type="text" id="edit-aslab-nama" placeholder="Contoh: Budi"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">No WhatsApp:</label>
+        <input type="text" id="edit-aslab-wa" placeholder="Contoh: 081234567890"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Ruangan / Labor:</label>
+        <select id="edit-aslab-ruangan"
+          style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+          <option value="">-- Pilih Ruangan / Labor --</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="edit-wa-back-btn">Batal</button>
+        <button class="modal-btn" id="edit-wa-submit-btn">Update Data</button>
       </div>
     </div>
   </div>
+</div>
 
   <!-- MODAL: SPOTLIGHT SEARCH (CTRL+K) -->
-  <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
+    <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
   <div id="spotlight-backdrop" class="spotlight-backdrop" onclick="closeSpotlightModal(event)">
     <div class="spotlight-modal" onclick="event.stopPropagation()">
       <div class="spotlight-input-wrap" onclick="document.getElementById('spotlight-input')?.focus()">
@@ -1453,7 +1449,7 @@
 
 
   <!-- MODAL: SPOTLIGHT DETAIL PREVIEW -->
-  <!-- ==================== SPOTLIGHT DETAIL PREVIEW MODAL ==================== -->
+    <!-- ==================== SPOTLIGHT DETAIL PREVIEW MODAL ==================== -->
   <div id="spotlight-detail-backdrop" class="spotlight-backdrop" onclick="closeSpotlightDetailModal(event)">
     <div class="spotlight-modal spotlight-detail-modal" onclick="event.stopPropagation()">
       <div class="spotlight-detail-header">
@@ -1504,7 +1500,7 @@
 
 
   <!-- MODAL: TV / KIOSK DISPLAY MODE -->
-  <!-- ==================== TV / KIOSK DISPLAY MODE OVERLAY (CLEAN KIOSK) ==================== -->
+    <!-- ==================== TV / KIOSK DISPLAY MODE OVERLAY (CLEAN KIOSK) ==================== -->
   <div id="tv-mode-overlay" class="tv-mode-overlay">
     <div class="tv-header">
       <div class="tv-title-area">
@@ -1512,7 +1508,42 @@
         <p>Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 16px;">
+      <div class="tv-header-right">
+        <!-- TM, OL, CC, Total Jadwal dipindah ke samping Jam & Tanggal -->
+        <div class="tv-method-pills">
+          <div class="tv-mini-pill stat-tm" title="Tatap Muka">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>TM: <strong id="tv-stat-tm">0</strong></span>
+          </div>
+          <div class="tv-mini-pill stat-ol" title="Online">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <span>OL: <strong id="tv-stat-ol">0</strong></span>
+          </div>
+          <div class="tv-mini-pill stat-cc" title="Cancel">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+            <span>CC: <strong id="tv-stat-cc">0</strong></span>
+          </div>
+          <div class="tv-mini-pill stat-tot" title="Total Jadwal Hari Ini">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>Total: <strong id="tv-stat-total">0</strong></span>
+          </div>
+        </div>
+
         <div class="tv-clock-box">
           <div id="tv-live-time" class="tv-clock-time">00:00:00</div>
           <div id="tv-live-date" class="tv-clock-date">Memuat waktu...</div>
@@ -1528,42 +1559,35 @@
       </div>
     </div>
 
-    <!-- TV Status Badges Bar (Matching Image 3) -->
+    <!-- TV Real-Time Room & Lab Usage Badges (Data Real-Time Kelas & Lab yang Dipakai vs Kosong) -->
     <div class="tv-stats-bar">
-      <div class="tv-stat-pill stat-tm">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
-          stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        <span>TM: <strong id="tv-stat-tm">0</strong> Kelas</span>
+      <div class="tv-stat-pill pill-occupied">
+        <span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981; width:8px; height:8px; border-radius:50%;"></span>
+        <span>Dipakai: <strong id="tv-room-occupied-count">0</strong> Ruang (<span id="tv-lab-occupied-count">0</span> Lab • <span id="tv-kelas-occupied-count">0</span> Kelas)</span>
       </div>
-      <div class="tv-stat-pill stat-ol">
+      <div class="tv-stat-pill pill-empty">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
         </svg>
-        <span>OL: <strong id="tv-stat-ol">0</strong> Kelas</span>
+        <span>Kosong: <strong id="tv-room-empty-count">0</strong> Ruang (<span id="tv-lab-empty-count">0</span> Lab • <span id="tv-kelas-empty-count">0</span> Kelas)</span>
       </div>
-      <div class="tv-stat-pill stat-cc">
+      <div class="tv-stat-pill pill-waiting">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
-          <line x1="15" y1="9" x2="9" y2="15"></line>
-          <line x1="9" y1="9" x2="15" y2="15"></line>
+          <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
-        <span>CC: <strong id="tv-stat-cc">0</strong> Kelas</span>
+        <span>Jeda: <strong id="tv-room-waiting-count">0</strong> Ruang (<span id="tv-lab-waiting-count">0</span> Lab • <span id="tv-kelas-waiting-count">0</span> Kelas)</span>
       </div>
-      <div class="tv-stat-pill stat-tot">
+      <div class="tv-stat-pill pill-total">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="16" y1="2" x2="16" y2="6"></line>
-          <line x1="8" y1="2" x2="8" y2="6"></line>
-          <line x1="3" y1="10" x2="21" y2="10"></line>
+          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
         </svg>
-        <span>Total: <strong id="tv-stat-total">0</strong> Jadwal</span>
+        <span>Total: <strong id="tv-room-total-count">0</strong> Ruangan (<span id="tv-lab-total-count">0</span> Lab • <span id="tv-kelas-total-count">0</span> Kelas)</span>
       </div>
     </div>
 

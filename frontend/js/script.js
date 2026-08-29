@@ -4098,7 +4098,7 @@ function resetSpotlightFilter() {
 // =========================================================================
 // TV / KIOSK DISPLAY MODE (ANIMATED ROLLING QUEUE TICKER & REALTIME TODAY SCRAPER)
 // =========================================================================
-const TV_VISIBLE_ROWS_COUNT = 7;
+const TV_VISIBLE_ROWS_COUNT = 9;
 let tvClockTimer = null;
 let tvAutoRefreshTimer = null;
 let tvTickerInterval = null;
@@ -4282,6 +4282,11 @@ function updateTvClock() {
   if (dateEl) {
     dateEl.innerText = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   }
+
+  // Tiap pergantian menit (detik 00), refresh status ruangan realtime TV
+  if (now.getSeconds() === 0) {
+    updateTvModeData(false);
+  }
 }
 
 function updateTvModeData(isInitial = false) {
@@ -4297,7 +4302,7 @@ function updateTvModeData(isInitial = false) {
     dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
   }
 
-  // Hitung Statistik Status (TM, OL, CC, Total)
+  // 1. Hitung Statistik Metode (TM, OL, CC, Total)
   const tmCount = dayJadwal.filter(j => j.metode_pembelajaran === 'TM').length;
   const olCount = dayJadwal.filter(j => j.metode_pembelajaran === 'OL').length;
   const ccCount = dayJadwal.filter(j => j.metode_pembelajaran === 'CC').length;
@@ -4312,6 +4317,121 @@ function updateTvModeData(isInitial = false) {
   if (olEl) olEl.innerText = olCount;
   if (ccEl) ccEl.innerText = ccCount;
   if (totEl) totEl.innerText = totCount;
+
+  // 2. Hitung Statistik Real-Time Penggunaan Ruangan & Laboratorium
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const isToday = (targetDate === todayStr);
+
+  let roomSchedules = {};
+  dayJadwal.forEach(item => {
+    if (item.nama_ruangan && item.jam && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
+      const parts = item.jam.split(/[-–—]/).map(p => p.trim());
+      if (parts.length >= 1) {
+        const timeParts = parts[0].split(':').map(Number);
+        if (timeParts.length >= 2 && !isNaN(timeParts[0])) {
+          const startTime = timeParts[0] * 60 + timeParts[1];
+          let endTime = startTime + 135;
+          if (parts.length >= 2) {
+            const endParts = parts[1].split(':').map(Number);
+            if (endParts.length >= 2 && !isNaN(endParts[0])) {
+              endTime = endParts[0] * 60 + endParts[1];
+            }
+          }
+          if (!roomSchedules[item.nama_ruangan]) roomSchedules[item.nama_ruangan] = [];
+          roomSchedules[item.nama_ruangan].push({
+            start: startTime,
+            end: endTime,
+            nama_mk: item.nama_mk,
+            jam: item.jam
+          });
+        }
+      }
+    }
+  });
+
+  // Himpun seluruh ruangan unik dari master data ruangan & jadwal
+  let allUniqueRooms = new Map();
+  if (Array.isArray(allRuanganData) && allRuanganData.length > 0) {
+    allRuanganData.forEach(r => {
+      if (r.nama_ruangan) {
+        allUniqueRooms.set(r.nama_ruangan, {
+          nama: r.nama_ruangan,
+          isLab: isLab(r.nama_ruangan),
+          kampus: r.kampus || ''
+        });
+      }
+    });
+  }
+
+  Object.keys(roomSchedules).forEach(rName => {
+    if (!allUniqueRooms.has(rName)) {
+      allUniqueRooms.set(rName, {
+        nama: rName,
+        isLab: isLab(rName),
+        kampus: ''
+      });
+    }
+  });
+
+  let occTotal = 0, occLab = 0, occKelas = 0;
+  let emptyTotal = 0, emptyLab = 0, emptyKelas = 0;
+  let waitTotal = 0, waitLab = 0, waitKelas = 0;
+  let allTotal = 0, allLab = 0, allKelas = 0;
+
+  allUniqueRooms.forEach(room => {
+    allTotal++;
+    if (room.isLab) allLab++; else allKelas++;
+
+    const schedules = roomSchedules[room.nama] || [];
+    let isOccupied = false;
+    let hasFuture = false;
+
+    if (isToday) {
+      for (const s of schedules) {
+        if (currentMinutes >= s.start && currentMinutes <= s.end) {
+          isOccupied = true;
+          break;
+        } else if (currentMinutes < s.start) {
+          hasFuture = true;
+        }
+      }
+    } else {
+      if (schedules.length > 0) isOccupied = true;
+    }
+
+    if (isOccupied) {
+      occTotal++;
+      if (room.isLab) occLab++; else occKelas++;
+    } else if (hasFuture) {
+      waitTotal++;
+      if (room.isLab) waitLab++; else waitKelas++;
+    } else {
+      emptyTotal++;
+      if (room.isLab) emptyLab++; else emptyKelas++;
+    }
+  });
+
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val;
+  };
+
+  setEl('tv-room-occupied-count', occTotal);
+  setEl('tv-lab-occupied-count', occLab);
+  setEl('tv-kelas-occupied-count', occKelas);
+
+  setEl('tv-room-empty-count', emptyTotal);
+  setEl('tv-lab-empty-count', emptyLab);
+  setEl('tv-kelas-empty-count', emptyKelas);
+
+  setEl('tv-room-waiting-count', waitTotal);
+  setEl('tv-lab-waiting-count', waitLab);
+  setEl('tv-kelas-waiting-count', waitKelas);
+
+  setEl('tv-room-total-count', allTotal);
+  setEl('tv-lab-total-count', allLab);
+  setEl('tv-kelas-total-count', allKelas);
 
   if (dayJadwal.length === 0) {
     if (tvTickerInterval) { clearInterval(tvTickerInterval); tvTickerInterval = null; }
