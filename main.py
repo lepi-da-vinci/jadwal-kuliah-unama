@@ -361,9 +361,154 @@ def get_semua_jadwal():
             cursor.close()
             conn.close()
 
+class ClearDbRequest(BaseModel):
+    targets: list[str] | None = []
+
+@app.get("/api/db/stats")
+def get_db_stats():
+    """Mengambil statistik jumlah baris data di database untuk panel pembersihan selektif"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        def get_count(query, params=None):
+            try:
+                cursor.execute(query, params or ())
+                row = cursor.fetchone()
+                if row:
+                    return list(row.values())[0]
+            except Exception:
+                return 0
+            return 0
+
+        counts = {
+            "jadwal": get_count("SELECT COUNT(*) as cnt FROM jadwal"),
+            "jadwal_temp": get_count("SELECT COUNT(*) as cnt FROM jadwal_temp"),
+            "mata_kuliah": get_count("SELECT COUNT(*) as cnt FROM mata_kuliah"),
+            "ruangan": get_count("SELECT COUNT(*) as cnt FROM ruangan"),
+            "aslab": get_count("SELECT COUNT(*) as cnt FROM asisten_lab"),
+            "dosen": get_count("SELECT COUNT(*) as cnt FROM dosen"),
+            "notif_all": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab"),
+            "notif_tambahan": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'"),
+            "notif_perubahan": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'"),
+            "notif_jeda": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab WHERE tipe_notif = 'JEDA'")
+        }
+        return {"status": "success", "counts": counts}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/db/clear")
+def clear_selective_db(req: ClearDbRequest, admin: str = Depends(verify_admin_token)):
+    """Menghapus data tertentu secara selektif dari database (memerlukan token Admin)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+        
+        deleted_summary = {}
+        targets = set(req.targets or [])
+        is_all = "all" in targets or "semua" in targets
+        
+        # 1. Jadwal Perkuliahan & Temp & Jeda Lab
+        if is_all or "jadwal" in targets:
+            cursor.execute("DELETE FROM jadwal")
+            cnt_j = cursor.rowcount
+            cursor.execute("DELETE FROM jadwal_temp")
+            cnt_jt = cursor.rowcount
+            try:
+                cursor.execute("DELETE FROM mata_kuliah")
+            except Exception:
+                pass
+            try:
+                cursor.execute("DELETE FROM jeda_lab")
+            except Exception:
+                pass
+            deleted_summary["jadwal"] = cnt_j + cnt_jt
+            
+        # 2. Master Ruangan
+        if is_all or "ruangan" in targets:
+            cursor.execute("DELETE FROM ruangan")
+            deleted_summary["ruangan"] = cursor.rowcount
+            
+        # 3. Notifikasi (Granular: Semua, Tambahan, Perubahan, Jeda)
+        if is_all or "notif_all" in targets:
+            cursor.execute("DELETE FROM notifikasi_lab")
+            deleted_summary["notif_all"] = cursor.rowcount
+            try:
+                cursor.execute("DELETE FROM jeda_lab")
+            except Exception:
+                pass
+        else:
+            if "notif_tambahan" in targets:
+                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'")
+                deleted_summary["notif_tambahan"] = cursor.rowcount
+            if "notif_perubahan" in targets:
+                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'")
+                deleted_summary["notif_perubahan"] = cursor.rowcount
+            if "notif_jeda" in targets:
+                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'JEDA'")
+                deleted_summary["notif_jeda"] = cursor.rowcount
+                try:
+                    cursor.execute("DELETE FROM jeda_lab")
+                except Exception:
+                    pass
+                
+        # 4. Asisten Lab & Dosen
+        if is_all or "aslab" in targets or "aslab_dosen" in targets:
+            cursor.execute("DELETE FROM asisten_lab")
+            deleted_summary["aslab"] = cursor.rowcount
+        if is_all or "dosen" in targets or "aslab_dosen" in targets:
+            cursor.execute("DELETE FROM dosen")
+            deleted_summary["dosen"] = cursor.rowcount
+
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        conn.commit()
+        
+        # Susun pesan ringkasan yang ramah dan informatif
+        parts_msg = []
+        if "jadwal" in deleted_summary and deleted_summary["jadwal"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal']} baris Jadwal Kuliah")
+        if "ruangan" in deleted_summary and deleted_summary["ruangan"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan']} Master Ruangan")
+        if "notif_all" in deleted_summary and deleted_summary["notif_all"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_all']} Semua Notifikasi")
+        if "notif_tambahan" in deleted_summary and deleted_summary["notif_tambahan"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_tambahan']} Notifikasi Kelas Tambahan")
+        if "notif_perubahan" in deleted_summary and deleted_summary["notif_perubahan"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_perubahan']} Notifikasi Perubahan Jadwal")
+        if "notif_jeda" in deleted_summary and deleted_summary["notif_jeda"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_jeda']} Notifikasi Jeda Ruangan")
+        if "aslab" in deleted_summary and deleted_summary["aslab"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab']} Kontak Asisten Lab")
+        if "dosen" in deleted_summary and deleted_summary["dosen"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen']} Master Dosen")
+        
+        if is_all:
+            resp_msg = "Database berhasil di-reset total! Seluruh data (jadwal, ruangan, notifikasi, aslab, dan dosen) telah dibersihkan."
+        elif parts_msg:
+            resp_msg = f"Berhasil menghapus: {', '.join(parts_msg)}."
+        else:
+            resp_msg = "Pembersihan database selesai (tidak ada baris data yang terpengaruh)."
+
+        return {
+            "status": "success",
+            "message": resp_msg,
+            "deleted": deleted_summary
+        }
+    except Exception as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.delete("/api/jadwal")
 def clear_jadwal(admin: str = Depends(verify_admin_token)):
-    """Menghapus seluruh jadwal dari database (memerlukan token Admin)"""
+    """Menghapus seluruh jadwal dari database (memerlukan token Admin) - Legacy Wrapper"""
     try:
         conn = get_db()
         cursor = conn.cursor()

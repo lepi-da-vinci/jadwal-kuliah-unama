@@ -1157,7 +1157,7 @@ function promptFinalConfirmDanger() {
     const submitBtn = document.getElementById('final-danger-submit-btn');
     const cancelBtn = document.getElementById('final-danger-cancel-btn');
 
-    const targetCode = generateRandomString(15);
+    const targetCode = generateRandomString(10);
     codeElem.textContent = targetCode;
     inputElem.value = '';
     submitBtn.disabled = true;
@@ -1168,7 +1168,8 @@ function promptFinalConfirmDanger() {
     inputElem.focus();
 
     const checkInput = () => {
-      if (inputElem.value.toUpperCase() === targetCode) {
+      const val = inputElem.value.trim().toUpperCase();
+      if (val === targetCode) {
         submitBtn.disabled = false;
         submitBtn.style.opacity = '1';
         submitBtn.style.cursor = 'pointer';
@@ -1183,18 +1184,23 @@ function promptFinalConfirmDanger() {
       submitBtn.onclick = null;
       cancelBtn.onclick = null;
       inputElem.oninput = null;
+      inputElem.onkeyup = null;
       modal.classList.remove('open');
     };
 
-    inputElem.oninput = checkInput;
-
-    submitBtn.onclick = () => {
-      if (inputElem.value.toUpperCase() === targetCode) {
+    const handleConfirm = () => {
+      if (inputElem.value.trim().toUpperCase() === targetCode) {
         cleanup();
         resolve(true);
       }
     };
 
+    inputElem.oninput = checkInput;
+    inputElem.onkeyup = (e) => {
+      if (e.key === 'Enter') handleConfirm();
+    };
+
+    submitBtn.onclick = handleConfirm;
     cancelBtn.onclick = () => {
       cleanup();
       resolve(false);
@@ -2256,41 +2262,310 @@ document.getElementById('btn-test-notif-suara').addEventListener('click', () => 
   playNotificationSound();
 });
 
-document.getElementById('clear-db-btn').addEventListener('click', async () => {
-  // Pastikan user terotentikasi sebagai Admin di level Backend
+// ─── Pusat Pembersihan Database Modular ───
+async function fetchDbStats() {
+  const refreshBtn = document.getElementById('btn-refresh-db-stats');
+  if (refreshBtn) {
+    refreshBtn.classList.add('rotating');
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/db/stats?_t=${Date.now()}`);
+    const json = await res.json();
+    if (json.status === 'success' && json.counts) {
+      const c = json.counts;
+      const cntJadwal = (c.jadwal || 0) + (c.jadwal_temp || 0);
+      const elJadwal = document.getElementById('cnt-clear-jadwal');
+      if (elJadwal) elJadwal.textContent = cntJadwal;
+
+      const elRuangan = document.getElementById('cnt-clear-ruangan');
+      if (elRuangan) elRuangan.textContent = c.ruangan || 0;
+
+      const elNotifAll = document.getElementById('cnt-clear-notif-all');
+      if (elNotifAll) elNotifAll.textContent = c.notif_all || 0;
+      const elSubNotifAll = document.getElementById('cnt-sub-notif-all');
+      if (elSubNotifAll) elSubNotifAll.textContent = c.notif_all || 0;
+
+      const elNotifTambahan = document.getElementById('cnt-clear-notif-tambahan');
+      if (elNotifTambahan) elNotifTambahan.textContent = c.notif_tambahan || 0;
+
+      const elNotifPerubahan = document.getElementById('cnt-clear-notif-perubahan');
+      if (elNotifPerubahan) elNotifPerubahan.textContent = c.notif_perubahan || 0;
+
+      const elNotifJeda = document.getElementById('cnt-clear-notif-jeda');
+      if (elNotifJeda) elNotifJeda.textContent = c.notif_jeda || 0;
+
+      const elAslab = document.getElementById('cnt-clear-aslab');
+      if (elAslab) elAslab.textContent = c.aslab || 0;
+      const elDosen = document.getElementById('cnt-clear-dosen');
+      if (elDosen) elDosen.textContent = c.dosen || 0;
+    }
+  } catch (err) {
+    console.error("Gagal mengambil statistik DB:", err);
+  } finally {
+    if (refreshBtn) {
+      setTimeout(() => refreshBtn.classList.remove('rotating'), 400);
+    }
+  }
+}
+
+function updateDbClearUI() {
+  const chkJadwal = document.getElementById('chk-clear-jadwal');
+  const chkRuangan = document.getElementById('chk-clear-ruangan');
+  const chkNotifAll = document.getElementById('chk-clear-notif-all');
+  const chkNotifTambahan = document.getElementById('chk-clear-notif-tambahan');
+  const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
+  const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
+  const chkAslab = document.getElementById('chk-clear-aslab');
+
+  // Highlight cards based on checkbox status
+  if (chkJadwal) chkJadwal.closest('.db-clear-card')?.classList.toggle('selected', chkJadwal.checked);
+  if (chkRuangan) chkRuangan.closest('.db-clear-card')?.classList.toggle('selected', chkRuangan.checked);
+  if (chkAslab) chkAslab.closest('.db-clear-card')?.classList.toggle('selected', chkAslab.checked);
+
+  if (chkNotifAll) chkNotifAll.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifAll.checked);
+  if (chkNotifTambahan) chkNotifTambahan.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifTambahan.checked);
+  if (chkNotifPerubahan) chkNotifPerubahan.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifPerubahan.checked);
+  if (chkNotifJeda) chkNotifJeda.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifJeda.checked);
+
+  // Count active selections
+  let count = 0;
+  if (chkJadwal && chkJadwal.checked) count++;
+  if (chkRuangan && chkRuangan.checked) count++;
+  if (chkAslab && chkAslab.checked) count++;
+
+  if (chkNotifAll && chkNotifAll.checked) {
+    count++;
+  } else {
+    if (chkNotifTambahan && chkNotifTambahan.checked) count++;
+    if (chkNotifPerubahan && chkNotifPerubahan.checked) count++;
+    if (chkNotifJeda && chkNotifJeda.checked) count++;
+  }
+
+  const summaryText = document.getElementById('db-clear-summary-text');
+  const submitBtn = document.getElementById('db-clear-submit-btn');
+
+  if (summaryText) {
+    if (count === 0) {
+      summaryText.textContent = '0 kategori dipilih';
+      summaryText.style.color = 'var(--text-muted)';
+    } else {
+      summaryText.textContent = `${count} kategori data dipilih`;
+      summaryText.style.color = 'var(--badge-cc)';
+    }
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = (count === 0);
+    submitBtn.style.opacity = count === 0 ? '0.5' : '1';
+    submitBtn.style.cursor = count === 0 ? 'not-allowed' : 'pointer';
+  }
+}
+
+let isDbClearEventsInitialized = false;
+function initDbClearModalEvents() {
+  if (isDbClearEventsInitialized) return;
+  const modal = document.getElementById('db-clear-modal');
+  if (!modal) return;
+  isDbClearEventsInitialized = true;
+
+  const chkJadwal = document.getElementById('chk-clear-jadwal');
+  const chkRuangan = document.getElementById('chk-clear-ruangan');
+  const chkNotifAll = document.getElementById('chk-clear-notif-all');
+  const chkNotifTambahan = document.getElementById('chk-clear-notif-tambahan');
+  const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
+  const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
+  const chkAslab = document.getElementById('chk-clear-aslab');
+
+  [chkJadwal, chkRuangan, chkAslab].forEach(chk => {
+    chk?.addEventListener('change', updateDbClearUI);
+  });
+
+  if (chkNotifAll) {
+    chkNotifAll.addEventListener('change', () => {
+      const checked = chkNotifAll.checked;
+      if (chkNotifTambahan) chkNotifTambahan.checked = checked;
+      if (chkNotifPerubahan) chkNotifPerubahan.checked = checked;
+      if (chkNotifJeda) chkNotifJeda.checked = checked;
+      updateDbClearUI();
+    });
+  }
+
+  [chkNotifTambahan, chkNotifPerubahan, chkNotifJeda].forEach(chk => {
+    chk?.addEventListener('change', () => {
+      const allNotifChecked = chkNotifTambahan?.checked && chkNotifPerubahan?.checked && chkNotifJeda?.checked;
+      if (chkNotifAll) chkNotifAll.checked = allNotifChecked;
+      updateDbClearUI();
+    });
+  });
+
+  const btnSelectAll = document.getElementById('btn-select-all-db');
+  if (btnSelectAll) {
+    btnSelectAll.addEventListener('click', () => {
+      if (chkJadwal) chkJadwal.checked = true;
+      if (chkRuangan) chkRuangan.checked = true;
+      if (chkNotifAll) chkNotifAll.checked = true;
+      if (chkNotifTambahan) chkNotifTambahan.checked = true;
+      if (chkNotifPerubahan) chkNotifPerubahan.checked = true;
+      if (chkNotifJeda) chkNotifJeda.checked = true;
+      if (chkAslab) chkAslab.checked = true;
+      updateDbClearUI();
+    });
+  }
+
+  const btnDeselectAll = document.getElementById('btn-deselect-all-db');
+  if (btnDeselectAll) {
+    btnDeselectAll.addEventListener('click', () => {
+      if (chkJadwal) chkJadwal.checked = false;
+      if (chkRuangan) chkRuangan.checked = false;
+      if (chkNotifAll) chkNotifAll.checked = false;
+      if (chkNotifTambahan) chkNotifTambahan.checked = false;
+      if (chkNotifPerubahan) chkNotifPerubahan.checked = false;
+      if (chkNotifJeda) chkNotifJeda.checked = false;
+      if (chkAslab) chkAslab.checked = false;
+      updateDbClearUI();
+    });
+  }
+
+  const btnRefresh = document.getElementById('btn-refresh-db-stats');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => fetchDbStats());
+  }
+
+  const btnCancel = document.getElementById('db-clear-cancel-btn');
+  if (btnCancel) {
+    btnCancel.addEventListener('click', () => {
+      modal.classList.remove('open');
+    });
+  }
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.remove('open');
+  });
+
+  const submitBtn = document.getElementById('db-clear-submit-btn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', async () => {
+      const targets = [];
+      const targetLabels = [];
+      if (chkJadwal?.checked) { targets.push('jadwal'); targetLabels.push('Jadwal Kuliah'); }
+      if (chkRuangan?.checked) { targets.push('ruangan'); targetLabels.push('Master Ruangan'); }
+      if (chkNotifAll?.checked) {
+        targets.push('notif_all');
+        targetLabels.push('Semua Notifikasi');
+      } else {
+        if (chkNotifTambahan?.checked) { targets.push('notif_tambahan'); targetLabels.push('Notif Kelas Tambahan'); }
+        if (chkNotifPerubahan?.checked) { targets.push('notif_perubahan'); targetLabels.push('Notif Perubahan Jadwal'); }
+        if (chkNotifJeda?.checked) { targets.push('notif_jeda'); targetLabels.push('Notif Jeda Ruangan'); }
+      }
+      if (chkAslab?.checked) { targets.push('aslab', 'dosen'); targetLabels.push('Kontak Aslab & Dosen'); }
+
+      if (targets.length === 0) return;
+
+      const confirmMsg = `Konfirmasi Pembersihan Database:\n\nYakin ingin menghapus ${targetLabels.join(', ')} dari database?\n\nTindakan ini permanen dan tidak dapat dibatalkan.`;
+      if (!confirm(confirmMsg)) return;
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menghapus...`;
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/db/clear`, {
+          method: 'POST',
+          headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ targets: targets })
+        });
+        const result = await response.json();
+        if (response.ok && result.status === 'success') {
+          alert(`Pembersihan Berhasil!\n\n${result.message}`);
+          modal.classList.remove('open');
+          await fetchAllJadwal();
+          await fetchDbStats();
+          if (filterTanggal?.value) fetchNotifikasiLab(filterTanggal.value, false);
+          if (typeof fetchAllRuangan === 'function') fetchAllRuangan();
+        } else {
+          alert("Gagal menghapus data: " + (result.detail || result.message));
+        }
+      } catch (err) {
+        alert("Terjadi kesalahan saat memproses permintaan pembersihan database.");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span id="db-clear-submit-label">Hapus Data Terpilih</span>`;
+        updateDbClearUI();
+      }
+    });
+  }
+
+  const wipeAllBtn = document.getElementById('db-clear-wipe-all-btn');
+  if (wipeAllBtn) {
+    wipeAllBtn.addEventListener('click', async () => {
+      const confirmMsg = "PERINGATAN RESET TOTAL TINGKAT TINGGI:\n\nAnda akan mereset dan menghapus SELURUH data database (Jadwal Kuliah, Master Ruangan, Notifikasi, Kontak Aslab, dan Dosen) secara total!\n\nApakah Anda benar-benar yakin ingin melanjutkan?";
+      if (!confirm(confirmMsg)) return;
+
+      wipeAllBtn.disabled = true;
+      wipeAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Mereset Total...`;
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/db/clear`, {
+          method: 'POST',
+          headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ targets: ['all'] })
+        });
+        const result = await response.json();
+        if (response.ok && result.status === 'success') {
+          alert(`Reset Total Berhasil!\n\n${result.message}`);
+          modal.classList.remove('open');
+          await fetchAllJadwal();
+          await fetchDbStats();
+          if (filterTanggal?.value) fetchNotifikasiLab(filterTanggal.value, false);
+          if (typeof fetchAllRuangan === 'function') fetchAllRuangan();
+        } else {
+          alert("Gagal mereset database: " + (result.detail || result.message));
+        }
+      } catch (err) {
+        alert("Terjadi kesalahan saat mereset database.");
+      } finally {
+        wipeAllBtn.disabled = false;
+        wipeAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> <span>Reset Total (Semua)</span>`;
+      }
+    });
+  }
+}
+
+async function openDbClearModal() {
+  const modal = document.getElementById('db-clear-modal');
+  if (!modal) return;
+  if (typeof closeSettingModal === 'function') closeSettingModal(true);
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal) testWaModal.classList.remove('open');
+  initDbClearModalEvents();
+  modal.classList.add('open');
+  await fetchDbStats();
+  updateDbClearUI();
+}
+window.openDbClearModal = openDbClearModal;
+
+document.getElementById('clear-db-btn')?.addEventListener('click', async (e) => {
+  if (e) e.preventDefault();
+  if (typeof closeSettingModal === 'function') closeSettingModal(true);
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal) testWaModal.classList.remove('open');
+
+  // 1. Pastikan user terotentikasi sebagai Admin di level Backend
   let token = getAdminToken();
   if (!token) {
     token = await requestAdminLogin();
     if (!token) return; // Login dibatalkan atau gagal
   }
 
-  const isSure = await promptConfirmDanger("Yakin ingin menghapus SELURUH data jadwal dari database?");
-  if (isSure) {
-    const isFinalSure = await promptFinalConfirmDanger();
-    if (!isFinalSure) return;
+  // 2. Tampilkan Konfirmasi Keamanan Awal
+  const isSure = await promptConfirmDanger("Pusat Pembersihan Database: Anda akan membuka menu pemilihan data yang ingin dihapus. Lanjutkan ke verifikasi kode?");
+  if (!isSure) return;
 
-    const btn = document.getElementById('clear-db-btn');
-    btn.disabled = true;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menghapus...`;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/jadwal`, {
-        method: 'DELETE',
-        headers: getAdminHeaders()
-      });
-      const result = await response.json();
-      if (response.ok && result.status === 'success') {
-        showCustomAlert("Berhasil Dihapus!", result.message, "success");
-        await fetchAllJadwal();
-      }
-      else {
-        showCustomAlert("Gagal!", "Gagal menghapus database: " + (result.detail || result.message), "error");
-      }
-    } catch (e) {
-      showCustomAlert("Error", "Terjadi kesalahan saat menghapus database.", "warning");
-    }
-    btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Bersihkan Semua Jadwal DB`;
-  }
+  // 3. Tampilkan Tantangan Kode Unik Acak
+  const isFinalSure = await promptFinalConfirmDanger();
+  if (!isFinalSure) return;
+
+  // 4. Setelah kode unik berhasil dimasukkan, LANGSUNG BUKA MENU PEMILIHAN DATA DATABASE
+  openDbClearModal();
 });
 
 filterTanggal.addEventListener('change', () => {
@@ -4546,6 +4821,8 @@ window.closeSettingAndOpenTvMode = closeSettingAndOpenTvMode;
 window.exportFilteredSchedulesToExcel = exportFilteredSchedulesToExcel;
 window.openSingleGoogleCalendar = openSingleGoogleCalendar;
 window.executeSpotlightAction = executeSpotlightAction;
+window.openDbClearModal = openDbClearModal;
+window.initDbClearModalEvents = initDbClearModalEvents;
 
 document.addEventListener('DOMContentLoaded', () => {
   const btnSpotlight = document.getElementById('btn-spotlight');
@@ -4571,6 +4848,9 @@ document.addEventListener('DOMContentLoaded', () => {
       exportFilteredSchedulesToExcel();
     });
   }
+
+  // Inisialisasi event listener Modal Pusat Pembersihan Database
+  initDbClearModalEvents();
 });
 
 

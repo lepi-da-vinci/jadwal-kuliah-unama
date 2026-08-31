@@ -1,0 +1,195 @@
+  <!-- ==================== MODAL PUSAT PEMBERSIHAN DATABASE TERPILIH ==================== -->
+  <div id="db-clear-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Pembersihan Database"
+    style="z-index: 10002;">
+    <div class="modal-box db-clear-modal-box" style="max-width: 760px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-icon" style="margin: 0; background: rgba(239, 68, 68, 0.12); color: var(--badge-cc); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.35em; color: var(--text);">Pusat Pembersihan Database</h2>
+            <p style="margin: 3px 0 0 0; font-size: 0.85em; color: var(--text-muted);">Pilih data mana yang ingin dihapus atau lakukan reset database.</p>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 0.78em; font-weight: 600;">
+            <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981;"></span>
+            Admin Terverifikasi
+          </span>
+          <button id="btn-refresh-db-stats" type="button" title="Perbarui jumlah data"
+            style="background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.75em; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Refresh Data</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Selection Controls -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.88em;">
+        <span style="font-weight: 600; color: var(--text);">Pilih Data Target:</span>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-select-all-db" class="db-quick-btn">Pilih Semua</button>
+          <button type="button" id="btn-deselect-all-db" class="db-quick-btn">Hapus Pilihan</button>
+        </div>
+      </div>
+
+      <!-- Grid Pilihan Data -->
+      <div class="db-clear-grid" style="display: flex; flex-direction: column; gap: 12px;">
+        
+        <!-- Opsi 1: Data Jadwal Kuliah -->
+        <label class="db-clear-card" for="chk-clear-jadwal">
+          <div class="db-clear-card-left">
+            <input type="checkbox" id="chk-clear-jadwal" class="db-clear-chk" value="jadwal">
+            <div class="db-clear-info">
+              <div class="db-clear-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <span>Jadwal Perkuliahan & Data Temp</span>
+              </div>
+              <div class="db-clear-desc">Menghapus seluruh jadwal perkuliahan utama (<code class="db-code">jadwal</code>), data sementara (<code class="db-code">jadwal_temp</code>), dan master mata kuliah transaksi.</div>
+            </div>
+          </div>
+          <div class="db-clear-badge" id="badge-jadwal"><span id="cnt-clear-jadwal">...</span> baris</div>
+        </label>
+
+        <!-- Opsi 2: Data Master Ruangan -->
+        <label class="db-clear-card" for="chk-clear-ruangan">
+          <div class="db-clear-card-left">
+            <input type="checkbox" id="chk-clear-ruangan" class="db-clear-chk" value="ruangan">
+            <div class="db-clear-info">
+              <div class="db-clear-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0ea5e9;">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span>Master Data Ruangan & Labor</span>
+              </div>
+              <div class="db-clear-desc">Menghapus daftar seluruh master ruangan kampus Thehok dan Kobar (<code class="db-code">ruangan</code>).</div>
+            </div>
+          </div>
+          <div class="db-clear-badge" id="badge-ruangan"><span id="cnt-clear-ruangan">...</span> ruangan</div>
+        </label>
+
+        <!-- Opsi 3: Data Notifikasi (DIPISAH SESUAI PERMINTAAN USER) -->
+        <div class="db-clear-group-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 0.95em;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span>Riwayat & Log Notifikasi Ruangan</span>
+            </div>
+            <div class="db-clear-badge" id="badge-notif-all-total"><span id="cnt-clear-notif-all">...</span> total</div>
+          </div>
+          
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
+            Pilih pembersihan seluruh notifikasi sekaligus atau pilih tipe spesifik di bawah ini:
+          </div>
+
+          <div class="db-clear-subgrid">
+            <!-- Sub-opsi: Semua Notifikasi -->
+            <label class="db-clear-subcard" for="chk-clear-notif-all" style="border-left: 3px solid #f59e0b;">
+              <input type="checkbox" id="chk-clear-notif-all" class="db-clear-chk notif-chk" value="notif_all">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle"><b>Semua Notifikasi</b></span>
+                <span class="db-clear-subdesc">Hapus seluruh riwayat (<code class="db-code">notifikasi_lab</code>)</span>
+              </div>
+              <span class="db-mini-badge" id="cnt-notif-all-badge"><span id="cnt-sub-notif-all">0</span></span>
+            </label>
+
+            <!-- Sub-opsi: Notifikasi Kelas Tambahan Saja -->
+            <label class="db-clear-subcard" for="chk-clear-notif-tambahan" style="border-left: 3px solid var(--badge-tm);">
+              <input type="checkbox" id="chk-clear-notif-tambahan" class="db-clear-chk notif-chk" value="notif_tambahan">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">➕ <b>Kelas Tambahan</b></span>
+                <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">TAMBAHAN</code></span>
+              </div>
+              <span class="db-mini-badge badge-green"><span id="cnt-clear-notif-tambahan">0</span></span>
+            </label>
+
+            <!-- Sub-opsi: Notifikasi Perubahan Jadwal Saja -->
+            <label class="db-clear-subcard" for="chk-clear-notif-perubahan" style="border-left: 3px solid var(--badge-ol);">
+              <input type="checkbox" id="chk-clear-notif-perubahan" class="db-clear-chk notif-chk" value="notif_perubahan">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">🔄 <b>Perubahan Jadwal</b></span>
+                <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">PERUBAHAN</code></span>
+              </div>
+              <span class="db-mini-badge badge-blue"><span id="cnt-clear-notif-perubahan">0</span></span>
+            </label>
+
+            <!-- Sub-opsi: Notifikasi Jeda Ruangan Saja -->
+            <label class="db-clear-subcard" for="chk-clear-notif-jeda" style="border-left: 3px solid #eab308;">
+              <input type="checkbox" id="chk-clear-notif-jeda" class="db-clear-chk notif-chk" value="notif_jeda">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">⏱️ <b>Jeda Lab / Ruangan</b></span>
+                <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">JEDA</code></span>
+              </div>
+              <span class="db-mini-badge badge-yellow"><span id="cnt-clear-notif-jeda">0</span></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Opsi 4: Asisten Lab & Dosen -->
+        <label class="db-clear-card" for="chk-clear-aslab">
+          <div class="db-clear-card-left">
+            <input type="checkbox" id="chk-clear-aslab" class="db-clear-chk" value="aslab">
+            <div class="db-clear-info">
+              <div class="db-clear-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ec4899;">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Kontak WA Asisten Lab & Dosen</span>
+              </div>
+              <div class="db-clear-desc">Menghapus data kontak WhatsApp asisten lab (<code class="db-code">asisten_lab</code>) dan master <code class="db-code">dosen</code>.</div>
+            </div>
+          </div>
+          <div class="db-clear-badge" id="badge-aslab"><span id="cnt-clear-aslab">...</span> Aslab / <span id="cnt-clear-dosen">...</span> Dosen</div>
+        </label>
+      </div>
+
+      <!-- Action Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 22px; border-top: 1.5px solid var(--border); padding-top: 16px; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 0.88em; color: var(--text-muted);">
+          Status: <b id="db-clear-summary-text" style="color: var(--primary);">0 kategori dipilih</b>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button type="button" class="modal-btn" style="background: var(--text-muted);" id="db-clear-cancel-btn">Batal</button>
+          <button type="button" class="modal-btn" style="background: var(--badge-cc); display: inline-flex; align-items: center; gap: 6px;" id="db-clear-submit-btn" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            <span id="db-clear-submit-label">Hapus Data Terpilih</span>
+          </button>
+          <button type="button" class="modal-btn" id="db-clear-wipe-all-btn"
+            style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #fff; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>Reset Total (Semua)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
