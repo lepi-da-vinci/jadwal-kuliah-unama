@@ -369,35 +369,52 @@ def get_db_stats():
     """Mengambil statistik jumlah baris data di database untuk panel pembersihan selektif"""
     try:
         conn = get_db()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(buffered=True)
         
-        def get_count(query, params=None):
-            try:
-                cursor.execute(query, params or ())
-                row = cursor.fetchone()
-                if row:
-                    return list(row.values())[0]
-            except Exception:
-                return 0
-            return 0
-
         counts = {
-            "jadwal": get_count("SELECT COUNT(*) as cnt FROM jadwal"),
-            "jadwal_temp": get_count("SELECT COUNT(*) as cnt FROM jadwal_temp"),
-            "mata_kuliah": get_count("SELECT COUNT(*) as cnt FROM mata_kuliah"),
-            "ruangan": get_count("SELECT COUNT(*) as cnt FROM ruangan"),
-            "ruangan_lab": get_count("SELECT COUNT(*) as cnt FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%'"),
-            "ruangan_kelas": get_count("SELECT COUNT(*) as cnt FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%'"),
-            "aslab": get_count("SELECT COUNT(*) as cnt FROM asisten_lab"),
-            "dosen": get_count("SELECT COUNT(*) as cnt FROM dosen"),
-            "notif_all": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab"),
-            "notif_tambahan": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'"),
-            "notif_perubahan": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'"),
-            "notif_jeda": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab WHERE tipe_notif = 'JEDA'")
+            "jadwal": 0,
+            "jadwal_temp": 0,
+            "mata_kuliah": 0,
+            "ruangan": 0,
+            "ruangan_lab": 0,
+            "ruangan_kelas": 0,
+            "aslab": 0,
+            "dosen": 0,
+            "notif_all": 0,
+            "notif_tambahan": 0,
+            "notif_perubahan": 0,
+            "notif_jeda": 0
         }
+        
+        queries = {
+            "jadwal": "SELECT COUNT(*) FROM jadwal",
+            "jadwal_temp": "SELECT COUNT(*) FROM jadwal_temp",
+            "mata_kuliah": "SELECT COUNT(*) FROM mata_kuliah",
+            "ruangan": "SELECT COUNT(*) FROM ruangan",
+            "ruangan_lab": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%'",
+            "ruangan_kelas": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%'",
+            "aslab": "SELECT COUNT(*) FROM asisten_lab",
+            "dosen": "SELECT COUNT(*) FROM dosen",
+            "notif_all": "SELECT COUNT(*) FROM notifikasi_lab",
+            "notif_tambahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'",
+            "notif_perubahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'",
+            "notif_jeda": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'JEDA'"
+        }
+        
+        for key, q in queries.items():
+            try:
+                cursor.execute(q)
+                res = cursor.fetchone()
+                if res is not None and len(res) > 0 and res[0] is not None:
+                    counts[key] = int(res[0])
+            except Exception as q_err:
+                print(f"[Stats] Notice for table '{key}': {q_err}")
+                counts[key] = 0
+                
         return {"status": "success", "counts": counts}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        print(f"[Stats] Error: {e}")
+        return {"status": "error", "message": str(e), "counts": {}}
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()

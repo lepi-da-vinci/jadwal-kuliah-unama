@@ -2714,10 +2714,19 @@ window.showModernAlert = showModernAlert;
             type: "success",
             buttonText: "Oke, Paham!"
           });
-          await fetchAllJadwal();
-          await fetchDbStats();
-          if (filterTanggal?.value) fetchNotifikasiLab(filterTanggal.value, false);
-          if (typeof fetchAllRuangan === 'function') fetchAllRuangan();
+          // Background refresh UI data safely
+          try {
+            if (typeof fetchAllJadwal === 'function') await fetchAllJadwal();
+            if (typeof fetchDbStats === 'function') await fetchDbStats();
+            if (filterTanggal?.value && typeof fetchNotifikasiLab === 'function') {
+              await fetchNotifikasiLab(filterTanggal.value, false);
+            }
+            if (typeof fetchAllRuangan === 'function') await fetchAllRuangan();
+            if (typeof loadAslabData === 'function') await loadAslabData();
+            if (typeof loadRuanganData === 'function') await loadRuanganData();
+          } catch (refErr) {
+            console.warn("Notice: background data refresh skipped:", refErr);
+          }
         } else {
           await showModernAlert({
             title: "Gagal Menghapus!",
@@ -2727,6 +2736,7 @@ window.showModernAlert = showModernAlert;
           });
         }
       } catch (err) {
+        console.error("Error clearing DB:", err);
         await showModernAlert({
           title: "Terjadi Kesalahan",
           message: "Tidak dapat menghubungi server saat memproses permintaan pembersihan database.",
@@ -2772,10 +2782,19 @@ window.showModernAlert = showModernAlert;
             type: "success",
             buttonText: "Selesai"
           });
-          await fetchAllJadwal();
-          await fetchDbStats();
-          if (filterTanggal?.value) fetchNotifikasiLab(filterTanggal.value, false);
-          if (typeof fetchAllRuangan === 'function') fetchAllRuangan();
+          // Background refresh UI data safely
+          try {
+            if (typeof fetchAllJadwal === 'function') await fetchAllJadwal();
+            if (typeof fetchDbStats === 'function') await fetchDbStats();
+            if (filterTanggal?.value && typeof fetchNotifikasiLab === 'function') {
+              await fetchNotifikasiLab(filterTanggal.value, false);
+            }
+            if (typeof fetchAllRuangan === 'function') await fetchAllRuangan();
+            if (typeof loadAslabData === 'function') await loadAslabData();
+            if (typeof loadRuanganData === 'function') await loadRuanganData();
+          } catch (refErr) {
+            console.warn("Notice: background data refresh skipped:", refErr);
+          }
         } else {
           await showModernAlert({
             title: "Gagal Mereset Database!",
@@ -2785,6 +2804,7 @@ window.showModernAlert = showModernAlert;
           });
         }
       } catch (err) {
+        console.error("Error wipe all DB:", err);
         await showModernAlert({
           title: "Terjadi Kesalahan",
           message: "Tidak dapat menghubungi server saat mereset database.",
