@@ -1281,7 +1281,7 @@ function getAdminHeaders(customHeaders = {}) {
 }
 
 async function requestAdminLogin() {
-  const pass = await promptPassword("Masukkan password Admin untuk masuk ke Mode Admin:");
+  const pass = await promptPassword("Masukkan password Admin untuk otentikasi Admin:");
   if (pass === null) return null; // Dibatalkan
   
   const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:");
@@ -1298,11 +1298,21 @@ async function requestAdminLogin() {
       setAdminToken(data.token);
       return data.token;
     } else {
-      alert(data.detail || data.message || "Password Admin / Master salah!");
+      await showModernAlert({
+        title: "Login Gagal!",
+        message: data.detail || data.message || "Password Admin atau Password Master salah!",
+        type: "error",
+        buttonText: "Tutup"
+      });
       return null;
     }
   } catch (err) {
-    alert("Gagal menghubungi server untuk verifikasi otentikasi.");
+    await showModernAlert({
+      title: "Gagal Menghubungi Server",
+      message: "Tidak dapat menghubungi server untuk verifikasi otentikasi.",
+      type: "error",
+      buttonText: "Tutup"
+    });
     return null;
   }
 }
@@ -2700,11 +2710,30 @@ window.showModernAlert = showModernAlert;
       submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menghapus...`;
 
       try {
-        const response = await fetch(`/api/db/clear`, {
+        let token = getAdminToken();
+        if (!token) {
+          token = await requestAdminLogin();
+          if (!token) return;
+        }
+
+        let response = await fetch(`/api/db/clear`, {
           method: 'POST',
           headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ targets: targets })
         });
+
+        // Jika token kedaluwarsa / 401, minta login ulang dan coba lagi sekali
+        if (response.status === 401) {
+          setAdminToken(null);
+          const newToken = await requestAdminLogin();
+          if (!newToken) return;
+          response = await fetch(`/api/db/clear`, {
+            method: 'POST',
+            headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ targets: targets })
+          });
+        }
+
         const result = await response.json();
         if (response.ok && result.status === 'success') {
           modal.classList.remove('open');
@@ -2768,11 +2797,29 @@ window.showModernAlert = showModernAlert;
       wipeAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Mereset Total...`;
 
       try {
-        const response = await fetch(`/api/db/clear`, {
+        let token = getAdminToken();
+        if (!token) {
+          token = await requestAdminLogin();
+          if (!token) return;
+        }
+
+        let response = await fetch(`/api/db/clear`, {
           method: 'POST',
           headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ targets: ['all'] })
         });
+
+        if (response.status === 401) {
+          setAdminToken(null);
+          const newToken = await requestAdminLogin();
+          if (!newToken) return;
+          response = await fetch(`/api/db/clear`, {
+            method: 'POST',
+            headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ targets: ['all'] })
+          });
+        }
+
         const result = await response.json();
         if (response.ok && result.status === 'success') {
           modal.classList.remove('open');

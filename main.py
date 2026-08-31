@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import hashlib
 import hmac
 import os
 import re
@@ -78,6 +79,40 @@ class LoginRequest(BaseModel):
     password: str
     master_password: str | None = None
 
+def get_admin_secret() -> str:
+    return os.getenv("ADMIN_SECRET_KEY", "e83a9f14d8b2413a967c52684b39174fb80f2d91ac6e4f3a7c8b0e12d4a5b6c7")
+
+def create_admin_token() -> str:
+    secret = get_admin_secret()
+    expiry = int(time.time() + 43200)  # 12 jam
+    sig = hmac.new(secret.encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
+    token = f"{expiry}.{sig}"
+    admin_tokens[token] = expiry
+    return token
+
+def is_valid_admin_token(token: str) -> bool:
+    if not token:
+        return False
+    now = time.time()
+    # 1. Cek in-memory store
+    if token in admin_tokens and admin_tokens[token] >= now:
+        return True
+    # 2. Cek validasi kriptografi HMAC (bertahan saat server restart)
+    try:
+        if "." in token:
+            parts = token.split(".", 1)
+            expiry_str, sig = parts[0], parts[1]
+            expiry = int(expiry_str)
+            if expiry >= now:
+                secret = get_admin_secret()
+                expected_sig = hmac.new(secret.encode(), expiry_str.encode(), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(sig, expected_sig):
+                    admin_tokens[token] = expiry  # Re-cache di memory
+                    return True
+    except Exception:
+        pass
+    return False
+
 def verify_admin_token(authorization: str = Header(None)) -> str:
     """Memvalidasi Bearer Token Admin untuk endpoint mutasi data sensitif"""
     if not authorization or not authorization.startswith("Bearer "):
@@ -86,9 +121,7 @@ def verify_admin_token(authorization: str = Header(None)) -> str:
             detail="Akses ditolak: Memerlukan otentikasi Admin."
         )
     token = authorization.split(" ", 1)[1].strip()
-    now = time.time()
-    if token not in admin_tokens or admin_tokens[token] < now:
-        # Hapus token kadaluwarsa dari memory
+    if not is_valid_admin_token(token):
         if token in admin_tokens:
             del admin_tokens[token]
         raise HTTPException(
@@ -112,8 +145,7 @@ def is_admin_authenticated(authorization: str = Header(None)) -> bool:
     if not authorization or not authorization.startswith("Bearer "):
         return False
     token = authorization.split(" ", 1)[1].strip()
-    now = time.time()
-    return token in admin_tokens and admin_tokens[token] >= now
+    return is_valid_admin_token(token)
 
 @app.post("/api/auth/login")
 def admin_login(req: LoginRequest, request: Request):
@@ -162,10 +194,8 @@ def admin_login(req: LoginRequest, request: Request):
     # Sukses -> Reset failed attempts untuk IP ini
     login_failed_attempts.pop(client_ip, None)
     
-    # 3. Terbitkan Secure Random Token (64-char Hex)
-    token = secrets.token_hex(32)
-    # Berlaku selama 12 jam (43200 detik)
-    admin_tokens[token] = time.time() + 43200
+    # 3. Terbitkan Secure HMAC-signed Token
+    token = create_admin_token()
     
     return {
         "status": "success",

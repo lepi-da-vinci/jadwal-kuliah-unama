@@ -1,6 +1,6 @@
 # Analisis Mendalam & Dokumentasi Arsitektur Sistem Jadwal Kuliah UNAMA
 
-Dokumen ini adalah **Buku Panduan Utama (Master Blueprint)** dari keseluruhan sistem proyek Jadwal Kuliah UNAMA. Seluruh struktur, susunan folder, hubungan antar modul, logika kode, serta aturan pengembangan (termasuk potensi *bug*) dicatat secara mendetail tanpa terkecuali. 
+Dokumen ini adalah **Buku Panduan Utama (Master Blueprint)** dari keseluruhan sistem proyek Jadwal Kuliah UNAMA. Seluruh struktur, susunan folder, hubungan antar modul, logika kode, serta aturan pengembangan (termasuk fitur pembersihan database, keamanan autentikasi HMAC, dan rincian UI) dicatat secara mendetail tanpa terkecuali. 
 
 **Tujuan Dokumen:** Memastikan tidak ada *blind spot* (titik buta) bagi developer di masa depan. Seluruh kode terstruktur rapi per folder dan komponen HTML per mode dipisah agar mudah dimaintenance.
 
@@ -27,9 +27,10 @@ jadwal-kuliah-unama/
 │   │   ├── modal-spotlight.html         # Modal Pencarian Pintar (Spotlight Search Ctrl+K)
 │   │   ├── modal-spotlight-detail.html  # Modal Detail Preview (Ruangan/Dosen/Matkul)
 │   │   ├── modal-setting.html           # Modal Setting Admin, WA Aslab, Master Data, & QR Code
+│   │   ├── modal-clear-db.html          # Pusat Pembersihan Database Terpilih & Live Breakdown
 │   │   ├── modal-notifikasi.html        # Pop-up Peringatan Ruangan (Lab & Kelas)
 │   │   ├── modal-filter-info.html       # Modal Filter Fullscreen & Panduan Bantuan
-│   │   └── modal-security.html          # Modal Password Admin & Konfirmasi Bahaya
+│   │   └── modal-security.html          # Modal Password Admin, Kode Acak & Custom Alert/Confirm
 │   ├── 📁 templates/
 │   │   └── index.html                   # Master HTML layout skeleton (dengan INCLUDE tag)
 │   ├── 📁 css/
@@ -60,7 +61,7 @@ jadwal-kuliah-unama/
 ├── 📄 auto_start_docker.bat             # Shortcut 1-Klik Start Docker Compose
 ├── 📄 build_html.bat                    # Shortcut 1-Klik Re-compile Komponen HTML
 ├── 📄 start_bot.bat                     # Shortcut 1-Klik Start WhatsApp Bot
-├── 📄 main.py                           # Pusat Server API FastAPI & Auto-Build Hook
+├── 📄 main.py                           # Pusat Server API FastAPI, Autentikasi HMAC & Clear DB
 ├── 📄 docker-compose.yml                # Orkestrasi Docker container
 ├── 📄 Dockerfile                        # Resep build container backend
 ├── 📄 requirements.txt                  # Daftar pustaka Python FastAPI
@@ -84,15 +85,16 @@ Untuk memudahkan pemeliharaan dan menghindari scrolling file HTML ribuan baris, 
 | `modal-tv-mode.html` | ~90 baris | Mode Layar TV / Kiosk Display dengan jam besar, stat badges, tabel 6-kolom, dan running text marquee info BAAK. |
 | `modal-spotlight.html` | ~90 baris | Pop-up Spotlight Search (`Ctrl + K`), tombol kategori (Semua, Dosen, MK, Ruangan, Aslab), input pencarian, dan hasil cepat. |
 | `modal-spotlight-detail.html` | ~45 baris | Pop-up detail preview saat memilih item hasil spotlight beserta tombol filter ke tabel utama. |
-| `modal-setting.html` | ~370 baris | Pengaturan Admin, Scan QR Code / Link Akses HP, Uji coba pesan WA, tabel master data Aslab & Ruangan, serta form input data baru. |
+| `modal-setting.html` | ~370 baris | Pengaturan Admin, Scan QR Code / Link Akses HP, Uji coba pesan WA, tabel master data Aslab & Ruangan, serta tombol pemicu Pembersihan Database. |
+| `modal-clear-db.html` | ~200 baris | **Pusat Pembersihan Database Terpilih**: Checkbox granular (Jadwal, Ruangan, Notifikasi, Kontak Aslab, Dosen Pengampu, Reset Total), live pill counters, dan status seleksi. |
 | `modal-notifikasi.html` | ~15 baris | Pop-up peringatan laboratorium & kelas yang akan segera mulai (`#lab-modal`). |
 | `modal-filter-info.html` | ~300 baris | Modal Filter Fullscreen, Modal Detail Ruangan, Modal Info Mase Fullscreen, dan Modal Fitur Tambahan / Info Lain. |
-| `modal-security.html` | ~80 baris | Otorisasi Password Admin, Peringatan Bahaya, dan Konfirmasi Akhir Hapus Database. |
+| `modal-security.html` | ~160 baris | Otorisasi Password Admin, Tantangan Kode Unik Acak 10-Digit, serta **Custom Modern Confirm & Alert Modal** (`#custom-confirm-modal` & `#custom-alert-modal`). |
 
 ### Cara Mengubah Tampilan:
-1. Buka file komponen yang relevan di folder `frontend/components/` (misal: ingin ubah modal TV, buka `modal-tv-mode.html`).
+1. Buka file komponen yang relevan di folder `frontend/components/` (misal: ingin ubah modal pembersihan database, buka `modal-clear-db.html`).
 2. Lakukan perubahan kode HTML.
-3. Jalankan `python scripts/build_html.py` (atau saat server FastAPI dijalankan, file `index.html` terpadu otomatis siap digunakan).
+3. Jalankan `python scripts/build_html.py` (atau saat server FastAPI dijalankan, file `index.html` terpadu otomatis dikompilasi).
 
 ---
 
@@ -188,7 +190,7 @@ Database `db_jadwal_kuliah` memiliki 8 tabel utama dengan relasi *Foreign Key* y
 ### B. Tabel Transaksional
 5.  **`jadwal`**: Tabel utama untuk menampilkan data ke layar. Memiliki kolom `nama_mk`, `kelas`, dan `metode_pembelajaran ENUM('TM', 'OL', 'CC')`.
 6.  **`jadwal_temp`**: Tabel transit / *staging* untuk penampung hasil *scraping* kotor.
-7.  **`notifikasi_lab`**: Menyimpan riwayat perubahan (`TAMBAHAN`, `PERUBAHAN`).
+7.  **`notifikasi_lab`**: Menyimpan riwayat perubahan (`TAMBAHAN`, `PERUBAHAN`, `JEDA`).
 8.  **`jeda_lab`**: Menyimpan riwayat ruang/lab kosong berdurasi panjang (`>= 90 menit`).
 
 ---
@@ -204,13 +206,16 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
 
 ---
 
-## 7. Frontend & Manipulasi UI (`script.js` & `index.html`)
+## 7. Frontend, Manipulasi UI & Sistem Keamanan (`script.js` & `main.py`)
 
-*   **Akses QR Code & Link HP (Monitor Standby)**: Fitur "Scan QR Code / Link Akses HP" di dalam Modal Setting yang otomatis mendeteksi URL aktif (Cloudflare Tunnel, Ngrok, atau IP Wi-Fi Lokal Lab `192.168.x.x`) dan me-render QR Code tajam di layar monitor. Siapa pun di ruang lab dapat langsung scan barcode dengan kamera HP atau menyalin link URL dengan 1 klik.
-*   **State Admin (`isAslabAdmin`)**: Mode admin otomatis dinonaktifkan (`Admin: OFF`) saat window Setting ditutup, backdrop diklik, tombol `ESC` ditekan, atau beralih ke Spotlight / TV mode.
+*   **Pusat Pembersihan Database Terpilih (Granular Clearance)**: Menggantikan penghapusan instan lama dengan panel pilihan terarah. Setiap kategori (Jadwal, Ruangan, Notifikasi, Aslab, Dosen) dapat dipilih dan dihapus secara parsial atau di-reset total (`wipe all`).
+*   **Live Data Counters & Detailed Breakdown**: Setiap kartu pilihan pada menu pembersihan database memiliki badge baris data dan sub-pill rincian (misal: Ruang Lab vs Ruang Teori, Jadwal Utama vs Temp, breakdown per jenis notifikasi) yang di-query secara efisien via `/api/db/stats` dengan `buffered=True` cursor.
+*   **Autentikasi Token Kriptografi HMAC Persistent**: Token admin diterbitkan dengan format `<timestamp>.<hmac_sha256_sig>` menggunakan `ADMIN_SECRET_KEY` dari `.env`. Token ini bertahan bahkan ketika server Python di-restart (tidak hilang dari memory).
+*   **Auto Re-Authentication & Seamless Retry**: Jika token kedaluwarsa atau hilang (status `401 Unauthorized`), frontend secara otomatis menampilkan prompt otorisasi Admin & Master, kemudian langsung melanjutkan aksi penghapusan tanpa memunculkan error gagal buntu.
+*   **Custom UI Confirmation & Alert Modal**: Seluruh dialog browser bawaan (`confirm()` dan `alert()`) telah digantikan oleh custom UI modal modern dengan efek claymorphism, animasi pulse warning ring, chip list ringkasan target terpilih, dan banner peringatan.
+*   **Akses QR Code & Link HP (Monitor Standby)**: Fitur "Scan QR Code / Link Akses HP" di dalam Modal Setting yang otomatis mendeteksi URL aktif (Cloudflare Tunnel, Ngrok, atau IP Wi-Fi Lokal Lab `192.168.x.x`) dan me-render QR Code tajam di layar monitor.
 *   **Spotlight Search (`Ctrl + K`)**: Pencarian instan multi-entitas (Dosen, Mata Kuliah, Ruangan, Asisten Lab) dengan navigasi keyboard panah atas-bawah dan preview modal.
 *   **TV / Kiosk Display Mode**: Tampilan layar penuh monitor aula / lab dengan live time, 4 status pill (TM, OL, CC, Total), tabel status 6 kolom, dan auto-scroll carousel jadwal per 7 baris.
-*   **PWA & Offline Cache**: Dukungan Service Worker (`sw.js`) dan web app manifest (`manifest.json`) agar dashboard dapat di-install sebagai aplikasi desktop/HP yang cepat dan ringan.
 
 ---
 
@@ -227,28 +232,38 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
     *   Ubah fungsi JS `getKampusDisplay()` di `frontend/js/script.js`.
 4.  **Mengubah Durasi SKS?**
     *   Saat ini durasi 1 pertemuan = 135 Menit (3 SKS).
-    *   Cari angka `135` di dalam file `backend/main.py` dan `backend/scraper.py`.
-5.  **Ingin Bot WA Menggunakan Format Pesan yang Beda?**
-    *   Buka `backend/wa_notifier.py`.
-    *   Untuk Notifikasi Harian, ubah string `pesan_wa = f"⚠️ *PERINGATAN JADWAL* ⚠️..."`.
-    *   Untuk AI, ubah instruksi dasar pada `GEMINI_PROMPT_CONTEXT`.
+    *   Cari angka `135` di dalam file `main.py` dan `backend/scraper.py`.
+5.  **Ingin Menyesuaikan Target Pembersihan Database Baru?**
+    *   Tambahkan checkbox di `frontend/components/modal-clear-db.html`.
+    *   Tambahkan penanganan query di endpoint `@app.post("/api/db/clear")` pada `main.py`.
+    *   Tambahkan kalkulasi statistik di `@app.get("/api/db/stats")` pada `main.py`.
 
 ---
 
 ## 9. ZONA MERAH: Struktur Kode yang Sebaiknya JANGAN Diotak-atik
 
-1.  **`scrape_baak_direct` pada `backend/scraper.py` & Rute `/api/sync` pada `backend/main.py`**
+1.  **`scrape_baak_direct` pada `backend/scraper.py` & Rute `/api/sync` pada `main.py`**
     *   Jantung sistem Direct Scraping senyap latar belakang.
 2.  **`parse_html_content` pada `backend/scraper.py` (Baris Regex TANGGAL dan JAM)**
     *   Regex penangkap jam dan tanggal jadwal dari HTML BAAK.
-3.  **`setInterval` di dalam Chrome Extension (`background.js` & `dashboard_bridge.js`)**
-    *   Debouncing agar tidak memicu proteksi Cloudflare.
-4.  **Logika `.admin-only` di `frontend/js/script.js` (`updateAdminUI()` & `closeSettingModal()`)**
-    *   Keamanan level client untuk auto-logout saat modal ditutup.
-5.  **Pemecah Jeda (Gap) Antar Kelas `calculate_and_save_gaps` di `backend/scraper.py`**
-    *   Algoritma konversi jam ke integer menit harian.
-6.  **Fungsi `get_db()` dengan Smart Password Fallback di `backend/main.py` & `backend/scraper.py`**
+3.  **`verify_admin_token` & `create_admin_token` pada `main.py`**
+    *   Sistem validasi kriptografi HMAC-SHA256 untuk proteksi mutasi database tingkat tinggi.
+4.  **`showModernConfirm` & `showModernAlert` pada `frontend/js/script.js`**
+    *   Core helper Promise-based modal pengontrol dialog konfirmasi modern.
+5.  **Fungsi `get_db()` dengan Smart Password Fallback di `main.py` & `backend/scraper.py`**
     *   Penanganan multi-koneksi password database MySQL.
+
+---
+
+## 10. Log Riwayat Pembaruan Sistem (Update Changelog)
+
+| Versi / Tanggal | Fitur / Komponen | Rincian Perubahan & Peningkatan |
+|---|---|---|
+| **2026-08-31** | **Pusat Pembersihan DB Modular** | Pemisahan alur hapus instan menjadi *Pusat Pembersihan Database Terpilih* (`modal-clear-db.html`) dengan checklist granular: Jadwal & Temp, Master Ruangan, Log Notifikasi, Kontak Aslab, dan Master Dosen Pengampu. |
+| **2026-08-31** | **Pemisahan Aslab vs Dosen** | Kategori *Kontak WA Asisten Lab* (`asisten_lab`) dan *Master Data Dosen Pengampu* (`dosen`) dipisahkan menjadi 2 checkbox & kartu independen di UI dan backend. |
+| **2026-08-31** | **Live Counter Breakdown** | Penambahan endpoint `@app.get("/api/db/stats")` dengan cursor `buffered=True` untuk menampilkan statistik jumlah baris data realtime beserta pill sub-kategori (Lab vs Teori, Jadwal Utama vs Temp, rincian per tipe notifikasi). |
+| **2026-08-31** | **HMAC Persistent Token** | Implementasi token admin berbasis HMAC-SHA256 yang ditandatangani dengan `ADMIN_SECRET_KEY` agar sesi login admin tetap valid meski server Python di-restart. Ditambah fitur auto re-auth & seamless retry pada 401. |
+| **2026-08-31** | **Custom Modern Modals** | Penggantian menyeluruh `confirm()` dan `alert()` browser bawaan dengan Custom UI Modal beranimasi modern, chip target ringkasan data, dan warning pulse ring icon. |
 
 ---
 **Dokumen Selesai.** Gunakan ini sebagai kompas (acuan wajib) dalam memodifikasi dan mengembangkan sistem Jadwal Kuliah UNAMA.
