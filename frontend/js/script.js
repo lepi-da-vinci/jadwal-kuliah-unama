@@ -2269,17 +2269,31 @@ async function fetchDbStats() {
     refreshBtn.classList.add('rotating');
   }
   try {
-    const res = await fetch(`${API_BASE_URL}/api/db/stats?_t=${Date.now()}`);
+    const res = await fetch(`/api/db/stats?_t=${Date.now()}`);
     const json = await res.json();
     if (json.status === 'success' && json.counts) {
       const c = json.counts;
       const cntJadwal = (c.jadwal || 0) + (c.jadwal_temp || 0);
+      
+      // Jadwal counters
       const elJadwal = document.getElementById('cnt-clear-jadwal');
       if (elJadwal) elJadwal.textContent = cntJadwal;
+      const elDetailJadwal = document.getElementById('cnt-detail-jadwal');
+      if (elDetailJadwal) elDetailJadwal.textContent = c.jadwal || 0;
+      const elDetailJadwalTemp = document.getElementById('cnt-detail-jadwal-temp');
+      if (elDetailJadwalTemp) elDetailJadwalTemp.textContent = c.jadwal_temp || 0;
+      const elDetailMk = document.getElementById('cnt-detail-mk');
+      if (elDetailMk) elDetailMk.textContent = c.mata_kuliah || 0;
 
+      // Ruangan counters
       const elRuangan = document.getElementById('cnt-clear-ruangan');
       if (elRuangan) elRuangan.textContent = c.ruangan || 0;
+      const elDetailRuanganLab = document.getElementById('cnt-detail-ruangan-lab');
+      if (elDetailRuanganLab) elDetailRuanganLab.textContent = c.ruangan_lab || 0;
+      const elDetailRuanganKelas = document.getElementById('cnt-detail-ruangan-kelas');
+      if (elDetailRuanganKelas) elDetailRuanganKelas.textContent = c.ruangan_kelas || 0;
 
+      // Notifikasi counters
       const elNotifAll = document.getElementById('cnt-clear-notif-all');
       if (elNotifAll) elNotifAll.textContent = c.notif_all || 0;
       const elSubNotifAll = document.getElementById('cnt-sub-notif-all');
@@ -2294,10 +2308,16 @@ async function fetchDbStats() {
       const elNotifJeda = document.getElementById('cnt-clear-notif-jeda');
       if (elNotifJeda) elNotifJeda.textContent = c.notif_jeda || 0;
 
+      // Kontak Aslab & Dosen counters (Separated)
       const elAslab = document.getElementById('cnt-clear-aslab');
       if (elAslab) elAslab.textContent = c.aslab || 0;
+      const elDetailAslab = document.getElementById('cnt-detail-aslab');
+      if (elDetailAslab) elDetailAslab.textContent = c.aslab || 0;
+
       const elDosen = document.getElementById('cnt-clear-dosen');
       if (elDosen) elDosen.textContent = c.dosen || 0;
+      const elDetailDosen = document.getElementById('cnt-detail-dosen');
+      if (elDetailDosen) elDetailDosen.textContent = c.dosen || 0;
     }
   } catch (err) {
     console.error("Gagal mengambil statistik DB:", err);
@@ -2316,11 +2336,13 @@ function updateDbClearUI() {
   const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
   const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
   const chkAslab = document.getElementById('chk-clear-aslab');
+  const chkDosen = document.getElementById('chk-clear-dosen');
 
   // Highlight cards based on checkbox status
   if (chkJadwal) chkJadwal.closest('.db-clear-card')?.classList.toggle('selected', chkJadwal.checked);
   if (chkRuangan) chkRuangan.closest('.db-clear-card')?.classList.toggle('selected', chkRuangan.checked);
   if (chkAslab) chkAslab.closest('.db-clear-card')?.classList.toggle('selected', chkAslab.checked);
+  if (chkDosen) chkDosen.closest('.db-clear-card')?.classList.toggle('selected', chkDosen.checked);
 
   if (chkNotifAll) chkNotifAll.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifAll.checked);
   if (chkNotifTambahan) chkNotifTambahan.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifTambahan.checked);
@@ -2332,6 +2354,7 @@ function updateDbClearUI() {
   if (chkJadwal && chkJadwal.checked) count++;
   if (chkRuangan && chkRuangan.checked) count++;
   if (chkAslab && chkAslab.checked) count++;
+  if (chkDosen && chkDosen.checked) count++;
 
   if (chkNotifAll && chkNotifAll.checked) {
     count++;
@@ -2375,8 +2398,9 @@ function initDbClearModalEvents() {
   const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
   const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
   const chkAslab = document.getElementById('chk-clear-aslab');
+  const chkDosen = document.getElementById('chk-clear-dosen');
 
-  [chkJadwal, chkRuangan, chkAslab].forEach(chk => {
+  [chkJadwal, chkRuangan, chkAslab, chkDosen].forEach(chk => {
     chk?.addEventListener('change', updateDbClearUI);
   });
 
@@ -2408,6 +2432,7 @@ function initDbClearModalEvents() {
       if (chkNotifPerubahan) chkNotifPerubahan.checked = true;
       if (chkNotifJeda) chkNotifJeda.checked = true;
       if (chkAslab) chkAslab.checked = true;
+      if (chkDosen) chkDosen.checked = true;
       updateDbClearUI();
     });
   }
@@ -2422,6 +2447,7 @@ function initDbClearModalEvents() {
       if (chkNotifPerubahan) chkNotifPerubahan.checked = false;
       if (chkNotifJeda) chkNotifJeda.checked = false;
       if (chkAslab) chkAslab.checked = false;
+      if (chkDosen) chkDosen.checked = false;
       updateDbClearUI();
     });
   }
@@ -2442,50 +2468,271 @@ function initDbClearModalEvents() {
     if (e.target === modal) modal.classList.remove('open');
   });
 
+// ─── Custom Modern Confirmation & Alert Helper Functions ───
+function showModernConfirm({
+  title = "Konfirmasi Tindakan",
+  subtitle = "Data yang dipilih akan dihapus secara permanen.",
+  targets = [],
+  warningText = "Tindakan ini tidak dapat dibatalkan atau dikembalikan.",
+  okText = "Ya, Hapus Sekarang",
+  cancelText = "Batal",
+  isWipeAll = false
+}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('custom-confirm-modal');
+    if (!modal) {
+      return resolve(confirm(title + "\n\n" + subtitle));
+    }
+
+    const titleEl = document.getElementById('custom-confirm-title');
+    const subtitleEl = document.getElementById('custom-confirm-subtitle');
+    const targetsBoxEl = document.getElementById('custom-confirm-targets-box');
+    const targetsLabelEl = document.getElementById('custom-confirm-targets-label');
+    const warningTextEl = document.getElementById('custom-confirm-warning-text');
+    const okBtn = document.getElementById('custom-confirm-ok-btn');
+    const okLabel = document.getElementById('custom-confirm-ok-label');
+    const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
+    const iconWrap = document.getElementById('custom-confirm-icon');
+    const headerWrap = document.getElementById('custom-confirm-header');
+
+    if (titleEl) {
+      titleEl.textContent = title;
+      titleEl.style.color = isWipeAll ? '#dc2626' : 'var(--badge-cc)';
+    }
+    if (subtitleEl) subtitleEl.textContent = subtitle;
+    if (warningTextEl) warningTextEl.textContent = warningText;
+    if (okLabel) okLabel.textContent = okText;
+    if (cancelBtn) cancelBtn.textContent = cancelText;
+
+    if (isWipeAll) {
+      if (okBtn) {
+        okBtn.className = 'modal-btn btn-confirm-ok wipe-all';
+      }
+      if (iconWrap) {
+        iconWrap.className = 'custom-confirm-icon-wrap danger';
+      }
+      if (headerWrap) {
+        headerWrap.style.background = 'rgba(220, 38, 38, 0.12)';
+        headerWrap.style.borderColor = 'rgba(220, 38, 38, 0.25)';
+      }
+      if (targetsLabelEl) targetsLabelEl.style.display = 'none';
+      if (targetsBoxEl) targetsBoxEl.style.display = 'none';
+    } else {
+      if (okBtn) {
+        okBtn.className = 'modal-btn btn-confirm-ok danger';
+      }
+      if (iconWrap) {
+        iconWrap.className = 'custom-confirm-icon-wrap danger';
+      }
+      if (headerWrap) {
+        headerWrap.style.background = 'rgba(239, 68, 68, 0.08)';
+        headerWrap.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+      }
+      
+      if (targets && targets.length > 0) {
+        if (targetsLabelEl) targetsLabelEl.style.display = 'block';
+        if (targetsBoxEl) {
+          targetsBoxEl.style.display = 'flex';
+          targetsBoxEl.innerHTML = targets.map(t => `
+            <div class="custom-confirm-target-item">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>${escapeHtml(t)}</span>
+            </div>
+          `).join('');
+        }
+      } else {
+        if (targetsLabelEl) targetsLabelEl.style.display = 'none';
+        if (targetsBoxEl) targetsBoxEl.style.display = 'none';
+      }
+    }
+
+    modal.classList.add('open');
+
+    const cleanup = () => {
+      if (okBtn) okBtn.onclick = null;
+      if (cancelBtn) cancelBtn.onclick = null;
+      modal.onclick = null;
+      document.removeEventListener('keydown', keyHandler);
+      modal.classList.remove('open');
+    };
+
+    const keyHandler = (e) => {
+      if (e.key === 'Escape') {
+        cleanup();
+        resolve(false);
+      }
+    };
+
+    if (okBtn) {
+      okBtn.onclick = () => {
+        cleanup();
+        resolve(true);
+      };
+    }
+
+    if (cancelBtn) {
+      cancelBtn.onclick = () => {
+        cleanup();
+        resolve(false);
+      };
+    }
+
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        cleanup();
+        resolve(false);
+      }
+    };
+
+    document.addEventListener('keydown', keyHandler);
+  });
+}
+
+function showModernAlert({
+  title = "Informasi",
+  message = "",
+  type = "success",
+  buttonText = "Selesai"
+}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('custom-alert-modal');
+    if (!modal) {
+      alert(title + "\n\n" + message);
+      return resolve();
+    }
+
+    const titleEl = document.getElementById('custom-alert-title');
+    const msgEl = document.getElementById('custom-alert-message');
+    const closeBtn = document.getElementById('custom-alert-close-btn');
+    const iconWrap = document.getElementById('custom-alert-icon');
+
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) {
+      msgEl.innerHTML = escapeHtml(message).replace(/\n/g, '<br>');
+    }
+    if (closeBtn) closeBtn.textContent = buttonText;
+
+    if (iconWrap) {
+      if (type === 'success') {
+        iconWrap.className = 'custom-confirm-icon-wrap success';
+        iconWrap.innerHTML = `
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>`;
+      } else if (type === 'error') {
+        iconWrap.className = 'custom-confirm-icon-wrap danger';
+        iconWrap.innerHTML = `
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>`;
+      } else {
+        iconWrap.className = 'custom-confirm-icon-wrap warning';
+        iconWrap.innerHTML = `
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>`;
+      }
+    }
+
+    modal.classList.add('open');
+
+    const cleanup = () => {
+      if (closeBtn) closeBtn.onclick = null;
+      modal.onclick = null;
+      document.removeEventListener('keydown', keyHandler);
+      modal.classList.remove('open');
+      resolve();
+    };
+
+    const keyHandler = (e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        cleanup();
+      }
+    };
+
+    if (closeBtn) closeBtn.onclick = cleanup;
+    modal.onclick = (e) => {
+      if (e.target === modal) cleanup();
+    };
+    document.addEventListener('keydown', keyHandler);
+  });
+}
+window.showModernConfirm = showModernConfirm;
+window.showModernAlert = showModernAlert;
+
   const submitBtn = document.getElementById('db-clear-submit-btn');
   if (submitBtn) {
     submitBtn.addEventListener('click', async () => {
       const targets = [];
       const targetLabels = [];
-      if (chkJadwal?.checked) { targets.push('jadwal'); targetLabels.push('Jadwal Kuliah'); }
-      if (chkRuangan?.checked) { targets.push('ruangan'); targetLabels.push('Master Ruangan'); }
+      if (chkJadwal?.checked) { targets.push('jadwal'); targetLabels.push('Jadwal Perkuliahan & Data Temp'); }
+      if (chkRuangan?.checked) { targets.push('ruangan'); targetLabels.push('Master Data Ruangan & Labor'); }
       if (chkNotifAll?.checked) {
         targets.push('notif_all');
-        targetLabels.push('Semua Notifikasi');
+        targetLabels.push('Semua Riwayat Notifikasi');
       } else {
-        if (chkNotifTambahan?.checked) { targets.push('notif_tambahan'); targetLabels.push('Notif Kelas Tambahan'); }
-        if (chkNotifPerubahan?.checked) { targets.push('notif_perubahan'); targetLabels.push('Notif Perubahan Jadwal'); }
-        if (chkNotifJeda?.checked) { targets.push('notif_jeda'); targetLabels.push('Notif Jeda Ruangan'); }
+        if (chkNotifTambahan?.checked) { targets.push('notif_tambahan'); targetLabels.push('Notifikasi Kelas Tambahan'); }
+        if (chkNotifPerubahan?.checked) { targets.push('notif_perubahan'); targetLabels.push('Notifikasi Perubahan Jadwal'); }
+        if (chkNotifJeda?.checked) { targets.push('notif_jeda'); targetLabels.push('Notifikasi Jeda Ruangan'); }
       }
-      if (chkAslab?.checked) { targets.push('aslab', 'dosen'); targetLabels.push('Kontak Aslab & Dosen'); }
+      if (chkAslab?.checked) { targets.push('aslab'); targetLabels.push('Kontak WA Asisten Lab'); }
+      if (chkDosen?.checked) { targets.push('dosen'); targetLabels.push('Master Data Dosen Pengampu'); }
 
       if (targets.length === 0) return;
 
-      const confirmMsg = `Konfirmasi Pembersihan Database:\n\nYakin ingin menghapus ${targetLabels.join(', ')} dari database?\n\nTindakan ini permanen dan tidak dapat dibatalkan.`;
-      if (!confirm(confirmMsg)) return;
+      const isConfirmed = await showModernConfirm({
+        title: "Konfirmasi Pembersihan Database",
+        subtitle: `Anda akan menghapus ${targetLabels.length} kategori data yang dipilih dari database.`,
+        targets: targetLabels,
+        warningText: "Tindakan ini permanen. Data yang dihapus tidak dapat dipulihkan kembali.",
+        okText: "Ya, Hapus Data Terpilih",
+        isWipeAll: false
+      });
+      if (!isConfirmed) return;
 
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menghapus...`;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/db/clear`, {
+        const response = await fetch(`/api/db/clear`, {
           method: 'POST',
           headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ targets: targets })
         });
         const result = await response.json();
         if (response.ok && result.status === 'success') {
-          alert(`Pembersihan Berhasil!\n\n${result.message}`);
           modal.classList.remove('open');
+          await showModernAlert({
+            title: "Pembersihan Berhasil!",
+            message: result.message,
+            type: "success",
+            buttonText: "Oke, Paham!"
+          });
           await fetchAllJadwal();
           await fetchDbStats();
           if (filterTanggal?.value) fetchNotifikasiLab(filterTanggal.value, false);
           if (typeof fetchAllRuangan === 'function') fetchAllRuangan();
         } else {
-          alert("Gagal menghapus data: " + (result.detail || result.message));
+          await showModernAlert({
+            title: "Gagal Menghapus!",
+            message: result.detail || result.message || "Terjadi kesalahan saat menghapus data.",
+            type: "error",
+            buttonText: "Tutup"
+          });
         }
       } catch (err) {
-        alert("Terjadi kesalahan saat memproses permintaan pembersihan database.");
+        await showModernAlert({
+          title: "Terjadi Kesalahan",
+          message: "Tidak dapat menghubungi server saat memproses permintaan pembersihan database.",
+          type: "error",
+          buttonText: "Tutup"
+        });
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span id="db-clear-submit-label">Hapus Data Terpilih</span>`;
@@ -2497,31 +2744,53 @@ function initDbClearModalEvents() {
   const wipeAllBtn = document.getElementById('db-clear-wipe-all-btn');
   if (wipeAllBtn) {
     wipeAllBtn.addEventListener('click', async () => {
-      const confirmMsg = "PERINGATAN RESET TOTAL TINGKAT TINGGI:\n\nAnda akan mereset dan menghapus SELURUH data database (Jadwal Kuliah, Master Ruangan, Notifikasi, Kontak Aslab, dan Dosen) secara total!\n\nApakah Anda benar-benar yakin ingin melanjutkan?";
-      if (!confirm(confirmMsg)) return;
+      const isConfirmed = await showModernConfirm({
+        title: "PERINGATAN RESET TOTAL TINGKAT TINGGI",
+        subtitle: "Anda akan mereset dan menghapus SELURUH data database (Jadwal Kuliah, Master Ruangan, Notifikasi, Kontak Aslab, dan Dosen) secara total!",
+        targets: ["Jadwal Perkuliahan & Temp", "Master Ruangan & Labor", "Semua Log Notifikasi", "Kontak WA Asisten Lab", "Master Data Dosen Pengampu"],
+        warningText: "PERINGATAN: Seluruh data database akan musnah permanen. Pastikan Anda sadar akan risikonya!",
+        okText: "Ya, Reset Total Seluruhnya",
+        isWipeAll: true
+      });
+      if (!isConfirmed) return;
 
       wipeAllBtn.disabled = true;
       wipeAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Mereset Total...`;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/db/clear`, {
+        const response = await fetch(`/api/db/clear`, {
           method: 'POST',
           headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ targets: ['all'] })
         });
         const result = await response.json();
         if (response.ok && result.status === 'success') {
-          alert(`Reset Total Berhasil!\n\n${result.message}`);
           modal.classList.remove('open');
+          await showModernAlert({
+            title: "Reset Total Berhasil!",
+            message: result.message || "Seluruh data database berhasil dibersihkan secara total.",
+            type: "success",
+            buttonText: "Selesai"
+          });
           await fetchAllJadwal();
           await fetchDbStats();
           if (filterTanggal?.value) fetchNotifikasiLab(filterTanggal.value, false);
           if (typeof fetchAllRuangan === 'function') fetchAllRuangan();
         } else {
-          alert("Gagal mereset database: " + (result.detail || result.message));
+          await showModernAlert({
+            title: "Gagal Mereset Database!",
+            message: result.detail || result.message || "Terjadi kesalahan saat mereset database.",
+            type: "error",
+            buttonText: "Tutup"
+          });
         }
       } catch (err) {
-        alert("Terjadi kesalahan saat mereset database.");
+        await showModernAlert({
+          title: "Terjadi Kesalahan",
+          message: "Tidak dapat menghubungi server saat mereset database.",
+          type: "error",
+          buttonText: "Tutup"
+        });
       } finally {
         wipeAllBtn.disabled = false;
         wipeAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> <span>Reset Total (Semua)</span>`;

@@ -979,6 +979,83 @@
     </div>
   </div>
 
+  <!-- Modal Konfirmasi Aksi Kustom (Pengganti confirm browser native) -->
+  <div id="custom-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Tindakan"
+    style="z-index: 10010;">
+    <div class="modal-box custom-confirm-box" style="max-width: 520px; width: 94%; border-radius: var(--radius-xl); overflow: hidden; padding: 0; text-align: left; background: var(--bg-card); border: 1.5px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);">
+      
+      <!-- Glowing Status Header -->
+      <div id="custom-confirm-header" style="padding: 22px 24px 16px 24px; display: flex; align-items: flex-start; gap: 14px; background: rgba(239, 68, 68, 0.08); border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
+        <div id="custom-confirm-icon" class="custom-confirm-icon-wrap danger">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <h3 id="custom-confirm-title" style="margin: 0; font-size: 1.25em; font-family: var(--font-heading); color: var(--badge-cc); font-weight: 700;">Konfirmasi Pembersihan Database</h3>
+          <p id="custom-confirm-subtitle" style="margin: 4px 0 0 0; font-size: 0.86em; color: var(--text-muted); line-height: 1.4;">Data yang dipilih akan dihapus secara permanen dari sistem.</p>
+        </div>
+      </div>
+
+      <div style="padding: 20px 24px;">
+        <!-- Container Target Badges -->
+        <div id="custom-confirm-targets-label" style="font-size: 0.82em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Target Data yang akan Dihapus:</div>
+        <div id="custom-confirm-targets-box" class="custom-confirm-targets-box">
+          <!-- Injected dynamically by JS -->
+        </div>
+
+        <!-- Warning Callout Banner -->
+        <div id="custom-confirm-warning-banner" class="custom-confirm-warning-banner">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);">
+            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span id="custom-confirm-warning-text">Tindakan ini tidak dapat dibatalkan atau dikembalikan. Pastikan Anda telah memeriksa kembali data yang dipilih.</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: var(--bg-elevated);">
+        <button type="button" class="modal-btn btn-confirm-cancel" id="custom-confirm-cancel-btn">Batal</button>
+        <button type="button" class="modal-btn btn-confirm-ok danger" id="custom-confirm-ok-btn">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span id="custom-confirm-ok-label">Ya, Hapus Sekarang</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Alert Kustom (Pengganti alert browser native) -->
+  <div id="custom-alert-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Sistem"
+    style="z-index: 10011;">
+    <div class="modal-box custom-confirm-box" style="max-width: 480px; width: 94%; border-radius: var(--radius-xl); overflow: hidden; padding: 0; text-align: center; background: var(--bg-card); border: 1.5px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);">
+      
+      <div style="padding: 30px 24px 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
+        <div id="custom-alert-icon" class="custom-confirm-icon-wrap success" style="width: 56px; height: 56px; border-radius: 16px;">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h3 id="custom-alert-title" style="margin: 0; font-size: 1.3em; font-family: var(--font-heading); color: var(--text-dark); font-weight: 700;">Pembersihan Berhasil!</h3>
+        <div id="custom-alert-message" style="margin: 0; font-size: 0.9em; color: var(--text-muted); line-height: 1.5; text-align: center; max-height: 200px; overflow-y: auto; padding: 0 10px; width: 100%;">
+          Data terpilih berhasil dibersihkan dari database.
+        </div>
+      </div>
+
+      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; background: var(--bg-elevated);">
+        <button type="button" class="modal-btn btn-primary" id="custom-alert-close-btn" style="min-width: 140px; border-radius: var(--radius-md); padding: 10px 24px; font-weight: 600;">Selesai</button>
+      </div>
+    </div>
+  </div>
+
 
 
 
@@ -1046,10 +1123,15 @@
                 </svg>
                 <span>Jadwal Perkuliahan & Data Temp</span>
               </div>
-              <div class="db-clear-desc">Menghapus seluruh jadwal perkuliahan utama (<code class="db-code">jadwal</code>), data sementara (<code class="db-code">jadwal_temp</code>), dan master mata kuliah transaksi.</div>
+              <div class="db-clear-desc">Menghapus seluruh jadwal perkuliahan utama (<code class="db-code">jadwal</code>), data sementara (<code class="db-code">jadwal_temp</code>), dan master transaksi.</div>
+              <div class="db-clear-detail-pill-row">
+                <span class="db-pill-item">Utama: <b id="cnt-detail-jadwal">0</b> baris</span>
+                <span class="db-pill-item">Temp: <b id="cnt-detail-jadwal-temp">0</b> baris</span>
+                <span class="db-pill-item">Mata Kuliah: <b id="cnt-detail-mk">0</b> mk</span>
+              </div>
             </div>
           </div>
-          <div class="db-clear-badge" id="badge-jadwal"><span id="cnt-clear-jadwal">...</span> baris</div>
+          <div class="db-clear-badge" id="badge-jadwal"><span id="cnt-clear-jadwal">0</span> baris</div>
         </label>
 
         <!-- Opsi 2: Data Master Ruangan -->
@@ -1064,10 +1146,14 @@
                 </svg>
                 <span>Master Data Ruangan & Labor</span>
               </div>
-              <div class="db-clear-desc">Menghapus daftar seluruh master ruangan kampus Thehok dan Kobar (<code class="db-code">ruangan</code>).</div>
+              <div class="db-clear-desc">Menghapus daftar master ruangan kampus Thehok dan Kobar (<code class="db-code">ruangan</code>).</div>
+              <div class="db-clear-detail-pill-row">
+                <span class="db-pill-item">Laboratorium: <b id="cnt-detail-ruangan-lab">0</b> lab</span>
+                <span class="db-pill-item">Ruang Teori/Kelas: <b id="cnt-detail-ruangan-kelas">0</b> kelas</span>
+              </div>
             </div>
           </div>
-          <div class="db-clear-badge" id="badge-ruangan"><span id="cnt-clear-ruangan">...</span> ruangan</div>
+          <div class="db-clear-badge" id="badge-ruangan"><span id="cnt-clear-ruangan">0</span> ruangan</div>
         </label>
 
         <!-- Opsi 3: Data Notifikasi (DIPISAH SESUAI PERMINTAAN USER) -->
@@ -1080,7 +1166,7 @@
               </svg>
               <span>Riwayat & Log Notifikasi Ruangan</span>
             </div>
-            <div class="db-clear-badge" id="badge-notif-all-total"><span id="cnt-clear-notif-all">...</span> total</div>
+            <div class="db-clear-badge" id="badge-notif-all-total"><span id="cnt-clear-notif-all">0</span> total</div>
           </div>
           
           <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
@@ -1095,7 +1181,7 @@
                 <span class="db-clear-subtitle"><b>Semua Notifikasi</b></span>
                 <span class="db-clear-subdesc">Hapus seluruh riwayat (<code class="db-code">notifikasi_lab</code>)</span>
               </div>
-              <span class="db-mini-badge" id="cnt-notif-all-badge"><span id="cnt-sub-notif-all">0</span></span>
+              <span class="db-mini-badge" id="cnt-notif-all-badge"><span id="cnt-sub-notif-all">0</span> notif</span>
             </label>
 
             <!-- Sub-opsi: Notifikasi Kelas Tambahan Saja -->
@@ -1105,7 +1191,7 @@
                 <span class="db-clear-subtitle">➕ <b>Kelas Tambahan</b></span>
                 <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">TAMBAHAN</code></span>
               </div>
-              <span class="db-mini-badge badge-green"><span id="cnt-clear-notif-tambahan">0</span></span>
+              <span class="db-mini-badge badge-green"><span id="cnt-clear-notif-tambahan">0</span> notif</span>
             </label>
 
             <!-- Sub-opsi: Notifikasi Perubahan Jadwal Saja -->
@@ -1115,7 +1201,7 @@
                 <span class="db-clear-subtitle">🔄 <b>Perubahan Jadwal</b></span>
                 <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">PERUBAHAN</code></span>
               </div>
-              <span class="db-mini-badge badge-blue"><span id="cnt-clear-notif-perubahan">0</span></span>
+              <span class="db-mini-badge badge-blue"><span id="cnt-clear-notif-perubahan">0</span> notif</span>
             </label>
 
             <!-- Sub-opsi: Notifikasi Jeda Ruangan Saja -->
@@ -1125,12 +1211,12 @@
                 <span class="db-clear-subtitle">⏱️ <b>Jeda Lab / Ruangan</b></span>
                 <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">JEDA</code></span>
               </div>
-              <span class="db-mini-badge badge-yellow"><span id="cnt-clear-notif-jeda">0</span></span>
+              <span class="db-mini-badge badge-yellow"><span id="cnt-clear-notif-jeda">0</span> notif</span>
             </label>
           </div>
         </div>
 
-        <!-- Opsi 4: Asisten Lab & Dosen -->
+        <!-- Opsi 4: Asisten Lab (DIPISAH DARI DOSEN) -->
         <label class="db-clear-card" for="chk-clear-aslab">
           <div class="db-clear-card-left">
             <input type="checkbox" id="chk-clear-aslab" class="db-clear-chk" value="aslab">
@@ -1142,13 +1228,38 @@
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                 </svg>
-                <span>Kontak WA Asisten Lab & Dosen</span>
+                <span>Kontak WA Asisten Laboratorium</span>
               </div>
-              <div class="db-clear-desc">Menghapus data kontak WhatsApp asisten lab (<code class="db-code">asisten_lab</code>) dan master <code class="db-code">dosen</code>.</div>
+              <div class="db-clear-desc">Menghapus seluruh data kontak WhatsApp asisten lab (<code class="db-code">asisten_lab</code>).</div>
+              <div class="db-clear-detail-pill-row">
+                <span class="db-pill-item">Master Kontak: <b id="cnt-detail-aslab">0</b> Aslab</span>
+              </div>
             </div>
           </div>
-          <div class="db-clear-badge" id="badge-aslab"><span id="cnt-clear-aslab">...</span> Aslab / <span id="cnt-clear-dosen">...</span> Dosen</div>
+          <div class="db-clear-badge" id="badge-aslab"><span id="cnt-clear-aslab">0</span> Aslab</div>
         </label>
+
+        <!-- Opsi 5: Master Data Dosen (DIPISAH DARI ASLAB) -->
+        <label class="db-clear-card" for="chk-clear-dosen">
+          <div class="db-clear-card-left">
+            <input type="checkbox" id="chk-clear-dosen" class="db-clear-chk" value="dosen">
+            <div class="db-clear-info">
+              <div class="db-clear-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #8b5cf6;">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                  <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+                </svg>
+                <span>Master Data Dosen Pengampu</span>
+              </div>
+              <div class="db-clear-desc">Menghapus seluruh daftar master data dosen pengampu (<code class="db-code">dosen</code>).</div>
+              <div class="db-clear-detail-pill-row">
+                <span class="db-pill-item">Master Pengampu: <b id="cnt-detail-dosen">0</b> Dosen</span>
+              </div>
+            </div>
+          </div>
+          <div class="db-clear-badge" id="badge-dosen"><span id="cnt-clear-dosen">0</span> Dosen</div>
+        </label>
+
       </div>
 
       <!-- Action Footer -->
@@ -1821,7 +1932,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260831_dbclear_v2"></script>
+  <script src="frontend/js/script.js?v=20260831_stats_v4"></script>
 </body>
 
 </html>

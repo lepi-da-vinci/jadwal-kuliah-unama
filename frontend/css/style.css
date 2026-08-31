@@ -2489,6 +2489,32 @@ body.dark-theme .db-code {
   border-color: rgba(234, 179, 8, 0.2);
 }
 
+.db-clear-detail-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.db-pill-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76em;
+  padding: 2px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.db-pill-item b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+
 /* ─── Custom Aesthetic Confirmation & Alert Modals ─── */
 .custom-confirm-box {
   animation: confirmPop 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;

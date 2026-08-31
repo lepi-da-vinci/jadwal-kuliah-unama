@@ -386,6 +386,8 @@ def get_db_stats():
             "jadwal_temp": get_count("SELECT COUNT(*) as cnt FROM jadwal_temp"),
             "mata_kuliah": get_count("SELECT COUNT(*) as cnt FROM mata_kuliah"),
             "ruangan": get_count("SELECT COUNT(*) as cnt FROM ruangan"),
+            "ruangan_lab": get_count("SELECT COUNT(*) as cnt FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%'"),
+            "ruangan_kelas": get_count("SELECT COUNT(*) as cnt FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%'"),
             "aslab": get_count("SELECT COUNT(*) as cnt FROM asisten_lab"),
             "dosen": get_count("SELECT COUNT(*) as cnt FROM dosen"),
             "notif_all": get_count("SELECT COUNT(*) as cnt FROM notifikasi_lab"),
@@ -402,7 +404,9 @@ def get_db_stats():
             conn.close()
 
 @app.post("/api/db/clear")
-def clear_selective_db(req: ClearDbRequest, admin: str = Depends(verify_admin_token)):
+@app.delete("/api/db/clear")
+@app.post("/api/clear-db")
+def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depends(verify_admin_token)):
     """Menghapus data tertentu secara selektif dari database (memerlukan token Admin)"""
     try:
         conn = get_db()
