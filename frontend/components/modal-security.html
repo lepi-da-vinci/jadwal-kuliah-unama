@@ -108,23 +108,27 @@
 
         <!-- Warning Callout Banner -->
         <div id="custom-confirm-warning-banner" class="custom-confirm-warning-banner">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);">
-            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
+          <span id="custom-confirm-banner-icon" style="display: inline-flex; align-items: center; flex-shrink: 0;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--badge-cc);">
+              <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </span>
           <span id="custom-confirm-warning-text">Tindakan ini tidak dapat dibatalkan atau dikembalikan. Pastikan Anda telah memeriksa kembali data yang dipilih.</span>
         </div>
       </div>
 
-      <!-- Action Buttons -->
-      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: var(--bg-elevated);">
+      <!-- Action Buttons (Centered) -->
+      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--bg-elevated);">
         <button type="button" class="modal-btn btn-confirm-cancel" id="custom-confirm-cancel-btn">Batal</button>
         <button type="button" class="modal-btn btn-confirm-ok danger" id="custom-confirm-ok-btn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
+          <span id="custom-confirm-ok-icon" style="display: inline-flex; align-items: center;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </span>
           <span id="custom-confirm-ok-label">Ya, Hapus Sekarang</span>
         </button>
       </div>

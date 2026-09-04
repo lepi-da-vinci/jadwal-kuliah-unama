@@ -2447,6 +2447,11 @@ body.dark-theme .db-code {
   background: rgba(239, 68, 68, 0.06);
 }
 
+.db-backup-subcard.selected {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.06);
+}
+
 .db-clear-subinfo {
   display: flex;
   flex-direction: column;
@@ -2597,6 +2602,12 @@ body.dark-theme .db-code {
   animation: pulseGlow 2s infinite ease-in-out;
 }
 
+.custom-confirm-icon-wrap.backup {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.08);
+}
+
 @keyframes pulseGlow {
   0%, 100% {
     transform: scale(1);
@@ -2698,5 +2709,30 @@ body.dark-theme .db-code {
   background: linear-gradient(135deg, #b91c1c 0%, #450a0a 100%);
   box-shadow: 0 6px 20px rgba(220, 38, 38, 0.6);
   transform: translateY(-1px);
+}
+
+.btn-confirm-ok.backup {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.btn-confirm-ok.backup:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
+  transform: translateY(-1px);
+}
+
+.custom-confirm-target-item.backup {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.custom-confirm-target-item.backup svg {
+  color: #10b981;
+}
+
+.custom-confirm-warning-banner.backup {
+  background: rgba(16, 185, 129, 0.08) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
 }
 

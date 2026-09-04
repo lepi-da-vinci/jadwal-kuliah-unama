@@ -2274,81 +2274,66 @@ document.getElementById('btn-test-notif-suara').addEventListener('click', () => 
 
 // ─── Pusat Pembersihan Database Modular ───
 async function fetchDbStats() {
-  const refreshBtn = document.getElementById('btn-refresh-db-stats');
-  if (refreshBtn) {
-    refreshBtn.classList.add('rotating');
-  }
+  const refreshBtns = [
+    document.getElementById('btn-refresh-db-stats'),
+    document.getElementById('btn-refresh-backup-stats')
+  ];
+  refreshBtns.forEach(b => b?.classList.add('rotating'));
+
   try {
     const res = await fetch(`/api/db/stats?_t=${Date.now()}`);
     const json = await res.json();
     if (json.status === 'success' && json.counts) {
       const c = json.counts;
       const cntJadwalTotal = (c.jadwal || 0) + (c.jadwal_temp || 0);
+
+      const setVal = (ids, val) => {
+        ids.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        });
+      };
       
       // Grup 1: Jadwal Perkuliahan & Data Staging
-      const elJadwalTotal = document.getElementById('cnt-clear-jadwal-total');
-      if (elJadwalTotal) elJadwalTotal.textContent = cntJadwalTotal;
-      const elSubJadwalAll = document.getElementById('cnt-sub-jadwal-all');
-      if (elSubJadwalAll) elSubJadwalAll.textContent = cntJadwalTotal;
-      const elJadwalUtama = document.getElementById('cnt-clear-jadwal-utama');
-      if (elJadwalUtama) elJadwalUtama.textContent = c.jadwal || 0;
-      const elJadwalTemp = document.getElementById('cnt-clear-jadwal-temp');
-      if (elJadwalTemp) elJadwalTemp.textContent = c.jadwal_temp || 0;
-      const elMk = document.getElementById('cnt-clear-mk');
-      if (elMk) elMk.textContent = c.mata_kuliah || 0;
+      setVal(['cnt-clear-jadwal-total', 'cnt-backup-jadwal-total'], cntJadwalTotal);
+      setVal(['cnt-sub-jadwal-all', 'cnt-sub-backup-jadwal-all'], cntJadwalTotal);
+      setVal(['cnt-clear-jadwal-utama', 'cnt-backup-jadwal-utama'], c.jadwal || 0);
+      setVal(['cnt-clear-jadwal-temp', 'cnt-backup-jadwal-temp'], c.jadwal_temp || 0);
+      setVal(['cnt-clear-mk', 'cnt-backup-mk'], c.mata_kuliah || 0);
 
       // Grup 2: Master Ruangan & Laboratorium
-      const elRuanganTotal = document.getElementById('cnt-clear-ruangan-total');
-      if (elRuanganTotal) elRuanganTotal.textContent = c.ruangan || 0;
-      const elSubRuanganAll = document.getElementById('cnt-sub-ruangan-all');
-      if (elSubRuanganAll) elSubRuanganAll.textContent = c.ruangan || 0;
-      const elRuanganLab = document.getElementById('cnt-clear-ruangan-lab');
-      if (elRuanganLab) elRuanganLab.textContent = c.ruangan_lab || 0;
-      const elRuanganKelas = document.getElementById('cnt-clear-ruangan-kelas');
-      if (elRuanganKelas) elRuanganKelas.textContent = c.ruangan_kelas || 0;
-      const elRuanganUnused = document.getElementById('cnt-clear-ruangan-unused');
-      if (elRuanganUnused) elRuanganUnused.textContent = c.ruangan_unused || 0;
+      setVal(['cnt-clear-ruangan-total', 'cnt-backup-ruangan-total'], c.ruangan || 0);
+      setVal(['cnt-sub-ruangan-all', 'cnt-sub-backup-ruangan-all'], c.ruangan || 0);
+      setVal(['cnt-clear-ruangan-lab', 'cnt-backup-ruangan-lab'], c.ruangan_lab || 0);
+      setVal(['cnt-clear-ruangan-kelas', 'cnt-backup-ruangan-kelas'], c.ruangan_kelas || 0);
+      setVal(['cnt-clear-ruangan-unused', 'cnt-backup-ruangan-unused'], c.ruangan_unused || 0);
 
       // Grup 3: Riwayat & Log Notifikasi
-      const elNotifAll = document.getElementById('cnt-clear-notif-all');
-      if (elNotifAll) elNotifAll.textContent = c.notif_all || 0;
-      const elSubNotifAll = document.getElementById('cnt-sub-notif-all');
-      if (elSubNotifAll) elSubNotifAll.textContent = c.notif_all || 0;
-      const elNotifTambahan = document.getElementById('cnt-clear-notif-tambahan');
-      if (elNotifTambahan) elNotifTambahan.textContent = c.notif_tambahan || 0;
-      const elNotifPerubahan = document.getElementById('cnt-clear-notif-perubahan');
-      if (elNotifPerubahan) elNotifPerubahan.textContent = c.notif_perubahan || 0;
-      const elNotifJeda = document.getElementById('cnt-clear-notif-jeda');
-      if (elNotifJeda) elNotifJeda.textContent = c.notif_jeda || 0;
+      setVal(['cnt-clear-notif-all', 'cnt-backup-notif-all'], c.notif_all || 0);
+      setVal(['cnt-sub-notif-all', 'cnt-sub-backup-notif-all'], c.notif_all || 0);
+      setVal(['cnt-clear-notif-tambahan', 'cnt-backup-notif-tambahan'], c.notif_tambahan || 0);
+      setVal(['cnt-clear-notif-perubahan', 'cnt-backup-notif-perubahan'], c.notif_perubahan || 0);
+      setVal(['cnt-clear-notif-jeda', 'cnt-backup-notif-jeda'], c.notif_jeda || 0);
 
       // Grup 4: Kontak Asisten Lab
-      const elAslabTotal = document.getElementById('cnt-clear-aslab-total');
-      if (elAslabTotal) elAslabTotal.textContent = c.aslab || 0;
-      const elSubAslabAll = document.getElementById('cnt-sub-aslab-all');
-      if (elSubAslabAll) elSubAslabAll.textContent = c.aslab || 0;
-      const elAslabThehok = document.getElementById('cnt-clear-aslab-thehok');
-      if (elAslabThehok) elAslabThehok.textContent = c.aslab_thehok || 0;
-      const elAslabKobar = document.getElementById('cnt-clear-aslab-kobar');
-      if (elAslabKobar) elAslabKobar.textContent = c.aslab_kobar || 0;
-      const elAslabNoroom = document.getElementById('cnt-clear-aslab-noroom');
-      if (elAslabNoroom) elAslabNoroom.textContent = c.aslab_noroom || 0;
+      setVal(['cnt-clear-aslab-total', 'cnt-backup-aslab-total'], c.aslab || 0);
+      setVal(['cnt-sub-aslab-all', 'cnt-sub-backup-aslab-all'], c.aslab || 0);
+      setVal(['cnt-clear-aslab-thehok', 'cnt-backup-aslab-thehok'], c.aslab_thehok || 0);
+      setVal(['cnt-clear-aslab-kobar', 'cnt-backup-aslab-kobar'], c.aslab_kobar || 0);
+      setVal(['cnt-clear-aslab-noroom', 'cnt-backup-aslab-noroom'], c.aslab_noroom || 0);
 
       // Grup 5: Master Data Dosen
-      const elDosenTotal = document.getElementById('cnt-clear-dosen-total');
-      if (elDosenTotal) elDosenTotal.textContent = c.dosen || 0;
-      const elSubDosenAll = document.getElementById('cnt-sub-dosen-all');
-      if (elSubDosenAll) elSubDosenAll.textContent = c.dosen || 0;
-      const elDosenActive = document.getElementById('cnt-clear-dosen-active');
-      if (elDosenActive) elDosenActive.textContent = c.dosen_active || 0;
-      const elDosenInactive = document.getElementById('cnt-clear-dosen-inactive');
-      if (elDosenInactive) elDosenInactive.textContent = c.dosen_inactive || 0;
+      setVal(['cnt-clear-dosen-total', 'cnt-backup-dosen-total'], c.dosen || 0);
+      setVal(['cnt-sub-dosen-all', 'cnt-sub-backup-dosen-all'], c.dosen || 0);
+      setVal(['cnt-clear-dosen-active', 'cnt-backup-dosen-active'], c.dosen_active || 0);
+      setVal(['cnt-clear-dosen-inactive', 'cnt-backup-dosen-inactive'], c.dosen_inactive || 0);
     }
   } catch (err) {
     console.error("Gagal mengambil statistik DB:", err);
   } finally {
-    if (refreshBtn) {
-      setTimeout(() => refreshBtn.classList.remove('rotating'), 400);
-    }
+    refreshBtns.forEach(b => {
+      if (b) setTimeout(() => b.classList.remove('rotating'), 400);
+    });
   }
 }
 
@@ -2552,10 +2537,12 @@ function showModernConfirm({
   title = "Konfirmasi Tindakan",
   subtitle = "Data yang dipilih akan dihapus secara permanen.",
   targets = [],
+  targetsLabel = null,
   warningText = "Tindakan ini tidak dapat dibatalkan atau dikembalikan.",
   okText = "Ya, Hapus Sekarang",
   cancelText = "Batal",
-  isWipeAll = false
+  isWipeAll = false,
+  isBackup = false
 }) {
   return new Promise((resolve) => {
     const modal = document.getElementById('custom-confirm-modal');
@@ -2568,48 +2555,127 @@ function showModernConfirm({
     const targetsBoxEl = document.getElementById('custom-confirm-targets-box');
     const targetsLabelEl = document.getElementById('custom-confirm-targets-label');
     const warningTextEl = document.getElementById('custom-confirm-warning-text');
+    const warningBannerEl = document.getElementById('custom-confirm-warning-banner');
+    const bannerIconEl = document.getElementById('custom-confirm-banner-icon');
     const okBtn = document.getElementById('custom-confirm-ok-btn');
     const okLabel = document.getElementById('custom-confirm-ok-label');
+    const okIcon = document.getElementById('custom-confirm-ok-icon');
     const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
     const iconWrap = document.getElementById('custom-confirm-icon');
     const headerWrap = document.getElementById('custom-confirm-header');
 
     if (titleEl) {
       titleEl.textContent = title;
-      titleEl.style.color = isWipeAll ? '#dc2626' : 'var(--badge-cc)';
+      if (isBackup) {
+        titleEl.style.color = '#10b981';
+      } else if (isWipeAll) {
+        titleEl.style.color = '#dc2626';
+      } else {
+        titleEl.style.color = 'var(--badge-cc)';
+      }
     }
     if (subtitleEl) subtitleEl.textContent = subtitle;
     if (warningTextEl) warningTextEl.textContent = warningText;
     if (okLabel) okLabel.textContent = okText;
     if (cancelBtn) cancelBtn.textContent = cancelText;
 
-    if (isWipeAll) {
+    if (isBackup) {
+      // === TEMA BACKUP DATABASE (EMERALD/HIJAU, RAMAH EKSPOR) ===
+      if (okBtn) {
+        okBtn.className = 'modal-btn btn-confirm-ok backup';
+      }
+      if (okIcon) {
+        okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+      }
+      if (iconWrap) {
+        iconWrap.className = 'custom-confirm-icon-wrap backup';
+        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+      }
+      if (headerWrap) {
+        headerWrap.style.background = 'rgba(16, 185, 129, 0.08)';
+        headerWrap.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+      }
+      if (warningBannerEl) {
+        warningBannerEl.className = 'custom-confirm-warning-banner backup';
+      }
+      if (bannerIconEl) {
+        bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+      }
+
+      if (targets && targets.length > 0) {
+        if (targetsLabelEl) {
+          targetsLabelEl.style.display = 'block';
+          targetsLabelEl.textContent = targetsLabel || "Target Data yang akan Diekspor (.SQL):";
+        }
+        if (targetsBoxEl) {
+          targetsBoxEl.style.display = 'flex';
+          targetsBoxEl.innerHTML = targets.map(t => `
+            <div class="custom-confirm-target-item backup">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>${escapeHtml(t)}</span>
+            </div>
+          `).join('');
+        }
+      } else {
+        if (targetsLabelEl) targetsLabelEl.style.display = 'none';
+        if (targetsBoxEl) targetsBoxEl.style.display = 'none';
+      }
+
+    } else if (isWipeAll) {
+      // === TEMA DANGER WIPE ALL ===
       if (okBtn) {
         okBtn.className = 'modal-btn btn-confirm-ok wipe-all';
       }
+      if (okIcon) {
+        okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+      }
       if (iconWrap) {
         iconWrap.className = 'custom-confirm-icon-wrap danger';
+        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
       }
       if (headerWrap) {
         headerWrap.style.background = 'rgba(220, 38, 38, 0.12)';
         headerWrap.style.borderColor = 'rgba(220, 38, 38, 0.25)';
       }
+      if (warningBannerEl) {
+        warningBannerEl.className = 'custom-confirm-warning-banner';
+      }
+      if (bannerIconEl) {
+        bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      }
       if (targetsLabelEl) targetsLabelEl.style.display = 'none';
       if (targetsBoxEl) targetsBoxEl.style.display = 'none';
+
     } else {
+      // === TEMA STANDAR DANGER PEMBERSIHAN ===
       if (okBtn) {
         okBtn.className = 'modal-btn btn-confirm-ok danger';
       }
+      if (okIcon) {
+        okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+      }
       if (iconWrap) {
         iconWrap.className = 'custom-confirm-icon-wrap danger';
+        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
       }
       if (headerWrap) {
         headerWrap.style.background = 'rgba(239, 68, 68, 0.08)';
         headerWrap.style.borderColor = 'rgba(239, 68, 68, 0.15)';
       }
+      if (warningBannerEl) {
+        warningBannerEl.className = 'custom-confirm-warning-banner';
+      }
+      if (bannerIconEl) {
+        bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      }
       
       if (targets && targets.length > 0) {
-        if (targetsLabelEl) targetsLabelEl.style.display = 'block';
+        if (targetsLabelEl) {
+          targetsLabelEl.style.display = 'block';
+          targetsLabelEl.textContent = targetsLabel || "Target Data yang akan Dihapus:";
+        }
         if (targetsBoxEl) {
           targetsBoxEl.style.display = 'flex';
           targetsBoxEl.innerHTML = targets.map(t => `
@@ -3032,6 +3098,415 @@ document.getElementById('clear-db-btn')?.addEventListener('click', async (e) => 
 
   // 4. Setelah kode unik berhasil dimasukkan, LANGSUNG BUKA MENU PEMILIHAN DATA DATABASE
   openDbClearModal();
+});
+
+// ─── Pusat Backup Database (.SQL) Modular ───
+function updateDbBackupUI() {
+  const allSubcards = document.querySelectorAll('.db-backup-subcard');
+  allSubcards.forEach(card => {
+    const chk = card.querySelector('input[type="checkbox"]');
+    if (chk) {
+      card.classList.toggle('selected', chk.checked);
+    }
+  });
+
+  const chkJadwalAll = document.getElementById('chk-backup-jadwal-all');
+  const chkJadwalUtama = document.getElementById('chk-backup-jadwal-utama');
+  const chkJadwalTemp = document.getElementById('chk-backup-jadwal-temp');
+  const chkMk = document.getElementById('chk-backup-mk');
+
+  const chkRuanganAll = document.getElementById('chk-backup-ruangan-all');
+  const chkRuanganLab = document.getElementById('chk-backup-ruangan-lab');
+  const chkRuanganKelas = document.getElementById('chk-backup-ruangan-kelas');
+  const chkRuanganUnused = document.getElementById('chk-backup-ruangan-unused');
+
+  const chkNotifAll = document.getElementById('chk-backup-notif-all');
+  const chkNotifTambahan = document.getElementById('chk-backup-notif-tambahan');
+  const chkNotifPerubahan = document.getElementById('chk-backup-notif-perubahan');
+  const chkNotifJeda = document.getElementById('chk-backup-notif-jeda');
+
+  const chkAslabAll = document.getElementById('chk-backup-aslab-all');
+  const chkAslabThehok = document.getElementById('chk-backup-aslab-thehok');
+  const chkAslabKobar = document.getElementById('chk-backup-aslab-kobar');
+  const chkAslabNoroom = document.getElementById('chk-backup-aslab-noroom');
+
+  const chkDosenAll = document.getElementById('chk-backup-dosen-all');
+  const chkDosenActive = document.getElementById('chk-backup-dosen-active');
+  const chkDosenInactive = document.getElementById('chk-backup-dosen-inactive');
+
+  let count = 0;
+
+  // Grup 1: Jadwal
+  if (chkJadwalAll && chkJadwalAll.checked) {
+    count++;
+  } else {
+    if (chkJadwalUtama && chkJadwalUtama.checked) count++;
+    if (chkJadwalTemp && chkJadwalTemp.checked) count++;
+    if (chkMk && chkMk.checked) count++;
+  }
+
+  // Grup 2: Ruangan
+  if (chkRuanganAll && chkRuanganAll.checked) {
+    count++;
+  } else {
+    if (chkRuanganLab && chkRuanganLab.checked) count++;
+    if (chkRuanganKelas && chkRuanganKelas.checked) count++;
+    if (chkRuanganUnused && chkRuanganUnused.checked) count++;
+  }
+
+  // Grup 3: Notifikasi
+  if (chkNotifAll && chkNotifAll.checked) {
+    count++;
+  } else {
+    if (chkNotifTambahan && chkNotifTambahan.checked) count++;
+    if (chkNotifPerubahan && chkNotifPerubahan.checked) count++;
+    if (chkNotifJeda && chkNotifJeda.checked) count++;
+  }
+
+  // Grup 4: Aslab
+  if (chkAslabAll && chkAslabAll.checked) {
+    count++;
+  } else {
+    if (chkAslabThehok && chkAslabThehok.checked) count++;
+    if (chkAslabKobar && chkAslabKobar.checked) count++;
+    if (chkAslabNoroom && chkAslabNoroom.checked) count++;
+  }
+
+  // Grup 5: Dosen
+  if (chkDosenAll && chkDosenAll.checked) {
+    count++;
+  } else {
+    if (chkDosenActive && chkDosenActive.checked) count++;
+    if (chkDosenInactive && chkDosenInactive.checked) count++;
+  }
+
+  const summaryText = document.getElementById('db-backup-summary-text');
+  const submitBtn = document.getElementById('db-backup-submit-btn');
+
+  if (summaryText) {
+    if (count === 0) {
+      summaryText.textContent = '0 opsi data dipilih';
+      summaryText.style.color = 'var(--text-muted)';
+    } else {
+      summaryText.textContent = `${count} opsi data dipilih`;
+      summaryText.style.color = '#10b981';
+    }
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = (count === 0);
+    submitBtn.style.opacity = count === 0 ? '0.5' : '1';
+    submitBtn.style.cursor = count === 0 ? 'not-allowed' : 'pointer';
+  }
+}
+
+let isDbBackupEventsInitialized = false;
+function initDbBackupModalEvents() {
+  if (isDbBackupEventsInitialized) return;
+  const modal = document.getElementById('db-backup-modal');
+  if (!modal) return;
+  isDbBackupEventsInitialized = true;
+
+  const chkJadwalAll = document.getElementById('chk-backup-jadwal-all');
+  const chkJadwalUtama = document.getElementById('chk-backup-jadwal-utama');
+  const chkJadwalTemp = document.getElementById('chk-backup-jadwal-temp');
+  const chkMk = document.getElementById('chk-backup-mk');
+
+  const chkRuanganAll = document.getElementById('chk-backup-ruangan-all');
+  const chkRuanganLab = document.getElementById('chk-backup-ruangan-lab');
+  const chkRuanganKelas = document.getElementById('chk-backup-ruangan-kelas');
+  const chkRuanganUnused = document.getElementById('chk-backup-ruangan-unused');
+
+  const chkNotifAll = document.getElementById('chk-backup-notif-all');
+  const chkNotifTambahan = document.getElementById('chk-backup-notif-tambahan');
+  const chkNotifPerubahan = document.getElementById('chk-backup-notif-perubahan');
+  const chkNotifJeda = document.getElementById('chk-backup-notif-jeda');
+
+  const chkAslabAll = document.getElementById('chk-backup-aslab-all');
+  const chkAslabThehok = document.getElementById('chk-backup-aslab-thehok');
+  const chkAslabKobar = document.getElementById('chk-backup-aslab-kobar');
+  const chkAslabNoroom = document.getElementById('chk-backup-aslab-noroom');
+
+  const chkDosenAll = document.getElementById('chk-backup-dosen-all');
+  const chkDosenActive = document.getElementById('chk-backup-dosen-active');
+  const chkDosenInactive = document.getElementById('chk-backup-dosen-inactive');
+
+  const allChks = [
+    chkJadwalAll, chkJadwalUtama, chkJadwalTemp, chkMk,
+    chkRuanganAll, chkRuanganLab, chkRuanganKelas, chkRuanganUnused,
+    chkNotifAll, chkNotifTambahan, chkNotifPerubahan, chkNotifJeda,
+    chkAslabAll, chkAslabThehok, chkAslabKobar, chkAslabNoroom,
+    chkDosenAll, chkDosenActive, chkDosenInactive
+  ];
+
+  const setupBackupGroupSync = (parentChk, childChks) => {
+    if (!parentChk) return;
+    parentChk.addEventListener('change', () => {
+      const isChecked = parentChk.checked;
+      childChks.forEach(c => { if (c) c.checked = isChecked; });
+      updateDbBackupUI();
+    });
+    childChks.forEach(c => {
+      c?.addEventListener('change', () => {
+        const allChecked = childChks.every(item => item && item.checked);
+        parentChk.checked = allChecked;
+        updateDbBackupUI();
+      });
+    });
+  };
+
+  setupBackupGroupSync(chkJadwalAll, [chkJadwalUtama, chkJadwalTemp, chkMk]);
+  setupBackupGroupSync(chkRuanganAll, [chkRuanganLab, chkRuanganKelas, chkRuanganUnused]);
+  setupBackupGroupSync(chkNotifAll, [chkNotifTambahan, chkNotifPerubahan, chkNotifJeda]);
+  setupBackupGroupSync(chkAslabAll, [chkAslabThehok, chkAslabKobar, chkAslabNoroom]);
+  setupBackupGroupSync(chkDosenAll, [chkDosenActive, chkDosenInactive]);
+
+  const btnSelectAll = document.getElementById('btn-select-all-backup');
+  if (btnSelectAll) {
+    btnSelectAll.addEventListener('click', () => {
+      allChks.forEach(c => { if (c) c.checked = true; });
+      updateDbBackupUI();
+    });
+  }
+
+  const btnDeselectAll = document.getElementById('btn-deselect-all-backup');
+  if (btnDeselectAll) {
+    btnDeselectAll.addEventListener('click', () => {
+      allChks.forEach(c => { if (c) c.checked = false; });
+      updateDbBackupUI();
+    });
+  }
+
+  const btnRefresh = document.getElementById('btn-refresh-backup-stats');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => fetchDbStats());
+  }
+
+  const btnCancel = document.getElementById('db-backup-cancel-btn');
+  if (btnCancel) {
+    btnCancel.addEventListener('click', () => {
+      modal.classList.remove('open');
+    });
+  }
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.remove('open');
+  });
+
+  // Helper trigger file download
+  const triggerDownloadSql = async (targetsList, isTotal = false) => {
+    let token = getAdminToken();
+    if (!token) {
+      token = await requestAdminLogin();
+      if (!token) return;
+    }
+
+    let response = await fetch('/api/db/backup', {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ targets: targetsList })
+    });
+
+    if (response.status === 401) {
+      setAdminToken(null);
+      const newToken = await requestAdminLogin();
+      if (!newToken) return;
+      response = await fetch('/api/db/backup', {
+        method: 'POST',
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ targets: targetsList })
+      });
+    }
+
+    if (!response.ok) {
+      throw new Error(`Server returned status ${response.status}`);
+    }
+
+    let filename = `backup_jadwal_unama_${new Date().toISOString().slice(0,10)}.sql`;
+    const disp = response.headers.get('Content-Disposition');
+    if (disp && disp.includes('filename=')) {
+      const match = disp.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    const sizeKb = (blob.size / 1024).toFixed(1);
+    await showModernAlert({
+      title: isTotal ? "Backup Total Berhasil!" : "Backup Terpilih Berhasil!",
+      message: `File skrip SQL <b>${filename}</b> (${sizeKb} KB) berhasil diekspor dan diunduh ke komputer Anda.`,
+      type: "success",
+      buttonText: "Selesai"
+    });
+  };
+
+  // Submit Granular Backup
+  const submitBtn = document.getElementById('db-backup-submit-btn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', async () => {
+      const selectedTargets = [];
+      const selectedLabels = [];
+
+      if (chkJadwalAll?.checked) {
+        selectedTargets.push('jadwal_all');
+        selectedLabels.push('Semua Data Jadwal');
+      } else {
+        if (chkJadwalUtama?.checked) { selectedTargets.push('jadwal_utama'); selectedLabels.push('Jadwal Utama Saja'); }
+        if (chkJadwalTemp?.checked) { selectedTargets.push('jadwal_temp'); selectedLabels.push('Data Temporary Saja'); }
+        if (chkMk?.checked) { selectedTargets.push('mata_kuliah'); selectedLabels.push('Master Mata Kuliah'); }
+      }
+
+      if (chkRuanganAll?.checked) {
+        selectedTargets.push('ruangan_all');
+        selectedLabels.push('Semua Ruangan');
+      } else {
+        if (chkRuanganLab?.checked) { selectedTargets.push('ruangan_lab'); selectedLabels.push('Ruangan Laboratorium'); }
+        if (chkRuanganKelas?.checked) { selectedTargets.push('ruangan_kelas'); selectedLabels.push('Ruang Kelas / Teori'); }
+        if (chkRuanganUnused?.checked) { selectedTargets.push('ruangan_unused'); selectedLabels.push('Ruang Tanpa Jadwal'); }
+      }
+
+      if (chkNotifAll?.checked) {
+        selectedTargets.push('notif_all');
+        selectedLabels.push('Semua Riwayat Notifikasi');
+      } else {
+        if (chkNotifTambahan?.checked) { selectedTargets.push('notif_tambahan'); selectedLabels.push('Notifikasi Tambahan'); }
+        if (chkNotifPerubahan?.checked) { selectedTargets.push('notif_perubahan'); selectedLabels.push('Notifikasi Perubahan'); }
+        if (chkNotifJeda?.checked) { selectedTargets.push('notif_jeda'); selectedLabels.push('Notifikasi Jeda Lab'); }
+      }
+
+      if (chkAslabAll?.checked) {
+        selectedTargets.push('aslab_all');
+        selectedLabels.push('Semua Kontak Aslab');
+      } else {
+        if (chkAslabThehok?.checked) { selectedTargets.push('aslab_thehok'); selectedLabels.push('Aslab Kampus Thehok'); }
+        if (chkAslabKobar?.checked) { selectedTargets.push('aslab_kobar'); selectedLabels.push('Aslab Kampus Kobar'); }
+        if (chkAslabNoroom?.checked) { selectedTargets.push('aslab_noroom'); selectedLabels.push('Aslab Tanpa Ruangan'); }
+      }
+
+      if (chkDosenAll?.checked) {
+        selectedTargets.push('dosen_all');
+        selectedLabels.push('Semua Master Dosen');
+      } else {
+        if (chkDosenActive?.checked) { selectedTargets.push('dosen_active'); selectedLabels.push('Dosen Berjadwal Aktif'); }
+        if (chkDosenInactive?.checked) { selectedTargets.push('dosen_inactive'); selectedLabels.push('Dosen Tanpa Jadwal'); }
+      }
+
+      if (selectedTargets.length === 0) {
+        await showModernAlert({
+          title: "Pilih Target Backup",
+          message: "Silakan centang setidaknya satu kategori data untuk diekspor ke file .sql.",
+          type: "error",
+          buttonText: "Mengerti"
+        });
+        return;
+      }
+
+      const isConfirmed = await showModernConfirm({
+        title: "Konfirmasi Ekspor Backup Database (.SQL)",
+        subtitle: `Anda akan mengekspor ${selectedTargets.length} target kategori data ke dalam file skrip SQL (.sql).`,
+        targets: selectedLabels,
+        targetsLabel: "Target Data yang akan Diekspor (.SQL):",
+        warningText: "Ekspor ini aman dan tidak akan mengubah atau menghapus data database.",
+        okText: "Ya, Unduh File .SQL",
+        cancelText: "Batal",
+        isWipeAll: false,
+        isBackup: true
+      });
+      if (!isConfirmed) return;
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menyiapkan File SQL...`;
+
+      try {
+        await triggerDownloadSql(selectedTargets, false);
+      } catch (err) {
+        console.error("Error backup DB:", err);
+        await showModernAlert({
+          title: "Terjadi Kesalahan",
+          message: "Tidak dapat menghubungi server saat mengekspor database.",
+          type: "error",
+          buttonText: "Tutup"
+        });
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span id="db-backup-submit-label">Download Backup .SQL</span>`;
+        updateDbBackupUI();
+      }
+    });
+  }
+
+  // Backup Total All
+  const backupAllBtn = document.getElementById('db-backup-all-btn');
+  if (backupAllBtn) {
+    backupAllBtn.addEventListener('click', async () => {
+      const isConfirmed = await showModernConfirm({
+        title: "Konfirmasi Backup Total Database (.SQL)",
+        subtitle: "Anda akan mengekspor seluruh 8 tabel database (skema tabel lengkap & seluruh baris data) ke dalam satu file .sql master.",
+        targets: ["Jadwal Perkuliahan & Temp", "Master Ruangan & Labor", "Semua Log Notifikasi", "Kontak WA Asisten Lab", "Master Data Dosen Pengampu"],
+        targetsLabel: "Target Data yang akan Diekspor (.SQL):",
+        warningText: "File .sql master ini dapat digunakan untuk restore penuh kapan saja.",
+        okText: "Ya, Unduh Master .SQL",
+        cancelText: "Batal",
+        isWipeAll: false,
+        isBackup: true
+      });
+      if (!isConfirmed) return;
+
+      backupAllBtn.disabled = true;
+      backupAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Menyiapkan Master SQL...`;
+
+      try {
+        await triggerDownloadSql(['all'], true);
+      } catch (err) {
+        console.error("Error backup all DB:", err);
+        await showModernAlert({
+          title: "Terjadi Kesalahan",
+          message: "Tidak dapat menghubungi server saat mengekspor master database.",
+          type: "error",
+          buttonText: "Tutup"
+        });
+      } finally {
+        backupAllBtn.disabled = false;
+        backupAllBtn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg> <span>Backup Total (Semua .SQL)</span>`;
+      }
+    });
+  }
+}
+
+async function openDbBackupModal() {
+  const modal = document.getElementById('db-backup-modal');
+  if (!modal) return;
+  if (typeof closeSettingModal === 'function') closeSettingModal(true);
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal) testWaModal.classList.remove('open');
+  initDbBackupModalEvents();
+  modal.classList.add('open');
+  await fetchDbStats();
+  updateDbBackupUI();
+}
+window.openDbBackupModal = openDbBackupModal;
+
+document.getElementById('backup-db-btn')?.addEventListener('click', async (e) => {
+  if (e) e.preventDefault();
+  if (typeof closeSettingModal === 'function') closeSettingModal(true);
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal) testWaModal.classList.remove('open');
+
+  let token = getAdminToken();
+  if (!token) {
+    token = await requestAdminLogin();
+    if (!token) return;
+  }
+
+  openDbBackupModal();
 });
 
 filterTanggal.addEventListener('change', () => {

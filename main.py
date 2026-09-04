@@ -638,6 +638,200 @@ def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depe
             cursor.close()
             conn.close()
 
+class BackupDbRequest(BaseModel):
+    targets: list[str] | None = []
+
+def sql_escape_value(val):
+    if val is None:
+        return "NULL"
+    elif isinstance(val, bool):
+        return "1" if val else "0"
+    elif isinstance(val, (int, float)):
+        return str(val)
+    elif isinstance(val, datetime.timedelta):
+        total_seconds = int(val.total_seconds())
+        hours = total_seconds // 3600
+        mins = (total_seconds % 3600) // 60
+        secs = total_seconds % 60
+        return f"'{hours:02d}:{mins:02d}:{secs:02d}'"
+    elif isinstance(val, datetime.datetime):
+        return f"'{val.strftime('%Y-%m-%d %H:%M:%S')}'"
+    elif isinstance(val, datetime.date):
+        return f"'{val.strftime('%Y-%m-%d')}'"
+    else:
+        s = str(val).replace('\\', '\\\\').replace("'", "''").replace('\r', '\\r').replace('\n', '\\n')
+        return f"'{s}'"
+
+def generate_table_sql_dump(cursor, table_name, query=None):
+    out = []
+    try:
+        cursor.execute(f"SHOW CREATE TABLE `{table_name}`")
+        res_create = cursor.fetchone()
+        if not res_create or len(res_create) < 2:
+            return ""
+        create_sql = res_create[1]
+    except Exception as e:
+        return f"-- Gagal mengambil skema tabel `{table_name}`: {e}\n"
+
+    out.append(f"-- --------------------------------------------------------")
+    out.append(f"-- Struktur tabel `{table_name}`")
+    out.append(f"-- --------------------------------------------------------")
+    out.append(f"DROP TABLE IF EXISTS `{table_name}`;")
+    out.append(f"{create_sql};\n")
+
+    if query is None:
+        query = f"SELECT * FROM `{table_name}`"
+
+    try:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+    except Exception as e:
+        out.append(f"-- Gagal mengambil data tabel `{table_name}`: {e}\n")
+        return "\n".join(out)
+
+    if not rows:
+        out.append(f"-- Tidak ada data baris untuk tabel `{table_name}`\n")
+        return "\n".join(out)
+
+    cols = [f"`{col[0]}`" for col in cursor.description]
+    cols_str = ", ".join(cols)
+
+    out.append(f"-- Dumping data untuk tabel `{table_name}` ({len(rows)} baris)")
+    batch_size = 100
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i:i + batch_size]
+        row_strings = []
+        for r in batch:
+            val_strs = [sql_escape_value(val) for val in r]
+            row_strings.append(f"  ({', '.join(val_strs)})")
+        out.append(f"INSERT INTO `{table_name}` ({cols_str}) VALUES\n" + ",\n".join(row_strings) + ";\n")
+
+    return "\n".join(out)
+
+@app.post("/api/db/backup")
+def backup_selective_db(req: BackupDbRequest = BackupDbRequest(), admin: str = Depends(verify_admin_token)):
+    """Mengekspor data database ke skrip SQL (memerlukan token Admin)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        targets = set(req.targets or [])
+        is_all = not targets or "all" in targets or "semua" in targets or "backup_all" in targets or "wipe_all" in targets
+        
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ts_slug = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        sql_parts = []
+        sql_parts.append("-- ========================================================")
+        sql_parts.append("-- Jadwal Kuliah UNAMA - Database Backup (.SQL)")
+        sql_parts.append(f"-- Dibuat secara otomatis pada: {now_str}")
+        sql_parts.append(f"-- Kategori Backup: {'Semua Database (Total)' if is_all else ', '.join(targets)}")
+        sql_parts.append("-- ========================================================\n")
+        sql_parts.append("/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;")
+        sql_parts.append("/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;")
+        sql_parts.append("/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;")
+        sql_parts.append("/*!40101 SET NAMES utf8mb4 */;")
+        sql_parts.append("SET FOREIGN_KEY_CHECKS = 0;")
+        sql_parts.append("SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";")
+        sql_parts.append("SET AUTOCOMMIT = 0;")
+        sql_parts.append("START TRANSACTION;")
+        sql_parts.append("SET time_zone = \"+07:00\";\n")
+        
+        # 1. Tabel Ruangan
+        if is_all or "ruangan" in targets or "ruangan_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "ruangan", "SELECT * FROM ruangan"))
+        else:
+            r_conds = []
+            if "ruangan_lab" in targets:
+                r_conds.append("(LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%')")
+            if "ruangan_kelas" in targets:
+                r_conds.append("(LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%')")
+            if "ruangan_unused" in targets:
+                r_conds.append("(id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL))")
+            if r_conds:
+                sql_parts.append(generate_table_sql_dump(cursor, "ruangan", f"SELECT * FROM ruangan WHERE {' OR '.join(r_conds)}"))
+
+        # 2. Tabel Dosen
+        if is_all or "dosen" in targets or "dosen_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "dosen", "SELECT * FROM dosen"))
+        else:
+            d_conds = []
+            if "dosen_active" in targets:
+                d_conds.append("id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+            if "dosen_inactive" in targets:
+                d_conds.append("id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+            if d_conds:
+                sql_parts.append(generate_table_sql_dump(cursor, "dosen", f"SELECT * FROM dosen WHERE {' OR '.join(d_conds)}"))
+
+        # 3. Tabel Mata Kuliah
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "mata_kuliah" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "mata_kuliah", "SELECT * FROM mata_kuliah"))
+
+        # 4. Tabel Jadwal Utama
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_utama" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jadwal", "SELECT * FROM jadwal"))
+
+        # 5. Tabel Jadwal Temp
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_temp" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jadwal_temp", "SELECT * FROM jadwal_temp"))
+
+        # 6. Tabel Jeda Lab
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "notif_all" in targets or "notif_jeda" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jeda_lab", "SELECT * FROM jeda_lab"))
+
+        # 7. Tabel Notifikasi Lab
+        if is_all or "notif_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "notifikasi_lab", "SELECT * FROM notifikasi_lab"))
+        else:
+            n_subtypes = []
+            if "notif_tambahan" in targets: n_subtypes.append("'TAMBAHAN'")
+            if "notif_perubahan" in targets: n_subtypes.append("'PERUBAHAN'")
+            if "notif_jeda" in targets: n_subtypes.append("'JEDA'")
+            if n_subtypes:
+                sql_parts.append(generate_table_sql_dump(cursor, "notifikasi_lab", f"SELECT * FROM notifikasi_lab WHERE tipe_notif IN ({','.join(n_subtypes)})"))
+
+        # 8. Tabel Asisten Lab
+        if is_all or "aslab" in targets or "aslab_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "asisten_lab", "SELECT * FROM asisten_lab"))
+        else:
+            a_conds = []
+            if "aslab_thehok" in targets:
+                a_conds.append("id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%thehok%')")
+            if "aslab_kobar" in targets:
+                a_conds.append("id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%kobar%')")
+            if "aslab_noroom" in targets:
+                a_conds.append("id_ruangan IS NULL")
+            if a_conds:
+                sql_parts.append(generate_table_sql_dump(cursor, "asisten_lab", f"SELECT * FROM asisten_lab WHERE {' OR '.join(a_conds)}"))
+
+        sql_parts.append("COMMIT;")
+        sql_parts.append("SET FOREIGN_KEY_CHECKS = 1;")
+        sql_parts.append("/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;")
+        sql_parts.append("/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;")
+        sql_parts.append("/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;")
+
+        final_sql = "\n".join(sql_parts)
+        filename = f"backup_jadwal_unama_{ts_slug}.sql"
+        
+        return Response(
+            content=final_sql,
+            media_type="application/sql; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{filename}\"",
+                "X-Backup-Filename": filename
+            }
+        )
+    except Exception as err:
+        return Response(
+            content=f"-- Error generating backup: {err}",
+            status_code=500,
+            media_type="text/plain"
+        )
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.delete("/api/jadwal")
 def clear_jadwal(admin: str = Depends(verify_admin_token)):
     """Menghapus seluruh jadwal dari database (memerlukan token Admin) - Legacy Wrapper"""

@@ -1009,23 +1009,27 @@
 
         <!-- Warning Callout Banner -->
         <div id="custom-confirm-warning-banner" class="custom-confirm-warning-banner">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);">
-            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
+          <span id="custom-confirm-banner-icon" style="display: inline-flex; align-items: center; flex-shrink: 0;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--badge-cc);">
+              <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </span>
           <span id="custom-confirm-warning-text">Tindakan ini tidak dapat dibatalkan atau dikembalikan. Pastikan Anda telah memeriksa kembali data yang dipilih.</span>
         </div>
       </div>
 
-      <!-- Action Buttons -->
-      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: var(--bg-elevated);">
+      <!-- Action Buttons (Centered) -->
+      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--bg-elevated);">
         <button type="button" class="modal-btn btn-confirm-cancel" id="custom-confirm-cancel-btn">Batal</button>
         <button type="button" class="modal-btn btn-confirm-ok danger" id="custom-confirm-ok-btn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
+          <span id="custom-confirm-ok-icon" style="display: inline-flex; align-items: center;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </span>
           <span id="custom-confirm-ok-label">Ya, Hapus Sekarang</span>
         </button>
       </div>
@@ -1462,13 +1466,13 @@
 
       </div>
 
-      <!-- Action Footer -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 22px; border-top: 1.5px solid var(--border); padding-top: 16px; flex-wrap: wrap; gap: 12px;">
+      <!-- Action Footer (Centered) -->
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 22px; border-top: 1.5px solid var(--border); padding-top: 16px; gap: 14px; text-align: center;">
         <div style="font-size: 0.88em; color: var(--text-muted);">
-          Status: <b id="db-clear-summary-text" style="color: var(--primary);">0 kategori dipilih</b>
+          Status: <b id="db-clear-summary-text" style="color: var(--primary);">0 opsi data dipilih</b>
         </div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <button type="button" class="modal-btn" style="background: var(--text-muted);" id="db-clear-cancel-btn">Batal</button>
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+          <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-clear-cancel-btn">Batal</button>
           <button type="button" class="modal-btn" style="background: var(--badge-cc); display: inline-flex; align-items: center; gap: 6px;" id="db-clear-submit-btn" disabled>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -1484,6 +1488,438 @@
               <line x1="12" y1="16" x2="12.01" y2="16"></line>
             </svg>
             <span>Reset Total (Semua)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL: PUSAT BACKUP DATABASE (.SQL) -->
+    <!-- ==================== MODAL PUSAT BACKUP DATABASE (.SQL) ==================== -->
+  <div id="db-backup-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Backup Database"
+    style="z-index: 10002;">
+    <div class="modal-box db-clear-modal-box" style="max-width: 760px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-icon" style="margin: 0; background: rgba(16, 185, 129, 0.12); color: #10b981; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.35em; color: var(--text);">Pusat Backup Database (.SQL)</h2>
+            <p style="margin: 3px 0 0 0; font-size: 0.85em; color: var(--text-muted);">Pilih data yang ingin diekspor atau unduh seluruh database ke file skrip .sql.</p>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 0.78em; font-weight: 600;">
+            <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981;"></span>
+            Admin Terverifikasi
+          </span>
+          <button id="btn-refresh-backup-stats" type="button" title="Perbarui jumlah data"
+            style="background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 0.75em; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Refresh Data</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Selection Controls -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.88em;">
+        <span style="font-weight: 600; color: var(--text);">Pilih Data Target Backup:</span>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-select-all-backup" class="db-quick-btn">Pilih Semua</button>
+          <button type="button" id="btn-deselect-all-backup" class="db-quick-btn">Hapus Pilihan</button>
+        </div>
+      </div>
+
+      <!-- Grid Pilihan Data -->
+      <div class="db-clear-grid" style="display: flex; flex-direction: column; gap: 14px;">
+        
+        <!-- ==================== GRUP 1: JADWAL PERKULIAHAN & DATA TEMP ==================== -->
+        <div class="db-clear-group-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 0.95em;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span>Jadwal Perkuliahan & Data Staging</span>
+            </div>
+            <div class="db-clear-badge" id="badge-backup-jadwal-total"><span id="cnt-backup-jadwal-total">0</span> baris</div>
+          </div>
+          
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
+            Pilih backup seluruh tabel jadwal sekaligus atau pilih komponen spesifik di bawah ini:
+          </div>
+
+          <div class="db-clear-subgrid">
+            <!-- Sub-opsi: Semua Data Jadwal -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-jadwal-all" style="border-left: 3px solid var(--primary);">
+              <input type="checkbox" id="chk-backup-jadwal-all" class="db-backup-chk jadwal-chk" value="jadwal_all">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); flex-shrink: 0;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                  <b>Semua Data Jadwal</b>
+                </span>
+                <span class="db-clear-subdesc">Backup jadwal utama, temp & master MK</span>
+              </div>
+              <span class="db-mini-badge" id="cnt-backup-jadwal-all-badge"><span id="cnt-sub-backup-jadwal-all">0</span> total</span>
+            </label>
+
+            <!-- Sub-opsi: Jadwal Utama Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-jadwal-utama" style="border-left: 3px solid #3b82f6;">
+              <input type="checkbox" id="chk-backup-jadwal-utama" class="db-backup-chk jadwal-chk" value="jadwal_utama">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #3b82f6; flex-shrink: 0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                  <b>Jadwal Utama Saja</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya jadwal aktif (<code class="db-code">jadwal</code>)</span>
+              </div>
+              <span class="db-mini-badge badge-blue"><span id="cnt-backup-jadwal-utama">0</span> baris</span>
+            </label>
+
+            <!-- Sub-opsi: Data Temporary Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-jadwal-temp" style="border-left: 3px solid #f59e0b;">
+              <input type="checkbox" id="chk-backup-jadwal-temp" class="db-backup-chk jadwal-chk" value="jadwal_temp">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <b>Data Temporary (Temp)</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya antrean staging (<code class="db-code">jadwal_temp</code>)</span>
+              </div>
+              <span class="db-mini-badge badge-yellow"><span id="cnt-backup-jadwal-temp">0</span> baris</span>
+            </label>
+
+            <!-- Sub-opsi: Master Mata Kuliah Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-mk" style="border-left: 3px solid #10b981;">
+              <input type="checkbox" id="chk-backup-mk" class="db-backup-chk jadwal-chk" value="mata_kuliah">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981; flex-shrink: 0;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                  <b>Master Mata Kuliah</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya master (<code class="db-code">mata_kuliah</code>)</span>
+              </div>
+              <span class="db-mini-badge badge-green"><span id="cnt-backup-mk">0</span> mk</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- ==================== GRUP 2: MASTER DATA RUANGAN & LABOR ==================== -->
+        <div class="db-clear-group-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 0.95em;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0ea5e9;">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+              <span>Master Data Ruangan & Laboratorium</span>
+            </div>
+            <div class="db-clear-badge" id="badge-backup-ruangan-total"><span id="cnt-backup-ruangan-total">0</span> ruangan</div>
+          </div>
+          
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
+            Pilih backup seluruh master ruangan atau pilih kategori spesifik di bawah ini:
+          </div>
+
+          <div class="db-clear-subgrid">
+            <!-- Sub-opsi: Semua Ruangan -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-ruangan-all" style="border-left: 3px solid #0ea5e9;">
+              <input type="checkbox" id="chk-backup-ruangan-all" class="db-backup-chk ruangan-chk" value="ruangan_all">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0ea5e9; flex-shrink: 0;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                  <b>Semua Ruangan</b>
+                </span>
+                <span class="db-clear-subdesc">Backup seluruh data (<code class="db-code">ruangan</code>)</span>
+              </div>
+              <span class="db-mini-badge" id="cnt-backup-ruangan-all-badge"><span id="cnt-sub-backup-ruangan-all">0</span> total</span>
+            </label>
+
+            <!-- Sub-opsi: Ruang Laboratorium Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-ruangan-lab" style="border-left: 3px solid #8b5cf6;">
+              <input type="checkbox" id="chk-backup-ruangan-lab" class="db-backup-chk ruangan-chk" value="ruangan_lab">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #8b5cf6; flex-shrink: 0;"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                  <b>Laboratorium & Praktek</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya ruang lab & praktek komputer</span>
+              </div>
+              <span class="db-mini-badge badge-purple"><span id="cnt-backup-ruangan-lab">0</span> lab</span>
+            </label>
+
+            <!-- Sub-opsi: Ruang Kelas / Teori Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-ruangan-kelas" style="border-left: 3px solid #3b82f6;">
+              <input type="checkbox" id="chk-backup-ruangan-kelas" class="db-backup-chk ruangan-chk" value="ruangan_kelas">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #3b82f6; flex-shrink: 0;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                  <b>Ruang Kelas / Teori</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya ruang perkuliahan teori/umum</span>
+              </div>
+              <span class="db-mini-badge badge-blue"><span id="cnt-backup-ruangan-kelas">0</span> kelas</span>
+            </label>
+
+            <!-- Sub-opsi: Ruang Tanpa Jadwal Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-ruangan-unused" style="border-left: 3px solid #64748b;">
+              <input type="checkbox" id="chk-backup-ruangan-unused" class="db-backup-chk ruangan-chk" value="ruangan_unused">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #64748b; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <b>Ruang Tanpa Jadwal</b>
+                </span>
+                <span class="db-clear-subdesc">Ruangan tidak terpakai di jadwal aktif</span>
+              </div>
+              <span class="db-mini-badge badge-slate"><span id="cnt-backup-ruangan-unused">0</span> ruang</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- ==================== GRUP 3: RIWAYAT & LOG NOTIFIKASI RUANGAN ==================== -->
+        <div class="db-clear-group-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 0.95em;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span>Riwayat & Log Notifikasi Ruangan</span>
+            </div>
+            <div class="db-clear-badge" id="badge-backup-notif-all-total"><span id="cnt-backup-notif-all">0</span> total</div>
+          </div>
+          
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
+            Pilih backup seluruh notifikasi sekaligus atau pilih tipe spesifik di bawah ini:
+          </div>
+
+          <div class="db-clear-subgrid">
+            <!-- Sub-opsi: Semua Notifikasi -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-notif-all" style="border-left: 3px solid #f59e0b;">
+              <input type="checkbox" id="chk-backup-notif-all" class="db-backup-chk notif-chk" value="notif_all">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b; flex-shrink: 0;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                  <b>Semua Notifikasi</b>
+                </span>
+                <span class="db-clear-subdesc">Backup seluruh riwayat (<code class="db-code">notifikasi_lab</code>)</span>
+              </div>
+              <span class="db-mini-badge" id="cnt-backup-notif-all-badge"><span id="cnt-sub-backup-notif-all">0</span> notif</span>
+            </label>
+
+            <!-- Sub-opsi: Notifikasi Kelas Tambahan Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-notif-tambahan" style="border-left: 3px solid var(--badge-tm);">
+              <input type="checkbox" id="chk-backup-notif-tambahan" class="db-backup-chk notif-chk" value="notif_tambahan">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--badge-tm); flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                  <b>Kelas Tambahan</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">TAMBAHAN</code></span>
+              </div>
+              <span class="db-mini-badge badge-green"><span id="cnt-backup-notif-tambahan">0</span> notif</span>
+            </label>
+
+            <!-- Sub-opsi: Notifikasi Perubahan Jadwal Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-notif-perubahan" style="border-left: 3px solid var(--badge-ol);">
+              <input type="checkbox" id="chk-backup-notif-perubahan" class="db-backup-chk notif-chk" value="notif_perubahan">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--badge-ol); flex-shrink: 0;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                  <b>Perubahan Jadwal</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">PERUBAHAN</code></span>
+              </div>
+              <span class="db-mini-badge badge-blue"><span id="cnt-backup-notif-perubahan">0</span> notif</span>
+            </label>
+
+            <!-- Sub-opsi: Notifikasi Jeda Ruangan Saja -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-notif-jeda" style="border-left: 3px solid #eab308;">
+              <input type="checkbox" id="chk-backup-notif-jeda" class="db-backup-chk notif-chk" value="notif_jeda">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #eab308; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                  <b>Jeda Lab / Ruangan</b>
+                </span>
+                <span class="db-clear-subdesc">Hanya notif tipe <code class="db-code">JEDA</code></span>
+              </div>
+              <span class="db-mini-badge badge-yellow"><span id="cnt-backup-notif-jeda">0</span> notif</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- ==================== GRUP 4: KONTAK WA ASISTEN LAB ==================== -->
+        <div class="db-clear-group-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 0.95em;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ec4899;">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              <span>Kontak WA Asisten Laboratorium</span>
+            </div>
+            <div class="db-clear-badge" id="badge-backup-aslab-total"><span id="cnt-backup-aslab-total">0</span> Aslab</div>
+          </div>
+          
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
+            Pilih backup seluruh kontak aslab atau pilih kategori spesifik di bawah ini:
+          </div>
+
+          <div class="db-clear-subgrid">
+            <!-- Sub-opsi: Semua Aslab -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-aslab-all" style="border-left: 3px solid #ec4899;">
+              <input type="checkbox" id="chk-backup-aslab-all" class="db-backup-chk aslab-chk" value="aslab_all">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ec4899; flex-shrink: 0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                  <b>Semua Kontak Aslab</b>
+                </span>
+                <span class="db-clear-subdesc">Backup seluruh data (<code class="db-code">asisten_lab</code>)</span>
+              </div>
+              <span class="db-mini-badge" id="cnt-backup-aslab-all-badge"><span id="cnt-sub-backup-aslab-all">0</span> Aslab</span>
+            </label>
+
+            <!-- Sub-opsi: Aslab Thehok -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-aslab-thehok" style="border-left: 3px solid #0ea5e9;">
+              <input type="checkbox" id="chk-backup-aslab-thehok" class="db-backup-chk aslab-chk" value="aslab_thehok">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0ea5e9; flex-shrink: 0;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="22" x2="9" y2="22.01"></line><line x1="15" y1="22" x2="15" y2="22.01"></line><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line></svg>
+                  <b>Aslab Kampus Thehok</b>
+                </span>
+                <span class="db-clear-subdesc">Penugasan lab Kampus Thehok</span>
+              </div>
+              <span class="db-mini-badge badge-blue"><span id="cnt-backup-aslab-thehok">0</span> Aslab</span>
+            </label>
+
+            <!-- Sub-opsi: Aslab Kobar -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-aslab-kobar" style="border-left: 3px solid #f59e0b;">
+              <input type="checkbox" id="chk-backup-aslab-kobar" class="db-backup-chk aslab-chk" value="aslab_kobar">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b; flex-shrink: 0;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                  <b>Aslab Kampus Kobar</b>
+                </span>
+                <span class="db-clear-subdesc">Penugasan lab Kampus Kobar</span>
+              </div>
+              <span class="db-mini-badge badge-yellow"><span id="cnt-backup-aslab-kobar">0</span> Aslab</span>
+            </label>
+
+            <!-- Sub-opsi: Aslab Tanpa Ruangan -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-aslab-noroom" style="border-left: 3px solid #94a3b8;">
+              <input type="checkbox" id="chk-backup-aslab-noroom" class="db-backup-chk aslab-chk" value="aslab_noroom">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #94a3b8; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                  <b>Aslab Tanpa Ruangan</b>
+                </span>
+                <span class="db-clear-subdesc">Kontak tanpa penugasan ruangan</span>
+              </div>
+              <span class="db-mini-badge badge-slate"><span id="cnt-backup-aslab-noroom">0</span> Aslab</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- ==================== GRUP 5: MASTER DATA DOSEN PENGAMPU ==================== -->
+        <div class="db-clear-group-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); font-size: 0.95em;">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #8b5cf6;">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+              </svg>
+              <span>Master Data Dosen Pengampu</span>
+            </div>
+            <div class="db-clear-badge" id="badge-backup-dosen-total"><span id="cnt-backup-dosen-total">0</span> Dosen</div>
+          </div>
+          
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-bottom: 10px;">
+            Pilih backup seluruh master dosen atau pilih kategori spesifik di bawah ini:
+          </div>
+
+          <div class="db-clear-subgrid">
+            <!-- Sub-opsi: Semua Dosen -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-dosen-all" style="border-left: 3px solid #8b5cf6;">
+              <input type="checkbox" id="chk-backup-dosen-all" class="db-backup-chk dosen-chk" value="dosen_all">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #8b5cf6; flex-shrink: 0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                  <b>Semua Master Dosen</b>
+                </span>
+                <span class="db-clear-subdesc">Backup seluruh data master (<code class="db-code">dosen</code>)</span>
+              </div>
+              <span class="db-mini-badge" id="cnt-backup-dosen-all-badge"><span id="cnt-sub-backup-dosen-all">0</span> Dosen</span>
+            </label>
+
+            <!-- Sub-opsi: Dosen Berjadwal Aktif -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-dosen-active" style="border-left: 3px solid #10b981;">
+              <input type="checkbox" id="chk-backup-dosen-active" class="db-backup-chk dosen-chk" value="dosen_active">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981; flex-shrink: 0;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><polyline points="9 14 11 16 15 12"></polyline></svg>
+                  <b>Dosen Berjadwal Aktif</b>
+                </span>
+                <span class="db-clear-subdesc">Dosen dengan jadwal aktif berjalan</span>
+              </div>
+              <span class="db-mini-badge badge-green"><span id="cnt-backup-dosen-active">0</span> Dosen</span>
+            </label>
+
+            <!-- Sub-opsi: Dosen Tanpa Jadwal -->
+            <label class="db-backup-subcard db-clear-subcard" for="chk-backup-dosen-inactive" style="border-left: 3px solid #f43f5e;">
+              <input type="checkbox" id="chk-backup-dosen-inactive" class="db-backup-chk dosen-chk" value="dosen_inactive">
+              <div class="db-clear-subinfo">
+                <span class="db-clear-subtitle">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f43f5e; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                  <b>Dosen Tanpa Jadwal</b>
+                </span>
+                <span class="db-clear-subdesc">Dosen tanpa jadwal (arsip / non-aktif)</span>
+              </div>
+              <span class="db-mini-badge badge-red"><span id="cnt-backup-dosen-inactive">0</span> Dosen</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Action Footer (Centered) -->
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 22px; border-top: 1.5px solid var(--border); padding-top: 16px; gap: 14px; text-align: center;">
+        <div style="font-size: 0.88em; color: var(--text-muted);">
+          Status: <b id="db-backup-summary-text" style="color: #10b981;">0 opsi data dipilih</b>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+          <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-backup-cancel-btn">Batal</button>
+          <button type="button" class="modal-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);" id="db-backup-submit-btn" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span id="db-backup-submit-label">Download Backup .SQL</span>
+          </button>
+          <button type="button" class="modal-btn" id="db-backup-all-btn"
+            style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            <span>Backup Total (Semua .SQL)</span>
           </button>
         </div>
       </div>
@@ -1651,6 +2087,17 @@
           <line x1="14" y1="11" x2="14" y2="17"></line>
         </svg>
         Pusat Pembersihan Database
+      </button>
+
+      <button class="btn admin-only" id="backup-db-btn"
+        style="padding: 14px; font-size: 1.05em; width: 100%; display: none; align-items: center; justify-content: center; gap: 10px; font-weight: 600; border-radius: var(--radius-sm); background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25); cursor: pointer; transition: all 0.2s ease;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Pusat Backup Database (.SQL)
       </button>
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
@@ -2132,7 +2579,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260904_svg_v2"></script>
+  <script src="frontend/js/script.js?v=20260904_backup_theme_v3"></script>
 </body>
 
 </html>

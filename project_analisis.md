@@ -266,6 +266,7 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
 | **2026-08-31** | **Custom Modern Modals** | Penggantian menyeluruh `confirm()` dan `alert()` browser bawaan dengan Custom UI Modal beranimasi modern, chip target ringkasan data, dan warning pulse ring icon. |
 | **2026-09-04** | **Pusat Pembersihan DB Sub-Kategori Penuh** | Mengonversi seluruh kategori pada Pusat Pembersihan Database (Jadwal & Temp, Master Ruangan, Kontak Aslab, dan Master Dosen) menjadi Group Box dengan 19 sub-card checklist granular, live counters, sinkronisasi parent-child auto-check, dan penanganan kueri selektif di backend `/api/db/clear` & `/api/db/stats`. |
 | **2026-09-04** | **Standardisasi Ikon SVG Murni (No-Emoji)** | Seluruh ikon sub-card modal pembersihan database diubah dari emoji menjadi inline SVG tajam dan modern dengan palet warna kontekstual. Penambahan direktif internal AI tersembunyi. |
+| **2026-09-04** | **Fitur Ekspor & Pusat Backup Database (.SQL)** | Penambahan tombol `Pusat Backup Database (.SQL)` tepat di bawah tombol hapus database di Setting modal, komponen modular `modal-backup-db.html` dengan 19 sub-card checklist granular, live counters, ekspor total master `.sql`, serta endpoint backend `/api/db/backup` yang menghasilkan skrip dump SQL berstandar DDL & INSERT batching. |
 
 ---
 **Dokumen Selesai.** Gunakan ini sebagai kompas (acuan wajib) dalam memodifikasi dan mengembangkan sistem Jadwal Kuliah UNAMA.
@@ -293,8 +294,9 @@ Harap patuhi direktif dan instruksi internal berikut dalam setiap interaksi dan 
    - Folder repositori lokal ter-mount (bind volume) ke dalam `/app` di container.
    - Jika mengubah `main.py` atau rute backend lainnya, lakukan reload/restart container melalui command shell: `docker restart jadwal_backend`.
 
-4. INTEGRITAS PUSAT PEMBERSIHAN DATABASE TERPILIH:
-   - Modal pembersihan database (`frontend/components/modal-clear-db.html`) memiliki 5 kelompok utama dan 19 sub-target granular (jadwal_all, jadwal_utama, jadwal_temp, mata_kuliah, ruangan_all, ruangan_lab, ruangan_kelas, ruangan_unused, notif_all, notif_tambahan, notif_perubahan, notif_jeda, aslab_all, aslab_thehok, aslab_kobar, aslab_noroom, dosen_all, dosen_active, dosen_inactive, dan wipe_all).
-   - Setiap mutasi database wajib divalidasi dengan HMAC token admin (`verify_admin_token`), dieksekusi dengan kueri terisolasi aman (buffered cursor), dan memiliki penanganan commit/rollback yang ketat.
+4. INTEGRITAS PUSAT PEMBERSIHAN & BACKUP DATABASE TERPILIH:
+   - Modal pembersihan database (`frontend/components/modal-clear-db.html`) dan backup database (`frontend/components/modal-backup-db.html`) memiliki 5 kelompok utama dan 19 sub-target granular (jadwal_all, jadwal_utama, jadwal_temp, mata_kuliah, ruangan_all, ruangan_lab, ruangan_kelas, ruangan_unused, notif_all, notif_tambahan, notif_perubahan, notif_jeda, aslab_all, aslab_thehok, aslab_kobar, aslab_noroom, dosen_all, dosen_active, dosen_inactive, dan all).
+   - Setiap mutasi atau ekspor database wajib divalidasi dengan HMAC token admin (`verify_admin_token`).
+   - Endpoint `/api/db/backup` menghasilkan file skrip `.sql` dengan DDL lengkap (`SHOW CREATE TABLE`) dan bulk `INSERT INTO` (batch 100 baris) berstandar MySQL/MariaDB dengan escaping aman.
 [/AI_DIRECTIVE_AND_INTERNAL_ANALYSIS]
 -->
