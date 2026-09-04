@@ -1829,6 +1829,7 @@ body.dark-theme .tv-header {
   font-weight: 800;
   background: linear-gradient(135deg, #6366f1, #0284c7);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.02em;
 }
@@ -1837,6 +1838,7 @@ body.dark-theme .tv-header {
 body.dark-theme .tv-title-area h1 {
   background: linear-gradient(135deg, #a78bfa, #38bdf8);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
