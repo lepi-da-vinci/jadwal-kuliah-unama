@@ -2456,6 +2456,9 @@ body.dark-theme .db-code {
 .db-clear-subtitle {
   font-size: 0.85em;
   color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .db-clear-subdesc {
@@ -2489,6 +2492,36 @@ body.dark-theme .db-code {
   color: #eab308;
   background: rgba(234, 179, 8, 0.1);
   border-color: rgba(234, 179, 8, 0.2);
+}
+
+.db-mini-badge.badge-purple {
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.db-mini-badge.badge-red {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.2);
+}
+
+.db-mini-badge.badge-slate {
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.1);
+  border-color: rgba(100, 116, 139, 0.2);
+}
+
+.db-mini-badge.badge-pink {
+  color: #ec4899;
+  background: rgba(236, 72, 153, 0.1);
+  border-color: rgba(236, 72, 153, 0.2);
+}
+
+.db-mini-badge.badge-cyan {
+  color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.2);
 }
 
 .db-clear-detail-pill-row {

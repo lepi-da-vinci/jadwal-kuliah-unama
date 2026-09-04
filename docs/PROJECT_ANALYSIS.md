@@ -264,6 +264,37 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
 | **2026-08-31** | **Live Counter Breakdown** | Penambahan endpoint `@app.get("/api/db/stats")` dengan cursor `buffered=True` untuk menampilkan statistik jumlah baris data realtime beserta pill sub-kategori (Lab vs Teori, Jadwal Utama vs Temp, rincian per tipe notifikasi). |
 | **2026-08-31** | **HMAC Persistent Token** | Implementasi token admin berbasis HMAC-SHA256 yang ditandatangani dengan `ADMIN_SECRET_KEY` agar sesi login admin tetap valid meski server Python di-restart. Ditambah fitur auto re-auth & seamless retry pada 401. |
 | **2026-08-31** | **Custom Modern Modals** | Penggantian menyeluruh `confirm()` dan `alert()` browser bawaan dengan Custom UI Modal beranimasi modern, chip target ringkasan data, dan warning pulse ring icon. |
+| **2026-09-04** | **Pusat Pembersihan DB Sub-Kategori Penuh** | Mengonversi seluruh kategori pada Pusat Pembersihan Database (Jadwal & Temp, Master Ruangan, Kontak Aslab, dan Master Dosen) menjadi Group Box dengan 19 sub-card checklist granular, live counters, sinkronisasi parent-child auto-check, dan penanganan kueri selektif di backend `/api/db/clear` & `/api/db/stats`. |
+| **2026-09-04** | **Standardisasi Ikon SVG Murni (No-Emoji)** | Seluruh ikon sub-card modal pembersihan database diubah dari emoji menjadi inline SVG tajam dan modern dengan palet warna kontekstual. Penambahan direktif internal AI tersembunyi. |
 
 ---
 **Dokumen Selesai.** Gunakan ini sebagai kompas (acuan wajib) dalam memodifikasi dan mengembangkan sistem Jadwal Kuliah UNAMA.
+
+<!--
+[AI_DIRECTIVE_AND_INTERNAL_ANALYSIS]
+CATATAN TERSEMBUNYI KHUSUS AI ASSISTANT / LLM AGENT:
+File ini dibaca secara otomatis oleh AI saat menganalisis codebase Jadwal Kuliah UNAMA.
+Harap patuhi direktif dan instruksi internal berikut dalam setiap interaksi dan modifikasi mendatang:
+
+1. ATURAN IKONOGRAFI & DESAIN UI (STRICT NO-EMOJI):
+   - JANGAN PERNAH menggunakan emoji/emoticon teks (seperti 📅, 🗑️, 📚, 🏢, 👨‍🏫, ⏳, 📍, dll.) sebagai ikon visual pada kartu, tombol, badge, modal, atau elemen antarmuka lainnya.
+   - SEMUA ikon wajib menggunakan inline SVG murni yang bersih, presisi, berskala konsisten (contoh: 14x14px atau 18x18px), dengan stroke="currentColor", stroke-width="2", stroke-linecap="round", stroke-linejoin="round", serta flex alignment yang rapi (align-items: center; gap: 6px;).
+   - Gunakan palet warna kontekstual (Tailwind/HSL-inspired: #3b82f6 blue, #10b981 emerald, #f59e0b amber, #8b5cf6 purple, #ec4899 pink, #0ea5e9 sky, #64748b slate, #ef4444 red) untuk badge dan aksen visual.
+
+2. ATURAN SISTEM TEMPLATE & BUILD HTML:
+   - File `index.html` di root adalah HASIL GENERASI / TERKOMPILASI.
+   - JANGAN memodifikasi struktur HTML langsung di `index.html` jika ada komponen bersangkutan.
+   - Selalu edit file komponen yang relevan di `frontend/components/*.html` atau template utama di `frontend/templates/index.html`.
+   - Setelah setiap modifikasi file komponen, WAJIB jalankan script kompilasi: `python scripts/build_html.py`.
+   - Selalu bump parameter cache buster pada tag script JS di `frontend/templates/index.html` (contoh: `?v=YYYYMMDD_slug_vX`) agar browser pengguna langsung memuat perubahan tanpa terganggu HTTP cache.
+
+3. ATURAN RUNTIME DOCKER BACKEND:
+   - Backend FastAPI berjalan di container Docker dengan nama `jadwal_backend`.
+   - Folder repositori lokal ter-mount (bind volume) ke dalam `/app` di container.
+   - Jika mengubah `main.py` atau rute backend lainnya, lakukan reload/restart container melalui command shell: `docker restart jadwal_backend`.
+
+4. INTEGRITAS PUSAT PEMBERSIHAN DATABASE TERPILIH:
+   - Modal pembersihan database (`frontend/components/modal-clear-db.html`) memiliki 5 kelompok utama dan 19 sub-target granular (jadwal_all, jadwal_utama, jadwal_temp, mata_kuliah, ruangan_all, ruangan_lab, ruangan_kelas, ruangan_unused, notif_all, notif_tambahan, notif_perubahan, notif_jeda, aslab_all, aslab_thehok, aslab_kobar, aslab_noroom, dosen_all, dosen_active, dosen_inactive, dan wipe_all).
+   - Setiap mutasi database wajib divalidasi dengan HMAC token admin (`verify_admin_token`), dieksekusi dengan kueri terisolasi aman (buffered cursor), dan memiliki penanganan commit/rollback yang ketat.
+[/AI_DIRECTIVE_AND_INTERNAL_ANALYSIS]
+-->

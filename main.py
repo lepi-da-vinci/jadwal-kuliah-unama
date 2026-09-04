@@ -408,8 +408,14 @@ def get_db_stats():
             "ruangan": 0,
             "ruangan_lab": 0,
             "ruangan_kelas": 0,
+            "ruangan_unused": 0,
             "aslab": 0,
+            "aslab_thehok": 0,
+            "aslab_kobar": 0,
+            "aslab_noroom": 0,
             "dosen": 0,
+            "dosen_active": 0,
+            "dosen_inactive": 0,
             "notif_all": 0,
             "notif_tambahan": 0,
             "notif_perubahan": 0,
@@ -421,10 +427,16 @@ def get_db_stats():
             "jadwal_temp": "SELECT COUNT(*) FROM jadwal_temp",
             "mata_kuliah": "SELECT COUNT(*) FROM mata_kuliah",
             "ruangan": "SELECT COUNT(*) FROM ruangan",
-            "ruangan_lab": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%'",
-            "ruangan_kelas": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%'",
+            "ruangan_lab": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'",
+            "ruangan_kelas": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%'",
+            "ruangan_unused": "SELECT COUNT(*) FROM ruangan WHERE id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL)",
             "aslab": "SELECT COUNT(*) FROM asisten_lab",
+            "aslab_thehok": "SELECT COUNT(*) FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan WHERE LOWER(r.kampus) LIKE '%thehok%'",
+            "aslab_kobar": "SELECT COUNT(*) FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan WHERE LOWER(r.kampus) LIKE '%kobar%'",
+            "aslab_noroom": "SELECT COUNT(*) FROM asisten_lab WHERE id_ruangan IS NULL",
             "dosen": "SELECT COUNT(*) FROM dosen",
+            "dosen_active": "SELECT COUNT(*) FROM dosen WHERE id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)",
+            "dosen_inactive": "SELECT COUNT(*) FROM dosen WHERE id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)",
             "notif_all": "SELECT COUNT(*) FROM notifikasi_lab",
             "notif_tambahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'",
             "notif_perubahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'",
@@ -464,26 +476,50 @@ def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depe
         targets = set(req.targets or [])
         is_all = "all" in targets or "semua" in targets
         
-        # 1. Jadwal Perkuliahan & Temp & Jeda Lab
-        if is_all or "jadwal" in targets:
+        # 1. Jadwal Perkuliahan & Temp & Master MK & Jeda Lab
+        if is_all or "jadwal" in targets or "jadwal_all" in targets:
             cursor.execute("DELETE FROM jadwal")
             cnt_j = cursor.rowcount
             cursor.execute("DELETE FROM jadwal_temp")
             cnt_jt = cursor.rowcount
             try:
                 cursor.execute("DELETE FROM mata_kuliah")
+                cnt_mk = cursor.rowcount
             except Exception:
-                pass
+                cnt_mk = 0
             try:
                 cursor.execute("DELETE FROM jeda_lab")
             except Exception:
                 pass
-            deleted_summary["jadwal"] = cnt_j + cnt_jt
+            deleted_summary["jadwal_all"] = cnt_j + cnt_jt + cnt_mk
+        else:
+            if "jadwal_utama" in targets:
+                cursor.execute("DELETE FROM jadwal")
+                deleted_summary["jadwal_utama"] = cursor.rowcount
+            if "jadwal_temp" in targets:
+                cursor.execute("DELETE FROM jadwal_temp")
+                deleted_summary["jadwal_temp"] = cursor.rowcount
+            if "mata_kuliah" in targets:
+                try:
+                    cursor.execute("DELETE FROM mata_kuliah")
+                    deleted_summary["mata_kuliah"] = cursor.rowcount
+                except Exception:
+                    pass
             
         # 2. Master Ruangan
-        if is_all or "ruangan" in targets:
+        if is_all or "ruangan" in targets or "ruangan_all" in targets:
             cursor.execute("DELETE FROM ruangan")
-            deleted_summary["ruangan"] = cursor.rowcount
+            deleted_summary["ruangan_all"] = cursor.rowcount
+        else:
+            if "ruangan_lab" in targets:
+                cursor.execute("DELETE FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'")
+                deleted_summary["ruangan_lab"] = cursor.rowcount
+            if "ruangan_kelas" in targets:
+                cursor.execute("DELETE FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%'")
+                deleted_summary["ruangan_kelas"] = cursor.rowcount
+            if "ruangan_unused" in targets:
+                cursor.execute("DELETE FROM ruangan WHERE id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL)")
+                deleted_summary["ruangan_unused"] = cursor.rowcount
             
         # 3. Notifikasi (Granular: Semua, Tambahan, Perubahan, Jeda)
         if is_all or "notif_all" in targets:
@@ -508,23 +544,56 @@ def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depe
                 except Exception:
                     pass
                 
-        # 4. Asisten Lab & Dosen
-        if is_all or "aslab" in targets or "aslab_dosen" in targets:
+        # 4. Asisten Lab
+        if is_all or "aslab" in targets or "aslab_all" in targets or "aslab_dosen" in targets:
             cursor.execute("DELETE FROM asisten_lab")
-            deleted_summary["aslab"] = cursor.rowcount
-        if is_all or "dosen" in targets or "aslab_dosen" in targets:
+            deleted_summary["aslab_all"] = cursor.rowcount
+        else:
+            if "aslab_thehok" in targets:
+                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%thehok%')")
+                deleted_summary["aslab_thehok"] = cursor.rowcount
+            if "aslab_kobar" in targets:
+                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%kobar%')")
+                deleted_summary["aslab_kobar"] = cursor.rowcount
+            if "aslab_noroom" in targets:
+                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IS NULL")
+                deleted_summary["aslab_noroom"] = cursor.rowcount
+
+        # 5. Master Dosen
+        if is_all or "dosen" in targets or "dosen_all" in targets or "aslab_dosen" in targets:
             cursor.execute("DELETE FROM dosen")
-            deleted_summary["dosen"] = cursor.rowcount
+            deleted_summary["dosen_all"] = cursor.rowcount
+        else:
+            if "dosen_active" in targets:
+                cursor.execute("DELETE FROM dosen WHERE id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+                deleted_summary["dosen_active"] = cursor.rowcount
+            if "dosen_inactive" in targets:
+                cursor.execute("DELETE FROM dosen WHERE id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+                deleted_summary["dosen_inactive"] = cursor.rowcount
 
         cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
         conn.commit()
         
         # Susun pesan ringkasan yang ramah dan informatif
         parts_msg = []
-        if "jadwal" in deleted_summary and deleted_summary["jadwal"] > 0:
-            parts_msg.append(f"{deleted_summary['jadwal']} baris Jadwal Kuliah")
-        if "ruangan" in deleted_summary and deleted_summary["ruangan"] > 0:
-            parts_msg.append(f"{deleted_summary['ruangan']} Master Ruangan")
+        if "jadwal_all" in deleted_summary and deleted_summary["jadwal_all"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal_all']} baris Data Jadwal & Temp")
+        if "jadwal_utama" in deleted_summary and deleted_summary["jadwal_utama"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal_utama']} baris Jadwal Utama")
+        if "jadwal_temp" in deleted_summary and deleted_summary["jadwal_temp"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal_temp']} baris Data Temp/Staging")
+        if "mata_kuliah" in deleted_summary and deleted_summary["mata_kuliah"] > 0:
+            parts_msg.append(f"{deleted_summary['mata_kuliah']} Master Mata Kuliah")
+
+        if "ruangan_all" in deleted_summary and deleted_summary["ruangan_all"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_all']} Master Ruangan")
+        if "ruangan_lab" in deleted_summary and deleted_summary["ruangan_lab"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_lab']} Ruang Laboratorium")
+        if "ruangan_kelas" in deleted_summary and deleted_summary["ruangan_kelas"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_kelas']} Ruang Kelas/Teori")
+        if "ruangan_unused" in deleted_summary and deleted_summary["ruangan_unused"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_unused']} Ruangan Tanpa Jadwal")
+
         if "notif_all" in deleted_summary and deleted_summary["notif_all"] > 0:
             parts_msg.append(f"{deleted_summary['notif_all']} Semua Notifikasi")
         if "notif_tambahan" in deleted_summary and deleted_summary["notif_tambahan"] > 0:
@@ -533,10 +602,22 @@ def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depe
             parts_msg.append(f"{deleted_summary['notif_perubahan']} Notifikasi Perubahan Jadwal")
         if "notif_jeda" in deleted_summary and deleted_summary["notif_jeda"] > 0:
             parts_msg.append(f"{deleted_summary['notif_jeda']} Notifikasi Jeda Ruangan")
-        if "aslab" in deleted_summary and deleted_summary["aslab"] > 0:
-            parts_msg.append(f"{deleted_summary['aslab']} Kontak Asisten Lab")
-        if "dosen" in deleted_summary and deleted_summary["dosen"] > 0:
-            parts_msg.append(f"{deleted_summary['dosen']} Master Dosen")
+
+        if "aslab_all" in deleted_summary and deleted_summary["aslab_all"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_all']} Kontak Asisten Lab")
+        if "aslab_thehok" in deleted_summary and deleted_summary["aslab_thehok"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_thehok']} Aslab Kampus Thehok")
+        if "aslab_kobar" in deleted_summary and deleted_summary["aslab_kobar"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_kobar']} Aslab Kampus Kobar")
+        if "aslab_noroom" in deleted_summary and deleted_summary["aslab_noroom"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_noroom']} Aslab Tanpa Ruangan")
+
+        if "dosen_all" in deleted_summary and deleted_summary["dosen_all"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen_all']} Master Dosen")
+        if "dosen_active" in deleted_summary and deleted_summary["dosen_active"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen_active']} Dosen Berjadwal")
+        if "dosen_inactive" in deleted_summary and deleted_summary["dosen_inactive"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen_inactive']} Dosen Tanpa Jadwal")
         
         if is_all:
             resp_msg = "Database berhasil di-reset total! Seluruh data (jadwal, ruangan, notifikasi, aslab, dan dosen) telah dibersihkan."

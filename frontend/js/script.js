@@ -2283,51 +2283,65 @@ async function fetchDbStats() {
     const json = await res.json();
     if (json.status === 'success' && json.counts) {
       const c = json.counts;
-      const cntJadwal = (c.jadwal || 0) + (c.jadwal_temp || 0);
+      const cntJadwalTotal = (c.jadwal || 0) + (c.jadwal_temp || 0);
       
-      // Jadwal counters
-      const elJadwal = document.getElementById('cnt-clear-jadwal');
-      if (elJadwal) elJadwal.textContent = cntJadwal;
-      const elDetailJadwal = document.getElementById('cnt-detail-jadwal');
-      if (elDetailJadwal) elDetailJadwal.textContent = c.jadwal || 0;
-      const elDetailJadwalTemp = document.getElementById('cnt-detail-jadwal-temp');
-      if (elDetailJadwalTemp) elDetailJadwalTemp.textContent = c.jadwal_temp || 0;
-      const elDetailMk = document.getElementById('cnt-detail-mk');
-      if (elDetailMk) elDetailMk.textContent = c.mata_kuliah || 0;
+      // Grup 1: Jadwal Perkuliahan & Data Staging
+      const elJadwalTotal = document.getElementById('cnt-clear-jadwal-total');
+      if (elJadwalTotal) elJadwalTotal.textContent = cntJadwalTotal;
+      const elSubJadwalAll = document.getElementById('cnt-sub-jadwal-all');
+      if (elSubJadwalAll) elSubJadwalAll.textContent = cntJadwalTotal;
+      const elJadwalUtama = document.getElementById('cnt-clear-jadwal-utama');
+      if (elJadwalUtama) elJadwalUtama.textContent = c.jadwal || 0;
+      const elJadwalTemp = document.getElementById('cnt-clear-jadwal-temp');
+      if (elJadwalTemp) elJadwalTemp.textContent = c.jadwal_temp || 0;
+      const elMk = document.getElementById('cnt-clear-mk');
+      if (elMk) elMk.textContent = c.mata_kuliah || 0;
 
-      // Ruangan counters
-      const elRuangan = document.getElementById('cnt-clear-ruangan');
-      if (elRuangan) elRuangan.textContent = c.ruangan || 0;
-      const elDetailRuanganLab = document.getElementById('cnt-detail-ruangan-lab');
-      if (elDetailRuanganLab) elDetailRuanganLab.textContent = c.ruangan_lab || 0;
-      const elDetailRuanganKelas = document.getElementById('cnt-detail-ruangan-kelas');
-      if (elDetailRuanganKelas) elDetailRuanganKelas.textContent = c.ruangan_kelas || 0;
+      // Grup 2: Master Ruangan & Laboratorium
+      const elRuanganTotal = document.getElementById('cnt-clear-ruangan-total');
+      if (elRuanganTotal) elRuanganTotal.textContent = c.ruangan || 0;
+      const elSubRuanganAll = document.getElementById('cnt-sub-ruangan-all');
+      if (elSubRuanganAll) elSubRuanganAll.textContent = c.ruangan || 0;
+      const elRuanganLab = document.getElementById('cnt-clear-ruangan-lab');
+      if (elRuanganLab) elRuanganLab.textContent = c.ruangan_lab || 0;
+      const elRuanganKelas = document.getElementById('cnt-clear-ruangan-kelas');
+      if (elRuanganKelas) elRuanganKelas.textContent = c.ruangan_kelas || 0;
+      const elRuanganUnused = document.getElementById('cnt-clear-ruangan-unused');
+      if (elRuanganUnused) elRuanganUnused.textContent = c.ruangan_unused || 0;
 
-      // Notifikasi counters
+      // Grup 3: Riwayat & Log Notifikasi
       const elNotifAll = document.getElementById('cnt-clear-notif-all');
       if (elNotifAll) elNotifAll.textContent = c.notif_all || 0;
       const elSubNotifAll = document.getElementById('cnt-sub-notif-all');
       if (elSubNotifAll) elSubNotifAll.textContent = c.notif_all || 0;
-
       const elNotifTambahan = document.getElementById('cnt-clear-notif-tambahan');
       if (elNotifTambahan) elNotifTambahan.textContent = c.notif_tambahan || 0;
-
       const elNotifPerubahan = document.getElementById('cnt-clear-notif-perubahan');
       if (elNotifPerubahan) elNotifPerubahan.textContent = c.notif_perubahan || 0;
-
       const elNotifJeda = document.getElementById('cnt-clear-notif-jeda');
       if (elNotifJeda) elNotifJeda.textContent = c.notif_jeda || 0;
 
-      // Kontak Aslab & Dosen counters (Separated)
-      const elAslab = document.getElementById('cnt-clear-aslab');
-      if (elAslab) elAslab.textContent = c.aslab || 0;
-      const elDetailAslab = document.getElementById('cnt-detail-aslab');
-      if (elDetailAslab) elDetailAslab.textContent = c.aslab || 0;
+      // Grup 4: Kontak Asisten Lab
+      const elAslabTotal = document.getElementById('cnt-clear-aslab-total');
+      if (elAslabTotal) elAslabTotal.textContent = c.aslab || 0;
+      const elSubAslabAll = document.getElementById('cnt-sub-aslab-all');
+      if (elSubAslabAll) elSubAslabAll.textContent = c.aslab || 0;
+      const elAslabThehok = document.getElementById('cnt-clear-aslab-thehok');
+      if (elAslabThehok) elAslabThehok.textContent = c.aslab_thehok || 0;
+      const elAslabKobar = document.getElementById('cnt-clear-aslab-kobar');
+      if (elAslabKobar) elAslabKobar.textContent = c.aslab_kobar || 0;
+      const elAslabNoroom = document.getElementById('cnt-clear-aslab-noroom');
+      if (elAslabNoroom) elAslabNoroom.textContent = c.aslab_noroom || 0;
 
-      const elDosen = document.getElementById('cnt-clear-dosen');
-      if (elDosen) elDosen.textContent = c.dosen || 0;
-      const elDetailDosen = document.getElementById('cnt-detail-dosen');
-      if (elDetailDosen) elDetailDosen.textContent = c.dosen || 0;
+      // Grup 5: Master Data Dosen
+      const elDosenTotal = document.getElementById('cnt-clear-dosen-total');
+      if (elDosenTotal) elDosenTotal.textContent = c.dosen || 0;
+      const elSubDosenAll = document.getElementById('cnt-sub-dosen-all');
+      if (elSubDosenAll) elSubDosenAll.textContent = c.dosen || 0;
+      const elDosenActive = document.getElementById('cnt-clear-dosen-active');
+      if (elDosenActive) elDosenActive.textContent = c.dosen_active || 0;
+      const elDosenInactive = document.getElementById('cnt-clear-dosen-inactive');
+      if (elDosenInactive) elDosenInactive.textContent = c.dosen_inactive || 0;
     }
   } catch (err) {
     console.error("Gagal mengambil statistik DB:", err);
@@ -2339,33 +2353,60 @@ async function fetchDbStats() {
 }
 
 function updateDbClearUI() {
-  const chkJadwal = document.getElementById('chk-clear-jadwal');
-  const chkRuangan = document.getElementById('chk-clear-ruangan');
+  const allSubcards = document.querySelectorAll('.db-clear-subcard');
+  allSubcards.forEach(card => {
+    const chk = card.querySelector('input[type="checkbox"]');
+    if (chk) {
+      card.classList.toggle('selected', chk.checked);
+    }
+  });
+
+  // Checkboxes
+  const chkJadwalAll = document.getElementById('chk-clear-jadwal-all');
+  const chkJadwalUtama = document.getElementById('chk-clear-jadwal-utama');
+  const chkJadwalTemp = document.getElementById('chk-clear-jadwal-temp');
+  const chkMk = document.getElementById('chk-clear-mk');
+
+  const chkRuanganAll = document.getElementById('chk-clear-ruangan-all');
+  const chkRuanganLab = document.getElementById('chk-clear-ruangan-lab');
+  const chkRuanganKelas = document.getElementById('chk-clear-ruangan-kelas');
+  const chkRuanganUnused = document.getElementById('chk-clear-ruangan-unused');
+
   const chkNotifAll = document.getElementById('chk-clear-notif-all');
   const chkNotifTambahan = document.getElementById('chk-clear-notif-tambahan');
   const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
   const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
-  const chkAslab = document.getElementById('chk-clear-aslab');
-  const chkDosen = document.getElementById('chk-clear-dosen');
 
-  // Highlight cards based on checkbox status
-  if (chkJadwal) chkJadwal.closest('.db-clear-card')?.classList.toggle('selected', chkJadwal.checked);
-  if (chkRuangan) chkRuangan.closest('.db-clear-card')?.classList.toggle('selected', chkRuangan.checked);
-  if (chkAslab) chkAslab.closest('.db-clear-card')?.classList.toggle('selected', chkAslab.checked);
-  if (chkDosen) chkDosen.closest('.db-clear-card')?.classList.toggle('selected', chkDosen.checked);
+  const chkAslabAll = document.getElementById('chk-clear-aslab-all');
+  const chkAslabThehok = document.getElementById('chk-clear-aslab-thehok');
+  const chkAslabKobar = document.getElementById('chk-clear-aslab-kobar');
+  const chkAslabNoroom = document.getElementById('chk-clear-aslab-noroom');
 
-  if (chkNotifAll) chkNotifAll.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifAll.checked);
-  if (chkNotifTambahan) chkNotifTambahan.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifTambahan.checked);
-  if (chkNotifPerubahan) chkNotifPerubahan.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifPerubahan.checked);
-  if (chkNotifJeda) chkNotifJeda.closest('.db-clear-subcard')?.classList.toggle('selected', chkNotifJeda.checked);
+  const chkDosenAll = document.getElementById('chk-clear-dosen-all');
+  const chkDosenActive = document.getElementById('chk-clear-dosen-active');
+  const chkDosenInactive = document.getElementById('chk-clear-dosen-inactive');
 
-  // Count active selections
   let count = 0;
-  if (chkJadwal && chkJadwal.checked) count++;
-  if (chkRuangan && chkRuangan.checked) count++;
-  if (chkAslab && chkAslab.checked) count++;
-  if (chkDosen && chkDosen.checked) count++;
 
+  // Grup 1: Jadwal
+  if (chkJadwalAll && chkJadwalAll.checked) {
+    count++;
+  } else {
+    if (chkJadwalUtama && chkJadwalUtama.checked) count++;
+    if (chkJadwalTemp && chkJadwalTemp.checked) count++;
+    if (chkMk && chkMk.checked) count++;
+  }
+
+  // Grup 2: Ruangan
+  if (chkRuanganAll && chkRuanganAll.checked) {
+    count++;
+  } else {
+    if (chkRuanganLab && chkRuanganLab.checked) count++;
+    if (chkRuanganKelas && chkRuanganKelas.checked) count++;
+    if (chkRuanganUnused && chkRuanganUnused.checked) count++;
+  }
+
+  // Grup 3: Notifikasi
   if (chkNotifAll && chkNotifAll.checked) {
     count++;
   } else {
@@ -2374,15 +2415,32 @@ function updateDbClearUI() {
     if (chkNotifJeda && chkNotifJeda.checked) count++;
   }
 
+  // Grup 4: Aslab
+  if (chkAslabAll && chkAslabAll.checked) {
+    count++;
+  } else {
+    if (chkAslabThehok && chkAslabThehok.checked) count++;
+    if (chkAslabKobar && chkAslabKobar.checked) count++;
+    if (chkAslabNoroom && chkAslabNoroom.checked) count++;
+  }
+
+  // Grup 5: Dosen
+  if (chkDosenAll && chkDosenAll.checked) {
+    count++;
+  } else {
+    if (chkDosenActive && chkDosenActive.checked) count++;
+    if (chkDosenInactive && chkDosenInactive.checked) count++;
+  }
+
   const summaryText = document.getElementById('db-clear-summary-text');
   const submitBtn = document.getElementById('db-clear-submit-btn');
 
   if (summaryText) {
     if (count === 0) {
-      summaryText.textContent = '0 kategori dipilih';
+      summaryText.textContent = '0 opsi data dipilih';
       summaryText.style.color = 'var(--text-muted)';
     } else {
-      summaryText.textContent = `${count} kategori data dipilih`;
+      summaryText.textContent = `${count} opsi data dipilih`;
       summaryText.style.color = 'var(--badge-cc)';
     }
   }
@@ -2401,48 +2459,66 @@ function initDbClearModalEvents() {
   if (!modal) return;
   isDbClearEventsInitialized = true;
 
-  const chkJadwal = document.getElementById('chk-clear-jadwal');
-  const chkRuangan = document.getElementById('chk-clear-ruangan');
+  // Elements
+  const chkJadwalAll = document.getElementById('chk-clear-jadwal-all');
+  const chkJadwalUtama = document.getElementById('chk-clear-jadwal-utama');
+  const chkJadwalTemp = document.getElementById('chk-clear-jadwal-temp');
+  const chkMk = document.getElementById('chk-clear-mk');
+
+  const chkRuanganAll = document.getElementById('chk-clear-ruangan-all');
+  const chkRuanganLab = document.getElementById('chk-clear-ruangan-lab');
+  const chkRuanganKelas = document.getElementById('chk-clear-ruangan-kelas');
+  const chkRuanganUnused = document.getElementById('chk-clear-ruangan-unused');
+
   const chkNotifAll = document.getElementById('chk-clear-notif-all');
   const chkNotifTambahan = document.getElementById('chk-clear-notif-tambahan');
   const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
   const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
-  const chkAslab = document.getElementById('chk-clear-aslab');
-  const chkDosen = document.getElementById('chk-clear-dosen');
 
-  [chkJadwal, chkRuangan, chkAslab, chkDosen].forEach(chk => {
-    chk?.addEventListener('change', updateDbClearUI);
-  });
+  const chkAslabAll = document.getElementById('chk-clear-aslab-all');
+  const chkAslabThehok = document.getElementById('chk-clear-aslab-thehok');
+  const chkAslabKobar = document.getElementById('chk-clear-aslab-kobar');
+  const chkAslabNoroom = document.getElementById('chk-clear-aslab-noroom');
 
-  if (chkNotifAll) {
-    chkNotifAll.addEventListener('change', () => {
-      const checked = chkNotifAll.checked;
-      if (chkNotifTambahan) chkNotifTambahan.checked = checked;
-      if (chkNotifPerubahan) chkNotifPerubahan.checked = checked;
-      if (chkNotifJeda) chkNotifJeda.checked = checked;
+  const chkDosenAll = document.getElementById('chk-clear-dosen-all');
+  const chkDosenActive = document.getElementById('chk-clear-dosen-active');
+  const chkDosenInactive = document.getElementById('chk-clear-dosen-inactive');
+
+  const allChks = [
+    chkJadwalAll, chkJadwalUtama, chkJadwalTemp, chkMk,
+    chkRuanganAll, chkRuanganLab, chkRuanganKelas, chkRuanganUnused,
+    chkNotifAll, chkNotifTambahan, chkNotifPerubahan, chkNotifJeda,
+    chkAslabAll, chkAslabThehok, chkAslabKobar, chkAslabNoroom,
+    chkDosenAll, chkDosenActive, chkDosenInactive
+  ];
+
+  // Parent-child synchronization helper
+  const setupGroupSync = (parentChk, childChks) => {
+    if (!parentChk) return;
+    parentChk.addEventListener('change', () => {
+      const isChecked = parentChk.checked;
+      childChks.forEach(c => { if (c) c.checked = isChecked; });
       updateDbClearUI();
     });
-  }
-
-  [chkNotifTambahan, chkNotifPerubahan, chkNotifJeda].forEach(chk => {
-    chk?.addEventListener('change', () => {
-      const allNotifChecked = chkNotifTambahan?.checked && chkNotifPerubahan?.checked && chkNotifJeda?.checked;
-      if (chkNotifAll) chkNotifAll.checked = allNotifChecked;
-      updateDbClearUI();
+    childChks.forEach(c => {
+      c?.addEventListener('change', () => {
+        const allChecked = childChks.every(item => item && item.checked);
+        parentChk.checked = allChecked;
+        updateDbClearUI();
+      });
     });
-  });
+  };
+
+  setupGroupSync(chkJadwalAll, [chkJadwalUtama, chkJadwalTemp, chkMk]);
+  setupGroupSync(chkRuanganAll, [chkRuanganLab, chkRuanganKelas, chkRuanganUnused]);
+  setupGroupSync(chkNotifAll, [chkNotifTambahan, chkNotifPerubahan, chkNotifJeda]);
+  setupGroupSync(chkAslabAll, [chkAslabThehok, chkAslabKobar, chkAslabNoroom]);
+  setupGroupSync(chkDosenAll, [chkDosenActive, chkDosenInactive]);
 
   const btnSelectAll = document.getElementById('btn-select-all-db');
   if (btnSelectAll) {
     btnSelectAll.addEventListener('click', () => {
-      if (chkJadwal) chkJadwal.checked = true;
-      if (chkRuangan) chkRuangan.checked = true;
-      if (chkNotifAll) chkNotifAll.checked = true;
-      if (chkNotifTambahan) chkNotifTambahan.checked = true;
-      if (chkNotifPerubahan) chkNotifPerubahan.checked = true;
-      if (chkNotifJeda) chkNotifJeda.checked = true;
-      if (chkAslab) chkAslab.checked = true;
-      if (chkDosen) chkDosen.checked = true;
+      allChks.forEach(c => { if (c) c.checked = true; });
       updateDbClearUI();
     });
   }
@@ -2450,14 +2526,7 @@ function initDbClearModalEvents() {
   const btnDeselectAll = document.getElementById('btn-deselect-all-db');
   if (btnDeselectAll) {
     btnDeselectAll.addEventListener('click', () => {
-      if (chkJadwal) chkJadwal.checked = false;
-      if (chkRuangan) chkRuangan.checked = false;
-      if (chkNotifAll) chkNotifAll.checked = false;
-      if (chkNotifTambahan) chkNotifTambahan.checked = false;
-      if (chkNotifPerubahan) chkNotifPerubahan.checked = false;
-      if (chkNotifJeda) chkNotifJeda.checked = false;
-      if (chkAslab) chkAslab.checked = false;
-      if (chkDosen) chkDosen.checked = false;
+      allChks.forEach(c => { if (c) c.checked = false; });
       updateDbClearUI();
     });
   }
@@ -2681,18 +2750,79 @@ window.showModernAlert = showModernAlert;
     submitBtn.addEventListener('click', async () => {
       const targets = [];
       const targetLabels = [];
-      if (chkJadwal?.checked) { targets.push('jadwal'); targetLabels.push('Jadwal Perkuliahan & Data Temp'); }
-      if (chkRuangan?.checked) { targets.push('ruangan'); targetLabels.push('Master Data Ruangan & Labor'); }
+
+      // 1. Jadwal Perkuliahan
+      const chkJadwalAll = document.getElementById('chk-clear-jadwal-all');
+      const chkJadwalUtama = document.getElementById('chk-clear-jadwal-utama');
+      const chkJadwalTemp = document.getElementById('chk-clear-jadwal-temp');
+      const chkMk = document.getElementById('chk-clear-mk');
+
+      if (chkJadwalAll?.checked) {
+        targets.push('jadwal_all');
+        targetLabels.push('Semua Data Jadwal Perkuliahan & Temp');
+      } else {
+        if (chkJadwalUtama?.checked) { targets.push('jadwal_utama'); targetLabels.push('Jadwal Perkuliahan Utama'); }
+        if (chkJadwalTemp?.checked) { targets.push('jadwal_temp'); targetLabels.push('Data Temporary (Temp)'); }
+        if (chkMk?.checked) { targets.push('mata_kuliah'); targetLabels.push('Master Mata Kuliah'); }
+      }
+
+      // 2. Master Ruangan
+      const chkRuanganAll = document.getElementById('chk-clear-ruangan-all');
+      const chkRuanganLab = document.getElementById('chk-clear-ruangan-lab');
+      const chkRuanganKelas = document.getElementById('chk-clear-ruangan-kelas');
+      const chkRuanganUnused = document.getElementById('chk-clear-ruangan-unused');
+
+      if (chkRuanganAll?.checked) {
+        targets.push('ruangan_all');
+        targetLabels.push('Semua Master Ruangan & Laboratorium');
+      } else {
+        if (chkRuanganLab?.checked) { targets.push('ruangan_lab'); targetLabels.push('Ruang Laboratorium & Praktek'); }
+        if (chkRuanganKelas?.checked) { targets.push('ruangan_kelas'); targetLabels.push('Ruang Kelas / Teori'); }
+        if (chkRuanganUnused?.checked) { targets.push('ruangan_unused'); targetLabels.push('Ruangan Tanpa Jadwal'); }
+      }
+
+      // 3. Notifikasi
+      const chkNotifAll = document.getElementById('chk-clear-notif-all');
+      const chkNotifTambahan = document.getElementById('chk-clear-notif-tambahan');
+      const chkNotifPerubahan = document.getElementById('chk-clear-notif-perubahan');
+      const chkNotifJeda = document.getElementById('chk-clear-notif-jeda');
+
       if (chkNotifAll?.checked) {
         targets.push('notif_all');
-        targetLabels.push('Semua Riwayat Notifikasi');
+        targetLabels.push('Semua Riwayat Log Notifikasi');
       } else {
         if (chkNotifTambahan?.checked) { targets.push('notif_tambahan'); targetLabels.push('Notifikasi Kelas Tambahan'); }
         if (chkNotifPerubahan?.checked) { targets.push('notif_perubahan'); targetLabels.push('Notifikasi Perubahan Jadwal'); }
         if (chkNotifJeda?.checked) { targets.push('notif_jeda'); targetLabels.push('Notifikasi Jeda Ruangan'); }
       }
-      if (chkAslab?.checked) { targets.push('aslab'); targetLabels.push('Kontak WA Asisten Lab'); }
-      if (chkDosen?.checked) { targets.push('dosen'); targetLabels.push('Master Data Dosen Pengampu'); }
+
+      // 4. Asisten Lab
+      const chkAslabAll = document.getElementById('chk-clear-aslab-all');
+      const chkAslabThehok = document.getElementById('chk-clear-aslab-thehok');
+      const chkAslabKobar = document.getElementById('chk-clear-aslab-kobar');
+      const chkAslabNoroom = document.getElementById('chk-clear-aslab-noroom');
+
+      if (chkAslabAll?.checked) {
+        targets.push('aslab_all');
+        targetLabels.push('Semua Kontak WA Asisten Lab');
+      } else {
+        if (chkAslabThehok?.checked) { targets.push('aslab_thehok'); targetLabels.push('Aslab Kampus Thehok'); }
+        if (chkAslabKobar?.checked) { targets.push('aslab_kobar'); targetLabels.push('Aslab Kampus Kobar'); }
+        if (chkAslabNoroom?.checked) { targets.push('aslab_noroom'); targetLabels.push('Aslab Tanpa Ruangan'); }
+      }
+
+      // 5. Master Dosen
+      const chkDosenAll = document.getElementById('chk-clear-dosen-all');
+      const chkDosenActive = document.getElementById('chk-clear-dosen-active');
+      const chkDosenInactive = document.getElementById('chk-clear-dosen-inactive');
+
+      if (chkDosenAll?.checked) {
+        targets.push('dosen_all');
+        targetLabels.push('Semua Master Data Dosen');
+      } else {
+        if (chkDosenActive?.checked) { targets.push('dosen_active'); targetLabels.push('Dosen Berjadwal Aktif'); }
+        if (chkDosenInactive?.checked) { targets.push('dosen_inactive'); targetLabels.push('Dosen Tanpa Jadwal'); }
+      }
 
       if (targets.length === 0) return;
 
