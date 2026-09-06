@@ -54,6 +54,7 @@ jadwal-kuliah-unama/
 │   └── build_html.py                    # Auto-compiler penggabung komponen HTML
 │
 ├── 📁 docs/                             # Panduan & Dokumentasi
+│   ├── ANALISIS_FITUR_DAN_ALUR_KERJA.md # Analisis Komprehensif Seluruh Fitur & Alur Kerja
 │   ├── PANDUAN_AUTO_START.md            # Panduan auto-start & setup tunnel
 │   └── PROJECT_ANALYSIS.md              # Blueprint arsitektur proyek (file ini)
 │
