@@ -2912,7 +2912,7 @@ function showModernAlert({
 
     if (titleEl) titleEl.textContent = title;
     if (msgEl) {
-      msgEl.innerHTML = escapeHtml(message).replace(/\n/g, '<br>');
+      msgEl.innerHTML = message.replace(/\n/g, '<br>');
     }
     if (closeBtn) closeBtn.textContent = buttonText;
 
@@ -3458,7 +3458,7 @@ function initDbBackupModalEvents() {
       if (!token) return;
     }
 
-    let response = await fetch('/api/db/backup', {
+    let response = await fetch(`${API_BASE_URL}/api/db/backup`, {
       method: 'POST',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ targets: targetsList })
@@ -3468,7 +3468,7 @@ function initDbBackupModalEvents() {
       setAdminToken(null);
       const newToken = await requestAdminLogin();
       if (!newToken) return;
-      response = await fetch('/api/db/backup', {
+      response = await fetch(`${API_BASE_URL}/api/db/backup`, {
         method: 'POST',
         headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ targets: targetsList })
@@ -3476,12 +3476,16 @@ function initDbBackupModalEvents() {
     }
 
     if (!response.ok) {
-      throw new Error(`Server returned status ${response.status}`);
+      const errText = await response.text().catch(() => '');
+      throw new Error(`Server returned status ${response.status}: ${errText}`);
     }
 
     let filename = `backup_jadwal_unama_${new Date().toISOString().slice(0,10)}.sql`;
+    const xFilename = response.headers.get('X-Backup-Filename');
     const disp = response.headers.get('Content-Disposition');
-    if (disp && disp.includes('filename=')) {
+    if (xFilename) {
+      filename = xFilename;
+    } else if (disp && disp.includes('filename=')) {
       const match = disp.match(/filename="?([^";]+)"?/);
       if (match && match[1]) filename = match[1];
     }
@@ -3489,17 +3493,22 @@ function initDbBackupModalEvents() {
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = url;
-    a.download = filename;
+    a.setAttribute('download', filename);
     document.body.appendChild(a);
     a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+    
+    // Tunda pelepasan URL agar download manager browser (Chromium/Firefox) tidak membatalkan proses unduhan
+    setTimeout(() => {
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    }, 60000);
 
     const sizeKb = (blob.size / 1024).toFixed(1);
     await showModernAlert({
       title: isTotal ? "Backup Total Berhasil!" : "Backup Terpilih Berhasil!",
-      message: `File skrip SQL <b>${filename}</b> (${sizeKb} KB) berhasil diekspor dan diunduh ke komputer Anda.`,
+      message: `File skrip SQL <b>${escapeHtml(filename)}</b> (${sizeKb} KB) berhasil diekspor dan diunduh ke komputer Anda.`,
       type: "success",
       buttonText: "Selesai"
     });
@@ -5731,6 +5740,14 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    // 0. Prioritaskan Mode TV: Jika aktif, tekan ESC harus langsung kembali ke Dashboard
+    const tvOverlay = document.getElementById('tv-mode-overlay');
+    if (tvOverlay && (tvOverlay.classList.contains('active') || tvOverlay.style.display === 'flex' || tvOverlay.style.display === 'block')) {
+      e.preventDefault();
+      closeTvMode(true);
+      return;
+    }
+
     const openModals = document.querySelectorAll('.modal-overlay.open, #modal-fs-filter, #modal-fs-info');
     // Close the top-most modal first (last in DOM or highest z-index)
     if (openModals.length > 0) {
@@ -6153,22 +6170,28 @@ window.toggleFullscreenRuangan = function () {
   }
 };
 
-document.addEventListener('fullscreenchange', () => {
-  if (document.fullscreenElement) onFullscreenEnter();
-  else onFullscreenExit();
-});
-document.addEventListener('webkitfullscreenchange', () => {
-  if (document.webkitFullscreenElement) onFullscreenEnter();
-  else onFullscreenExit();
-});
-document.addEventListener('mozfullscreenchange', () => {
-  if (document.mozFullScreenElement) onFullscreenEnter();
-  else onFullscreenExit();
-});
-document.addEventListener('MSFullscreenChange', () => {
-  if (document.msFullscreenElement) onFullscreenEnter();
-  else onFullscreenExit();
-});
+function handleGlobalFullscreenChange() {
+  const fsElem = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+  const tvOverlay = document.getElementById('tv-mode-overlay');
+  const isTvActive = tvOverlay && (tvOverlay.classList.contains('active') || tvOverlay.style.display === 'flex');
+
+  if (!fsElem) {
+    if (isTvActive) {
+      closeTvMode(false);
+    }
+    onFullscreenExit();
+  } else {
+    const section = document.getElementById('section-status-ruangan');
+    if (section && (fsElem === section || section.contains(fsElem))) {
+      onFullscreenEnter();
+    }
+  }
+}
+
+document.addEventListener('fullscreenchange', handleGlobalFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleGlobalFullscreenChange);
+document.addEventListener('mozfullscreenchange', handleGlobalFullscreenChange);
+document.addEventListener('MSFullscreenChange', handleGlobalFullscreenChange);
 
 flatpickr("input[type='date'], #filter-tanggal", {
   dateFormat: "Y-m-d",
@@ -7084,9 +7107,12 @@ async function openTvMode() {
   if (!overlay) return;
 
   overlay.classList.add('active');
+  overlay.style.display = 'flex';
 
   if (document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen().catch(() => {});
+  } else if (document.documentElement.webkitRequestFullscreen) {
+    document.documentElement.webkitRequestFullscreen();
   }
 
   const selectedDate = document.getElementById('filter-tanggal')?.value;
@@ -7145,28 +7171,25 @@ async function openTvMode() {
 
 function closeTvMode(exitFullscreen = true) {
   const overlay = document.getElementById('tv-mode-overlay');
-  if (overlay) overlay.classList.remove('active');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.style.display = 'none';
+  }
 
-  if (exitFullscreen && document.fullscreenElement && document.exitFullscreen) {
-    document.exitFullscreen().catch(() => {});
+  const fsElem = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+  if (exitFullscreen && fsElem) {
+    try {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
+    } catch (e) {}
   }
 
   if (tvClockTimer) { clearInterval(tvClockTimer); tvClockTimer = null; }
   if (tvAutoRefreshTimer) { clearInterval(tvAutoRefreshTimer); tvAutoRefreshTimer = null; }
   if (tvTickerInterval) { clearInterval(tvTickerInterval); tvTickerInterval = null; }
 }
-
-// Listen to fullscreen changes to handle ESC key properly!
-document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement) {
-    closeTvMode(false);
-  }
-});
-document.addEventListener('webkitfullscreenchange', () => {
-  if (!document.webkitFullscreenElement) {
-    closeTvMode(false);
-  }
-});
 
 function createTvRowHtml(item, isEnter = false) {
   const now = new Date();

@@ -722,6 +722,24 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   overflow: visible !important;
 }
 
+#modal-fs-info .modal-box {
+  width: 92% !important;
+  max-width: 960px !important;
+  max-height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+#modal-fs-info #fs-notifikasi-lab-list {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)) !important;
+  gap: 14px !important;
+}
+
+#modal-fs-info #fs-live-warnings {
+  margin-bottom: 12px;
+}
+
 #modal-fitur .modal-box {
   width: 96% !important;
   max-width: 1480px !important;
