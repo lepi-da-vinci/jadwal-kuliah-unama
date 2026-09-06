@@ -4,6 +4,10 @@ Dokumen ini adalah **Buku Panduan Utama (Master Blueprint)** dari keseluruhan si
 
 **Tujuan Dokumen:** Memastikan tidak ada *blind spot* (titik buta) bagi developer di masa depan. Seluruh kode terstruktur rapi per folder dan komponen HTML per mode dipisah agar mudah dimaintenance.
 
+> [!NOTE]
+> **Catatan Konvensi Penamaan:**
+> Penulisan ruang praktikum di seluruh sistem (antarmuka UI, badge, modal, filter, notifikasi, dan dokumentasi) cukup ditulis **"Labor"** saja (misal: *Ruang Labor*, *Jeda Kosong Labor*, *Asisten Labor*), jangan ditulis panjang sebagai *"Laboratorium"*.
+
 ---
 
 ## 1. Susunan Struktur Folder Proyek (Organized Architecture)
@@ -88,7 +92,7 @@ Untuk memudahkan pemeliharaan dan menghindari scrolling file HTML ribuan baris, 
 | `modal-spotlight-detail.html` | ~45 baris | Pop-up detail preview saat memilih item hasil spotlight beserta tombol filter ke tabel utama. |
 | `modal-setting.html` | ~370 baris | Pengaturan Admin, Scan QR Code / Link Akses HP, Uji coba pesan WA, tabel master data Aslab & Ruangan, serta tombol pemicu Pembersihan Database. |
 | `modal-clear-db.html` | ~200 baris | **Pusat Pembersihan Database Terpilih**: Checkbox granular (Jadwal, Ruangan, Notifikasi, Kontak Aslab, Dosen Pengampu, Reset Total), live pill counters, dan status seleksi. |
-| `modal-notifikasi.html` | ~15 baris | Pop-up peringatan laboratorium & kelas yang akan segera mulai (`#lab-modal`). |
+| `modal-notifikasi.html` | ~15 baris | Pop-up peringatan labor & kelas yang akan segera mulai (`#lab-modal`). |
 | `modal-filter-info.html` | ~300 baris | Modal Filter Fullscreen, Modal Detail Ruangan, Modal Info Mase Fullscreen, dan Modal Fitur Tambahan / Info Lain. |
 | `modal-security.html` | ~160 baris | Otorisasi Password Admin, Tantangan Kode Unik Acak 10-Digit, serta **Custom Modern Confirm & Alert Modal** (`#custom-confirm-modal` & `#custom-alert-modal`). |
 

@@ -1172,7 +1172,7 @@ function renderInfoMaseNotifications(showPopup = false) {
   if (filtered.length === 0) {
     const emptyMsg = activeInfoMaseTab === 'ruang'
       ? '<em>Tidak ada notifikasi khusus untuk Ruang Kelas pada tanggal ini.</em>'
-      : '<em>Tidak ada notifikasi khusus untuk Laboratorium pada tanggal ini.</em>';
+      : '<em>Tidak ada notifikasi khusus untuk Labor pada tanggal ini.</em>';
 
     if (panelList) panelList.innerHTML = emptyMsg;
     if (fsList) fsList.innerHTML = emptyMsg;
@@ -2469,7 +2469,7 @@ document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
               <span>UJI COBA / SIMULASI NOTIFIKASI RUANGAN</span>
             </div>
-            <p style="margin-bottom: 6px; font-weight: 600; color: var(--primary);">Laboratorium segera mulai:</p>
+            <p style="margin-bottom: 6px; font-weight: 600; color: var(--primary);">Labor segera mulai:</p>
             <ul style="padding-left: 18px; margin: 0 0 10px 0; display: flex; flex-direction: column; gap: 6px;">
               <li><b>Labor 1.4 (Thehok)</b> <span class="notif-cat-badge labor">Labor</span> buat matkul <b>Pemrograman Web II (03PS4)</b> (Mulai 08:00) - <i style="color:var(--badge-cc);">Buka dalam 15 menit!</i></li>
             </ul>
@@ -2516,7 +2516,7 @@ async function fetchDbStats() {
       setVal(['cnt-clear-jadwal-temp', 'cnt-backup-jadwal-temp'], c.jadwal_temp || 0);
       setVal(['cnt-clear-mk', 'cnt-backup-mk'], c.mata_kuliah || 0);
 
-      // Grup 2: Master Ruangan & Laboratorium
+      // Grup 2: Master Ruangan & Labor
       setVal(['cnt-clear-ruangan-total', 'cnt-backup-ruangan-total'], c.ruangan || 0);
       setVal(['cnt-sub-ruangan-all', 'cnt-sub-backup-ruangan-all'], c.ruangan || 0);
       setVal(['cnt-clear-ruangan-lab', 'cnt-backup-ruangan-lab'], c.ruangan_lab || 0);
@@ -3055,9 +3055,9 @@ window.showModernAlert = showModernAlert;
 
       if (chkRuanganAll?.checked) {
         targets.push('ruangan_all');
-        targetLabels.push('Semua Master Ruangan & Laboratorium');
+        targetLabels.push('Semua Master Ruangan & Labor');
       } else {
-        if (chkRuanganLab?.checked) { targets.push('ruangan_lab'); targetLabels.push('Ruang Laboratorium & Praktek'); }
+        if (chkRuanganLab?.checked) { targets.push('ruangan_lab'); targetLabels.push('Ruang Labor & Praktek'); }
         if (chkRuanganKelas?.checked) { targets.push('ruangan_kelas'); targetLabels.push('Ruang Kelas / Teori'); }
         if (chkRuanganUnused?.checked) { targets.push('ruangan_unused'); targetLabels.push('Ruangan Tanpa Jadwal'); }
       }
@@ -3592,7 +3592,7 @@ function initDbBackupModalEvents() {
         selectedTargets.push('ruangan_all');
         selectedLabels.push('Semua Ruangan');
       } else {
-        if (chkRuanganLab?.checked) { selectedTargets.push('ruangan_lab'); selectedLabels.push('Ruangan Laboratorium'); }
+        if (chkRuanganLab?.checked) { selectedTargets.push('ruangan_lab'); selectedLabels.push('Ruangan Labor'); }
         if (chkRuanganKelas?.checked) { selectedTargets.push('ruangan_kelas'); selectedLabels.push('Ruang Kelas / Teori'); }
         if (chkRuanganUnused?.checked) { selectedTargets.push('ruangan_unused'); selectedLabels.push('Ruang Tanpa Jadwal'); }
       }
@@ -4277,7 +4277,7 @@ function renderRoomFinderResults() {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
           <div>
             <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">${escapeHtml(r.nama_ruangan)}</div>
-            <div style="font-size: 0.78em; color: var(--text-muted);">${escapeHtml(r.kampus)} • ${r.is_lab ? 'Laboratorium' : 'Ruang Kelas'}</div>
+            <div style="font-size: 0.78em; color: var(--text-muted);">${escapeHtml(r.kampus)} • ${r.is_lab ? 'Labor' : 'Ruang Kelas'}</div>
           </div>
           <span class="room-status-badge ${r.is_free ? 'free' : 'busy'}">
             <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
@@ -4700,7 +4700,7 @@ function checkLabNotifications() {
     const modalTitle = document.getElementById('lab-modal-title');
 
     if (labToNotify.length > 0 && kelasToNotify.length === 0) {
-      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Laboratorium';
+      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Labor';
       contentHTML += '<p style="font-weight:600; margin-bottom:8px;">Buka labor sekarang, praktikum segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
     } else if (kelasToNotify.length > 0 && labToNotify.length === 0) {
       if (modalTitle) modalTitle.textContent = 'Pemberitahuan Ruang Kelas';
@@ -4708,7 +4708,7 @@ function checkLabNotifications() {
     } else {
       if (modalTitle) modalTitle.textContent = 'Pemberitahuan Ruangan & Labor';
       if (labToNotify.length > 0) {
-        contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:var(--primary);">Laboratorium segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
+        contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:var(--primary);">Labor segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
       }
       if (kelasToNotify.length > 0) {
         contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:#10b981;">Ruang Kelas segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + kelasToNotify.map(k => `<li>${k}</li>`).join('') + '</ul>';
@@ -5011,7 +5011,7 @@ document.getElementById('tab-bentrok')?.addEventListener('click', () => switchIn
 document.getElementById('tab-cari-dosen')?.addEventListener('click', () => switchInfoMainTab('dosen'));
 document.getElementById('tab-cari-kelas')?.addEventListener('click', () => switchInfoMainTab('kelas'));
 
-// Tab 1: Category Toggles (Laboratorium vs Ruang Kelas vs Semua)
+// Tab 1: Category Toggles (Labor vs Ruang Kelas vs Semua)
 const btnFiturJenisLab = document.getElementById('btn-fitur-jenis-lab');
 const btnFiturJenisKelas = document.getElementById('btn-fitur-jenis-kelas');
 const btnFiturJenisSemua = document.getElementById('btn-fitur-jenis-semua');
@@ -5321,7 +5321,7 @@ function renderFiturRooms() {
             <div style="flex: 1; min-width: 0;">
               <div style="font-weight: 700; font-size: 1.08em; color: var(--text); line-height: 1.35; word-break: break-word;">${escapeHtml(r.roomName)}</div>
               <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 3px;">
-                ${escapeHtml(r.kampus)} • ${r.isLab ? 'Laboratorium' : 'Ruang Kelas'}
+                ${escapeHtml(r.kampus)} • ${r.isLab ? 'Labor' : 'Ruang Kelas'}
               </div>
             </div>
             <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0; white-space: nowrap;">
@@ -5427,7 +5427,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
   // 4. Jeda Kosong Lab
   const clientGaps = typeof calculateClientSideGaps === 'function' ? calculateClientSideGaps(ft) : [];
   clientGaps.forEach(g => {
-    const roomName = g.ruangan || 'Laboratorium';
+    const roomName = g.ruangan || 'Labor';
     items.push({
       type: 'jeda',
       tag: 'Jeda Kosong Lab',
@@ -5437,7 +5437,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
       dosen: '-',
       ruangan: roomName,
       kampus: roomName.toLowerCase().includes('thehok') ? 'Kampus Thehok' : 'Kampus Kobar',
-      desc: `Laboratorium tidak memiliki jadwal kuliah pada rentang jam ini dan dapat digunakan.`
+      desc: `Labor tidak memiliki jadwal kuliah pada rentang jam ini dan dapat digunakan.`
     });
   });
 
@@ -6483,7 +6483,7 @@ function exportFilteredSchedulesToExcel() {
       </style>
     </head>
     <body>
-      <h2 style="color:#1e1b4b; margin-bottom:4px;">JADWAL PERKULIAHAN & LABORATORIUM UNAMA</h2>
+      <h2 style="color:#1e1b4b; margin-bottom:4px;">JADWAL PERKULIAHAN & LABOR UNAMA</h2>
       <p style="color:#64748b; margin-top:0;">Universitas Dinamika Bangsa • Tanggal: ${escapeHtml(tanggalFormatIndo)} • Total: ${targetData.length} Jadwal</p>
       <table>
         <thead>
@@ -6838,7 +6838,7 @@ function renderSpotlightResults(query) {
         kampusPriority = 2;
       }
 
-      const isLaboratorium = isLab(cleanTitle);
+      const isLabor = isLab(cleanTitle);
       const uniqueKey = `${cleanTitle.toLowerCase()}__${kampusLabel.toLowerCase()}`;
 
       if (!roomMap.has(uniqueKey)) {
@@ -6847,8 +6847,8 @@ function renderSpotlightResults(query) {
           rawNames: new Set([originalName]),
           kampusLabel,
           kampusPriority,
-          isLaboratorium,
-          typePriority: isLaboratorium ? 1 : 2
+          isLabor,
+          typePriority: isLabor ? 1 : 2
         });
       } else {
         roomMap.get(uniqueKey).rawNames.add(originalName);
@@ -6872,10 +6872,10 @@ function renderSpotlightResults(query) {
 
     const roomTemp = [];
     roomMap.forEach(r => {
-      const tipeLabel = r.isLaboratorium ? 'Laboratorium Komputer' : 'Ruang Perkuliahan Teori';
-      const badgeClass = r.isLaboratorium ? 'badge-type-lab' : 'badge-type-ruang';
-      const badgeText = r.isLaboratorium ? 'LAB' : 'KELAS';
-      const svgIcon = r.isLaboratorium ? svgSearchIcons.lab : svgSearchIcons.ruangan;
+      const tipeLabel = r.isLabor ? 'Labor Komputer' : 'Ruang Perkuliahan Teori';
+      const badgeClass = r.isLabor ? 'badge-type-lab' : 'badge-type-ruang';
+      const badgeText = r.isLabor ? 'LAB' : 'KELAS';
+      const svgIcon = r.isLabor ? svgSearchIcons.lab : svgSearchIcons.ruangan;
 
       if (!query || r.cleanTitle.toLowerCase().includes(query) || r.kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
         roomTemp.push({
@@ -6894,7 +6894,7 @@ function renderSpotlightResults(query) {
       }
     });
 
-    // Urutkan Ruangan: Kampus Thehok dulu baru Kampus Kobar, dan dalam kampus: Laboratorium dulu baru Ruang Kelas
+    // Urutkan Ruangan: Kampus Thehok dulu baru Kampus Kobar, dan dalam kampus: Labor dulu baru Ruang Kelas
     roomTemp.sort((a, b) => {
       if (a.kampusPriority !== b.kampusPriority) return a.kampusPriority - b.kampusPriority;
       if (a.typePriority !== b.typePriority) return a.typePriority - b.typePriority;
@@ -7016,7 +7016,7 @@ function openSpotlightDetailModal(item) {
       <div class="spotlight-detail-stat-row">
         <div class="spotlight-detail-stat-box">
           <div class="spotlight-detail-stat-val">${item.aslabData.ruangan || '-'}</div>
-          <div class="spotlight-detail-stat-lbl">Laboratorium / Ruangan Jaga</div>
+          <div class="spotlight-detail-stat-lbl">Labor / Ruangan Jaga</div>
         </div>
         <div class="spotlight-detail-stat-box">
           <div class="spotlight-detail-stat-val">${item.aslabData.no_wa ? 'Tersedia' : '-'}</div>
@@ -7367,7 +7367,7 @@ function updateTvModeData(isInitial = false) {
   if (ccEl) ccEl.innerText = ccCount;
   if (totEl) totEl.innerText = totCount;
 
-  // 2. Hitung Statistik Real-Time Penggunaan Ruangan & Laboratorium
+  // 2. Hitung Statistik Real-Time Penggunaan Ruangan & Labor
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const isToday = (targetDate === todayStr);

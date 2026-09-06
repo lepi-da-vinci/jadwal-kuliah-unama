@@ -1,6 +1,6 @@
 # Jadwal Kuliah UNAMA & Bot Notifikasi WhatsApp
 
-Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan laboratorium BAAK Universitas Dinamika Bangsa (UNAMA). Dilengkapi dengan sinkronisasi otomatis, bypass proteksi Cloudflare (menggunakan Chrome Extension), AI Chatbot Aslab (Gemini AI), integrasi Docker, serta Bot Notifikasi WhatsApp (menggunakan Baileys Node.js).
+Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan labor BAAK Universitas Dinamika Bangsa (UNAMA). Dilengkapi dengan sinkronisasi otomatis, bypass proteksi Cloudflare (menggunakan Chrome Extension), AI Chatbot Aslab (Gemini AI), integrasi Docker, serta Bot Notifikasi WhatsApp (menggunakan Baileys Node.js).
 
 ---
 
@@ -8,7 +8,7 @@ Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan laborat
 
 1. **Dashboard Interaktif & Modern (Claymorphism UI)**
    - Tampilan bersih, elegan, responsif (*Mobile & Desktop Friendly*), dilengkapi tema **Dark Mode** dan **Light Mode**.
-   - **Status Penggunaan Ruangan Realtime:** Memisahkan panel Laboratorium dan Ruang Kelas, dengan indikator warna:
+   - **Status Penggunaan Ruangan Realtime:** Memisahkan panel Labor dan Ruang Kelas, dengan indikator warna:
      - 🟢 **Dipakai:** Kelas Tatap Muka (TM) sedang berlangsung.
      - 🟠 **Jeda:** Ada jeda kosong antar jam perkuliahan di ruangan tersebut.
      - 🔴 **Kosong:** Tidak ada perkuliahan pada jam saat ini.
@@ -21,7 +21,7 @@ Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan laborat
    - Tombol otomatis berubah warna dan berdenyut (*pulsing animation*) sesuai kondisi notifikasi terkini:
      - 🟢 **Hijau (`TAMBAHAN`):** Ada pemberitahuan kelas tambahan.
      - 🔵 **Biru (`PERUBAHAN`):** Ada informasi perubahan jadwal atau ruangan.
-     - 🟠 **Oren (`JEDA`):** Ada jeda kosong panjang di laboratorium.
+     - 🟠 **Oren (`JEDA`):** Ada jeda kosong panjang di ruang labor.
    - **Alarm:** Suara alarm dan popup hanya berbunyi di waktu H-30 menit dan H-15 menit sebelum kelas dimulai (tidak berulang saat sinkronisasi background).
 
 4. **Auto-Sync Otomatis Setiap 10 Menit**
@@ -29,7 +29,7 @@ Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan laborat
 
 5. **Manajemen Data Aslab & Pengelompokan Ruangan Alami**
    - Penambahan dan pengeditan kontak WhatsApp Aslab dengan nomor otomatis diformat standar internasional (`62`).
-   - Pilihan ruangan dikelompokkan secara rapi berdasarkan *Laboratorium* dan *Ruang Kelas* per kampus (*Kampus Kobar* & *Kampus Thehok*) serta diurutkan secara numerik alami (1.1, 1.2, ..., 1.10).
+   - Pilihan ruangan dikelompokkan secara rapi berdasarkan *Labor* dan *Ruang Kelas* per kampus (*Kampus Kobar* & *Kampus Thehok*) serta diurutkan secara numerik alami (1.1, 1.2, ..., 1.10).
 
 6. **Aksesibilitas Navigasi Keyboard Penuh**
    - Navigasi dropdown select, input, dan tombol menggunakan keyboard (`Tab`, `Enter`, `Spasi`, `Panah Atas/Bawah`) dengan indikator fokus tegas (`:focus-visible`), tanpa perubahan warna biru saat diklik mouse.

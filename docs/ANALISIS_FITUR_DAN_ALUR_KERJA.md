@@ -11,7 +11,7 @@
 3. [Analisis Detail Seluruh Fitur Aplikasi](#3-analisis-detail-seluruh-fitur-aplikasi)
    - [3.1 Mesin Sinkronisasi & Web Scraper Otomatis](#31-mesin-sinkronisasi--web-scraper-otomatis)
    - [3.2 Filter & Mesin Pencarian Multi-Kriteria Realtime](#32-filter--mesin-pencarian-multi-kriteria-realtime)
-   - [3.3 Panel Pemantau Ruangan & Laboratorium Aktif (Live Status)](#33-panel-pemantau-ruangan--laboratorium-aktif-live-status)
+   - [3.3 Panel Pemantau Ruangan & Labor Aktif (Live Status)](#33-panel-pemantau-ruangan--labor-aktif-live-status)
    - [3.4 Detektor Jadwal Bentrok Cerdas (SKS Duration Aware)](#34-detektor-jadwal-bentrok-cerdas-sks-duration-aware)
    - [3.5 Smart Room & Lab Finder (Pencari Ruang Kosong)](#35-smart-room--lab-finder-pencari-ruang-kosong)
    - [3.6 Hub Informasi Perubahan & Tambahan Jadwal](#36-hub-informasi-perubahan--tambahan-jadwal)
@@ -32,13 +32,17 @@
    - [4.2 Alur Penarikan Data (Scraping & Ingestion)](#42-alur-penarikan-data-scraping--ingestion)
    - [4.3 Alur Pemrosesan & Transformasi Backend](#43-alur-pemrosesan--transformasi-backend)
    - [4.4 Alur Konsumsi & Evaluasi Logika di Sisi Klien (Frontend Engine)](#44-alur-konsumsi--evaluasi-logika-di-sisi-klien-frontend-engine)
-   - [4.5 Alur Siklus Notifikasi Asisten Laboratorium](#45-alur-siklus-notifikasi-asisten-laboratorium)
+   - [4.5 Alur Siklus Notifikasi Asisten Labor](#45-alur-siklus-notifikasi-asisten-labor)
 
 ---
 
 ## 1. Ringkasan Eksekutif & Arsitektur Teknologi
 
-Aplikasi **Jadwal Kuliah UNAMA** adalah platform *enterprise-grade* yang dirancang untuk mengatasi kompleksitas penjadwalan akademik, pengelolaan ruang kelas, otomatisasi pengingat asisten laboratorium, dan pemantauan display aula/lobby di **Universitas Dinamika Bangsa (UNAMA)**.
+> [!NOTE]
+> **Catatan Konvensi Penamaan Ruang Praktikum:**  
+> Penulisan ruang praktikum di seluruh sistem (antarmuka UI, badge, modal, filter, notifikasi, dan dokumentasi) cukup ditulis **"Labor"** saja (misal: *Ruang Labor*, *Jeda Kosong Labor*, *Asisten Labor*), **tidak boleh** ditulis panjang sebagai *"Laboratorium"*.
+
+Aplikasi **Jadwal Kuliah UNAMA** adalah platform *enterprise-grade* yang dirancang untuk mengatasi kompleksitas penjadwalan akademik, pengelolaan ruang kelas, otomatisasi pengingat asisten labor, dan pemantauan display aula/lobby di **Universitas Dinamika Bangsa (UNAMA)**.
 
 ### Tumpukan Teknologi (Tech Stack)
 ```
@@ -108,9 +112,9 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
   1. **Primary Engine (Python Direct Scraper)**: Memanfaatkan `requests` dan `BeautifulSoup4` untuk mengirim permintaan HTTP POST dengan payload tanggal ke endpoint BAAK. Script mem-parsing tabel HTML, mengekstrak nama hari, tanggal, jam mulai, nama dosen, kode mata kuliah, nama mata kuliah, kelas, ruangan, dan status jadwal.
   2. **Fallback Engine (Chrome Extension Scraping)**: Jika portal BAAK menerapkan proteksi Cloudflare Turnstile / Captcha yang memblokir IP server, pengguna dapat mengaktifkan Ekstensi Chrome yang membaca DOM portal yang sudah terbuka di browser dan meneruskannya ke backend via API.
   3. **Auto Normalization**:
-     - Memperbaiki penulisan nama ruangan (misalnya mengelompokkan `Kampus Thehok` vs `Kampus Kobar/Pasir Putih`).
+     - Memperbaiki penulisan nama ruangan (misalnya mengelompokkan `Kampus Thehok` vs `Kampus Kobar`).
      - Menghubungkan otomatis dengan tabel master `dosen`, `mata_kuliah`, dan `ruangan`.
-     - Menghitung dan menyimpan jeda kosong laboratorium ke tabel `notifikasi_lab`.
+     - Menghitung dan menyimpan jeda kosong labor ke tabel `notifikasi_lab`.
 
 ---
 
@@ -126,15 +130,15 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
     - `Sore / Malam (16:00 - 21:00)`: Sesi perkuliahan sore/malam.
     - Jam spesifik (`08:00`, `09:30`, `10:15`, dst.).
   - **Filter Metode Pembelajaran**: Memfilter Tatap Muka (`TM`), Pembelajaran Daring (`OL`), atau Kelas Batal / Cancel Class (`CC`).
-  - **Filter Kampus**: Menyaring antara `Kampus 1 (Thehok)` dan `Kampus 2 (Pasir Putih / Kobar)`.
-  - **Filter Kategori Ruang**: Opsi khusus untuk hanya melihat ruangan `Laboratorium` atau `Ruang Kelas Teori`.
+  - **Filter Kampus**: Menyaring antara `Kampus Thehok` dan `Kampus Kobar`.
+  - **Filter Kategori Ruang**: Opsi khusus untuk hanya melihat ruangan `Labor` atau `Ruang Kelas Teori`.
   - **Filter Ruangan Dinamis**: Dropdown ruangan yang otomatis terisi berdasarkan ruangan yang aktif pada tanggal terpilih.
   - **Live Search Input**: Pencarian instan teks bebas pada nama dosen, nama matkul, kelas, maupun ruangan.
 
 ---
 
-### 3.3 Panel Pemantau Ruangan & Laboratorium Aktif (Live Status)
-* **Fungsi Utama**: Menampilkan status fisik setiap ruangan kuliah dan laboratorium secara visual dalam bentuk kartu-kartu interaktif.
+### 3.3 Panel Pemantau Ruangan & Labor Aktif (Live Status)
+* **Fungsi Utama**: Menampilkan status fisik setiap ruangan kuliah dan labor secara visual dalam bentuk kartu-kartu interaktif.
 * **Indikator Warna (Status Badges)**:
   - 🔴 **Sedang Dipakai (Busy)**: Ruangan sedang aktif digunakan untuk perkuliahan. Kartu mencantumkan nama mata kuliah, dosen pengampu, dan jam sesi.
   - 🟡 **Segera Selesai / Tutup Lab (Warning)**: Sesi perkuliahan akan berakhir dalam waktu kurang dari 30 menit. Memberi aba-aba kepada aslab dan petugas kebersihan.
@@ -161,7 +165,7 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
 ---
 
 ### 3.5 Smart Room & Lab Finder (Pencari Ruang Kosong)
-* **Fungsi Utama**: Membantu mahasiswa, dosen, atau pengelola laboratorium menemukan ruangan yang sedang kosong detik ini atau yang memiliki waktu jeda kosong terpanjang.
+* **Fungsi Utama**: Membantu mahasiswa, dosen, atau pengelola labor menemukan ruangan yang sedang kosong detik ini atau yang memiliki waktu jeda kosong terpanjang.
 * **Kemampuan Khusus**:
   - Menghitung rentang waktu kosong di pagi hari (dimulai tepat dari jam buka operasional universitas `08:00`), jeda antar kelas (minimal jeda 45 menit), hingga batas malam (`21:00`).
   - Memberikan ringkasan cerdas seperti `Kosong Bebas Jadwal`, `Ada 2 Jam Kosong (08:00 - 10:15, 14:45 - 17:00)`, atau `Terpakai Penuh`.
@@ -175,7 +179,7 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
   1. **Kelas Batal / Cancelled (CC)**: Menampilkan mata kuliah yang statusnya dibatalkan oleh BAAK beserta nama dosen dan ruangannya.
   2. **Kelas Tambahan**: Menampilkan jadwal sesi kuliah tambahan atau pengganti.
   3. **Perubahan Jam & Ruang**: Mendeteksi jadwal yang mengalami pergeseran dari waktu standar.
-  4. **Jeda Kosong Laboratorium**: Merekap jeda panjang laboratorium (durasi kosong ≥ 90 menit) yang dapat diajukan untuk praktikum susulan.
+  4. **Jeda Kosong Labor**: Merekap jeda panjang labor (durasi kosong ≥ 90 menit) yang dapat diajukan untuk praktikum susulan.
 
 ---
 
@@ -200,7 +204,7 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
 ---
 
 ### 3.9 Mode TV & Layar Penuh Kiosk Display
-* **Fungsi Utama**: Mode khusus tampilan monitor TV aula, lobby kampus, atau laboratorium komputer untuk menyajikan informasi jadwal secara otomatis tanpa perlu operator.
+* **Fungsi Utama**: Mode khusus tampilan monitor TV aula, lobby kampus, atau ruang labor komputer untuk menyajikan informasi jadwal secara otomatis tanpa perlu operator.
 * **Fitur Utama**:
   - **Jam Digital Realtime**: Menampilkan hari, tanggal, dan detik jam dengan ukuran besar dan kontras tinggi.
   - **Stat Badges**: Rekapitulasi jumlah sesi kelas Tatap Muka (`TM`), Online (`OL`), Batal (`CC`), dan Total Kelas hari ini.
@@ -211,14 +215,14 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
 ---
 
 ### 3.10 Sistem Peringatan & Notifikasi Otomatis Aslab (Dual-Channel)
-* **Fungsi Utama**: Mengotomatiskan pengingat kepada Asisten Laboratorium (Aslab) agar tidak terlambat membuka atau mengunci laboratorium.
+* **Fungsi Utama**: Mengotomatiskan pengingat kepada Asisten Labor (Aslab) agar tidak terlambat membuka atau mengunci labor.
 * **Arsitektur Peringatan Ganda**:
   1. **Browser Audio-Visual Alarm (`checkLabNotifications`)**:
      - Berjalan di background per 60 detik di tab browser.
      - **Synthesizer Nada Audio**: Memanfaatkan HTML5 `AudioContext` untuk memainkan sekuens nada *sine wave* frekuensi tinggi (880Hz & 1108Hz) tanpa ketergantungan file audio eksternal.
      - **Pemberitahuan Pukul 06:30 (90 Menit Sebelum Kelas Jam 08:00)**: Pengingat awal agar aslab bersiap menuju kampus dan membuka lab sebelum perkuliahan dimulai.
      - **Pemberitahuan 30 & 15 Menit Sebelum Mulai**: Pengingat darurat agar lab siap dimasuki mahasiswa.
-     - **Pemberitahuan Selesai Kelas**: Pengingat mengunci kembali laboratorium saat perkuliahan usai.
+     - **Pemberitahuan Selesai Kelas**: Pengingat mengunci kembali labor saat perkuliahan usai.
   2. **WhatsApp Bot Gateway Notifier (`backend/wa_notifier.py` & `wa-bot`)**:
      - Daemon background Python yang memantau jadwal aktif.
      - Otomatis mengirim pesan WhatsApp ke nomor HP aslab yang bertanggung jawab atas lab tersebut:
@@ -294,7 +298,7 @@ Berikut adalah rekapitulasi cepat 18 fitur utama dalam sistem:
 ### 3.16 Manajemen Master Data Ruangan & Kontak Aslab
 * **Fungsi Utama**: Pengaturan konfigurasi operasional di modal Setting.
 * **Fitur**:
-  - Menghubungkan ID Ruangan laboratorium dengan Nomor WhatsApp Asisten Laboratorium yang bertugas.
+  - Menghubungkan ID Ruangan labor dengan Nomor WhatsApp Asisten Labor yang bertugas.
   - Menambah, mengubah nama, atau menghapus ruangan kampus.
   - Formulir uji coba kirim pesan instan WhatsApp langsung ke nomor target untuk memastikan bot dalam kondisi prima.
 
@@ -393,7 +397,7 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
      - Waktu: `Jumat, 17 Juli 2026 08:00` -> `hari = "Jumat"`, `tanggal = "2026-07-17"`, `jam = "08:00:00"`.
      - Dosen: Tag `<span class="font-weight-bold">`.
      - Mata Kuliah & Kelas: Pemisahan string berdasarkan tanda pembatas `::` (misalnya `SI-4A :: Pemrograman Web I`).
-     - Ruangan & Lokasi: Pemisahan nama ruangan dan penanda lokasi kampus `(Thehok)` atau `(Pasir Putih)`.
+     - Ruangan & Lokasi: Pemisahan nama ruangan dan penanda lokasi kampus `(Thehok)` atau `(Kampus Kobar)`.
      - Metode Pembelajaran: Otomatis mendeteksi tag status apakah Tatap Muka (`TM`), Online (`OL`), atau Cancel Class (`CC`).
 
 ---
@@ -403,7 +407,7 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
    - Menjalankan kueri `INSERT IGNORE` ke tabel `dosen`, `mata_kuliah`, dan `ruangan` untuk memastikan data master selalu mutakhir tanpa duplikasi.
 2. **Transaksi Tabel Jadwal Utama**:
    - Menyimpan seluruh baris perkuliahan ke tabel transaksi `jadwal`.
-3. **Kalkulasi Jeda Laboratorium (`calculate_and_save_gaps`)**:
+3. **Kalkulasi Jeda Labor (`calculate_and_save_gaps`)**:
    - Mengurutkan sesi lab berdasarkan jam mulai.
    - Menghitung waktu selesai masing-masing kelas dengan durasi dinamis (`get_class_duration()`).
    - Jika terdapat jeda kosong antar kelas ≥ 90 menit, sistem membuat entri otomatis ke tabel `notifikasi_lab` dengan tipe `'JEDA'`.
@@ -432,7 +436,7 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
 
 ---
 
-### 4.5 Alur Siklus Notifikasi Asisten Laboratorium
+### 4.5 Alur Siklus Notifikasi Asisten Labor
 1. **Background Polling Browser**:
    - Fungsi `checkLabNotifications()` dieksekusi secara periodik setiap 60 detik.
 2. **Pengecekan Waktu**:
@@ -451,6 +455,6 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
 Proyek **Jadwal Kuliah UNAMA** berhasil mengubah data jadwal yang sebelumnya terfragmentasi di portal web menjadi ekosistem digital yang **terpadu, cerdas, otomatis, dan berorientasi pengguna**:
 - ⏱️ **Efisiensi Waktu**: Mahasiswa dan dosen dapat mencari ruang kosong atau jadwal dosen hanya dalam hitungan detik.
 - 🛡️ **Akurasi Akademik**: Deteksi bentrok cerdas berbasis durasi SKS nyata mencegah kesalahan alokasi ruangan.
-- 🤖 **Otomasi Praktikum**: Aslab tidak lagi lupa membuka atau menutup laboratorium berkat pengingat ganda (Alarm Web & WhatsApp Bot).
+- 🤖 **Otomasi Praktikum**: Aslab tidak lagi lupa membuka atau menutup labor berkat pengingat ganda (Alarm Web & WhatsApp Bot).
 - 📺 **Kesiapan Display Kampus**: Mode TV Kiosk siap ditayangkan di layar monitor aula kampus tanpa memerlukan perangkat lunak tambahan.
 - 🔒 **Keamanan Terjamin**: Operasi pembersihan dan pemulihan data dilindungi oleh tiga lapis proteksi ketat.

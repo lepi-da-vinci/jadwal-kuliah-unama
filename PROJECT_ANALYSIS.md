@@ -4,6 +4,10 @@ Dokumen ini adalah **Buku Panduan Utama (Master Blueprint)** dari keseluruhan si
 
 **Tujuan Dokumen:** Memastikan tidak ada *blind spot* (titik buta) bagi developer di masa depan. Seluruh kode terstruktur rapi per folder dan komponen HTML per mode dipisah agar mudah dimaintenance.
 
+> [!NOTE]
+> **Catatan Konvensi Penamaan:**
+> Penulisan ruang praktikum di seluruh sistem (antarmuka UI, badge, modal, filter, notifikasi, dan dokumentasi) cukup ditulis **"Labor"** saja (misal: *Ruang Labor*, *Jeda Kosong Labor*, *Asisten Labor*), jangan ditulis panjang sebagai *"Laboratorium"*.
+
 ---
 
 ## 1. Susunan Struktur Folder Proyek (Organized Architecture)
@@ -92,7 +96,7 @@ Untuk memudahkan pemeliharaan dan menghindari scrolling file HTML ribuan baris, 
 | `modal-restore-db.html` | ~120 baris | **Pusat Restore / Impor Database (.SQL)**: Upload & drag-and-drop file skrip `.sql`, live preview kueri/tabel/baris, verifikasi token HMAC, dan eksekusi aman via transaksi. |
 | `modal-room-finder.html` | ~85 baris | **Smart Room Finder (Cari Ruang Kosong)**: Filter kampus, tipe ruangan, dan slot waktu ketersediaan realtime (live / pagi / siang / sore) dengan kartu interaktif dan tombol hubung langsung ke tabel utama. |
 | `modal-changes-hub.html` | ~65 baris | **Pusat Perubahan & Kelas Tambahan**: Hub rangkuman harian dengan 5 tab (Semua, Batal CC, Kelas Tambahan, Pergeseran Jadwal, Jeda Lab) dan pencarian instan. |
-| `modal-notifikasi.html` | ~15 baris | Pop-up peringatan laboratorium & kelas yang akan segera mulai (`#lab-modal`). |
+| `modal-notifikasi.html` | ~15 baris | Pop-up peringatan labor & kelas yang akan segera mulai (`#lab-modal`). |
 | `modal-filter-info.html` | ~300 baris | Modal Filter Fullscreen, Modal Detail Ruangan, Modal Info Mase Fullscreen, dan Modal Fitur Tambahan / Info Lain. |
 | `modal-security.html` | ~160 baris | Otorisasi Password Admin, Tantangan Kode Unik Acak 10-Digit, serta **Custom Modern Confirm & Alert Modal** (`#custom-confirm-modal` & `#custom-alert-modal`). |
 

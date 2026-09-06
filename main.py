@@ -589,7 +589,7 @@ def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depe
         if "ruangan_all" in deleted_summary and deleted_summary["ruangan_all"] > 0:
             parts_msg.append(f"{deleted_summary['ruangan_all']} Master Ruangan")
         if "ruangan_lab" in deleted_summary and deleted_summary["ruangan_lab"] > 0:
-            parts_msg.append(f"{deleted_summary['ruangan_lab']} Ruang Laboratorium")
+            parts_msg.append(f"{deleted_summary['ruangan_lab']} Ruang Labor")
         if "ruangan_kelas" in deleted_summary and deleted_summary["ruangan_kelas"] > 0:
             parts_msg.append(f"{deleted_summary['ruangan_kelas']} Ruang Kelas/Teori")
         if "ruangan_unused" in deleted_summary and deleted_summary["ruangan_unused"] > 0:
