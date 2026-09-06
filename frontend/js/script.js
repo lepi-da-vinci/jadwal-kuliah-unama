@@ -283,7 +283,8 @@ function updateRuanganFilterOptions() {
       if (!item.jam) return;
       const parts = item.jam.split(':');
       const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-      if (!(currentTime >= startTime && currentTime <= startTime + 135)) return;
+      const dur = getClassDuration(item);
+      if (!(currentTime >= startTime && currentTime <= startTime + dur)) return;
     }
 
     if (filterKat === 'semua') {
@@ -334,6 +335,59 @@ function populateFilters() {
 }
 
 // ─── Detektor & Indikator Jadwal Bentrok (Conflict Detector) ───
+function is2Sks(namaMk) {
+  if (!namaMk || typeof namaMk !== 'string') return false;
+  const mk = namaMk.toLowerCase();
+  const twoSksKeywords = [
+    'pemrograman mobile',
+    'basic computer',
+    'bahasa inggris',
+    'kecakapan antar personal',
+    'matematika diskrit',
+    'kewarganegaraan',
+    'komputer dan masyarakat',
+    'kalkulus',
+    'kewirausahaan',
+    'rekayasa perangkat lunak',
+    'toefl',
+    'pengantar akuntansi',
+    'pengantar bisnis',
+    'pasar keuangan',
+    'hukum bisnis',
+    'pengantar sistem komputer',
+    'socialpreneurship',
+    'knowledge management',
+    'analisa kinerja',
+    'perilaku konsumen',
+    'praktikum',
+    'manajemen stratejik',
+    'pengantar ekonomi',
+    'sistem digital',
+    'sistem informasi manajemen',
+    'strategi bisnis',
+    'tata kelola sistem informasi',
+    'manajemen mutu',
+    'manajemen proyek tik'
+  ];
+  return twoSksKeywords.some(k => mk.includes(k));
+}
+
+function getClassDuration(itemOrMk) {
+  if (!itemOrMk) return 135;
+  const namaMk = typeof itemOrMk === 'string' ? itemOrMk : (itemOrMk.nama_mk || '');
+  if (is2Sks(namaMk)) return 90;
+  
+  // Deteksi berbasis slot waktu 90 menit UNAMA: 09:30, 11:00, 15:30, 18:30, 20:00
+  const jam = typeof itemOrMk === 'object' ? itemOrMk.jam : null;
+  if (jam) {
+    const startMin = parseTimeToMinutes(jam);
+    if ([570, 660, 930, 1110, 1200].includes(startMin)) {
+      return 90;
+    }
+  }
+  return 135;
+}
+
 function parseTimeToMinutes(timeStr) {
   if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes(':')) return null;
   const parts = timeStr.trim().split(':');
@@ -360,14 +414,16 @@ function detectScheduleConflicts(scheduleList) {
     const a = validItems[i];
     const startA = parseTimeToMinutes(a.jam);
     if (startA === null) continue;
-    const endA = startA + 135;
+    const durA = getClassDuration(a);
+    const endA = startA + durA;
     const keyA = getScheduleUniqueKey(a, i);
 
     for (let j = i + 1; j < validItems.length; j++) {
       const b = validItems[j];
       const startB = parseTimeToMinutes(b.jam);
       if (startB === null) continue;
-      const endB = startB + 135;
+      const durB = getClassDuration(b);
+      const endB = startB + durB;
       const keyB = getScheduleUniqueKey(b, j);
 
       // Overlap formula: startA < endB && startB < endA
@@ -552,7 +608,8 @@ function applyFilters() {
       if (!item.jam) return false;
       const parts = item.jam.split(':');
       const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-      return (currentTime >= startTime) && (currentTime <= startTime + 135);
+      const dur = getClassDuration(item);
+      return (currentTime >= startTime) && (currentTime <= startTime + dur);
     });
   } else if (fw !== 'semua') {
     filtered = filtered.filter(item => item.jam === fw);
@@ -637,9 +694,11 @@ function updateActiveLabPanel() {
       const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 
       if (!roomSchedules[item.nama_ruangan]) roomSchedules[item.nama_ruangan] = [];
+      const dur = getClassDuration(item);
       roomSchedules[item.nama_ruangan].push({
         start: startTime,
-        end: startTime + 135,
+        end: startTime + dur,
+        dur: dur,
         nama: item.nama_mk,
         jam: item.jam
       });
@@ -765,9 +824,7 @@ function updateActiveLabPanel() {
   if (isToday) {
     for (const [room, schedules] of Object.entries(roomSchedules)) {
       if (!schedules || schedules.length === 0) continue;
-      const startTimes = schedules.map(s => s.start);
-      const lastStartTime = Math.max(...startTimes);
-      const lastClassEndTime = lastStartTime + 135;
+      const lastClassEndTime = Math.max(...schedules.map(s => s.end || (s.start + 135)));
       const minsLeft = lastClassEndTime - currentTime;
 
       if (minsLeft >= 0 && minsLeft <= 30) {
@@ -943,11 +1000,12 @@ function calculateClientSideGaps(targetDate) {
       if (!roomSchedules[ruang]) roomSchedules[ruang] = [];
       const parts = item.jam.split(':');
       const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      const dur = getClassDuration(item);
       roomSchedules[ruang].push({
         jam: item.jam,
         nama_mk: item.nama_mk,
         start: startMin,
-        end: startMin + 135
+        end: startMin + dur
       });
     }
   });
@@ -4143,7 +4201,8 @@ function renderRoomFinderResults() {
       const currentClass = roomClasses.find(c => {
         const start = parseTimeToMinutes(c.jam);
         if (start === null) return false;
-        return (currentMins >= start && currentMins < start + 135);
+        const dur = getClassDuration(c);
+        return (currentMins >= start && currentMins < start + dur);
       });
       if (currentClass) {
         isFree = false;
@@ -4154,10 +4213,11 @@ function renderRoomFinderResults() {
         isFree = false;
         busyReason = `${roomClasses.length} kelas terjadwal pada hari ini`;
       }
-    } else if (fWaktu === 'pagi') { // 07:30 - 12:00 (450 - 720)
+    } else if (fWaktu === 'pagi') { // 08:00 - 12:00 (480 - 720)
       const cl = roomClasses.find(c => {
         const s = parseTimeToMinutes(c.jam);
-        return s !== null && (s < 720 && (s + 135) > 450);
+        const dur = getClassDuration(c);
+        return s !== null && (s < 720 && (s + dur) > 480);
       });
       if (cl) {
         isFree = false;
@@ -4166,7 +4226,8 @@ function renderRoomFinderResults() {
     } else if (fWaktu === 'siang') { // 12:00 - 16:00 (720 - 960)
       const cl = roomClasses.find(c => {
         const s = parseTimeToMinutes(c.jam);
-        return s !== null && (s < 960 && (s + 135) > 720);
+        const dur = getClassDuration(c);
+        return s !== null && (s < 960 && (s + dur) > 720);
       });
       if (cl) {
         isFree = false;
@@ -4175,7 +4236,8 @@ function renderRoomFinderResults() {
     } else if (fWaktu === 'sore') { // 16:00 - 21:00 (960 - 1260)
       const cl = roomClasses.find(c => {
         const s = parseTimeToMinutes(c.jam);
-        return s !== null && (s < 1260 && (s + 135) > 960);
+        const dur = getClassDuration(c);
+        return s !== null && (s < 1260 && (s + dur) > 960);
       });
       if (cl) {
         isFree = false;
@@ -4612,12 +4674,18 @@ function checkLabNotifications() {
   let kelasToNotify = [];
   for (const [ruang, dataClass] of Object.entries(firstClasses)) {
     const diffMin = dataClass.startTotalMin - currentTotalMin;
-    if (diffMin === 30 || diffMin === 15) {
+    // Notifikasi aslab: 90 menit (pukul 06:30 untuk kelas jam 08:00), 30 menit, dan 15 menit
+    if (diffMin === 90 || diffMin === 30 || diffMin === 15) {
       const alarmKey = `${currentDayStr}_${ruang}_${dataClass.jam}_${diffMin}`;
       if (!notifiedLabAlarmKeys.has(alarmKey)) {
         notifiedLabAlarmKeys.add(alarmKey);
         const badgeHTML = dataClass.isLab ? '<span class="notif-cat-badge labor">Labor</span>' : '<span class="notif-cat-badge kelas">Kelas</span>';
-        const itemMsg = `<b>${ruang}</b> ${badgeHTML} untuk matkul <b>${dataClass.nama_mk}</b> (Mulai ${dataClass.jam}) - <i style="color:var(--primary);">Buka dalam ${diffMin} menit!</i>`;
+        let itemMsg = '';
+        if (diffMin === 90) {
+          itemMsg = `<b>${ruang}</b> ${badgeHTML} untuk matkul <b>${dataClass.nama_mk}</b> (Mulai ${dataClass.jam}) - <i style="color:var(--primary);">Pukul 06:30: Harap persiapkan dan buka lab sebelum mulai kelas!</i>`;
+        } else {
+          itemMsg = `<b>${ruang}</b> ${badgeHTML} untuk matkul <b>${dataClass.nama_mk}</b> (Mulai ${dataClass.jam}) - <i style="color:var(--primary);">Buka dalam ${diffMin} menit!</i>`;
+        }
         if (dataClass.isLab) {
           labToNotify.push(itemMsg);
         } else {
@@ -5136,10 +5204,11 @@ function renderFiturRooms() {
     const sortedClasses = [...roomClasses].map(c => {
       const parts = (c.jam || '').split(':');
       const startMin = parts.length >= 2 ? parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) : 0;
+      const dur = getClassDuration(c);
       return {
         ...c,
         startMin,
-        endMin: startMin + 135
+        endMin: startMin + dur
       };
     }).sort((a, b) => a.startMin - b.startMin);
 
@@ -5156,7 +5225,7 @@ function renderFiturRooms() {
       if (sortedClasses[0].startMin >= 9 * 60) {
         const eh = Math.floor(sortedClasses[0].startMin / 60).toString().padStart(2, '0');
         const em = (sortedClasses[0].startMin % 60).toString().padStart(2, '0');
-        gapsInfo.push(`07:30 - ${eh}:${em}`);
+        gapsInfo.push(`08:00 - ${eh}:${em}`);
       }
 
       for (let i = 0; i < sortedClasses.length - 1; i++) {
@@ -5192,7 +5261,7 @@ function renderFiturRooms() {
       const isBusyNow = sortedClasses.some(c => currentMinutes >= c.startMin && currentMinutes < c.endMin);
       if (isBusyNow) return;
     } else if (filterWaktu === 'pagi') {
-      const busyMorning = sortedClasses.some(c => c.startMin < 720 && c.endMin > 450);
+      const busyMorning = sortedClasses.some(c => c.startMin < 720 && c.endMin > 480);
       if (busyMorning && statusType !== 'has-gaps') return;
     } else if (filterWaktu === 'siang') {
       const busyNoon = sortedClasses.some(c => c.startMin < 960 && c.endMin > 720);
@@ -7311,7 +7380,7 @@ function updateTvModeData(isInitial = false) {
         const timeParts = parts[0].split(':').map(Number);
         if (timeParts.length >= 2 && !isNaN(timeParts[0])) {
           const startTime = timeParts[0] * 60 + timeParts[1];
-          let endTime = startTime + 135;
+          let endTime = startTime + getClassDuration(item);
           if (parts.length >= 2) {
             const endParts = parts[1].split(':').map(Number);
             if (endParts.length >= 2 && !isNaN(endParts[0])) {

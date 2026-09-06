@@ -285,6 +285,48 @@ def parse_html_content(html_content, fallback_tanggal=None):
         
     return hasil_scraping
 
+def is_2_sks(nama_mk: str) -> bool:
+    """Mendeteksi apakah suatu mata kuliah adalah 2 SKS (90 menit) atau bukan."""
+    if not nama_mk:
+        return False
+    mk = nama_mk.lower()
+    two_sks_keywords = [
+        'pemrograman mobile',
+        'basic computer',
+        'bahasa inggris',
+        'kecakapan antar personal',
+        'matematika diskrit',
+        'kewarganegaraan',
+        'komputer dan masyarakat',
+        'kalkulus',
+        'kewirausahaan',
+        'rekayasa perangkat lunak',
+        'toefl',
+        'pengantar akuntansi',
+        'pengantar bisnis',
+        'pasar keuangan',
+        'hukum bisnis',
+        'pengantar sistem komputer',
+        'socialpreneurship',
+        'knowledge management',
+        'analisa kinerja',
+        'perilaku konsumen',
+        'praktikum',
+        'manajemen stratejik',
+        'pengantar ekonomi',
+        'sistem digital',
+        'sistem informasi manajemen',
+        'strategi bisnis',
+        'tata kelola sistem informasi',
+        'manajemen mutu',
+        'manajemen proyek tik'
+    ]
+    return any(k in mk for k in two_sks_keywords)
+
+def get_class_duration(nama_mk: str) -> int:
+    """Mengembalikan durasi perkuliahan dalam menit (2 SKS = 90 menit, 3 SKS = 135 menit)."""
+    return 90 if is_2_sks(nama_mk) else 135
+
 def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
@@ -321,7 +363,7 @@ def calculate_and_save_gaps(conn, cursor, target_date):
         else:
             continue
 
-        end_min = start_min + 135 # 3 SKS = 135 menit
+        end_min = start_min + get_class_duration(nama_mk)
         
         h = start_min // 60
         m = start_min % 60

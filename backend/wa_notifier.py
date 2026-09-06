@@ -102,10 +102,11 @@ def cek_jadwal_lab_tertentu(nama_lab: str, tanggal_YYYY_MM_DD: str):
         for j in jadwals:
             if not j['jam']: continue
             total_seconds = int(j['jam'].total_seconds())
+            dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
             h, m = total_seconds // 3600, (total_seconds % 3600) // 60
-            eh, em = (total_seconds // 60 + 135) // 60, (total_seconds // 60 + 135) % 60
+            eh, em = (total_seconds // 60 + dur) // 60, (total_seconds // 60 + dur) % 60
             dosen = j['nama_dosen'] or '-'
-            msg += f"- Jam {h:02d}:{m:02d}-{eh:02d}:{em:02d} | MK: {j['nama_mk']} ({j['kelas']}) | Dosen: {dosen}\n"
+            msg += f"- Jam {h:02d}:{m:02d}-{eh:02d}:{em:02d} ({dur} mnt) | MK: {j['nama_mk']} ({j['kelas']}) | Dosen: {dosen}\n"
         return msg
     except Exception as e:
         return f"Error database: {e}"
@@ -158,7 +159,7 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT r.nama_ruangan, j.jam
+            SELECT r.nama_ruangan, j.jam, j.nama_mk
             FROM ruangan r
             LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
             WHERE r.kampus LIKE %s 
@@ -173,22 +174,24 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str):
             if rname not in room_schedules:
                 room_schedules[rname] = []
             if r['jam']:
-                room_schedules[rname].append(int(r['jam'].total_seconds()) // 60)
+                sm = int(r['jam'].total_seconds()) // 60
+                dur = scraper.get_class_duration(r.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                room_schedules[rname].append((sm, dur))
         
         msg = f"Info Lab Kosong {kampus} Tanggal {tanggal_YYYY_MM_DD}:\n"
-        for rname, start_mins in room_schedules.items():
-            if not start_mins:
+        for rname, scheds in room_schedules.items():
+            if not scheds:
                 msg += f"- {rname}: full kosong seharian\n"
             else:
                 msg += f"- {rname}: "
-                start_mins = sorted(start_mins)
+                scheds = sorted(scheds, key=lambda x: x[0])
                 current = 480
-                end_of_day = max(1020, max((s + 135 for s in start_mins), default=1020))
+                end_of_day = max(1020, max((s + d for s, d in scheds), default=1020))
                 kosong_list = []
-                for sm in start_mins:
+                for sm, dur in scheds:
                     if sm > current:
                         kosong_list.append(f"{current//60:02d}:{current%60:02d} - {sm//60:02d}:{sm%60:02d}")
-                    current = max(current, sm + 135)
+                    current = max(current, sm + dur)
                 if current < end_of_day:
                     kosong_list.append(f"{current//60:02d}:{current%60:02d} - {end_of_day//60:02d}:{end_of_day%60:02d}")
                 msg += ", ".join(kosong_list) + " kosong.\n"
@@ -591,8 +594,8 @@ def check_lab_schedules():
             id_ruangan = row['id_ruangan']
             if id_ruangan in aslab_data:
                 start_min = int(row['jam'].total_seconds()) // 60
-                if id_ruangan not in lab_schedules: lab_schedules[id_ruangan] = []
-                lab_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + 135})
+                dur = scraper.get_class_duration(row['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
+                lab_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + dur})
         
         for id_room, scheds in lab_schedules.items():
             no_wa = aslab_data[id_room]['no_wa']
@@ -612,11 +615,15 @@ def check_lab_schedules():
             
             for cls in openings:
                 diff_buka = cls['start_min'] - current_total_min
-                if diff_buka in (30, 15):
+                # Notifikasi aslab: 90 menit (jam 06:30 untuk kelas jam 08:00), 30 menit, dan 15 menit
+                if diff_buka in (90, 30, 15):
                     notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{diff_buka}"
                     if notif_key not in sent_notifications:
                         h, m = cls['start_min'] // 60, cls['start_min'] % 60
-                        msg = f"🔔 *Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {diff_buka} menit loh mas!"
+                        if diff_buka == 90:
+                            msg = f"🔔 *Persiapan Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong persiapkan dan buka lab sebelum mulai kelas loh mas!"
+                        else:
+                            msg = f"🔔 *Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {diff_buka} menit loh mas!"
                         if send_wa_message(no_wa, msg): sent_notifications.add(notif_key)
             
             for cls in closings:

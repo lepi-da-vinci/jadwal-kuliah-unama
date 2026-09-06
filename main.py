@@ -1497,7 +1497,7 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
             filter_kondisi = ""
 
         query = f'''
-            SELECT r.nama_ruangan, j.jam
+            SELECT r.nama_ruangan, j.jam, j.nama_mk
             FROM ruangan r
             LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
                                AND j.tanggal = %s 
@@ -1515,22 +1515,24 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
             if rname not in room_schedules:
                 room_schedules[rname] = []
             if r['jam']:
-                room_schedules[rname].append(int(r['jam'].total_seconds()) // 60)
+                sm = int(r['jam'].total_seconds()) // 60
+                dur = scraper.get_class_duration(r.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                room_schedules[rname].append((sm, dur))
         
         data = []
-        for rname, start_mins in room_schedules.items():
-            if not start_mins:
+        for rname, scheds in room_schedules.items():
+            if not scheds:
                 data.append({"ruangan": rname, "status": "full kosong aja", "gaps": []})
             else:
                 gaps = []
-                start_mins = sorted(start_mins)
+                scheds = sorted(scheds, key=lambda x: x[0])
                 current = 480
-                end_of_day = max(1020, max((s + 135 for s in start_mins), default=1020))
+                end_of_day = max(1020, max((s + d for s, d in scheds), default=1020))
                 
-                for sm in start_mins:
+                for sm, dur in scheds:
                     if sm > current:
                         gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{sm//60:02d}:{sm%60:02d}", "note": "setelahnya ada kelas"})
-                    current = max(current, sm + 135)
+                    current = max(current, sm + dur)
                 if current < end_of_day:
                     gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{end_of_day//60:02d}:{end_of_day%60:02d}", "note": ""})
                 
@@ -1580,8 +1582,9 @@ def cari_dosen(nama: str, tanggal: str | None = None):
                 ts = int(row['jam'].total_seconds())
                 h = ts // 3600
                 m = (ts % 3600) // 60
-                eh = (ts // 60 + 135) // 60
-                em = (ts // 60 + 135) % 60
+                dur = scraper.get_class_duration(row.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                eh = (ts // 60 + dur) // 60
+                em = (ts // 60 + dur) % 60
                 row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
             else:
                 row['waktu'] = "-"
@@ -1629,8 +1632,9 @@ def cari_kelas(kode: str, tanggal: str | None = None):
                 ts = int(row['jam'].total_seconds())
                 h = ts // 3600
                 m = (ts % 3600) // 60
-                eh = (ts // 60 + 135) // 60
-                em = (ts // 60 + 135) % 60
+                dur = scraper.get_class_duration(row.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                eh = (ts // 60 + dur) // 60
+                em = (ts // 60 + dur) % 60
                 row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
             else:
                 row['waktu'] = "-"
