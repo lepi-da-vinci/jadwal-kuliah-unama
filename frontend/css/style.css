@@ -1433,6 +1433,46 @@ html body .flatpickr-calendar.arrowBottom:after {
   display: none !important;
 }
 
+/* Flatpickr Custom Action Footer (Clear & Today) */
+.flatpickr-custom-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin: 8px -10px -10px -10px !important;
+  padding: 10px 14px 8px !important;
+  border-top: 1px solid var(--border) !important;
+  background: var(--bg-card) !important;
+  border-bottom-left-radius: var(--radius-lg) !important;
+  border-bottom-right-radius: var(--radius-lg) !important;
+}
+
+.flatpickr-footer-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--primary) !important;
+  font-family: var(--font) !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  padding: 5px 12px !important;
+  border-radius: var(--radius-sm) !important;
+  transition: all 0.15s ease !important;
+  user-select: none !important;
+  outline: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+.flatpickr-footer-btn:hover {
+  background: var(--primary-bg, rgba(59, 130, 246, 0.12)) !important;
+  color: var(--primary-light, #3b82f6) !important;
+}
+
+.flatpickr-footer-btn:active {
+  transform: scale(0.95) !important;
+}
+
 @keyframes slideInRightTab {
   from { opacity: 0; transform: translateX(20px); }
   to { opacity: 1; transform: translateX(0); }

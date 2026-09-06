@@ -479,12 +479,18 @@ function isLab(namaRuangan) {
 }
 
 function applyFilters() {
-  const ft = filterTanggal.value;
+  const ft = filterTanggal ? filterTanggal.value : '';
   if (!ft) {
-    document.getElementById('hasil-pencarian').innerHTML = '<em>Pilih tanggal dulu mas.</em>';
-    document.getElementById('jadwal-table-body').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 1.1em;"><em style="display:inline-flex; align-items:center; gap:8px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Pilih tanggal dulu mas untuk mulai mencari jadwal</em></td></tr>';
-    document.getElementById('active-lab-list').innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
-    document.getElementById('active-room-list').innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
+    const hasilPencarian = document.getElementById('hasil-pencarian');
+    if (hasilPencarian) hasilPencarian.innerHTML = '<em>Pilih tanggal dulu mas.</em>';
+    const tbody = document.getElementById('jadwal-tbody') || document.getElementById('jadwal-table-body');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 1.1em;"><em style="display:inline-flex; align-items:center; gap:8px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Pilih tanggal dulu mas untuk mulai mencari jadwal</em></td></tr>';
+    }
+    const labList = document.getElementById('active-lab-list');
+    if (labList) labList.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
+    const roomList = document.getElementById('active-room-list');
+    if (roomList) roomList.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
 
     const statTm = document.getElementById('stat-tm');
     const statOl = document.getElementById('stat-ol');
@@ -4680,6 +4686,51 @@ const closeFitur = document.getElementById('close-modal-fitur');
 let _activeInfoMainTab = 'kosong';
 let _activeHubSubTab = 'all';
 
+function attachFlatpickrFooter(instance, options = {}) {
+  if (!instance || !instance.calendarContainer) return;
+  if (instance.calendarContainer.querySelector('.flatpickr-custom-footer')) return;
+
+  const footer = document.createElement('div');
+  footer.className = 'flatpickr-custom-footer';
+
+  const btnClear = document.createElement('button');
+  btnClear.type = 'button';
+  btnClear.className = 'flatpickr-footer-btn flatpickr-btn-clear';
+  btnClear.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Clear`;
+  btnClear.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    instance.clear();
+    if (typeof options.onClear === 'function') {
+      options.onClear(instance);
+    }
+    instance.close();
+  });
+
+  const btnToday = document.createElement('button');
+  btnToday.type = 'button';
+  btnToday.className = 'flatpickr-footer-btn flatpickr-btn-today';
+  btnToday.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Today`;
+  btnToday.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+    instance.setDate(todayStr, true);
+    if (typeof options.onToday === 'function') {
+      options.onToday(todayStr, instance);
+    }
+    instance.close();
+  });
+
+  footer.appendChild(btnClear);
+  footer.appendChild(btnToday);
+  instance.calendarContainer.appendChild(footer);
+}
+
 function initFiturTanggalFlatpickr() {
   const ftTanggalInput = document.getElementById('fitur-filter-tanggal');
   if (!ftTanggalInput || typeof flatpickr === 'undefined') return;
@@ -4694,11 +4745,31 @@ function initFiturTanggalFlatpickr() {
       altFormat: "d/m/Y",
       disableMobile: true,
       defaultDate: curTanggal || undefined,
+      onReady: function (selectedDates, dateStr, instance) {
+        attachFlatpickrFooter(instance, {
+          onClear: async () => {
+            ftTanggalInput.value = '';
+            await handleFiturDateChange('');
+          },
+          onToday: async (todayStr) => {
+            await handleFiturDateChange(todayStr);
+          }
+        });
+      },
+      onOpen: function (selectedDates, dateStr, instance) {
+        attachFlatpickrFooter(instance, {
+          onClear: async () => {
+            ftTanggalInput.value = '';
+            await handleFiturDateChange('');
+          },
+          onToday: async (todayStr) => {
+            await handleFiturDateChange(todayStr);
+          }
+        });
+      },
       onChange: async function (selectedDates, dateStr, instance) {
         if (instance) instance.close();
-        if (dateStr) {
-          await handleFiturDateChange(dateStr);
-        }
+        await handleFiturDateChange(dateStr || '');
       }
     });
   } else if (curTanggal) {
@@ -4707,7 +4778,23 @@ function initFiturTanggalFlatpickr() {
 }
 
 async function handleFiturDateChange(dateStr) {
-  if (!dateStr) return;
+  if (!dateStr) {
+    if (filterTanggal) {
+      filterTanggal.value = '';
+      if (filterTanggal._flatpickr) filterTanggal._flatpickr.clear();
+    }
+    const fsTanggal = document.getElementById('fs-filter-tanggal');
+    if (fsTanggal && fsTanggal._flatpickr) {
+      fsTanggal._flatpickr.clear();
+    }
+    const ftInput = document.getElementById('fitur-filter-tanggal');
+    if (ftInput && ftInput._flatpickr) {
+      ftInput._flatpickr.clear();
+    }
+    applyFilters();
+    renderFiturRooms();
+    return;
+  }
 
   // 1. Sinkronkan dengan filter tanggal utama & fullscreen filter
   if (filterTanggal) {
@@ -5495,95 +5582,101 @@ function renderBentrokList() {
 }
 window.renderBentrokList = renderBentrokList;
 
-btnSubmitCariDosen.addEventListener('click', async () => {
-  const nama = document.getElementById('fitur-nama-dosen').value;
-  const resContainer = document.getElementById('result-cari-dosen');
+const btnSubmitCariDosen = document.getElementById('btn-submit-cari-dosen');
+if (btnSubmitCariDosen) {
+  btnSubmitCariDosen.addEventListener('click', async () => {
+    const nama = document.getElementById('fitur-nama-dosen').value;
+    const resContainer = document.getElementById('result-cari-dosen');
 
-  if (!nama) {
-    alert("Masukkan nama dosen dulu!");
-    return;
-  }
-
-  resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
-
-  try {
-    const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
-    const url = tanggalFilter
-      ? `${API_BASE_URL}/api/cari_dosen?nama=${encodeURIComponent(nama)}&tanggal=${encodeURIComponent(tanggalFilter)}`
-      : `${API_BASE_URL}/api/cari_dosen?nama=${encodeURIComponent(nama)}`;
-    const response = await fetch(url);
-    const result = await response.json();
-
-    if (result.status === 'success') {
-      if (result.data.length === 0) {
-        resContainer.innerHTML = '<p style="text-align:center; color: var(--text-muted);">Tidak ada jadwal hari ini untuk dosen tersebut.</p>';
-        return;
-      }
-
-      let html = '';
-      result.data.forEach(item => {
-        html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
-              <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
-              <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
-                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
-                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
-                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
-              </div>
-            </div>`;
-      });
-      resContainer.innerHTML = html;
-    } else {
-      resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
+    if (!nama) {
+      alert("Masukkan nama dosen dulu!");
+      return;
     }
-  } catch (err) {
-    resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
-  }
-});
 
-btnSubmitCariKelas.addEventListener('click', async () => {
-  const kode = document.getElementById('fitur-kode-kelas').value;
-  const resContainer = document.getElementById('result-cari-kelas');
+    resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
 
-  if (!kode) {
-    alert("Masukkan kode kelas dulu!");
-    return;
-  }
+    try {
+      const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
+      const url = tanggalFilter
+        ? `${API_BASE_URL}/api/cari_dosen?nama=${encodeURIComponent(nama)}&tanggal=${encodeURIComponent(tanggalFilter)}`
+        : `${API_BASE_URL}/api/cari_dosen?nama=${encodeURIComponent(nama)}`;
+      const response = await fetch(url);
+      const result = await response.json();
 
-  resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
+      if (result.status === 'success') {
+        if (result.data.length === 0) {
+          resContainer.innerHTML = '<p style="text-align:center; color: var(--text-muted);">Tidak ada jadwal hari ini untuk dosen tersebut.</p>';
+          return;
+        }
 
-  try {
-    const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
-    const url = tanggalFilter
-      ? `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}`
-      : `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}`;
-    const response = await fetch(url);
-    const result = await response.json();
-
-    if (result.status === 'success') {
-      if (result.data.length === 0) {
-        resContainer.innerHTML = '<p style="text-align:center; color: var(--text-muted);">Tidak ada jadwal kelas tersebut hari ini.</p>';
-        return;
+        let html = '';
+        result.data.forEach(item => {
+          html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
+                <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
+                <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
+                </div>
+              </div>`;
+        });
+        resContainer.innerHTML = html;
+      } else {
+        resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
       }
-
-      let html = '';
-      result.data.forEach(item => {
-        html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
-              <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
-              <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
-                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
-                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
-                <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
-              </div>
-            </div>`;
-      });
-      resContainer.innerHTML = html;
-    } else {
-      resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
+    } catch (err) {
+      resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
     }
-  } catch (err) {
-    resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
-  }
-});
+  });
+}
+
+const btnSubmitCariKelas = document.getElementById('btn-submit-cari-kelas');
+if (btnSubmitCariKelas) {
+  btnSubmitCariKelas.addEventListener('click', async () => {
+    const kode = document.getElementById('fitur-kode-kelas').value;
+    const resContainer = document.getElementById('result-cari-kelas');
+
+    if (!kode) {
+      alert("Masukkan kode kelas dulu!");
+      return;
+    }
+
+    resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
+
+    try {
+      const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
+      const url = tanggalFilter
+        ? `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}`
+        : `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}`;
+      const response = await fetch(url);
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        if (result.data.length === 0) {
+          resContainer.innerHTML = '<p style="text-align:center; color: var(--text-muted);">Tidak ada jadwal kelas tersebut hari ini.</p>';
+          return;
+        }
+
+        let html = '';
+        result.data.forEach(item => {
+          html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
+                <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
+                <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
+                </div>
+              </div>`;
+        });
+        resContainer.innerHTML = html;
+      } else {
+        resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
+      }
+    } catch (err) {
+      resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
+    }
+  });
+}
 
 // ─── Generic Modal Closer (Click Outside & Escape Key) ───
 function closeAnyModal(modal) {
@@ -5744,12 +5837,37 @@ window.openFullscreenFilterModal = function () {
           static: true,
           disableMobile: true,
           defaultDate: curTanggal || undefined,
+          onReady: function (selectedDates, dateStr, instance) {
+            attachFlatpickrFooter(instance, {
+              onClear: () => {
+                syncFilterFromModal('tanggal', '');
+                applyFilters();
+              },
+              onToday: (todayStr) => {
+                syncFilterFromModal('tanggal', todayStr);
+                syncDataFromModal();
+              }
+            });
+          },
+          onOpen: function (selectedDates, dateStr, instance) {
+            attachFlatpickrFooter(instance, {
+              onClear: () => {
+                syncFilterFromModal('tanggal', '');
+                applyFilters();
+              },
+              onToday: (todayStr) => {
+                syncFilterFromModal('tanggal', todayStr);
+                syncDataFromModal();
+              }
+            });
+          },
           onChange: function (selectedDates, dateStr, instance) {
             if (instance) instance.close();
             syncFilterFromModal('tanggal', dateStr);
-            // Langsung sinkron otomatis tanpa harus klik tombol
             if (dateStr) {
               syncDataFromModal();
+            } else {
+              applyFilters();
             }
           }
         });
@@ -6055,15 +6173,58 @@ document.addEventListener('MSFullscreenChange', () => {
 flatpickr("input[type='date'], #filter-tanggal", {
   dateFormat: "Y-m-d",
   disableMobile: true,
+  onReady: function (selectedDates, dateStr, instance) {
+    attachFlatpickrFooter(instance, {
+      onClear: () => {
+        const mainTanggal = document.getElementById('filter-tanggal');
+        if (mainTanggal) mainTanggal.value = '';
+        updateRuanganFilterOptions();
+        applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+      },
+      onToday: (todayStr) => {
+        const mainTanggal = document.getElementById('filter-tanggal');
+        if (mainTanggal) mainTanggal.value = todayStr;
+        updateRuanganFilterOptions();
+        applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+        syncData(todayStr);
+      }
+    });
+  },
+  onOpen: function (selectedDates, dateStr, instance) {
+    attachFlatpickrFooter(instance, {
+      onClear: () => {
+        const mainTanggal = document.getElementById('filter-tanggal');
+        if (mainTanggal) mainTanggal.value = '';
+        updateRuanganFilterOptions();
+        applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+      },
+      onToday: (todayStr) => {
+        const mainTanggal = document.getElementById('filter-tanggal');
+        if (mainTanggal) mainTanggal.value = todayStr;
+        updateRuanganFilterOptions();
+        applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+        syncData(todayStr);
+      }
+    });
+  },
   onChange: function (selectedDates, dateStr, instance) {
     if (instance) instance.close();
+    const mainTanggal = document.getElementById('filter-tanggal');
     if (dateStr) {
-      const mainTanggal = document.getElementById('filter-tanggal');
       if (mainTanggal) mainTanggal.value = dateStr;
       updateRuanganFilterOptions();
       applyFilters();
       if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
       syncData(dateStr);
+    } else {
+      if (mainTanggal) mainTanggal.value = '';
+      updateRuanganFilterOptions();
+      applyFilters();
+      if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
     }
   }
 });
