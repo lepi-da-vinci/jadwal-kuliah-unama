@@ -4680,16 +4680,91 @@ const closeFitur = document.getElementById('close-modal-fitur');
 let _activeInfoMainTab = 'kosong';
 let _activeHubSubTab = 'all';
 
+function initFiturTanggalFlatpickr() {
+  const ftTanggalInput = document.getElementById('fitur-filter-tanggal');
+  if (!ftTanggalInput || typeof flatpickr === 'undefined') return;
+
+  const curTanggal = (filterTanggal && filterTanggal.value) || ftTanggalInput.value || '';
+  if (curTanggal) ftTanggalInput.value = curTanggal;
+
+  if (!ftTanggalInput._flatpickr) {
+    flatpickr(ftTanggalInput, {
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d/m/Y",
+      disableMobile: true,
+      defaultDate: curTanggal || undefined,
+      onChange: async function (selectedDates, dateStr, instance) {
+        if (instance) instance.close();
+        if (dateStr) {
+          await handleFiturDateChange(dateStr);
+        }
+      }
+    });
+  } else if (curTanggal) {
+    ftTanggalInput._flatpickr.setDate(curTanggal, false);
+  }
+}
+
+async function handleFiturDateChange(dateStr) {
+  if (!dateStr) return;
+
+  // 1. Sinkronkan dengan filter tanggal utama & fullscreen filter
+  if (filterTanggal) {
+    filterTanggal.value = dateStr;
+    if (filterTanggal._flatpickr) filterTanggal._flatpickr.setDate(dateStr, false);
+  }
+  const fsTanggal = document.getElementById('fs-filter-tanggal');
+  if (fsTanggal && fsTanggal._flatpickr) {
+    fsTanggal._flatpickr.setDate(dateStr, false);
+  }
+  const ftInput = document.getElementById('fitur-filter-tanggal');
+  if (ftInput && ftInput._flatpickr) {
+    ftInput._flatpickr.setDate(dateStr, false);
+  }
+
+  // 2. Tampilkan status loading interaktif di dalam modal
+  const grid = document.getElementById('result-lab-kosong-grid');
+  const summaryText = document.getElementById('fitur-room-summary-text');
+  if (grid) {
+    grid.innerHTML = `
+      <div style="grid-column: 1/-1; text-align: center; padding: 50px 20px; color: var(--primary);">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite; margin-bottom: 12px;">
+          <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+          <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+          <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+        </svg>
+        <div style="font-weight: 700; font-size: 1.08em; color: var(--text);">Menarik data jadwal tanggal ${escapeHtml(dateStr)}...</div>
+        <div style="font-size: 0.84em; color: var(--text-muted); margin-top: 4px;">Sedang sinkronisasi data dengan sistem BAAK</div>
+      </div>
+    `;
+  }
+  if (summaryText) summaryText.textContent = `Menarik data jadwal tanggal ${dateStr}...`;
+
+  // 3. Tarik data dari server / BAAK untuk tanggal ini
+  try {
+    await syncData(dateStr);
+  } catch (err) {
+    console.error('Gagal sinkron data tanggal:', err);
+  }
+
+  // 4. Update seluruh tampilan
+  updateRuanganFilterOptions();
+  applyFilters();
+  if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+  updateInfoLainBadges();
+  renderFiturRooms();
+  renderChangesHubList(_activeHubSubTab, document.getElementById('info-hub-search-input')?.value || '');
+  renderBentrokList();
+}
+window.handleFiturDateChange = handleFiturDateChange;
+
 function openInfoLainModal(initialTab = 'kosong') {
   if (!modalFitur) return;
   modalFitur.style.display = 'block';
 
-  // Sinkronkan input tanggal di dalam tab ruangan kosong dengan filter tanggal utama
-  const ftTanggalInput = document.getElementById('fitur-filter-tanggal');
-  if (ftTanggalInput && filterTanggal && filterTanggal.value) {
-    ftTanggalInput.value = filterTanggal.value;
-  }
-
+  initFiturTanggalFlatpickr();
   updateInfoLainBadges();
   switchInfoMainTab(initialTab);
 }
@@ -4804,9 +4879,12 @@ if (btnFiturJenisKelas) btnFiturJenisKelas.addEventListener('click', () => setFi
 if (btnFiturJenisSemua) btnFiturJenisSemua.addEventListener('click', () => setFiturJenisRuangan(''));
 
 document.getElementById('fitur-filter-kampus')?.addEventListener('change', renderFiturRooms);
-document.getElementById('fitur-filter-tanggal')?.addEventListener('change', renderFiturRooms);
 document.getElementById('fitur-filter-waktu')?.addEventListener('change', renderFiturRooms);
-document.getElementById('btn-refresh-fitur-rooms')?.addEventListener('click', renderFiturRooms);
+document.getElementById('btn-refresh-fitur-rooms')?.addEventListener('click', () => {
+  const ftVal = (document.getElementById('fitur-filter-tanggal')?.value) || (filterTanggal?.value) || '';
+  if (ftVal) handleFiturDateChange(ftVal);
+  else renderFiturRooms();
+});
 
 // Tab 2: Sub-tabs & Search Input
 document.querySelectorAll('#content-changes-hub .hub-subtab-btn').forEach(btn => {
@@ -5074,34 +5152,37 @@ function renderFiturRooms() {
     return `
       <div class="room-grid-card ${cardClass}">
         <div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
-            <div>
-              <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">${escapeHtml(r.roomName)}</div>
-              <div style="font-size: 0.78em; color: var(--text-muted); margin-top: 2px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 700; font-size: 1.08em; color: var(--text); line-height: 1.35; word-break: break-word;">${escapeHtml(r.roomName)}</div>
+              <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 3px;">
                 ${escapeHtml(r.kampus)} • ${r.isLab ? 'Laboratorium' : 'Ruang Kelas'}
               </div>
             </div>
-            <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0;">
+            <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0; white-space: nowrap;">
               <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5">${statusIcon}</svg>
               ${escapeHtml(r.statusLabel)}
             </span>
           </div>
 
-          <div style="margin-top: 8px; font-size: 0.82em; color: var(--text-muted);">
+          <div style="margin-top: 10px; font-size: 0.84em; color: var(--text-muted);">
             ${r.statusType === 'full-free' 
-              ? '<span style="color: #10b981; font-weight: 600;">Bebas digunakan sepanjang hari ini.</span>' 
+              ? `<div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: #10b981; font-weight: 600; font-size: 0.84em;">
+                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                   <span>Bebas digunakan sepanjang hari ini</span>
+                 </div>` 
               : r.statusType === 'has-gaps' 
                 ? `<div>Jam kosong tersedia:</div>
-                   <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;">
-                     ${r.gapsInfo.map(g => `<span class="info-time-chip" style="font-size: 0.78em; padding: 2px 7px;">${escapeHtml(g)}</span>`).join('')}
+                   <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;">
+                     ${r.gapsInfo.map(g => `<span class="info-time-chip" style="font-size: 0.8em; padding: 3px 8px;">${escapeHtml(g)}</span>`).join('')}
                    </div>`
                 : '<span style="color: var(--text-muted);">Jadwal penuh untuk seluruh sesi perkuliahan.</span>'
             }
           </div>
         </div>
 
-        <div style="border-top: 1px solid var(--border); padding-top: 10px; margin-top: 6px;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(r.roomName)}')" style="width: 100%; font-size: 0.82em; padding: 6px 10px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+        <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(r.roomName)}')" style="width: 100%; font-size: 0.84em; padding: 7px 12px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
             <span>Lihat Jadwal Ruangan</span>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
@@ -5117,7 +5198,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
   const container = document.getElementById('info-hub-changes-container');
   if (!container) return;
 
-  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  const ft = (document.getElementById('fitur-filter-tanggal')?.value) || (filterTanggal && filterTanggal.value) || '';
   const notifItems = window._currentNotifData || [];
   const query = (searchQuery || '').trim().toLowerCase();
 
@@ -5285,7 +5366,7 @@ function renderBentrokList() {
   const banner = document.getElementById('info-bentrok-summary-banner');
   if (!container) return;
 
-  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  const ft = (document.getElementById('fitur-filter-tanggal')?.value) || (filterTanggal && filterTanggal.value) || '';
   const conflicts = window._currentScheduleConflicts;
 
   if (!conflicts || (!conflicts.roomConflicts.size && !conflicts.lecturerConflicts.size)) {

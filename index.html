@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260906_infolain_v4">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260906_infolain_v8">
 </head>
 
 <body>
@@ -187,19 +187,7 @@
           </button>
         </div>
       </div>
-
-      <!-- Indikator Deteksi Jadwal Bentrok (Hanya tampil jika ada jadwal bentrok) -->
-      <div id="conflict-badge-wrap" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border);">
-        <button type="button" id="btn-toggle-conflict-filter" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85em; padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.1); color: #ef4444; font-weight: 600; cursor: pointer;">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          <span id="conflict-warning-label">Terdeteksi 0 Jadwal Bentrok</span>
-          <span id="conflict-filter-state" style="font-size: 0.78em; opacity: 0.9; text-decoration: underline;">(Lihat Jadwal Bentrok)</span>
-        </button>
-      </div>
+    </div>
 
 
     <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
@@ -726,7 +714,16 @@
 
               <div>
                 <label style="display: block; font-size: 0.76em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Tanggal:</label>
-                <input type="date" id="fitur-filter-tanggal" style="width: 100%; padding: 7px 10px; font-size: 0.86em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border); outline: none;">
+                <div class="fitur-tanggal-wrapper">
+                  <input type="text" id="fitur-filter-tanggal" placeholder="Pilih tanggal..." readonly>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--primary); z-index: 2;">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </div>
               </div>
 
               <div>
@@ -759,7 +756,7 @@
           </div>
 
           <!-- Grid Kartu Ruang Kosong -->
-          <div id="result-lab-kosong-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; max-height: calc(92vh - 280px); min-height: 380px; overflow-y: auto; padding: 6px;">
+          <div id="result-lab-kosong-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; max-height: calc(92vh - 280px); min-height: 380px; overflow-y: auto; padding: 6px;">
             <!-- Rendered by JS -->
           </div>
         </div>
@@ -2898,7 +2895,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260906_infolain_v4"></script>
+  <script src="frontend/js/script.js?v=20260906_infolain_v8"></script>
 </body>
 
 </html>

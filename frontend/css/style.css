@@ -1360,6 +1360,30 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   display: block;
   width: 100%;
 }
+
+.fitur-tanggal-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.fitur-tanggal-wrapper input,
+.fitur-tanggal-wrapper .flatpickr-input,
+.fitur-tanggal-wrapper .form-control,
+#modal-fitur .flatpickr-input,
+#modal-fitur input[type="text"]#fitur-filter-tanggal {
+  width: 100% !important;
+  display: block !important;
+  padding: 9px 12px 9px 38px !important;
+  font-size: 0.88em !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--bg-card) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  outline: none !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  height: 38px !important;
+}
 .flatpickr-calendar,
 html body .flatpickr-calendar {
   background: var(--bg-card);
@@ -3137,11 +3161,12 @@ tr.table-row-conflict td:first-child {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 16px 18px;
   box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-height: 175px;
   gap: 12px;
   transition: all 0.2s ease;
 }
