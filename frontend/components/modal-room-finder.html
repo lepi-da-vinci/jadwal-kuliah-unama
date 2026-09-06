@@ -1,0 +1,83 @@
+  <!-- ==================== MODAL SMART ROOM FINDER (CARI RUANG KOSONG) ==================== -->
+  <div id="room-finder-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Cari Ruang & Lab Kosong"
+    style="z-index: 10004;">
+    <div class="modal-box db-clear-modal-box" style="max-width: 860px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-icon" style="margin: 0; background: rgba(16, 185, 129, 0.12); color: #10b981; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+              <line x1="15" y1="3" x2="15" y2="21"></line>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="3" y1="15" x2="21" y2="15"></line>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.35em; color: var(--text);">Cari Lab & Ruangan Kosong</h2>
+            <p style="margin: 3px 0 0 0; font-size: 0.85em; color: var(--text-muted);">Temukan ruangan yang bebas jadwal untuk praktikum susulan atau belajar mandiri.</p>
+          </div>
+        </div>
+        <button type="button" id="btn-close-room-finder" class="modal-close" aria-label="Tutup" style="position: static; font-size: 1.5em;">&times;</button>
+      </div>
+
+      <!-- Filter Controls Bar -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; background: var(--bg-elevated); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+        <div>
+          <label style="display: block; font-size: 0.78em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px;">Pilih Kampus:</label>
+          <select id="finder-filter-kampus" class="custom-select" style="width: 100%; padding: 8px 10px; font-size: 0.88em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border);">
+            <option value="">Semua Kampus</option>
+            <option value="Thehok">Kampus Thehok</option>
+            <option value="Kobar">Kampus Kobar</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.78em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px;">Tipe Ruangan:</label>
+          <select id="finder-filter-jenis" class="custom-select" style="width: 100%; padding: 8px 10px; font-size: 0.88em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border);">
+            <option value="Lab">Khusus Laboratorium</option>
+            <option value="Kelas">Khusus Ruang Kelas</option>
+            <option value="">Semua (Lab & Kelas)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.78em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px;">Waktu Ketersediaan:</label>
+          <select id="finder-filter-waktu" class="custom-select" style="width: 100%; padding: 8px 10px; font-size: 0.88em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border);">
+            <option value="sekarang">Kosong Saat Ini (Live)</option>
+            <option value="semua">Sepanjang Hari Ini</option>
+            <option value="pagi">Pagi (07:30 - 12:00)</option>
+            <option value="siang">Siang (12:00 - 16:00)</option>
+            <option value="sore">Sore / Malam (16:00 - 21:00)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Status Summary Banner -->
+      <div id="finder-summary-banner" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-size: 0.86em; color: var(--text);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+          <span id="finder-summary-text">Memuat ketersediaan ruangan...</span>
+        </div>
+        <button type="button" id="btn-refresh-room-finder" class="db-quick-btn" style="padding: 4px 10px; font-size: 0.8em; display: inline-flex; align-items: center; gap: 4px;">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span>Segarkan</span>
+        </button>
+      </div>
+
+      <!-- Results Grid Container -->
+      <div id="room-finder-results-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; max-height: 480px; overflow-y: auto; padding: 2px;">
+        <!-- Injected dynamically by JS -->
+      </div>
+
+      <!-- Action Footer -->
+      <div style="display: flex; justify-content: flex-end; margin-top: 18px; border-top: 1.5px solid var(--border); padding-top: 14px;">
+        <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="btn-close-room-finder-footer">Tutup</button>
+      </div>
+    </div>
+  </div>

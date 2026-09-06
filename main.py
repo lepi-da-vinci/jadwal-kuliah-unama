@@ -832,6 +832,259 @@ def backup_selective_db(req: BackupDbRequest = BackupDbRequest(), admin: str = D
             cursor.close()
             conn.close()
 
+# ==================== PUSAT RESTORE / IMPOR DATABASE (.SQL) ====================
+class RestorePreviewRequest(BaseModel):
+    sql_content: str
+    filename: str = "backup.sql"
+
+class RestoreExecuteRequest(BaseModel):
+    sql_content: str
+    filename: str = "backup.sql"
+
+def parse_sql_statements(sql_text: str) -> list[str]:
+    """Memecah teks dump SQL menjadi daftar kueri/pernyataan yang dapat dieksekusi secara aman"""
+    statements = []
+    current = []
+    in_single_quote = False
+    in_double_quote = False
+    in_backtick = False
+    in_multiline_comment = False
+    
+    lines = sql_text.splitlines()
+    for line in lines:
+        stripped = line.strip()
+        # Lewati komentar satu baris
+        if not in_single_quote and not in_double_quote and not in_multiline_comment:
+            if stripped.startswith("--") or stripped.startswith("#"):
+                continue
+        
+        i = 0
+        n = len(line)
+        while i < n:
+            c = line[i]
+            
+            if not in_single_quote and not in_double_quote and not in_backtick:
+                if not in_multiline_comment and i + 1 < n and line[i:i+2] == "/*":
+                    if i + 2 < n and line[i+2] == "!":
+                        pass
+                    else:
+                        in_multiline_comment = True
+                        i += 2
+                        continue
+                elif in_multiline_comment and i + 1 < n and line[i:i+2] == "*/":
+                    in_multiline_comment = False
+                    i += 2
+                    continue
+            
+            if in_multiline_comment:
+                i += 1
+                continue
+            
+            if c == "'" and not in_double_quote and not in_backtick:
+                num_backslashes = 0
+                k = i - 1
+                while k >= 0 and line[k] == '\\':
+                    num_backslashes += 1
+                    k -= 1
+                if num_backslashes % 2 == 0:
+                    in_single_quote = not in_single_quote
+            elif c == '"' and not in_single_quote and not in_backtick:
+                num_backslashes = 0
+                k = i - 1
+                while k >= 0 and line[k] == '\\':
+                    num_backslashes += 1
+                    k -= 1
+                if num_backslashes % 2 == 0:
+                    in_double_quote = not in_double_quote
+            elif c == '`' and not in_single_quote and not in_double_quote:
+                in_backtick = not in_backtick
+            elif c == ';' and not in_single_quote and not in_double_quote and not in_backtick:
+                stmt = "".join(current).strip()
+                if stmt:
+                    statements.append(stmt)
+                current = []
+                i += 1
+                continue
+            
+            current.append(c)
+            i += 1
+        current.append("\n")
+        
+    remaining = "".join(current).strip()
+    if remaining:
+        statements.append(remaining)
+        
+    return statements
+
+def extract_sql_preview(sql_text: str, filename: str = "backup.sql") -> dict:
+    statements = parse_sql_statements(sql_text)
+    tables = set()
+    total_inserts = 0
+    estimated_rows = 0
+    has_drop = False
+    has_create = False
+    
+    table_pattern = re.compile(r'(?:CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|INSERT\s+INTO)\s+[`"]?([a-zA-Z0-9_]+)[`"]?', re.IGNORECASE)
+    
+    for stmt in statements:
+        upper = stmt[:60].upper()
+        if "DROP TABLE" in upper:
+            has_drop = True
+        if "CREATE TABLE" in upper:
+            has_create = True
+            
+        m = table_pattern.search(stmt)
+        if m:
+            tbl = m.group(1).lower()
+            if tbl not in ("table", "if", "not", "exists", "temporary"):
+                tables.add(tbl)
+        
+        if upper.startswith("INSERT INTO"):
+            total_inserts += 1
+            val_count = len(re.findall(r'\([^\)]+\)', stmt))
+            estimated_rows += max(1, val_count)
+
+    return {
+        "status": "success",
+        "filename": filename,
+        "total_statements": len(statements),
+        "total_tables": len(tables),
+        "tables": sorted(list(tables)),
+        "total_insert_batches": total_inserts,
+        "estimated_rows": estimated_rows,
+        "has_drop_table": has_drop,
+        "has_create_table": has_create
+    }
+
+@app.post("/api/db/restore/preview")
+def preview_restore_db(req: RestorePreviewRequest):
+    """Menganalisis file skrip SQL dan mengembalikan pratinjau tabel tanpa mengeksekusi ke DB"""
+    if not req.sql_content or not req.sql_content.strip():
+        return {"status": "error", "message": "Konten file SQL kosong atau tidak valid."}
+    
+    try:
+        preview = extract_sql_preview(req.sql_content, req.filename)
+        return preview
+    except Exception as e:
+        return {"status": "error", "message": f"Gagal membaca format SQL: {e}"}
+
+@app.post("/api/db/restore")
+def execute_restore_db(req: RestoreExecuteRequest, admin: str = Depends(verify_admin_token)):
+    """Memulihkan data database dari skrip SQL (memerlukan token Admin)"""
+    if not req.sql_content or not req.sql_content.strip():
+        return {"status": "error", "message": "Konten file SQL kosong atau tidak valid."}
+        
+    try:
+        statements = parse_sql_statements(req.sql_content)
+        if not statements:
+            return {"status": "error", "message": "Tidak ada kueri SQL valid yang dapat dieksekusi."}
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
+        cursor.execute("SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';")
+        
+        executed_count = 0
+        for stmt in statements:
+            s_clean = stmt.strip()
+            if not s_clean:
+                continue
+            try:
+                cursor.execute(s_clean)
+                executed_count += 1
+            except Exception as stmt_err:
+                if s_clean.upper().startswith("SET ") or "/*!40101" in s_clean:
+                    continue
+                else:
+                    raise stmt_err
+                    
+        conn.commit()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+        
+        preview = extract_sql_preview(req.sql_content, req.filename)
+        
+        return {
+            "status": "success",
+            "message": f"Database berhasil dipulihkan ({executed_count} kueri dieksekusi).",
+            "executed_count": executed_count,
+            "tables": preview.get("tables", []),
+            "estimated_rows": preview.get("estimated_rows", 0)
+        }
+    except Exception as err:
+        if 'conn' in locals() and conn.is_connected():
+            try:
+                conn.rollback()
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+            except Exception:
+                pass
+        return {"status": "error", "message": f"Gagal merestore database: {err}"}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# ==================== LIVE WHATSAPP GATEWAY MONITOR ====================
+@app.get("/api/wa/status")
+def get_wa_gateway_status():
+    """Memeriksa status online/offline bot WhatsApp dan riwayat pengiriman pesan notifikasi terakhir"""
+    bot_url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
+    base_bot_url = bot_url.rsplit('/', 1)[0] if '/' in bot_url else "http://localhost:3000"
+    
+    is_online = False
+    bot_info = None
+    try:
+        resp = requests.get(f"{base_bot_url}/status", timeout=1.5)
+        if resp.status_code == 200:
+            is_online = True
+            try:
+                bot_info = resp.json()
+            except Exception:
+                pass
+    except Exception:
+        try:
+            resp = requests.get(base_bot_url, timeout=1.5)
+            if resp.status_code in (200, 404):
+                is_online = True
+        except Exception:
+            is_online = False
+            
+    recent_logs = []
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id, tanggal, tipe_notif, pesan, created_at 
+            FROM notifikasi_lab 
+            ORDER BY id DESC 
+            LIMIT 15
+        """)
+        rows = cursor.fetchall()
+        for r in rows:
+            created_str = r['created_at'].strftime("%H:%M:%S (%d/%m/%Y)") if r.get('created_at') else "-"
+            tgl_str = str(r['tanggal']) if r.get('tanggal') else "-"
+            recent_logs.append({
+                "id": r['id'],
+                "tanggal": tgl_str,
+                "tipe_notif": r['tipe_notif'],
+                "pesan": r['pesan'],
+                "waktu": created_str
+            })
+    except Exception as e:
+        print(f"Error fetching WA logs: {e}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+            
+    return {
+        "status": "success",
+        "bot_online": is_online,
+        "gateway_url": base_bot_url,
+        "bot_info": bot_info,
+        "recent_logs": recent_logs
+    }
+
 @app.delete("/api/jadwal")
 def clear_jadwal(admin: str = Depends(verify_admin_token)):
     """Menghapus seluruh jadwal dari database (memerlukan token Admin) - Legacy Wrapper"""

@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260828_feat3">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260906_infolain_v4">
 </head>
 
 <body>
@@ -177,14 +177,28 @@
         <div class="filter-group">
           <label style="visibility: hidden;">Info Lain</label>
           <button id="btn-fitur-tambahan"
-            style="display: flex; align-items: center; justify-content: center; height: 100%; padding: 10px 14px; border: none; border-radius: var(--radius-md); background: var(--bg-card); color: var(--text); font-size: 0.9em; cursor: pointer; transition: all 0.2s; outline: none; box-shadow: var(--clay-inner);">
+            style="display: flex; align-items: center; justify-content: center; height: 100%; padding: 10px 14px; border: none; border-radius: var(--radius-md); background: var(--bg-card); color: var(--text); font-size: 0.9em; cursor: pointer; transition: all 0.2s; outline: none; box-shadow: var(--clay-inner); position: relative;">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
-            Info Lain
+            <span>Info Lain</span>
+            <span id="badge-info-lain" style="display: none; margin-left: 6px; background: #f59e0b; color: #fff; font-size: 0.75em; font-weight: 700; border-radius: 9999px; padding: 1px 7px; min-width: 18px;">0</span>
           </button>
         </div>
+      </div>
+
+      <!-- Indikator Deteksi Jadwal Bentrok (Hanya tampil jika ada jadwal bentrok) -->
+      <div id="conflict-badge-wrap" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border);">
+        <button type="button" id="btn-toggle-conflict-filter" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85em; padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.1); color: #ef4444; font-weight: 600; cursor: pointer;">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <span id="conflict-warning-label">Terdeteksi 0 Jadwal Bentrok</span>
+          <span id="conflict-filter-state" style="font-size: 0.78em; opacity: 0.9; text-decoration: underline;">(Lihat Jadwal Bentrok)</span>
+        </button>
       </div>
 
 
@@ -590,150 +604,260 @@
     </div>
   </div>
 
-  <!-- Modal Fitur Tambahan & Info Lain -->
+  <!-- Modal Fitur Tambahan & Info Lain (Unified Center) -->
   <div id="modal-fitur" class="modal-overlay"
-    style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+    style="display: none; position: fixed; z-index: 10005; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.65); backdrop-filter: blur(5px);">
     <div class="modal-box"
-      style="margin: 5% auto; width: 90%; max-width: 550px; padding: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);">
+      style="margin: 1.5vh auto; width: 96%; max-width: 1480px; padding: 0; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); overflow: hidden; display: flex; flex-direction: column; max-height: 94vh;">
 
       <!-- Modal Header -->
       <div
-        style="padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.1);">
-        <h2 style="margin: 0; display: flex; align-items: center; gap: 10px; font-size: 1.25em;">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--primary)" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-          Info Lain
-        </h2>
-        <span id="close-modal-fitur" style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        style="padding: 16px 22px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(99, 102, 241, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.25em; color: var(--text);">Pusat Informasi & Perubahan</h2>
+            <p style="margin: 2px 0 0 0; font-size: 0.82em; color: var(--text-muted);">Ruang kosong, status perubahan kelas, deteksi bentrok, dan pencarian.</p>
+          </div>
+        </div>
+        <span id="close-modal-fitur" style="cursor: pointer; opacity: 0.7; transition: opacity 0.2s; padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </span>
       </div>
 
-      <div style="padding: 24px;">
-        <!-- Segmented Tabs -->
-        <div
-          style="display: flex; background: var(--bg); padding: 4px; border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border);">
-          <button id="tab-lab-kosong"
-            style="flex: 1; padding: 10px; border: none; background: var(--primary); color: #fff; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); box-shadow: var(--shadow-sm); font-size: 0.9em;">Ruangan
-            Kosong</button>
-          <button id="tab-cari-dosen"
-            style="flex: 1; padding: 10px; border: none; background: transparent; color: var(--text-muted); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); font-size: 0.9em;">Posisi
-            Dosen</button>
-          <button id="tab-cari-kelas"
-            style="flex: 1; padding: 10px; border: none; background: transparent; color: var(--text-muted); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: var(--font); font-size: 0.9em;">Kode
-            Kelas</button>
-        </div>
+      <!-- Segmented Main Tabs Bar -->
+      <div style="padding: 10px 18px 0 18px; background: var(--bg-elevated); border-bottom: 1px solid var(--border);">
+        <div style="display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 10px;">
+          <button id="tab-lab-kosong" class="info-main-tab active" data-tab="kosong"
+            style="padding: 8px 14px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.86em; display: inline-flex; align-items: center; gap: 7px; background: var(--primary); color: #fff; box-shadow: var(--shadow-xs); white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+              <line x1="15" y1="3" x2="15" y2="21"></line>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="3" y1="15" x2="21" y2="15"></line>
+            </svg>
+            <span>Ruangan Kosong</span>
+          </button>
 
-        <!-- Content: Lab Kosong -->
+          <button id="tab-changes-hub" class="info-main-tab" data-tab="changes"
+            style="padding: 8px 14px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.86em; display: inline-flex; align-items: center; gap: 7px; background: transparent; color: var(--text-muted); white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+            <span>Perubahan & Tambahan</span>
+            <span id="info-tab-cnt-changes" class="db-mini-badge badge-amber" style="display:none;">0</span>
+          </button>
+
+          <button id="tab-bentrok" class="info-main-tab" data-tab="bentrok"
+            style="padding: 8px 14px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.86em; display: inline-flex; align-items: center; gap: 7px; background: transparent; color: var(--text-muted); white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>Jadwal Bentrok</span>
+            <span id="info-tab-cnt-bentrok" class="db-mini-badge badge-red" style="display:none;">0</span>
+          </button>
+
+          <button id="tab-cari-dosen" class="info-main-tab" data-tab="dosen"
+            style="padding: 8px 14px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.86em; display: inline-flex; align-items: center; gap: 7px; background: transparent; color: var(--text-muted); white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Posisi Dosen</span>
+          </button>
+
+          <button id="tab-cari-kelas" class="info-main-tab" data-tab="kelas"
+            style="padding: 8px 14px; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.86em; display: inline-flex; align-items: center; gap: 7px; background: transparent; color: var(--text-muted); white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <span>Kode Kelas</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div style="padding: 18px 22px; overflow-y: auto; flex: 1;">
+        
+        <!-- ==================== TAB 1: RUANGAN KOSONG ==================== -->
         <div id="content-lab-kosong">
-          <div
-            style="display: flex; gap: 8px; margin-bottom: 15px; background: var(--bg-elevated); padding: 5px; border-radius: var(--radius-sm);">
-            <button id="btn-filter-jenis-lab"
-              style="flex: 1; padding: 8px; border: none; background: var(--primary); color: white; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: 0.3s; font-family: var(--font); font-size: 0.9em; box-shadow: var(--shadow-sm);">Lab</button>
-            <button id="btn-filter-jenis-kelas"
-              style="flex: 1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; transition: 0.3s; font-family: var(--font); font-size: 0.9em;">Kelas</button>
-          </div>
-          <input type="hidden" id="filter-jenis-ruangan" value="Lab">
-          <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
-            <div class="custom-select-wrapper" id="wrapper-fitur-kampus"
-              style="flex: 1; position: relative; min-width: 150px;">
-              <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
-                onclick="toggleCustomSelect('fitur-kampus', event)"
-                style="height: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); box-shadow: none;">
-                <span class="custom-select-label" id="label-fitur-kampus">Kampus Kobar</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </div>
-              <div class="aslab-list-container custom-select-dropdown" id="dropdown-fitur-kampus">
-                <div class="aslab-list-item active"
-                  onclick="selectCustomOption('fitur-kampus', 'Kobar', 'Kampus Kobar')">Kampus Kobar</div>
-                <div class="aslab-list-item" onclick="selectCustomOption('fitur-kampus', 'Thehok', 'Kampus Thehok')">
-                  Kampus Thehok</div>
-              </div>
-              <input type="hidden" id="filter-fitur-kampus" value="Kobar">
+          <!-- Toolbar Filter Ruang Kosong -->
+          <div style="background: var(--bg-elevated); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 14px;">
+            <!-- Quick Category Pill Selector -->
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+              <button type="button" id="btn-fitur-jenis-lab" class="btn btn-secondary btn-sm"
+                style="padding: 6px 14px; border-radius: var(--radius-sm); font-size: 0.84em; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: #fff;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>Laboratorium</span>
+              </button>
+              <button type="button" id="btn-fitur-jenis-kelas" class="btn btn-secondary btn-sm"
+                style="padding: 6px 14px; border-radius: var(--radius-sm); font-size: 0.84em; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-card); color: var(--text-muted);">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span>Ruang Kelas</span>
+              </button>
+              <button type="button" id="btn-fitur-jenis-semua" class="btn btn-secondary btn-sm"
+                style="padding: 6px 14px; border-radius: var(--radius-sm); font-size: 0.84em; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-card); color: var(--text-muted);">
+                <span>Semua (Lab & Kelas)</span>
+              </button>
+              <input type="hidden" id="fitur-filter-jenis" value="Lab">
             </div>
-            <input type="date" id="fitur-tanggal"
-              style="flex: 1; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
-            <button id="btn-submit-lab-kosong" class="btn btn-primary"
-              style="width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg
-                viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;">
+              <div>
+                <label style="display: block; font-size: 0.76em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Kampus:</label>
+                <select id="fitur-filter-kampus" class="custom-select" style="width: 100%; padding: 8px 10px; font-size: 0.86em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border);">
+                  <option value="">Semua Kampus</option>
+                  <option value="Thehok">Kampus Thehok</option>
+                  <option value="Kobar">Kampus Kobar</option>
+                </select>
+              </div>
+
+              <div>
+                <label style="display: block; font-size: 0.76em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Tanggal:</label>
+                <input type="date" id="fitur-filter-tanggal" style="width: 100%; padding: 7px 10px; font-size: 0.86em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border); outline: none;">
+              </div>
+
+              <div>
+                <label style="display: block; font-size: 0.76em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Waktu Ketersediaan:</label>
+                <select id="fitur-filter-waktu" class="custom-select" style="width: 100%; padding: 8px 10px; font-size: 0.86em; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text); border: 1px solid var(--border);">
+                  <option value="semua">Sepanjang Hari Ini</option>
+                  <option value="sekarang">Kosong Saat Ini (Live)</option>
+                  <option value="pagi">Pagi (07:30 - 12:00)</option>
+                  <option value="siang">Siang (12:00 - 16:00)</option>
+                  <option value="sore">Sore / Malam (16:00 - 21:00)</option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div id="result-lab-kosong"
-            style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
-            <div
-              style="text-align: center; color: var(--text-muted); margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1"
-                opacity="0.5">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
+
+          <!-- Summary Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.86em; color: var(--text); flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+              <span id="fitur-room-summary-text">Memuat ketersediaan ruangan...</span>
+            </div>
+            <button type="button" id="btn-refresh-fitur-rooms" class="db-quick-btn" style="padding: 4px 10px; font-size: 0.8em; display: inline-flex; align-items: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
               </svg>
-              <span>Pilih kampus dan tanggal untuk mencari ruangan kosong.</span>
-            </div>
+              <span>Segarkan</span>
+            </button>
+          </div>
+
+          <!-- Grid Kartu Ruang Kosong -->
+          <div id="result-lab-kosong-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; max-height: calc(92vh - 280px); min-height: 380px; overflow-y: auto; padding: 6px;">
+            <!-- Rendered by JS -->
           </div>
         </div>
 
-        <!-- Content: Cari Dosen -->
+        <!-- ==================== TAB 2: PUSAT PERUBAHAN & TAMBAHAN ==================== -->
+        <div id="content-changes-hub" style="display: none;">
+          <!-- Sub Tabs Filter -->
+          <div style="display: flex; gap: 6px; border-bottom: 1.5px solid var(--border); padding-bottom: 10px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none;">
+            <button type="button" class="hub-subtab-btn active" data-subtab="all" style="padding: 6px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.85em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: #fff;">
+              <span>Semua Perubahan</span>
+              <span class="db-mini-badge badge-slate" id="cnt-subhub-all">0</span>
+            </button>
+            <button type="button" class="hub-subtab-btn" data-subtab="batal" style="padding: 6px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.85em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+              <span>Batal (CC)</span>
+              <span class="db-mini-badge badge-red" id="cnt-subhub-batal">0</span>
+            </button>
+            <button type="button" class="hub-subtab-btn" data-subtab="tambahan" style="padding: 6px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.85em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+              <span>Kelas Tambahan</span>
+              <span class="db-mini-badge badge-green" id="cnt-subhub-tambahan">0</span>
+            </button>
+            <button type="button" class="hub-subtab-btn" data-subtab="perubahan" style="padding: 6px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.85em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+              <span>Pergeseran Jadwal</span>
+              <span class="db-mini-badge badge-purple" id="cnt-subhub-perubahan">0</span>
+            </button>
+            <button type="button" class="hub-subtab-btn" data-subtab="jeda" style="padding: 6px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.85em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+              <span>Jeda Kosong Lab</span>
+              <span class="db-mini-badge badge-amber" id="cnt-subhub-jeda">0</span>
+            </button>
+          </div>
+
+          <!-- Quick Search -->
+          <div style="margin-bottom: 12px;">
+            <input type="text" id="info-hub-search-input" placeholder="Cari dosen, mata kuliah, atau ruangan..."
+              style="width: 100%; padding: 10px 14px; font-size: 0.88em; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); outline: none;">
+          </div>
+
+          <!-- List Container for Changes -->
+          <div id="info-hub-changes-container" style="display: flex; flex-direction: column; gap: 12px; max-height: calc(92vh - 280px); min-height: 380px; overflow-y: auto; padding: 6px;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- ==================== TAB 3: JADWAL BENTROK ==================== -->
+        <div id="content-bentrok" style="display: none;">
+          <div id="info-bentrok-summary-banner" style="margin-bottom: 14px;">
+            <!-- Injected by JS -->
+          </div>
+          <div id="info-bentrok-list-container" style="display: flex; flex-direction: column; gap: 12px; max-height: calc(92vh - 280px); min-height: 380px; overflow-y: auto; padding: 6px;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- ==================== TAB 4: CARI DOSEN ==================== -->
         <div id="content-cari-dosen" style="display: none;">
-          <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
-            <input type="text" id="fitur-nama-dosen" placeholder="Masukkan nama dosen..."
-              style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
-            <button id="btn-submit-cari-dosen" class="btn btn-primary"
-              style="width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg
-                viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
-          </div>
-          <div id="result-cari-dosen"
-            style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
-            <div
-              style="text-align: center; color: var(--text-muted); margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1"
-                opacity="0.5">
+          <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+            <input type="text" id="fitur-nama-dosen" placeholder="Ketik nama dosen..."
+              style="flex: 1; padding: 11px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); outline: none; font-size: 0.9em;">
+            <button id="btn-submit-cari-dosen" class="btn btn-primary" style="padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
-              <span>Ketik nama dosen untuk melihat jadwal mengajarnya hari ini.</span>
+              <span>Cari</span>
+            </button>
+          </div>
+          <div id="result-cari-dosen" style="background: var(--bg-elevated); padding: 16px; border-radius: var(--radius-sm); min-height: 200px; max-height: calc(92vh - 280px); overflow-y: auto; border: 1px solid var(--border);">
+            <div style="text-align: center; color: var(--text-muted); margin-top: 24px;">
+              Ketik nama dosen di atas untuk melihat jadwal mengajarnya hari ini.
             </div>
           </div>
         </div>
 
-        <!-- Content: Cari Kode Kelas -->
+        <!-- ==================== TAB 5: CARI KODE KELAS ==================== -->
         <div id="content-cari-kelas" style="display: none;">
-          <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
-            <input type="text" id="fitur-kode-kelas" placeholder="Masukkan kode kelas (contoh: 01PT1)"
-              style="flex: 1; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-family: var(--font); outline: none; transition: border 0.2s;">
-            <button id="btn-submit-cari-kelas" class="btn btn-primary"
-              style="width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg
-                viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg></button>
-          </div>
-          <div id="result-cari-kelas"
-            style="background: var(--bg); padding: 20px; border-radius: var(--radius-sm); min-height: 120px; max-height: 350px; overflow-y: auto; border: 1px solid var(--border);">
-            <div
-              style="text-align: center; color: var(--text-muted); margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
-              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1"
-                opacity="0.5">
+          <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+            <input type="text" id="fitur-kode-kelas" placeholder="Ketik kode kelas (contoh: 01PT1)..."
+              style="flex: 1; padding: 11px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); outline: none; font-size: 0.9em;">
+            <button id="btn-submit-cari-kelas" class="btn btn-primary" style="padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
-              <span>Ketik kode kelas untuk mencari jadwalnya hari ini.</span>
+              <span>Cari</span>
+            </button>
+          </div>
+          <div id="result-cari-kelas" style="background: var(--bg-elevated); padding: 16px; border-radius: var(--radius-sm); min-height: 200px; max-height: calc(92vh - 280px); overflow-y: auto; border: 1px solid var(--border);">
+            <div style="text-align: center; color: var(--text-muted); margin-top: 24px;">
+              Ketik kode kelas untuk mencari jadwal perkuliahannya hari ini.
             </div>
           </div>
         </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="padding: 12px 22px; border-top: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated); font-size: 0.82em; color: var(--text-muted);">
+        <div id="info-modal-footer-hint">Data sinkron langsung dengan sistem BAAK UNAMA</div>
+        <button type="button" class="modal-btn" onclick="document.getElementById('close-modal-fitur').click()" style="background: var(--text-muted); min-width: 80px; padding: 6px 14px; font-size: 0.86em;">Tutup</button>
       </div>
     </div>
   </div>
@@ -1927,6 +2051,127 @@
   </div>
 
 
+  <!-- MODAL: PUSAT RESTORE / IMPOR DATABASE (.SQL) -->
+    <!-- ==================== MODAL PUSAT RESTORE / IMPOR DATABASE (.SQL) ==================== -->
+  <div id="db-restore-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Restore Database"
+    style="z-index: 10003;">
+    <div class="modal-box db-clear-modal-box" style="max-width: 680px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-icon" style="margin: 0; background: rgba(59, 130, 246, 0.12); color: #3b82f6; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.35em; color: var(--text);">Pusat Restore Database (.SQL)</h2>
+            <p style="margin: 3px 0 0 0; font-size: 0.85em; color: var(--text-muted);">Pulihkan skema tabel dan baris data dari file backup skrip .sql.</p>
+          </div>
+        </div>
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(59, 130, 246, 0.12); color: #3b82f6; font-size: 0.78em; font-weight: 600;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #3b82f6;"></span>
+          Admin Terverifikasi
+        </span>
+      </div>
+
+      <!-- Warning Callout -->
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-sm); font-size: 0.84em; color: var(--text); margin-bottom: 18px; line-height: 1.45;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>
+          <b>Perhatian:</b> File .sql yang berisi perintah <code>DROP TABLE</code> atau <code>INSERT</code> akan menimpa data yang ada saat ini. Pastikan Anda telah memeriksa pratinjau sebelum memulihkan.
+        </span>
+      </div>
+
+      <!-- Dropzone Area -->
+      <div id="sql-dropzone" style="border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 32px 20px; text-align: center; background: var(--bg-elevated); cursor: pointer; transition: all 0.2s ease;">
+        <input type="file" id="sql-file-input" accept=".sql,text/plain" style="display: none;">
+        <div style="width: 52px; height: 52px; border-radius: 16px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto;">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+            <path d="M12 12v9"></path>
+            <path d="m16 16-4-4-4 4"></path>
+          </svg>
+        </div>
+        <div style="font-weight: 600; font-size: 1em; color: var(--text); margin-bottom: 4px;">Pilih atau Tarik File Backup .SQL ke Sini</div>
+        <div style="font-size: 0.83em; color: var(--text-muted); margin-bottom: 14px;">Mendukung file dump skrip SQL (.sql) standar UTF-8</div>
+        <button type="button" class="modal-btn" id="btn-browse-sql" style="background: var(--primary); color: #fff; padding: 7px 18px; font-size: 0.85em; border-radius: var(--radius-sm);">
+          Cari File di Komputer
+        </button>
+      </div>
+
+      <!-- File Preview Card (Hidden by default) -->
+      <div id="sql-preview-card" style="display: none; margin-top: 18px; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.12); color: #10b981; display: flex; align-items: center; justify-content: center;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </div>
+            <div>
+              <div id="preview-sql-filename" style="font-weight: 700; font-size: 0.95em; color: var(--text);">backup.sql</div>
+              <div id="preview-sql-filesize" style="font-size: 0.8em; color: var(--text-muted);">0 KB</div>
+            </div>
+          </div>
+          <button type="button" id="btn-remove-sql-file" title="Ganti file" style="background: transparent; border: none; color: var(--badge-cc); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.82em; font-weight: 600;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <span>Hapus / Ganti</span>
+          </button>
+        </div>
+
+        <div style="font-size: 0.82em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Tabel Terdeteksi di Dalam File:</div>
+        <div id="preview-tables-container" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
+          <!-- Injected dynamically -->
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; background: var(--bg-elevated); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.84em;">
+          <div>
+            <div style="color: var(--text-muted);">Total Kueri SQL:</div>
+            <div id="preview-stat-queries" style="font-weight: 700; color: var(--text);">0 Kueri</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted);">Estimasi Baris Data:</div>
+            <div id="preview-stat-rows" style="font-weight: 700; color: #10b981;">0 Baris</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted);">Status Struktur:</div>
+            <div id="preview-stat-structure" style="font-weight: 700; color: #3b82f6;">Lengkap (DDL)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Footer (Centered) -->
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 22px; border-top: 1.5px solid var(--border); padding-top: 16px; gap: 12px; text-align: center;">
+        <div id="db-restore-status-text" style="font-size: 0.88em; color: var(--text-muted);">
+          Silakan masukkan file .sql untuk memulai validasi
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+          <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-restore-cancel-btn">Batal</button>
+          <button type="button" class="modal-btn" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);" id="db-restore-submit-btn" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span id="db-restore-submit-label">Mulai Restore Database</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <!-- MODAL: SETTING & MASTER DATA ASLAB/RUANGAN -->
   <!-- ==================== MODAL SETTING & DATA MASTER ASLAB/RUANGAN ==================== -->
 <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Setting">
@@ -2023,6 +2268,15 @@
         Uji Coba Pesan WA (Admin)
       </button>
 
+      <button class="btn btn-secondary admin-only" id="btn-show-wa-monitor"
+        style="display: none; padding: 14px; font-size: 1.02em; width: 100%; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+        Live Monitor & Log Bot WA (Admin)
+      </button>
+
       <!-- Kategori 2: Data Master -->
       <div
         style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--text-muted); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
@@ -2099,6 +2353,18 @@
         </svg>
         Pusat Backup Database (.SQL)
       </button>
+
+      <button class="btn admin-only" id="restore-db-btn"
+        style="padding: 14px; font-size: 1.05em; width: 100%; display: none; align-items: center; justify-content: center; gap: 10px; font-weight: 600; border-radius: var(--radius-sm); background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; border: none; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25); cursor: pointer; transition: all 0.2s ease;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        Pusat Restore Database (.SQL)
+      </button>
+
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
       </div>
@@ -2309,6 +2575,59 @@
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="edit-wa-back-btn">Batal</button>
         <button class="modal-btn" id="edit-wa-submit-btn">Update Data</button>
+      </div>
+    </div>
+
+    <!-- Tampilan Live Monitor & Log Bot WA -->
+    <div id="wa-modal-monitor" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      
+      <!-- Status Box -->
+      <div style="background: var(--bg-elevated); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 0.78em; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Gateway Service URL</div>
+          <div id="wa-monitor-url" style="font-size: 0.9em; font-weight: 600; color: var(--text); margin-top: 2px;">http://localhost:3000</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span id="wa-monitor-status-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 9999px; font-size: 0.82em; font-weight: 600; background: rgba(239, 68, 68, 0.12); color: #ef4444;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: currentColor;"></span>
+            <span id="wa-monitor-status-label">Memeriksa Bot...</span>
+          </span>
+          <button type="button" id="btn-refresh-wa-monitor" class="db-quick-btn" title="Refresh status bot" style="padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Log Table Box -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="font-size: 0.82em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Riwayat Notifikasi WA Terakhir:</div>
+          <span style="font-size: 0.78em; color: var(--text-muted);">Peringatan 30 Menit & Notifikasi Lab</span>
+        </div>
+        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.86em;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--border); background: var(--bg-elevated); color: var(--text-muted);">
+                <th style="padding: 10px 12px; text-align: left; width: 140px;">Waktu Kirim</th>
+                <th style="padding: 10px 12px; text-align: left; width: 110px;">Kategori</th>
+                <th style="padding: 10px 12px; text-align: left;">Ringkasan Pesan</th>
+              </tr>
+            </thead>
+            <tbody id="wa-monitor-log-tbody">
+              <tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-muted);">Memuat riwayat pengiriman...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="wa-monitor-back-btn">Kembali ke Menu</button>
       </div>
     </div>
   </div>
@@ -2579,7 +2898,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260904_backup_theme_v3"></script>
+  <script src="frontend/js/script.js?v=20260906_infolain_v4"></script>
 </body>
 
 </html>

@@ -1,0 +1,62 @@
+  <!-- ==================== MODAL PUSAT PERUBAHAN & KELAS TAMBAHAN ==================== -->
+  <div id="changes-hub-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Pusat Perubahan Jadwal"
+    style="z-index: 10005;">
+    <div class="modal-box db-clear-modal-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-icon" style="margin: 0; background: rgba(245, 158, 11, 0.12); color: #f59e0b; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.35em; color: var(--text);">Pusat Perubahan & Kelas Tambahan</h2>
+            <p style="margin: 3px 0 0 0; font-size: 0.85em; color: var(--text-muted);">Rangkuman kelas yang dibatalkan, kelas pengganti/tambahan, dan jeda lab hari ini.</p>
+          </div>
+        </div>
+        <button type="button" id="btn-close-changes-hub" class="modal-close" aria-label="Tutup" style="position: static; font-size: 1.5em;">&times;</button>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div style="display: flex; gap: 8px; border-bottom: 1.5px solid var(--border); padding-bottom: 10px; margin-bottom: 14px; overflow-x: auto; scrollbar-width: none;">
+        <button type="button" class="hub-tab-btn active" data-tab="all" style="padding: 8px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.86em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-card); color: var(--text); box-shadow: var(--shadow-xs);">
+          <span>Semua Perubahan</span>
+          <span class="db-mini-badge badge-slate" id="cnt-hub-all">0</span>
+        </button>
+        <button type="button" class="hub-tab-btn" data-tab="batal" style="padding: 8px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.86em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+          <span>Kelas Batal (CC)</span>
+          <span class="db-mini-badge badge-red" id="cnt-hub-batal">0</span>
+        </button>
+        <button type="button" class="hub-tab-btn" data-tab="tambahan" style="padding: 8px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.86em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+          <span>Kelas Tambahan</span>
+          <span class="db-mini-badge badge-green" id="cnt-hub-tambahan">0</span>
+        </button>
+        <button type="button" class="hub-tab-btn" data-tab="perubahan" style="padding: 8px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.86em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+          <span>Pergeseran Jadwal</span>
+          <span class="db-mini-badge badge-purple" id="cnt-hub-perubahan">0</span>
+        </button>
+        <button type="button" class="hub-tab-btn" data-tab="jeda" style="padding: 8px 14px; border-radius: var(--radius-sm); border: none; font-size: 0.86em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--bg-elevated); color: var(--text-muted);">
+          <span>Jeda Kosong Lab</span>
+          <span class="db-mini-badge badge-amber" id="cnt-hub-jeda">0</span>
+        </button>
+      </div>
+
+      <!-- Quick Search inside Modal -->
+      <div style="margin-bottom: 14px;">
+        <input type="text" id="hub-search-input" placeholder="Cari berdasarkan nama dosen, mata kuliah, atau ruangan..."
+          style="width: 100%; padding: 10px 14px; font-size: 0.9em; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
+      </div>
+
+      <!-- List Container -->
+      <div id="changes-hub-list-container" style="display: flex; flex-direction: column; gap: 10px; max-height: 450px; overflow-y: auto; padding: 2px;">
+        <!-- Injected dynamically by JS -->
+      </div>
+
+      <!-- Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; border-top: 1.5px solid var(--border); padding-top: 14px; font-size: 0.84em; color: var(--text-muted);">
+        <div>Data disinkronkan langsung dengan BAAK UNAMA</div>
+        <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="btn-close-changes-hub-footer">Tutup</button>
+      </div>
+    </div>
+  </div>

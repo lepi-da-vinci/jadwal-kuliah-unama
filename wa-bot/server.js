@@ -132,6 +132,16 @@ app.post('/send', async (req, res) => {
     }
 });
 
+// Endpoint status kesehatan gateway WhatsApp
+app.get('/status', (req, res) => {
+    const isReady = !!(sock && sock.user);
+    res.json({
+        status: 'success',
+        ready: isReady,
+        user: sock?.user || null
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`Server Express sedang bersiap di port ${PORT}...`);
     connectToWhatsApp();

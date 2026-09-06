@@ -93,6 +93,15 @@
         Uji Coba Pesan WA (Admin)
       </button>
 
+      <button class="btn btn-secondary admin-only" id="btn-show-wa-monitor"
+        style="display: none; padding: 14px; font-size: 1.02em; width: 100%; align-items: center; justify-content: center; gap: 10px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+        Live Monitor & Log Bot WA (Admin)
+      </button>
+
       <!-- Kategori 2: Data Master -->
       <div
         style="text-align: left; font-size: 0.85em; font-weight: 600; color: var(--text-muted); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
@@ -169,6 +178,18 @@
         </svg>
         Pusat Backup Database (.SQL)
       </button>
+
+      <button class="btn admin-only" id="restore-db-btn"
+        style="padding: 14px; font-size: 1.05em; width: 100%; display: none; align-items: center; justify-content: center; gap: 10px; font-weight: 600; border-radius: var(--radius-sm); background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; border: none; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25); cursor: pointer; transition: all 0.2s ease;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        Pusat Restore Database (.SQL)
+      </button>
+
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
       </div>
@@ -379,6 +400,59 @@
       <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
         <button class="modal-btn" style="background: var(--text-muted);" id="edit-wa-back-btn">Batal</button>
         <button class="modal-btn" id="edit-wa-submit-btn">Update Data</button>
+      </div>
+    </div>
+
+    <!-- Tampilan Live Monitor & Log Bot WA -->
+    <div id="wa-modal-monitor" class="modal-body"
+      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
+      
+      <!-- Status Box -->
+      <div style="background: var(--bg-elevated); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 0.78em; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Gateway Service URL</div>
+          <div id="wa-monitor-url" style="font-size: 0.9em; font-weight: 600; color: var(--text); margin-top: 2px;">http://localhost:3000</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span id="wa-monitor-status-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 9999px; font-size: 0.82em; font-weight: 600; background: rgba(239, 68, 68, 0.12); color: #ef4444;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: currentColor;"></span>
+            <span id="wa-monitor-status-label">Memeriksa Bot...</span>
+          </span>
+          <button type="button" id="btn-refresh-wa-monitor" class="db-quick-btn" title="Refresh status bot" style="padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Log Table Box -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="font-size: 0.82em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Riwayat Notifikasi WA Terakhir:</div>
+          <span style="font-size: 0.78em; color: var(--text-muted);">Peringatan 30 Menit & Notifikasi Lab</span>
+        </div>
+        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.86em;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--border); background: var(--bg-elevated); color: var(--text-muted);">
+                <th style="padding: 10px 12px; text-align: left; width: 140px;">Waktu Kirim</th>
+                <th style="padding: 10px 12px; text-align: left; width: 110px;">Kategori</th>
+                <th style="padding: 10px 12px; text-align: left;">Ringkasan Pesan</th>
+              </tr>
+            </thead>
+            <tbody id="wa-monitor-log-tbody">
+              <tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-muted);">Memuat riwayat pengiriman...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+        <button class="modal-btn" style="background: var(--text-muted);" id="wa-monitor-back-btn">Kembali ke Menu</button>
       </div>
     </div>
   </div>

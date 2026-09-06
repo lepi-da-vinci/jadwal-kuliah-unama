@@ -333,6 +333,72 @@ function populateFilters() {
   updateRuanganFilterOptions();
 }
 
+// ─── Detektor & Indikator Jadwal Bentrok (Conflict Detector) ───
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes(':')) return null;
+  const parts = timeStr.trim().split(':');
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function getScheduleUniqueKey(item, idx) {
+  if (item && item.id) return `id_${item.id}`;
+  return `key_${item.tanggal || ''}_${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}_${item.nama_dosen || ''}_${idx}`;
+}
+
+function detectScheduleConflicts(scheduleList) {
+  const roomConflicts = new Map();
+  const lecturerConflicts = new Map();
+
+  const validItems = (scheduleList || []).filter(item =>
+    item && item.jam && item.metode_pembelajaran !== 'CC'
+  );
+
+  for (let i = 0; i < validItems.length; i++) {
+    const a = validItems[i];
+    const startA = parseTimeToMinutes(a.jam);
+    if (startA === null) continue;
+    const endA = startA + 135;
+    const keyA = getScheduleUniqueKey(a, i);
+
+    for (let j = i + 1; j < validItems.length; j++) {
+      const b = validItems[j];
+      const startB = parseTimeToMinutes(b.jam);
+      if (startB === null) continue;
+      const endB = startB + 135;
+      const keyB = getScheduleUniqueKey(b, j);
+
+      // Overlap formula: startA < endB && startB < endA
+      const overlaps = (startA < endB) && (startB < endA);
+      if (!overlaps) continue;
+
+      // 1. Room conflict (same room, excluding online/empty)
+      const roomA = (a.nama_ruangan || '').trim().toLowerCase();
+      const roomB = (b.nama_ruangan || '').trim().toLowerCase();
+      if (roomA && roomB && roomA === roomB && roomA !== '-' && roomA !== 'online') {
+        if (!roomConflicts.has(keyA)) roomConflicts.set(keyA, { item: a, list: [] });
+        if (!roomConflicts.has(keyB)) roomConflicts.set(keyB, { item: b, list: [] });
+        roomConflicts.get(keyA).list.push(b);
+        roomConflicts.get(keyB).list.push(a);
+      }
+
+      // 2. Lecturer conflict (same lecturer in different rooms, excluding empty)
+      const dosenA = (a.nama_dosen || '').trim().toLowerCase();
+      const dosenB = (b.nama_dosen || '').trim().toLowerCase();
+      if (dosenA && dosenB && dosenA === dosenB && dosenA !== '-' && dosenA !== 'team teaching') {
+        if (!lecturerConflicts.has(keyA)) lecturerConflicts.set(keyA, { item: a, list: [] });
+        if (!lecturerConflicts.has(keyB)) lecturerConflicts.set(keyB, { item: b, list: [] });
+        lecturerConflicts.get(keyA).list.push(b);
+        lecturerConflicts.get(keyB).list.push(a);
+      }
+    }
+  }
+
+  return { roomConflicts, lecturerConflicts };
+}
+
 function renderTable(data) {
   window._currentFilteredJadwal = data;
   const hasilLabel = document.getElementById('hasil-pencarian');
@@ -342,7 +408,7 @@ function renderTable(data) {
     tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Tidak ada jadwal yang sesuai dengan filter.</td></tr>';
     return;
   }
-  data.forEach(item => {
+  data.forEach((item, idx) => {
     let badgeClass = 'default';
     if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
     else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
@@ -351,7 +417,21 @@ function renderTable(data) {
     if (item.metode_pembelajaran === 'OL') {
       displayStatus = 'Online';
     }
+
+    // Check conflict status
+    const itemKey = getScheduleUniqueKey(item, idx);
+    const hasRoomConflict = window._currentScheduleConflicts && 
+      (window._currentScheduleConflicts.roomConflicts.has(itemKey) ||
+       Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const hasDosenConflict = window._currentScheduleConflicts && 
+      (window._currentScheduleConflicts.lecturerConflicts.has(itemKey) ||
+       Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+
     const row = document.createElement('tr');
+    if (hasRoomConflict || hasDosenConflict) {
+      row.classList.add('table-row-conflict');
+    }
+
     const safeItemJson = escapeHtml(JSON.stringify(item));
     row.innerHTML = `
           <td><strong>${escapeHtml(item.jam)}</strong><br><small>${escapeHtml(item.hari)}, ${escapeHtml(item.tanggal_format || item.tanggal)}</small></td>
@@ -365,8 +445,14 @@ function renderTable(data) {
               </button>
             </div>
           </td>
-          <td>${escapeHtml(item.nama_dosen || '-')}</td>
-          <td>${escapeHtml(item.nama_ruangan || '-')}</td>
+          <td>
+            ${escapeHtml(item.nama_dosen || '-')}
+            ${hasDosenConflict ? `<br><span class="conflict-pill dosen" title="Dosen terdaftar mengajar di 2 ruangan pada jam yang sama"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Bentrok Dosen</span>` : ''}
+          </td>
+          <td>
+            ${escapeHtml(item.nama_ruangan || '-')}
+            ${hasRoomConflict ? `<br><span class="conflict-pill room" title="Ruangan digunakan oleh 2 kelas berbeda pada jam yang bersamaan"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Bentrok Ruang</span>` : ''}
+          </td>
           <td>${escapeHtml(displayStatus)}</td>
           <td><span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran)}</span></td>
         `;
@@ -411,6 +497,36 @@ function applyFilters() {
 
   fetchNotifikasiLab(ft);
 
+  // Hitung jadwal bentrok pada tanggal aktif
+  const daySchedules = allJadwal.filter(item => item.tanggal === ft);
+  window._currentScheduleConflicts = detectScheduleConflicts(daySchedules);
+
+  const conflictBadgeWrap = document.getElementById('conflict-badge-wrap');
+  const conflictLabel = document.getElementById('conflict-warning-label');
+  const conflictState = document.getElementById('conflict-filter-state');
+  
+  const allConflictKeys = new Set([
+    ...window._currentScheduleConflicts.roomConflicts.keys(),
+    ...window._currentScheduleConflicts.lecturerConflicts.keys()
+  ]);
+
+  if (conflictBadgeWrap && conflictLabel) {
+    if (allConflictKeys.size > 0) {
+      conflictBadgeWrap.style.display = 'block';
+      conflictLabel.textContent = `Terdeteksi ${allConflictKeys.size} Jadwal Bentrok`;
+      if (conflictState) {
+        conflictState.textContent = window._filterOnlyConflicts ? "(Tampilkan Semua)" : "(Filter Bentrok Saja)";
+      }
+    } else {
+      conflictBadgeWrap.style.display = 'none';
+      window._filterOnlyConflicts = false;
+    }
+  }
+
+  if (typeof updateInfoLainBadges === 'function') {
+    updateInfoLainBadges();
+  }
+
   const fw = filterWaktu.value;
   const fm = filterMetode.value;
   const fr = filterRuangan.value;
@@ -442,6 +558,15 @@ function applyFilters() {
   else if (fk === 'kelas') filtered = filtered.filter(item => !isLab(item.nama_ruangan));
   if (fKampus !== 'semua') filtered = filtered.filter(item => item.kampus && item.kampus.trim() === fKampus);
 
+  // Jika filter bentrok sedang aktif, saring hanya jadwal yang mengalami bentrok
+  if (window._filterOnlyConflicts && allConflictKeys.size > 0) {
+    filtered = filtered.filter((item, idx) => {
+      const key = getScheduleUniqueKey(item, idx);
+      return allConflictKeys.has(key) ||
+        Array.from(allConflictKeys).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`));
+    });
+  }
+
   filtered.sort((a, b) => {
     const aIsLab = isLab(a.nama_ruangan);
     const bIsLab = isLab(b.nama_ruangan);
@@ -454,6 +579,7 @@ function applyFilters() {
   updateStats(filtered);
   renderTable(filtered);
   updateActiveLabPanel();
+  if (typeof updateChangesHubData === 'function') updateChangesHubData();
 }
 
 function updateActiveLabPanel() {
@@ -835,6 +961,9 @@ function calculateClientSideGaps(targetDate) {
         const em = (curr.end % 60).toString().padStart(2, '0');
         generatedGaps.push({
           tipe_notif: 'JEDA',
+          ruangan: room,
+          jam: `${eh}:${em} - ${nxt.jam}`,
+          durasi: durStr,
           pesan: `JEDA PANJANG (${durStr}): Ruang ${room} kosong antara ${eh}:${em} s/d ${nxt.jam}.`,
           waktu: 'Otomatis'
         });
@@ -1618,6 +1747,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       if (qrView) qrView.style.display = 'none';
       if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
+      if (document.getElementById('wa-modal-monitor')) document.getElementById('wa-modal-monitor').style.display = 'none';
       modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
@@ -1957,6 +2087,27 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     // Kembali dari Ruangan
     document.getElementById('data-ruangan-back-btn')?.addEventListener('click', showMenu);
     document.getElementById('add-ruangan-back-btn')?.addEventListener('click', showMenu);
+
+    // Navigasi ke Live Monitor & Log Bot WA
+    const btnShowWaMonitor = document.getElementById('btn-show-wa-monitor');
+    const monitorView = document.getElementById('wa-modal-monitor');
+    if (btnShowWaMonitor) {
+      btnShowWaMonitor.onclick = async () => {
+        menuView.style.display = 'none';
+        dataView.style.display = 'none';
+        addView.style.display = 'none';
+        editView.style.display = 'none';
+        if (qrView) qrView.style.display = 'none';
+        if (dataRuanganView) dataRuanganView.style.display = 'none';
+        if (addRuanganView) addRuanganView.style.display = 'none';
+        if (monitorView) monitorView.style.display = 'flex';
+        modalTitle.innerText = "Live Monitor & Log Bot WA";
+        modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>`;
+        await fetchWaBotStatus();
+      };
+    }
+    document.getElementById('wa-monitor-back-btn')?.addEventListener('click', showMenu);
+    document.getElementById('btn-refresh-wa-monitor')?.addEventListener('click', () => fetchWaBotStatus());
 
     // Submit Tambah Ruangan
     const btnAddRuanganSubmit = document.getElementById('add-ruangan-submit-btn');
@@ -3509,6 +3660,819 @@ document.getElementById('backup-db-btn')?.addEventListener('click', async (e) =>
   openDbBackupModal();
 });
 
+// ─── WA Monitor: Fetch Status & Riwayat Notifikasi ───
+async function fetchWaBotStatus() {
+  const badge = document.getElementById('wa-monitor-status-badge');
+  const label = document.getElementById('wa-monitor-status-label');
+  const urlEl = document.getElementById('wa-monitor-url');
+  const tbody = document.getElementById('wa-monitor-log-tbody');
+  
+  if (label) label.textContent = 'Memeriksa bot...';
+  if (badge) {
+    badge.style.background = 'rgba(59, 130, 246, 0.12)';
+    badge.style.color = '#3b82f6';
+  }
+
+  try {
+    const res = await fetch('/api/wa/status?_t=' + Date.now());
+    const data = await res.json();
+    if (urlEl) urlEl.textContent = data.bot_url || 'http://localhost:3000';
+
+    if (data.bot_online) {
+      if (badge) {
+        badge.style.background = 'rgba(16, 185, 129, 0.12)';
+        badge.style.color = '#10b981';
+      }
+      if (label) label.innerHTML = '<span class="wa-pulse-online" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:4px;"></span> Bot Online & Terhubung';
+    } else {
+      if (badge) {
+        badge.style.background = 'rgba(239, 68, 68, 0.12)';
+        badge.style.color = '#ef4444';
+      }
+      if (label) label.innerHTML = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:4px;"></span> Bot Offline / Disconnect';
+    }
+
+    if (tbody) {
+      const logs = data.recent_notifications || [];
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-muted);">Belum ada riwayat pengiriman notifikasi tersimpan.</td></tr>';
+      } else {
+        tbody.innerHTML = logs.map(log => {
+          let badgeColor = 'background: rgba(99, 102, 241, 0.12); color: #6366f1;';
+          if (log.kategori === 'tambahan') badgeColor = 'background: rgba(16, 185, 129, 0.12); color: #10b981;';
+          else if (log.kategori === 'batal') badgeColor = 'background: rgba(239, 68, 68, 0.12); color: #ef4444;';
+          else if (log.kategori === 'perubahan') badgeColor = 'background: rgba(245, 158, 11, 0.12); color: #d97706;';
+
+          const timeStr = log.created_at ? log.created_at.slice(0, 16).replace('T', ' ') : '-';
+          return `
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 8px 12px; font-family: monospace; font-size: 0.85em; color: var(--text-muted);">${escapeHtml(timeStr)}</td>
+              <td style="padding: 8px 12px;">
+                <span class="wa-log-badge" style="${badgeColor}">${escapeHtml(log.kategori || 'Info')}</span>
+              </td>
+              <td style="padding: 8px 12px; color: var(--text); font-size: 0.85em;">${escapeHtml(log.pesan || '-')}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+  } catch (err) {
+    console.error("Gagal memeriksa status WA:", err);
+    if (label) label.textContent = 'Gagal menghubungi server';
+    if (badge) {
+      badge.style.background = 'rgba(239, 68, 68, 0.12)';
+      badge.style.color = '#ef4444';
+    }
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #ef4444;">Gagal memuat riwayat pengiriman notifikasi.</td></tr>';
+    }
+  }
+}
+
+// ─── Pusat Restore Database (.SQL) Modular ───
+let _restoreSelectedFile = null;
+let _restoreSqlContent = null;
+let _restorePreviewData = null;
+
+function initDbRestoreModalEvents() {
+  const modal = document.getElementById('db-restore-modal');
+  if (!modal || modal.dataset.eventsInit === 'true') return;
+  modal.dataset.eventsInit = 'true';
+
+  const dropzone = document.getElementById('sql-dropzone');
+  const fileInput = document.getElementById('sql-file-input');
+  const btnBrowse = document.getElementById('btn-browse-sql');
+  const btnRemove = document.getElementById('btn-remove-sql-file');
+  const btnCancel = document.getElementById('db-restore-cancel-btn');
+  const btnSubmit = document.getElementById('db-restore-submit-btn');
+
+  // File pick handler
+  if (btnBrowse && fileInput) {
+    btnBrowse.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+  }
+
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleSqlFileSelected(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleSqlFileSelected(e.target.files[0]);
+      }
+    });
+  }
+
+  // Remove / Reset file
+  if (btnRemove) {
+    btnRemove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetDbRestoreState();
+    });
+  }
+
+  // Cancel button
+  if (btnCancel) {
+    btnCancel.addEventListener('click', () => {
+      modal.classList.remove('open');
+      resetDbRestoreState();
+    });
+  }
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.classList.remove('open');
+      resetDbRestoreState();
+    }
+  });
+
+  // Submit Restore
+  if (btnSubmit) {
+    btnSubmit.addEventListener('click', async () => {
+      if (!_restoreSqlContent || !_restoreSelectedFile || !_restorePreviewData) return;
+
+      const isConfirmed = await showModernConfirm({
+        title: "Konfirmasi Restore Database (.SQL)",
+        subtitle: `Anda akan mengeksekusi ${_restorePreviewData.statement_count} perintah SQL dari file "${_restoreSelectedFile.name}".`,
+        targets: _restorePreviewData.tables_detected || ["Semua Tabel Database"],
+        targetsLabel: "Tabel yang Terpengaruh oleh Skrip SQL:",
+        warningText: _restorePreviewData.has_drop_table
+          ? "PERHATIAN TINGGI: File ini berisi perintah DROP TABLE yang akan merestrukturisasi tabel database."
+          : "Perintah SQL akan dieksekusi dalam transaksi terlindungi.",
+        okText: "Ya, Mulai Restore Sekarang",
+        cancelText: "Batal",
+        isWipeAll: _restorePreviewData.has_drop_table,
+        isBackup: false
+      });
+
+      if (!isConfirmed) return;
+
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Memulihkan Database...`;
+
+      try {
+        let res = await fetch('/api/db/restore', {
+          method: 'POST',
+          headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            sql_content: _restoreSqlContent,
+            filename: _restoreSelectedFile.name
+          })
+        });
+
+        if (res.status === 401) {
+          setAdminToken(null);
+          const newToken = await requestAdminLogin();
+          if (!newToken) return;
+          res = await fetch('/api/db/restore', {
+            method: 'POST',
+            headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              sql_content: _restoreSqlContent,
+              filename: _restoreSelectedFile.name
+            })
+          });
+        }
+
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          modal.classList.remove('open');
+          resetDbRestoreState();
+          await showModernAlert({
+            title: "Restore Database Berhasil!",
+            message: `Berhasil mengeksekusi <b>${data.executed_statements}</b> perintah SQL. Data telah dipulihkan.`,
+            type: "success",
+            buttonText: "Selesai"
+          });
+          await fetchDbStats();
+          applyFilters();
+        } else {
+          await showModernAlert({
+            title: "Gagal Menjalankan Restore",
+            message: data.detail || "Terjadi kesalahan saat mengeksekusi skrip SQL di server.",
+            type: "error",
+            buttonText: "Tutup"
+          });
+        }
+      } catch (err) {
+        console.error("Error restore database:", err);
+        await showModernAlert({
+          title: "Terjadi Kesalahan",
+          message: "Tidak dapat terhubung ke server saat memulihkan database.",
+          type: "error",
+          buttonText: "Tutup"
+        });
+      } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> <span id="db-restore-submit-label">Mulai Restore Database</span>`;
+      }
+    });
+  }
+}
+
+function resetDbRestoreState() {
+  _restoreSelectedFile = null;
+  _restoreSqlContent = null;
+  _restorePreviewData = null;
+
+  const fileInput = document.getElementById('sql-file-input');
+  if (fileInput) fileInput.value = '';
+
+  const dropzone = document.getElementById('sql-dropzone');
+  if (dropzone) dropzone.style.display = 'block';
+
+  const previewCard = document.getElementById('sql-preview-card');
+  if (previewCard) previewCard.style.display = 'none';
+
+  const submitBtn = document.getElementById('db-restore-submit-btn');
+  if (submitBtn) submitBtn.disabled = true;
+
+  const statusText = document.getElementById('db-restore-status-text');
+  if (statusText) statusText.textContent = 'Silakan masukkan file .sql untuk memulai validasi';
+}
+
+async function handleSqlFileSelected(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.sql') && !file.type.includes('text') && !file.type.includes('sql')) {
+    await showModernAlert({
+      title: "Format Tidak Sesuai",
+      message: "Harap pilih file dengan ekstensi <b>.sql</b>.",
+      type: "error"
+    });
+    return;
+  }
+
+  _restoreSelectedFile = file;
+  const statusText = document.getElementById('db-restore-status-text');
+  if (statusText) statusText.textContent = 'Membaca dan memverifikasi skrip SQL...';
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    _restoreSqlContent = e.target.result;
+    if (!_restoreSqlContent || _restoreSqlContent.trim().length === 0) {
+      await showModernAlert({
+        title: "File Kosong",
+        message: "File .sql yang Anda pilih tidak memiliki isi perintah.",
+        type: "error"
+      });
+      resetDbRestoreState();
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/db/restore/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sql_content: _restoreSqlContent,
+          filename: file.name
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        _restorePreviewData = {
+          statement_count: data.total_statements !== undefined ? data.total_statements : ((data.preview && data.preview.statement_count) || 0),
+          tables_detected: data.tables || (data.preview && data.preview.tables_detected) || [],
+          estimated_rows: data.estimated_rows !== undefined ? data.estimated_rows : ((data.preview && data.preview.estimated_rows) || 0),
+          has_drop_table: data.has_drop_table !== undefined ? data.has_drop_table : ((data.preview && data.preview.has_drop_table) || false)
+        };
+
+        // Render preview UI
+        const filenameEl = document.getElementById('preview-sql-filename');
+        const filesizeEl = document.getElementById('preview-sql-filesize');
+        const queriesEl = document.getElementById('preview-stat-queries');
+        const rowsEl = document.getElementById('preview-stat-rows');
+        const structEl = document.getElementById('preview-stat-structure');
+        const tablesContainer = document.getElementById('preview-tables-container');
+        const previewCard = document.getElementById('sql-preview-card');
+        const submitBtn = document.getElementById('db-restore-submit-btn');
+
+        if (filenameEl) filenameEl.textContent = file.name;
+        if (filesizeEl) filesizeEl.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+        if (queriesEl) queriesEl.textContent = `${_restorePreviewData.statement_count} Kueri`;
+        if (rowsEl) rowsEl.textContent = `${_restorePreviewData.estimated_rows} Baris`;
+        if (structEl) {
+          structEl.textContent = _restorePreviewData.has_drop_table ? "Menimpa Tabel (DROP)" : "Normal / INSERT";
+          structEl.style.color = _restorePreviewData.has_drop_table ? "#ef4444" : "#3b82f6";
+        }
+
+        if (tablesContainer) {
+          const tables = _restorePreviewData.tables_detected || [];
+          if (tables.length > 0) {
+            tablesContainer.innerHTML = tables.map(t => `
+              <span class="restore-table-badge ${_restorePreviewData.has_drop_table ? 'has-drop' : ''}">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                ${escapeHtml(t)}
+              </span>
+            `).join('');
+          } else {
+            tablesContainer.innerHTML = '<span style="font-size:0.8em; color:var(--text-muted); font-style:italic;">Tidak ada tabel spesifik terdeteksi (kueri bebas).</span>';
+          }
+        }
+
+        if (previewCard) previewCard.style.display = 'block';
+        if (submitBtn) submitBtn.disabled = false;
+        if (statusText) statusText.innerHTML = `<span style="color:#10b981; font-weight:600;">File valid (${_restorePreviewData.statement_count} kueri terverifikasi). Siap dipulihkan.</span>`;
+      } else {
+        await showModernAlert({
+          title: "File SQL Tidak Valid",
+          message: data.detail || "Server tidak dapat mem-parsing skrip SQL tersebut.",
+          type: "error"
+        });
+        resetDbRestoreState();
+      }
+    } catch (err) {
+      console.error("Gagal preview SQL:", err);
+      resetDbRestoreState();
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function openDbRestoreModal() {
+  const modal = document.getElementById('db-restore-modal');
+  if (!modal) return;
+  if (typeof closeSettingModal === 'function') closeSettingModal(true);
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal) testWaModal.classList.remove('open');
+  initDbRestoreModalEvents();
+  modal.classList.add('open');
+  resetDbRestoreState();
+}
+window.openDbRestoreModal = openDbRestoreModal;
+
+document.getElementById('restore-db-btn')?.addEventListener('click', async (e) => {
+  if (e) e.preventDefault();
+  if (typeof closeSettingModal === 'function') closeSettingModal(true);
+  const testWaModal = document.getElementById('test-wa-modal');
+  if (testWaModal) testWaModal.classList.remove('open');
+
+  let token = getAdminToken();
+  if (!token) {
+    token = await requestAdminLogin();
+    if (!token) return;
+  }
+
+  openDbRestoreModal();
+});
+
+// ─── Detektor Bentrok: Buka Tab Bentrok di Info Lain ───
+document.getElementById('btn-toggle-conflict-filter')?.addEventListener('click', () => {
+  if (typeof openInfoLainModal === 'function') {
+    openInfoLainModal('bentrok');
+  } else {
+    window._filterOnlyConflicts = !window._filterOnlyConflicts;
+    applyFilters();
+  }
+});
+
+// ─── Smart Room Finder (Cari Ruang Kosong) Modular ───
+function initRoomFinderEvents() {
+  const modal = document.getElementById('room-finder-modal');
+  if (!modal || modal.dataset.eventsInit === 'true') return;
+  modal.dataset.eventsInit = 'true';
+
+  const btnClose = document.getElementById('btn-close-room-finder');
+  const btnCloseFooter = document.getElementById('btn-close-room-finder-footer');
+  const fKampus = document.getElementById('finder-filter-kampus');
+  const fJenis = document.getElementById('finder-filter-jenis');
+  const fWaktu = document.getElementById('finder-filter-waktu');
+  const btnRefresh = document.getElementById('btn-refresh-room-finder');
+
+  const closeFn = () => modal.classList.remove('open');
+  if (btnClose) btnClose.addEventListener('click', closeFn);
+  if (btnCloseFooter) btnCloseFooter.addEventListener('click', closeFn);
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeFn();
+  });
+
+  if (fKampus) fKampus.addEventListener('change', () => renderRoomFinderResults());
+  if (fJenis) fJenis.addEventListener('change', () => renderRoomFinderResults());
+  if (fWaktu) fWaktu.addEventListener('change', () => renderRoomFinderResults());
+  if (btnRefresh) btnRefresh.addEventListener('click', () => renderRoomFinderResults());
+}
+
+function openRoomFinderModal() {
+  const modal = document.getElementById('room-finder-modal');
+  if (!modal) return;
+  initRoomFinderEvents();
+  modal.classList.add('open');
+  renderRoomFinderResults();
+}
+window.openRoomFinderModal = openRoomFinderModal;
+
+function renderRoomFinderResults() {
+  const grid = document.getElementById('room-finder-results-grid');
+  const summaryText = document.getElementById('finder-summary-text');
+  if (!grid) return;
+
+  const fKampus = document.getElementById('finder-filter-kampus')?.value || '';
+  const fJenis = document.getElementById('finder-filter-jenis')?.value || '';
+  const fWaktu = document.getElementById('finder-filter-waktu')?.value || 'sekarang';
+
+  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  const activeDate = ft || new Date().toISOString().slice(0, 10);
+  const activeClasses = allJadwal.filter(j => j.tanggal === activeDate && j.metode_pembelajaran !== 'CC');
+
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+
+  let rooms = (allRuanganData && allRuanganData.length > 0) ? [...allRuanganData] : [];
+  if (rooms.length === 0) {
+    const set = new Set();
+    allJadwal.forEach(j => {
+      if (j.nama_ruangan && j.nama_ruangan !== '-' && !set.has(j.nama_ruangan)) {
+        set.add(j.nama_ruangan);
+        rooms.push({ nama_ruangan: j.nama_ruangan, kampus: j.kampus || '' });
+      }
+    });
+  }
+
+  if (fKampus) {
+    rooms = rooms.filter(r => (r.kampus || '').toLowerCase().includes(fKampus.toLowerCase()));
+  }
+  if (fJenis === 'Lab') {
+    rooms = rooms.filter(r => isLab(r.nama_ruangan));
+  } else if (fJenis === 'Kelas') {
+    rooms = rooms.filter(r => !isLab(r.nama_ruangan));
+  }
+
+  const roomResults = rooms.map(r => {
+    const roomClasses = activeClasses.filter(c => 
+      (c.nama_ruangan || '').trim().toLowerCase() === (r.nama_ruangan || '').trim().toLowerCase()
+    );
+
+    let isFree = true;
+    let busyReason = '';
+
+    if (fWaktu === 'sekarang') {
+      const currentClass = roomClasses.find(c => {
+        const start = parseTimeToMinutes(c.jam);
+        if (start === null) return false;
+        return (currentMins >= start && currentMins < start + 135);
+      });
+      if (currentClass) {
+        isFree = false;
+        busyReason = `Sedang Berlangsung: ${currentClass.jam} • ${currentClass.nama_mk || '-'} (${currentClass.nama_dosen || '-'})`;
+      }
+    } else if (fWaktu === 'semua') {
+      if (roomClasses.length > 0) {
+        isFree = false;
+        busyReason = `${roomClasses.length} kelas terjadwal pada hari ini`;
+      }
+    } else if (fWaktu === 'pagi') { // 07:30 - 12:00 (450 - 720)
+      const cl = roomClasses.find(c => {
+        const s = parseTimeToMinutes(c.jam);
+        return s !== null && (s < 720 && (s + 135) > 450);
+      });
+      if (cl) {
+        isFree = false;
+        busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
+      }
+    } else if (fWaktu === 'siang') { // 12:00 - 16:00 (720 - 960)
+      const cl = roomClasses.find(c => {
+        const s = parseTimeToMinutes(c.jam);
+        return s !== null && (s < 960 && (s + 135) > 720);
+      });
+      if (cl) {
+        isFree = false;
+        busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
+      }
+    } else if (fWaktu === 'sore') { // 16:00 - 21:00 (960 - 1260)
+      const cl = roomClasses.find(c => {
+        const s = parseTimeToMinutes(c.jam);
+        return s !== null && (s < 1260 && (s + 135) > 960);
+      });
+      if (cl) {
+        isFree = false;
+        busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
+      }
+    }
+
+    return {
+      nama_ruangan: r.nama_ruangan,
+      kampus: r.kampus || (r.nama_ruangan.toLowerCase().includes('thehok') ? 'Kampus Thehok' : 'Kampus Kobar'),
+      is_lab: isLab(r.nama_ruangan),
+      is_free: isFree,
+      busy_reason: busyReason,
+      class_count: roomClasses.length
+    };
+  });
+
+  roomResults.sort((a, b) => {
+    if (a.is_free && !b.is_free) return -1;
+    if (!a.is_free && b.is_free) return 1;
+    return a.nama_ruangan.localeCompare(b.nama_ruangan, undefined, { numeric: true });
+  });
+
+  const freeCount = roomResults.filter(r => r.is_free).length;
+  if (summaryText) {
+    summaryText.textContent = `Ditemukan ${freeCount} dari ${roomResults.length} ruangan kosong / bebas jadwal`;
+  }
+
+  if (roomResults.length === 0) {
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">Tidak ada ruangan yang cocok dengan filter.</div>';
+    return;
+  }
+
+  grid.innerHTML = roomResults.map(r => `
+    <div class="room-finder-card ${r.is_free ? 'is-free' : 'is-busy'}">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
+          <div>
+            <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">${escapeHtml(r.nama_ruangan)}</div>
+            <div style="font-size: 0.78em; color: var(--text-muted);">${escapeHtml(r.kampus)} • ${r.is_lab ? 'Laboratorium' : 'Ruang Kelas'}</div>
+          </div>
+          <span class="room-status-badge ${r.is_free ? 'free' : 'busy'}">
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+            ${r.is_free ? 'Kosong' : 'Terpakai'}
+          </span>
+        </div>
+        <div style="font-size: 0.83em; color: ${r.is_free ? 'var(--text-muted)' : '#d97706'}; line-height: 1.4; margin-bottom: 12px;">
+          ${r.is_free ? 'Bebas jadwal perkuliahan pada slot ini' : escapeHtml(r.busy_reason)}
+        </div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(r.nama_ruangan)}')" style="width: 100%; font-size: 0.82em; padding: 7px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        <span>Lihat di Jadwal Utama</span>
+      </button>
+    </div>
+  `).join('');
+}
+
+function filterMainTableToRoom(roomName) {
+  const modalFitur = document.getElementById('modal-fitur');
+  if (modalFitur) modalFitur.style.display = 'none';
+  const modalFinder = document.getElementById('room-finder-modal');
+  if (modalFinder) modalFinder.classList.remove('open');
+  const modalHub = document.getElementById('changes-hub-modal');
+  if (modalHub) modalHub.classList.remove('open');
+
+  const filterRuangan = document.getElementById('filter-ruangan');
+  const labelRuangan = document.getElementById('label-ruangan');
+  if (filterRuangan) filterRuangan.value = roomName;
+  if (labelRuangan) labelRuangan.textContent = roomName;
+
+  applyFilters();
+}
+window.filterMainTableToRoom = filterMainTableToRoom;
+
+// ─── Hub Pusat Perubahan & Kelas Tambahan Modular ───
+let _activeHubTab = 'all';
+
+function initChangesHubEvents() {
+  const modal = document.getElementById('changes-hub-modal');
+  if (!modal || modal.dataset.eventsInit === 'true') return;
+  modal.dataset.eventsInit = 'true';
+
+  const btnClose = document.getElementById('btn-close-changes-hub');
+  const btnCloseFooter = document.getElementById('btn-close-changes-hub-footer');
+  const searchInput = document.getElementById('hub-search-input');
+  const tabBtns = document.querySelectorAll('.hub-tab-btn');
+
+  const closeFn = () => modal.classList.remove('open');
+  if (btnClose) btnClose.addEventListener('click', closeFn);
+  if (btnCloseFooter) btnCloseFooter.addEventListener('click', closeFn);
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeFn();
+  });
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _activeHubTab = btn.getAttribute('data-tab') || 'all';
+      renderChangesHubList(_activeHubTab, searchInput ? searchInput.value : '');
+    });
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      renderChangesHubList(_activeHubTab, e.target.value);
+    });
+  }
+}
+
+function updateChangesHubData() {
+  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  if (!ft) {
+    const badgeChanges = document.getElementById('badge-changes-count');
+    if (badgeChanges) badgeChanges.textContent = '0';
+    return;
+  }
+
+  // 1. Batal (CC)
+  const batalList = allJadwal.filter(j => j.tanggal === ft && j.metode_pembelajaran === 'CC');
+
+  // 2. Tambahan
+  const notifItems = window._currentNotifData || [];
+  const tambahanNotifs = notifItems.filter(n => 
+    (n.kategori && n.kategori.toLowerCase() === 'tambahan') || 
+    (n.pesan && (n.pesan.toLowerCase().includes('tambahan') || n.pesan.toLowerCase().includes('pengganti')))
+  );
+  const tambahanJadwal = allJadwal.filter(j => 
+    j.tanggal === ft && j.status_jadwal && 
+    (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))
+  );
+
+  // 3. Perubahan
+  const perubahanNotifs = notifItems.filter(n => 
+    (n.kategori && n.kategori.toLowerCase() === 'perubahan') || 
+    (n.pesan && (n.pesan.toLowerCase().includes('perubahan') || n.pesan.toLowerCase().includes('pindah') || n.pesan.toLowerCase().includes('geser')))
+  );
+
+  // 4. Jeda Lab
+  const jedaNotifs = notifItems.filter(n => n.kategori && n.kategori.toLowerCase() === 'jeda');
+  const clientGaps = typeof calculateClientSideGaps === 'function' ? calculateClientSideGaps(ft) : [];
+
+  const totalCount = batalList.length + tambahanNotifs.length + tambahanJadwal.length + perubahanNotifs.length + Math.max(jedaNotifs.length, clientGaps.length);
+
+  const badgeChanges = document.getElementById('badge-changes-count');
+  if (badgeChanges) {
+    badgeChanges.textContent = totalCount;
+    badgeChanges.style.display = totalCount > 0 ? 'inline-flex' : 'none';
+  }
+
+  const cntAll = document.getElementById('cnt-hub-all');
+  const cntBatal = document.getElementById('cnt-hub-batal');
+  const cntTambahan = document.getElementById('cnt-hub-tambahan');
+  const cntPerubahan = document.getElementById('cnt-hub-perubahan');
+  const cntJeda = document.getElementById('cnt-hub-jeda');
+
+  if (cntAll) cntAll.textContent = totalCount;
+  if (cntBatal) cntBatal.textContent = batalList.length;
+  if (cntTambahan) cntTambahan.textContent = tambahanNotifs.length + tambahanJadwal.length;
+  if (cntPerubahan) cntPerubahan.textContent = perubahanNotifs.length;
+  if (cntJeda) cntJeda.textContent = Math.max(jedaNotifs.length, clientGaps.length);
+}
+
+function renderChangesHubList(activeTab = 'all', searchQuery = '') {
+  const container = document.getElementById('changes-hub-list-container');
+  if (!container) return;
+
+  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  const notifItems = window._currentNotifData || [];
+  const query = (searchQuery || '').trim().toLowerCase();
+
+  const items = [];
+
+  // Batal (CC)
+  allJadwal.filter(j => j.tanggal === ft && j.metode_pembelajaran === 'CC').forEach(j => {
+    items.push({
+      type: 'batal',
+      tag: 'Kelas Dibatalkan (CC)',
+      jam: j.jam || '-',
+      title: j.nama_mk || 'Mata Kuliah',
+      dosen: j.nama_dosen || '-',
+      ruangan: j.nama_ruangan || '-',
+      kampus: j.kampus || 'Kampus UNAMA',
+      desc: `Kelas ditiadakan / dibatalkan oleh dosen pengampu.`
+    });
+  });
+
+  // Tambahan
+  notifItems.filter(n => (n.kategori && n.kategori.toLowerCase() === 'tambahan') || (n.pesan && n.pesan.toLowerCase().includes('tambahan'))).forEach(n => {
+    items.push({
+      type: 'tambahan',
+      tag: 'Kelas Tambahan',
+      jam: n.jam || 'Tambahan',
+      title: n.ruangan ? `Jadwal Tambahan di ${n.ruangan}` : 'Kelas Pengganti / Tambahan',
+      dosen: '-',
+      ruangan: n.ruangan || '-',
+      kampus: 'Kampus UNAMA',
+      desc: n.pesan || '-'
+    });
+  });
+
+  // Perubahan
+  notifItems.filter(n => (n.kategori && n.kategori.toLowerCase() === 'perubahan') || (n.pesan && (n.pesan.toLowerCase().includes('pindah') || n.pesan.toLowerCase().includes('geser')))).forEach(n => {
+    items.push({
+      type: 'perubahan',
+      tag: 'Pergeseran Jadwal',
+      jam: n.jam || 'Perubahan',
+      title: n.ruangan ? `Perubahan di ${n.ruangan}` : 'Perubahan Jadwal',
+      dosen: '-',
+      ruangan: n.ruangan || '-',
+      kampus: 'Kampus UNAMA',
+      desc: n.pesan || '-'
+    });
+  });
+
+  // Jeda Lab
+  const clientGaps = typeof calculateClientSideGaps === 'function' ? calculateClientSideGaps(ft) : [];
+  clientGaps.forEach(g => {
+    items.push({
+      type: 'jeda',
+      tag: 'Jeda Kosong Lab',
+      jam: g.jam || 'Jeda Waktu',
+      title: `Lab Bebas Jadwal (${g.ruangan})`,
+      dosen: '-',
+      ruangan: g.ruangan || '-',
+      kampus: 'Kampus UNAMA',
+      desc: g.pesan || `Ruangan lab tidak digunakan pada jam ini.`
+    });
+  });
+
+  // Filter tab
+  let filtered = items;
+  if (activeTab !== 'all') {
+    filtered = filtered.filter(i => i.type === activeTab);
+  }
+
+  // Filter search
+  if (query) {
+    filtered = filtered.filter(i => 
+      i.title.toLowerCase().includes(query) ||
+      i.dosen.toLowerCase().includes(query) ||
+      i.ruangan.toLowerCase().includes(query) ||
+      i.desc.toLowerCase().includes(query)
+    );
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 36px 16px; color: var(--text-muted);">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px; opacity: 0.5;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <div style="font-weight: 600; font-size: 0.95em;">Tidak ada catatan perubahan pada kategori ini</div>
+        <div style="font-size: 0.82em; margin-top: 3px;">Semua perkuliahan berjalan normal sesuai jadwal utama.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => `
+    <div class="hub-change-item type-${item.type}">
+      <div style="flex: 1;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+          <span class="db-mini-badge ${
+            item.type === 'batal' ? 'badge-red' : 
+            item.type === 'tambahan' ? 'badge-green' : 
+            item.type === 'perubahan' ? 'badge-purple' : 'badge-amber'
+          }">${escapeHtml(item.tag)}</span>
+          <span style="font-weight: 700; font-size: 0.85em; color: var(--text);">${escapeHtml(item.jam)}</span>
+          <span style="font-size: 0.78em; color: var(--text-muted);">• ${escapeHtml(item.ruangan)}</span>
+        </div>
+        <div style="font-weight: 600; font-size: 0.92em; color: var(--text); margin-bottom: 2px;">
+          ${escapeHtml(item.title)}
+        </div>
+        ${item.dosen !== '-' ? `<div style="font-size: 0.8em; color: var(--text-muted); margin-bottom: 4px;">Dosen: ${escapeHtml(item.dosen)}</div>` : ''}
+        <div style="font-size: 0.82em; color: var(--text-muted); line-height: 1.4;">
+          ${escapeHtml(item.desc)}
+        </div>
+      </div>
+      ${item.ruangan && item.ruangan !== '-' ? `
+        <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(item.ruangan)}')" title="Lihat di jadwal utama" style="padding: 5px 10px; font-size: 0.78em; flex-shrink: 0; align-self: center;">
+          Lihat Ruang
+        </button>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+function openChangesHubModal() {
+  const modal = document.getElementById('changes-hub-modal');
+  if (!modal) return;
+  initChangesHubEvents();
+  modal.classList.add('open');
+  updateChangesHubData();
+  const searchInput = document.getElementById('hub-search-input');
+  if (searchInput) searchInput.value = '';
+  renderChangesHubList(_activeHubTab, '');
+}
+window.openChangesHubModal = openChangesHubModal;
+
+document.getElementById('btn-open-changes-hub')?.addEventListener('click', () => {
+  openChangesHubModal();
+});
+
+document.getElementById('btn-open-room-finder')?.addEventListener('click', () => {
+  openRoomFinderModal();
+});
+
 filterTanggal.addEventListener('change', () => {
   updateRuanganFilterOptions();
   applyFilters();
@@ -3708,212 +4672,747 @@ const style = document.createElement('style');
 style.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
 document.head.appendChild(style);
 
-// ─── Fitur Tambahan (Modal & Logic) ───
+// ─── Fitur Tambahan & Info Lain (Unified Hub) ───
 const btnFiturTambahan = document.getElementById('btn-fitur-tambahan');
 const modalFitur = document.getElementById('modal-fitur');
 const closeFitur = document.getElementById('close-modal-fitur');
 
-const btnJenisLab = document.getElementById('btn-filter-jenis-lab');
-const btnJenisKelas = document.getElementById('btn-filter-jenis-kelas');
-const inputJenisRuangan = document.getElementById('filter-jenis-ruangan');
+let _activeInfoMainTab = 'kosong';
+let _activeHubSubTab = 'all';
 
-btnJenisLab.addEventListener('click', () => {
-  btnJenisLab.style.background = 'var(--primary)';
-  btnJenisLab.style.color = 'white';
-  btnJenisLab.style.boxShadow = 'var(--shadow-sm)';
-  btnJenisKelas.style.background = 'transparent';
-  btnJenisKelas.style.color = 'var(--text-muted)';
-  btnJenisKelas.style.boxShadow = 'none';
-  inputJenisRuangan.value = 'Lab';
-});
-
-btnJenisKelas.addEventListener('click', () => {
-  btnJenisKelas.style.background = 'var(--primary)';
-  btnJenisKelas.style.color = 'white';
-  btnJenisKelas.style.boxShadow = 'var(--shadow-sm)';
-  btnJenisLab.style.background = 'transparent';
-  btnJenisLab.style.color = 'var(--text-muted)';
-  btnJenisLab.style.boxShadow = 'none';
-  inputJenisRuangan.value = 'Kelas';
-});
-const tabLabKosong = document.getElementById('tab-lab-kosong');
-const tabCariDosen = document.getElementById('tab-cari-dosen');
-const tabCariKelas = document.getElementById('tab-cari-kelas');
-const contentLabKosong = document.getElementById('content-lab-kosong');
-const contentCariDosen = document.getElementById('content-cari-dosen');
-const contentCariKelas = document.getElementById('content-cari-kelas');
-const btnSubmitLabKosong = document.getElementById('btn-submit-lab-kosong');
-const btnSubmitCariDosen = document.getElementById('btn-submit-cari-dosen');
-const btnSubmitCariKelas = document.getElementById('btn-submit-cari-kelas');
-
-// Set default date to today
-const fiturTanggal = document.getElementById('fitur-tanggal');
-fiturTanggal.value = new Date().toISOString().split('T')[0];
-fiturTanggal.addEventListener('change', () => {
-  if (fiturTanggal.value) {
-    syncData(fiturTanggal.value);
-  }
-});
-
-btnFiturTambahan.addEventListener('click', () => {
+function openInfoLainModal(initialTab = 'kosong') {
+  if (!modalFitur) return;
   modalFitur.style.display = 'block';
-});
 
-closeFitur.addEventListener('click', () => {
-  modalFitur.style.display = 'none';
-});
+  // Sinkronkan input tanggal di dalam tab ruangan kosong dengan filter tanggal utama
+  const ftTanggalInput = document.getElementById('fitur-filter-tanggal');
+  if (ftTanggalInput && filterTanggal && filterTanggal.value) {
+    ftTanggalInput.value = filterTanggal.value;
+  }
+
+  updateInfoLainBadges();
+  switchInfoMainTab(initialTab);
+}
+window.openInfoLainModal = openInfoLainModal;
+
+function closeInfoLainModal() {
+  if (modalFitur) modalFitur.style.display = 'none';
+}
+window.closeInfoLainModal = closeInfoLainModal;
+
+if (btnFiturTambahan) {
+  btnFiturTambahan.addEventListener('click', (e) => {
+    e.preventDefault();
+    openInfoLainModal('kosong');
+  });
+}
+
+if (closeFitur) {
+  closeFitur.addEventListener('click', closeInfoLainModal);
+}
 
 window.addEventListener('click', (e) => {
   if (e.target === modalFitur) {
-    modalFitur.style.display = 'none';
+    closeInfoLainModal();
   }
 });
 
-// Hover effects for close button
-closeFitur.addEventListener('mouseover', () => closeFitur.style.opacity = '1');
-closeFitur.addEventListener('mouseout', () => closeFitur.style.opacity = '0.6');
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modalFitur && modalFitur.style.display === 'block') {
+    closeInfoLainModal();
+  }
+});
 
-let currentInfoTab = 0; // 0: Lab Kosong, 1: Posisi Dosen, 2: Kode Kelas
+// Segmented Tab Switcher (5 Main Tabs)
+function switchInfoMainTab(tabKey) {
+  _activeInfoMainTab = tabKey;
+  const tabMap = {
+    'kosong': { btn: 'tab-lab-kosong', content: 'content-lab-kosong' },
+    'changes': { btn: 'tab-changes-hub', content: 'content-changes-hub' },
+    'bentrok': { btn: 'tab-bentrok', content: 'content-bentrok' },
+    'dosen': { btn: 'tab-cari-dosen', content: 'content-cari-dosen' },
+    'kelas': { btn: 'tab-cari-kelas', content: 'content-cari-kelas' }
+  };
 
-function animateTabContent(element, direction) {
-  element.style.animation = 'none';
-  void element.offsetWidth; // trigger reflow
-  element.style.animation = direction === 'left' ? 'slideInLeftTab 0.3s cubic-bezier(0.16, 1, 0.3, 1)' : 'slideInRightTab 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+  Object.keys(tabMap).forEach(k => {
+    const btn = document.getElementById(tabMap[k].btn);
+    const content = document.getElementById(tabMap[k].content);
+    if (btn) {
+      if (k === tabKey) {
+        btn.classList.add('active');
+        btn.style.background = 'var(--primary)';
+        btn.style.color = '#fff';
+        btn.style.boxShadow = 'var(--shadow-xs)';
+      } else {
+        btn.classList.remove('active');
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--text-muted)';
+        btn.style.boxShadow = 'none';
+      }
+    }
+    if (content) {
+      content.style.display = (k === tabKey) ? 'block' : 'none';
+    }
+  });
+
+  if (tabKey === 'kosong') {
+    renderFiturRooms();
+  } else if (tabKey === 'changes') {
+    renderChangesHubList(_activeHubSubTab, document.getElementById('info-hub-search-input')?.value || '');
+  } else if (tabKey === 'bentrok') {
+    renderBentrokList();
+  }
+}
+window.switchInfoMainTab = switchInfoMainTab;
+
+// Bind click events on main tab buttons
+document.getElementById('tab-lab-kosong')?.addEventListener('click', () => switchInfoMainTab('kosong'));
+document.getElementById('tab-changes-hub')?.addEventListener('click', () => switchInfoMainTab('changes'));
+document.getElementById('tab-bentrok')?.addEventListener('click', () => switchInfoMainTab('bentrok'));
+document.getElementById('tab-cari-dosen')?.addEventListener('click', () => switchInfoMainTab('dosen'));
+document.getElementById('tab-cari-kelas')?.addEventListener('click', () => switchInfoMainTab('kelas'));
+
+// Tab 1: Category Toggles (Laboratorium vs Ruang Kelas vs Semua)
+const btnFiturJenisLab = document.getElementById('btn-fitur-jenis-lab');
+const btnFiturJenisKelas = document.getElementById('btn-fitur-jenis-kelas');
+const btnFiturJenisSemua = document.getElementById('btn-fitur-jenis-semua');
+const inputFiturJenis = document.getElementById('fitur-filter-jenis');
+
+function setFiturJenisRuangan(val) {
+  if (inputFiturJenis) inputFiturJenis.value = val;
+  [btnFiturJenisLab, btnFiturJenisKelas, btnFiturJenisSemua].forEach(btn => {
+    if (!btn) return;
+    btn.style.background = 'var(--bg-card)';
+    btn.style.color = 'var(--text-muted)';
+  });
+
+  if (val === 'Lab' && btnFiturJenisLab) {
+    btnFiturJenisLab.style.background = 'var(--primary)';
+    btnFiturJenisLab.style.color = '#fff';
+  } else if (val === 'Kelas' && btnFiturJenisKelas) {
+    btnFiturJenisKelas.style.background = 'var(--primary)';
+    btnFiturJenisKelas.style.color = '#fff';
+  } else if (!val && btnFiturJenisSemua) {
+    btnFiturJenisSemua.style.background = 'var(--primary)';
+    btnFiturJenisSemua.style.color = '#fff';
+  }
+  renderFiturRooms();
 }
 
-tabLabKosong.addEventListener('click', () => {
-  tabLabKosong.style.background = 'var(--primary)';
-  tabLabKosong.style.color = '#fff';
-  tabLabKosong.style.boxShadow = 'var(--shadow-sm)';
+if (btnFiturJenisLab) btnFiturJenisLab.addEventListener('click', () => setFiturJenisRuangan('Lab'));
+if (btnFiturJenisKelas) btnFiturJenisKelas.addEventListener('click', () => setFiturJenisRuangan('Kelas'));
+if (btnFiturJenisSemua) btnFiturJenisSemua.addEventListener('click', () => setFiturJenisRuangan(''));
 
-  tabCariDosen.style.background = 'transparent';
-  tabCariDosen.style.color = 'var(--text-muted)';
-  tabCariDosen.style.boxShadow = 'none';
+document.getElementById('fitur-filter-kampus')?.addEventListener('change', renderFiturRooms);
+document.getElementById('fitur-filter-tanggal')?.addEventListener('change', renderFiturRooms);
+document.getElementById('fitur-filter-waktu')?.addEventListener('change', renderFiturRooms);
+document.getElementById('btn-refresh-fitur-rooms')?.addEventListener('click', renderFiturRooms);
 
-  tabCariKelas.style.background = 'transparent';
-  tabCariKelas.style.color = 'var(--text-muted)';
-  tabCariKelas.style.boxShadow = 'none';
-
-  const prevTab = currentInfoTab;
-  currentInfoTab = 0;
-  contentCariDosen.style.display = 'none';
-  contentCariKelas.style.display = 'none';
-  contentLabKosong.style.display = 'block';
-
-  if (prevTab !== 0) {
-    animateTabContent(contentLabKosong, prevTab > 0 ? 'left' : 'right');
-  }
+// Tab 2: Sub-tabs & Search Input
+document.querySelectorAll('#content-changes-hub .hub-subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#content-changes-hub .hub-subtab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = 'var(--bg-elevated)';
+      b.style.color = 'var(--text-muted)';
+    });
+    btn.classList.add('active');
+    btn.style.background = 'var(--primary)';
+    btn.style.color = '#fff';
+    _activeHubSubTab = btn.getAttribute('data-subtab') || 'all';
+    const q = document.getElementById('info-hub-search-input')?.value || '';
+    renderChangesHubList(_activeHubSubTab, q);
+  });
 });
 
-tabCariDosen.addEventListener('click', () => {
-  tabCariDosen.style.background = 'var(--primary)';
-  tabCariDosen.style.color = '#fff';
-  tabCariDosen.style.boxShadow = 'var(--shadow-sm)';
-
-  tabLabKosong.style.background = 'transparent';
-  tabLabKosong.style.color = 'var(--text-muted)';
-  tabLabKosong.style.boxShadow = 'none';
-
-  tabCariKelas.style.background = 'transparent';
-  tabCariKelas.style.color = 'var(--text-muted)';
-  tabCariKelas.style.boxShadow = 'none';
-
-  const prevTab = currentInfoTab;
-  currentInfoTab = 1;
-  contentLabKosong.style.display = 'none';
-  contentCariKelas.style.display = 'none';
-  contentCariDosen.style.display = 'block';
-
-  if (prevTab !== 1) {
-    animateTabContent(contentCariDosen, prevTab > 1 ? 'left' : 'right');
-  }
+document.getElementById('info-hub-search-input')?.addEventListener('input', (e) => {
+  renderChangesHubList(_activeHubSubTab, e.target.value);
 });
 
-tabCariKelas.addEventListener('click', () => {
-  tabCariKelas.style.background = 'var(--primary)';
-  tabCariKelas.style.color = '#fff';
-  tabCariKelas.style.boxShadow = 'var(--shadow-sm)';
+// Update Badges on Header and Modal Tabs
+function updateInfoLainBadges() {
+  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  if (!ft) return;
 
-  tabLabKosong.style.background = 'transparent';
-  tabLabKosong.style.color = 'var(--text-muted)';
-  tabLabKosong.style.boxShadow = 'none';
+  // 1. Batal (CC)
+  const batalList = allJadwal.filter(j => j.tanggal === ft && j.metode_pembelajaran === 'CC');
 
-  tabCariDosen.style.background = 'transparent';
-  tabCariDosen.style.color = 'var(--text-muted)';
-  tabCariDosen.style.boxShadow = 'none';
+  // 2. Tambahan
+  const notifItems = window._currentNotifData || [];
+  const tambahanNotifs = notifItems.filter(n => 
+    (n.kategori && n.kategori.toLowerCase() === 'tambahan') || 
+    (n.pesan && (n.pesan.toLowerCase().includes('tambahan') || n.pesan.toLowerCase().includes('pengganti')))
+  );
+  const tambahanJadwal = allJadwal.filter(j => 
+    j.tanggal === ft && j.status_jadwal && 
+    (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))
+  );
+  const totalTambahan = tambahanNotifs.length + tambahanJadwal.length;
 
-  const prevTab = currentInfoTab;
-  currentInfoTab = 2;
-  contentLabKosong.style.display = 'none';
-  contentCariDosen.style.display = 'none';
-  contentCariKelas.style.display = 'block';
+  // 3. Perubahan
+  const perubahanNotifs = notifItems.filter(n => 
+    (n.kategori && n.kategori.toLowerCase() === 'perubahan') || 
+    (n.pesan && (n.pesan.toLowerCase().includes('perubahan') || n.pesan.toLowerCase().includes('pindah') || n.pesan.toLowerCase().includes('geser')))
+  );
 
-  if (prevTab !== 2) {
-    animateTabContent(contentCariKelas, prevTab > 2 ? 'left' : 'right');
+  // 4. Jeda Lab
+  const clientGaps = typeof calculateClientSideGaps === 'function' ? calculateClientSideGaps(ft) : [];
+  const jedaCount = clientGaps.length;
+
+  const totalChanges = batalList.length + totalTambahan + perubahanNotifs.length + jedaCount;
+
+  // 5. Jadwal Bentrok
+  const conflictKeys = window._currentScheduleConflicts ? new Set([
+    ...window._currentScheduleConflicts.roomConflicts.keys(),
+    ...window._currentScheduleConflicts.lecturerConflicts.keys()
+  ]) : new Set();
+  const totalBentrok = conflictKeys.size;
+
+  // Update badge on Info Lain header button
+  const badgeInfoLain = document.getElementById('badge-info-lain');
+  const totalAllUpdates = totalChanges + totalBentrok;
+  if (badgeInfoLain) {
+    if (totalAllUpdates > 0) {
+      badgeInfoLain.textContent = totalAllUpdates;
+      badgeInfoLain.style.display = 'inline-block';
+    } else {
+      badgeInfoLain.style.display = 'none';
+    }
   }
-});
 
-btnSubmitLabKosong.addEventListener('click', async () => {
-  const kampus = document.getElementById('filter-fitur-kampus').value;
-  const tanggal = document.getElementById('fitur-tanggal').value;
-  const jenis = document.getElementById('filter-jenis-ruangan').value;
-  const resContainer = document.getElementById('result-lab-kosong');
+  // Update badge on Main Tabs in Modal
+  const tabBadgeChanges = document.getElementById('info-tab-cnt-changes');
+  if (tabBadgeChanges) {
+    if (totalChanges > 0) {
+      tabBadgeChanges.textContent = totalChanges;
+      tabBadgeChanges.style.display = 'inline-flex';
+    } else {
+      tabBadgeChanges.style.display = 'none';
+    }
+  }
 
-  if (!tanggal) {
-    alert("Pilih tanggal dulu!");
+  const tabBadgeBentrok = document.getElementById('info-tab-cnt-bentrok');
+  if (tabBadgeBentrok) {
+    if (totalBentrok > 0) {
+      tabBadgeBentrok.textContent = totalBentrok;
+      tabBadgeBentrok.style.display = 'inline-flex';
+    } else {
+      tabBadgeBentrok.style.display = 'none';
+    }
+  }
+
+  // Update subtab counts
+  const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setTxt('cnt-subhub-all', totalChanges);
+  setTxt('cnt-subhub-batal', batalList.length);
+  setTxt('cnt-subhub-tambahan', totalTambahan);
+  setTxt('cnt-subhub-perubahan', perubahanNotifs.length);
+  setTxt('cnt-subhub-jeda', jedaCount);
+}
+window.updateInfoLainBadges = updateInfoLainBadges;
+
+// Tab 1: Render Ruangan Kosong
+function renderFiturRooms() {
+  const grid = document.getElementById('result-lab-kosong-grid');
+  const summaryText = document.getElementById('fitur-room-summary-text');
+  if (!grid) return;
+
+  const targetDate = (document.getElementById('fitur-filter-tanggal')?.value) || (filterTanggal?.value) || '';
+  const filterKampus = document.getElementById('fitur-filter-kampus')?.value || '';
+  const filterJenis = document.getElementById('fitur-filter-jenis')?.value || '';
+  const filterWaktu = document.getElementById('fitur-filter-waktu')?.value || 'semua';
+
+  if (!targetDate || !allJadwal || allJadwal.length === 0) {
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 30px; color: var(--text-muted);">Silakan pilih tanggal dan tunggu data dimuat.</div>';
+    if (summaryText) summaryText.textContent = 'Menunggu data jadwal...';
     return;
   }
 
-  resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
+  // Ambil semua nama ruangan yang terdaftar di jadwal
+  const allKnownRooms = new Set();
+  allJadwal.forEach(j => {
+    if (j.nama_ruangan && j.nama_ruangan !== '-' && j.nama_ruangan.toLowerCase() !== 'online') {
+      allKnownRooms.add(j.nama_ruangan);
+    }
+  });
 
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/cek_kosong?kampus=${kampus}&tanggal=${tanggal}&jenis=${jenis}`);
-    const result = await response.json();
+  const activeScheds = allJadwal.filter(j => j.tanggal === targetDate && j.metode_pembelajaran !== 'CC');
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    if (result.status === 'success') {
-      let html = '';
-      result.data.forEach(room => {
-        if (room.status === 'full kosong aja') {
-          html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
-                <strong style="display:flex; align-items:center; gap:6px;">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--badge-tm)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> ${room.ruangan}
-                </strong>
-                <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.9em; margin-top:4px;">Kosong seharian penuh</div>
-              </div>`;
-        } else {
-          if (room.gaps && room.gaps.length > 0) {
-            let gapsHtml = room.gaps.map(g => `<li>${g.start} - ${g.end} kosong ${g.note ? `<i>(${g.note})</i>` : ''}</li>`).join('');
-            html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
-                  <strong style="display:flex; align-items:center; gap:6px;">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--badge-wa)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> ${room.ruangan}
-                  </strong>
-                  <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.85em; margin-top:4px; margin-bottom: 4px;">Ada jam kosong pada:</div>
-                  <ul style="padding-left: 44px; color: var(--text-muted); font-size: 0.85em; margin-top:0; margin-bottom: 0;">${gapsHtml}</ul>
-                </div>`;
-          } else {
-            html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
-                  <strong style="display:flex; align-items:center; gap:6px;">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--badge-cc)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${room.ruangan}
-                  </strong>
-                  <div style="padding-left: 24px; color: var(--text-muted); font-size: 0.85em; margin-top:4px;">Terpakai penuh (Full Kelas)</div>
-                </div>`;
-          }
-        }
-      });
-      if (!html) html = '<p style="text-align:center;">Tidak ada lab terdaftar.</p>';
-      resContainer.innerHTML = html;
+  const results = [];
+
+  allKnownRooms.forEach(roomName => {
+    const isRoomLab = isLab(roomName);
+    if (filterJenis === 'Lab' && !isRoomLab) return;
+    if (filterJenis === 'Kelas' && isRoomLab) return;
+
+    const roomClasses = activeScheds.filter(j => j.nama_ruangan === roomName);
+    let kampus = 'Kampus Kobar';
+    if (roomClasses.length > 0 && roomClasses[0].kampus) {
+      kampus = roomClasses[0].kampus;
+    } else if (roomName.toLowerCase().includes('thehok') || roomName.toLowerCase().includes('4.')) {
+      kampus = 'Kampus Thehok';
+    }
+
+    if (filterKampus && !kampus.toLowerCase().includes(filterKampus.toLowerCase())) {
+      return;
+    }
+
+    const sortedClasses = [...roomClasses].map(c => {
+      const parts = (c.jam || '').split(':');
+      const startMin = parts.length >= 2 ? parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) : 0;
+      return {
+        ...c,
+        startMin,
+        endMin: startMin + 135
+      };
+    }).sort((a, b) => a.startMin - b.startMin);
+
+    let isFree = true;
+    let statusType = 'full-free'; // 'full-free', 'has-gaps', 'full-busy'
+    let statusLabel = 'Kosong Seharian Penuh';
+    let gapsInfo = [];
+
+    if (sortedClasses.length === 0) {
+      statusType = 'full-free';
+      statusLabel = 'Kosong Bebas Jadwal';
     } else {
-      let msg = result.message;
-      if (msg.includes("Belum ada data") || msg.includes("Libur")) {
-        resContainer.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding: 20px 10px;">${msg}</p>`;
+      statusType = 'has-gaps';
+      if (sortedClasses[0].startMin >= 9 * 60) {
+        const eh = Math.floor(sortedClasses[0].startMin / 60).toString().padStart(2, '0');
+        const em = (sortedClasses[0].startMin % 60).toString().padStart(2, '0');
+        gapsInfo.push(`07:30 - ${eh}:${em}`);
+      }
+
+      for (let i = 0; i < sortedClasses.length - 1; i++) {
+        const c1 = sortedClasses[i];
+        const c2 = sortedClasses[i + 1];
+        const gapMin = c2.startMin - c1.endMin;
+        if (gapMin >= 45) {
+          const h1 = Math.floor(c1.endMin / 60).toString().padStart(2, '0');
+          const m1 = (c1.endMin % 60).toString().padStart(2, '0');
+          const h2 = Math.floor(c2.startMin / 60).toString().padStart(2, '0');
+          const m2 = (c2.startMin % 60).toString().padStart(2, '0');
+          gapsInfo.push(`${h1}:${m1} - ${h2}:${m2}`);
+        }
+      }
+
+      const lastClass = sortedClasses[sortedClasses.length - 1];
+      if (lastClass.endMin <= 17 * 60) {
+        const lh = Math.floor(lastClass.endMin / 60).toString().padStart(2, '0');
+        const lm = (lastClass.endMin % 60).toString().padStart(2, '0');
+        gapsInfo.push(`${lh}:${lm} - 21:00`);
+      }
+
+      if (gapsInfo.length === 0) {
+        statusType = 'full-busy';
+        statusLabel = 'Terpakai Penuh';
+        isFree = false;
       } else {
-        resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center; padding: 20px 10px;">Error: ${msg}</p>`;
+        statusLabel = `Ada ${gapsInfo.length} Jam Kosong`;
       }
     }
-  } catch (err) {
-    resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
+
+    if (filterWaktu === 'sekarang') {
+      const isBusyNow = sortedClasses.some(c => currentMinutes >= c.startMin && currentMinutes < c.endMin);
+      if (isBusyNow) return;
+    } else if (filterWaktu === 'pagi') {
+      const busyMorning = sortedClasses.some(c => c.startMin < 720 && c.endMin > 450);
+      if (busyMorning && statusType !== 'has-gaps') return;
+    } else if (filterWaktu === 'siang') {
+      const busyNoon = sortedClasses.some(c => c.startMin < 960 && c.endMin > 720);
+      if (busyNoon && statusType !== 'has-gaps') return;
+    } else if (filterWaktu === 'sore') {
+      const busyEve = sortedClasses.some(c => c.startMin < 1260 && c.endMin > 960);
+      if (busyEve && statusType !== 'has-gaps') return;
+    }
+
+    results.push({
+      roomName,
+      kampus,
+      isLab: isRoomLab,
+      statusType,
+      statusLabel,
+      gapsInfo,
+      classCount: sortedClasses.length
+    });
+  });
+
+  results.sort((a, b) => {
+    const order = { 'full-free': 0, 'has-gaps': 1, 'full-busy': 2 };
+    if (order[a.statusType] !== order[b.statusType]) {
+      return order[a.statusType] - order[b.statusType];
+    }
+    return a.roomName.localeCompare(b.roomName, undefined, { numeric: true });
+  });
+
+  const availableCount = results.filter(r => r.statusType !== 'full-busy').length;
+  if (summaryText) {
+    summaryText.innerHTML = `Ditemukan <strong>${availableCount}</strong> dari ${results.length} ruangan yang tersedia / memiliki jam kosong`;
   }
-});
+
+  if (results.length === 0) {
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">Tidak ada ruangan yang cocok dengan filter ketersediaan.</div>';
+    return;
+  }
+
+  grid.innerHTML = results.map(r => {
+    let badgeClass = 'free';
+    let statusIcon = '<polyline points="20 6 9 17 4 12"></polyline>';
+    let cardClass = 'is-free';
+
+    if (r.statusType === 'has-gaps') {
+      badgeClass = 'busy';
+      statusIcon = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+      cardClass = 'is-gap';
+    } else if (r.statusType === 'full-busy') {
+      cardClass = 'is-busy';
+      statusIcon = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
+    }
+
+    return `
+      <div class="room-grid-card ${cardClass}">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+            <div>
+              <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">${escapeHtml(r.roomName)}</div>
+              <div style="font-size: 0.78em; color: var(--text-muted); margin-top: 2px;">
+                ${escapeHtml(r.kampus)} • ${r.isLab ? 'Laboratorium' : 'Ruang Kelas'}
+              </div>
+            </div>
+            <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0;">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5">${statusIcon}</svg>
+              ${escapeHtml(r.statusLabel)}
+            </span>
+          </div>
+
+          <div style="margin-top: 8px; font-size: 0.82em; color: var(--text-muted);">
+            ${r.statusType === 'full-free' 
+              ? '<span style="color: #10b981; font-weight: 600;">Bebas digunakan sepanjang hari ini.</span>' 
+              : r.statusType === 'has-gaps' 
+                ? `<div>Jam kosong tersedia:</div>
+                   <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;">
+                     ${r.gapsInfo.map(g => `<span class="info-time-chip" style="font-size: 0.78em; padding: 2px 7px;">${escapeHtml(g)}</span>`).join('')}
+                   </div>`
+                : '<span style="color: var(--text-muted);">Jadwal penuh untuk seluruh sesi perkuliahan.</span>'
+            }
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 10px; margin-top: 6px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(r.roomName)}')" style="width: 100%; font-size: 0.82em; padding: 6px 10px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+            <span>Lihat Jadwal Ruangan</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+window.renderFiturRooms = renderFiturRooms;
+
+// Tab 2: Render Perubahan & Tambahan
+function renderChangesHubList(activeTab = 'all', searchQuery = '') {
+  const container = document.getElementById('info-hub-changes-container');
+  if (!container) return;
+
+  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  const notifItems = window._currentNotifData || [];
+  const query = (searchQuery || '').trim().toLowerCase();
+
+  const items = [];
+
+  // 1. Batal (CC)
+  allJadwal.filter(j => j.tanggal === ft && j.metode_pembelajaran === 'CC').forEach(j => {
+    items.push({
+      type: 'batal',
+      tag: 'Kelas Batal (CC)',
+      jam: j.jam || '-',
+      title: `${j.nama_mk || 'Mata Kuliah'} ${j.kelas ? `(${j.kelas})` : ''}`,
+      dosen: j.nama_dosen || '-',
+      ruangan: j.nama_ruangan || '-',
+      kampus: j.kampus || 'Kampus UNAMA',
+      desc: 'Kelas perkuliahan ditiadakan atau dibatalkan (Metode CC).'
+    });
+  });
+
+  // 2. Kelas Tambahan
+  notifItems.filter(n => (n.kategori && n.kategori.toLowerCase() === 'tambahan') || (n.pesan && n.pesan.toLowerCase().includes('tambahan'))).forEach(n => {
+    items.push({
+      type: 'tambahan',
+      tag: 'Kelas Tambahan',
+      jam: n.jam || 'Tambahan',
+      title: n.ruangan ? `Jadwal Tambahan di ${n.ruangan}` : 'Kelas Pengganti / Tambahan',
+      dosen: '-',
+      ruangan: n.ruangan || '-',
+      kampus: 'Kampus UNAMA',
+      desc: n.pesan || 'Terdapat penambahan atau sesi perkuliahan pengganti.'
+    });
+  });
+
+  allJadwal.filter(j => j.tanggal === ft && j.status_jadwal && (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))).forEach(j => {
+    items.push({
+      type: 'tambahan',
+      tag: 'Kelas Tambahan',
+      jam: j.jam || '-',
+      title: `${j.nama_mk || 'Mata Kuliah'} ${j.kelas ? `(${j.kelas})` : ''}`,
+      dosen: j.nama_dosen || '-',
+      ruangan: j.nama_ruangan || '-',
+      kampus: j.kampus || 'Kampus UNAMA',
+      desc: `Status jadwal: ${j.status_jadwal}`
+    });
+  });
+
+  // 3. Pergeseran Jadwal
+  notifItems.filter(n => (n.kategori && n.kategori.toLowerCase() === 'perubahan') || (n.pesan && (n.pesan.toLowerCase().includes('pindah') || n.pesan.toLowerCase().includes('geser')))).forEach(n => {
+    items.push({
+      type: 'perubahan',
+      tag: 'Pergeseran Jadwal',
+      jam: n.jam || 'Perubahan',
+      title: n.ruangan ? `Perubahan di ${n.ruangan}` : 'Pergeseran Ruangan / Waktu',
+      dosen: '-',
+      ruangan: n.ruangan || '-',
+      kampus: 'Kampus UNAMA',
+      desc: n.pesan || 'Jadwal mengalami penyesuaian ruangan atau pergeseran waktu.'
+    });
+  });
+
+  // 4. Jeda Kosong Lab
+  const clientGaps = typeof calculateClientSideGaps === 'function' ? calculateClientSideGaps(ft) : [];
+  clientGaps.forEach(g => {
+    const roomName = g.ruangan || 'Laboratorium';
+    items.push({
+      type: 'jeda',
+      tag: 'Jeda Kosong Lab',
+      jam: g.jam || 'Jeda Waktu',
+      durasi: g.durasi || '',
+      title: `Ruang ${roomName} Bebas Jadwal`,
+      dosen: '-',
+      ruangan: roomName,
+      kampus: roomName.toLowerCase().includes('thehok') ? 'Kampus Thehok' : 'Kampus Kobar',
+      desc: `Laboratorium tidak memiliki jadwal kuliah pada rentang jam ini dan dapat digunakan.`
+    });
+  });
+
+  // Filter Subtab
+  let filtered = items;
+  if (activeTab !== 'all') {
+    filtered = filtered.filter(i => i.type === activeTab);
+  }
+
+  // Filter Query Search
+  if (query) {
+    filtered = filtered.filter(i => 
+      i.title.toLowerCase().includes(query) ||
+      i.dosen.toLowerCase().includes(query) ||
+      i.ruangan.toLowerCase().includes(query) ||
+      i.desc.toLowerCase().includes(query)
+    );
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 40px 16px; color: var(--text-muted); background: var(--bg-elevated); border-radius: var(--radius-md); border: 1px solid var(--border);">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px; opacity: 0.4;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <div style="font-weight: 700; font-size: 1em; color: var(--text);">Tidak ada catatan perubahan pada kategori ini</div>
+        <div style="font-size: 0.82em; margin-top: 3px;">Seluruh jadwal berjalan reguler sesuai kalender perkuliahan.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => `
+    <div class="info-change-card type-${item.type}">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span class="info-tag tag-${item.type}">
+            ${item.type === 'batal' ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' : ''}
+            ${item.type === 'tambahan' ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>' : ''}
+            ${item.type === 'perubahan' ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>' : ''}
+            ${item.type === 'jeda' ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' : ''}
+            <span>${escapeHtml(item.tag)}</span>
+          </span>
+          <span class="info-time-chip">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            ${escapeHtml(item.jam)}
+          </span>
+          ${item.durasi ? `<span class="info-durasi-chip">${escapeHtml(item.durasi)}</span>` : ''}
+        </div>
+        ${item.ruangan && item.ruangan !== '-' ? `
+          <span class="info-room-pill">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            ${escapeHtml(item.ruangan)}
+          </span>
+        ` : ''}
+      </div>
+
+      <div>
+        <div style="font-size: 1.02em; font-weight: 700; color: var(--text); line-height: 1.35; margin-bottom: 3px;">
+          ${escapeHtml(item.title)}
+        </div>
+        ${item.dosen && item.dosen !== '-' ? `
+          <div style="font-size: 0.84em; color: var(--text-muted); display: flex; align-items: center; gap: 5px; margin-bottom: 4px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Dosen: <strong>${escapeHtml(item.dosen)}</strong></span>
+          </div>
+        ` : ''}
+        <div style="font-size: 0.85em; color: var(--text-muted); line-height: 1.45;">
+          ${escapeHtml(item.desc)}
+        </div>
+      </div>
+
+      ${item.ruangan && item.ruangan !== '-' ? `
+        <div style="display: flex; justify-content: flex-end; padding-top: 6px; border-top: 1px dashed var(--border);">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(item.ruangan)}')" style="font-size: 0.8em; padding: 5px 12px; display: inline-flex; align-items: center; gap: 6px;">
+            <span>Lihat Jadwal Ruang</span>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+}
+window.renderChangesHubList = renderChangesHubList;
+
+// Tab 3: Render Jadwal Bentrok
+function renderBentrokList() {
+  const container = document.getElementById('info-bentrok-list-container');
+  const banner = document.getElementById('info-bentrok-summary-banner');
+  if (!container) return;
+
+  const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
+  const conflicts = window._currentScheduleConflicts;
+
+  if (!conflicts || (!conflicts.roomConflicts.size && !conflicts.lecturerConflicts.size)) {
+    if (banner) banner.innerHTML = '';
+    container.innerHTML = `
+      <div style="text-align: center; padding: 40px 16px; color: var(--text-muted); background: var(--bg-elevated); border-radius: var(--radius-md); border: 1px solid var(--border);">
+        <svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 10px;">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">Tidak Ada Jadwal Bentrok</div>
+        <div style="font-size: 0.85em; margin-top: 4px;">Semua ruangan dan dosen terjadwal tertib tanpa tumpang tindih waktu pada tanggal ${escapeHtml(ft)}.</div>
+      </div>
+    `;
+    return;
+  }
+
+  const processedPairs = new Set();
+  const collisionItems = [];
+
+  // 1. Room conflicts
+  conflicts.roomConflicts.forEach((data, keyA) => {
+    const a = data.item || (Array.isArray(data) ? null : data);
+    const list = data.list || (Array.isArray(data) ? data : []);
+    if (!a) return;
+    list.forEach(b => {
+      const pairKey = [getScheduleUniqueKey(a, 0), getScheduleUniqueKey(b, 0)].sort().join(':::');
+      if (!processedPairs.has(pairKey)) {
+        processedPairs.add(pairKey);
+        collisionItems.push({
+          type: 'room',
+          title: `Bentrok Ruangan: ${a.nama_ruangan || '-'}`,
+          ruangan: a.nama_ruangan || '-',
+          itemA: a,
+          itemB: b
+        });
+      }
+    });
+  });
+
+  // 2. Lecturer conflicts
+  conflicts.lecturerConflicts.forEach((data, keyA) => {
+    const a = data.item || (Array.isArray(data) ? null : data);
+    const list = data.list || (Array.isArray(data) ? data : []);
+    if (!a) return;
+    list.forEach(b => {
+      const pairKey = [getScheduleUniqueKey(a, 0), getScheduleUniqueKey(b, 0)].sort().join(':::');
+      if (!processedPairs.has(pairKey)) {
+        processedPairs.add(pairKey);
+        collisionItems.push({
+          type: 'dosen',
+          title: `Bentrok Dosen: ${a.nama_dosen || '-'}`,
+          dosen: a.nama_dosen || '-',
+          itemA: a,
+          itemB: b
+        });
+      }
+    });
+  });
+
+  if (banner) {
+    banner.innerHTML = `
+      <div style="padding: 12px 16px; border-radius: var(--radius-md); background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; gap: 12px;">
+        <div style="color: #ef4444; flex-shrink: 0;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        </div>
+        <div>
+          <div style="font-weight: 700; font-size: 0.94em; color: #ef4444;">Terdeteksi ${collisionItems.length} Pasang Jadwal Bentrok</div>
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 1px;">Dua perkuliahan dijadwalkan pada ruangan atau dosen yang sama dengan jam tumpang tindih.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = collisionItems.map(c => `
+    <div class="info-bentrok-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span class="info-tag tag-batal">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          ${escapeHtml(c.title)}
+        </span>
+        ${c.type === 'room' ? `
+          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(c.ruangan)}')" style="font-size: 0.78em; padding: 4px 10px;">
+            Filter Ruang Ini
+          </button>
+        ` : ''}
+      </div>
+
+      <div class="bentrok-pair-grid">
+        <!-- Kelas 1 -->
+        <div class="bentrok-item-box">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="info-time-chip" style="font-size: 0.78em;">${escapeHtml(c.itemA.jam || '-')}</span>
+            <span style="font-size: 0.76em; font-weight: 700; color: var(--badge-tm);">Kelas A</span>
+          </div>
+          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 2px;">
+            ${escapeHtml(c.itemA.nama_mk || '-')} <small style="color: var(--text-muted);">(${escapeHtml(c.itemA.kelas || '-')})</small>
+          </div>
+          <div style="font-size: 0.8em; color: var(--text-muted);">
+            👤 ${escapeHtml(c.itemA.nama_dosen || '-')}
+          </div>
+          <div style="font-size: 0.8em; color: var(--text-muted);">
+            📍 ${escapeHtml(c.itemA.nama_ruangan || '-')}
+          </div>
+        </div>
+
+        <!-- Kelas 2 -->
+        <div class="bentrok-item-box">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="info-time-chip" style="font-size: 0.78em;">${escapeHtml(c.itemB.jam || '-')}</span>
+            <span style="font-size: 0.76em; font-weight: 700; color: #ef4444;">Kelas B</span>
+          </div>
+          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 2px;">
+            ${escapeHtml(c.itemB.nama_mk || '-')} <small style="color: var(--text-muted);">(${escapeHtml(c.itemB.kelas || '-')})</small>
+          </div>
+          <div style="font-size: 0.8em; color: var(--text-muted);">
+            👤 ${escapeHtml(c.itemB.nama_dosen || '-')}
+          </div>
+          <div style="font-size: 0.8em; color: var(--text-muted);">
+            📍 ${escapeHtml(c.itemB.nama_ruangan || '-')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+window.renderBentrokList = renderBentrokList;
 
 btnSubmitCariDosen.addEventListener('click', async () => {
   const nama = document.getElementById('fitur-nama-dosen').value;
@@ -5790,8 +7289,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Inisialisasi event listener Modal Pusat Pembersihan Database
+  // Inisialisasi event listener Modals
   initDbClearModalEvents();
+  if (typeof initDbBackupModalEvents === 'function') initDbBackupModalEvents();
+  if (typeof initDbRestoreModalEvents === 'function') initDbRestoreModalEvents();
+  if (typeof initRoomFinderEvents === 'function') initRoomFinderEvents();
+  if (typeof initChangesHubEvents === 'function') initChangesHubEvents();
 });
 
 

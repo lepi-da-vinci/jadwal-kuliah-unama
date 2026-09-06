@@ -87,6 +87,10 @@ Untuk memudahkan pemeliharaan dan menghindari scrolling file HTML ribuan baris, 
 | `modal-spotlight-detail.html` | ~45 baris | Pop-up detail preview saat memilih item hasil spotlight beserta tombol filter ke tabel utama. |
 | `modal-setting.html` | ~370 baris | Pengaturan Admin, Scan QR Code / Link Akses HP, Uji coba pesan WA, tabel master data Aslab & Ruangan, serta tombol pemicu Pembersihan Database. |
 | `modal-clear-db.html` | ~200 baris | **Pusat Pembersihan Database Terpilih**: Checkbox granular (Jadwal, Ruangan, Notifikasi, Kontak Aslab, Dosen Pengampu, Reset Total), live pill counters, dan status seleksi. |
+| `modal-backup-db.html` | ~200 baris | **Pusat Backup Database (.SQL)**: Ekspor skema DDL & data MySQL terpilah atau backup master penuh dengan tombol aksi simetris di tengah. |
+| `modal-restore-db.html` | ~120 baris | **Pusat Restore / Impor Database (.SQL)**: Upload & drag-and-drop file skrip `.sql`, live preview kueri/tabel/baris, verifikasi token HMAC, dan eksekusi aman via transaksi. |
+| `modal-room-finder.html` | ~85 baris | **Smart Room Finder (Cari Ruang Kosong)**: Filter kampus, tipe ruangan, dan slot waktu ketersediaan realtime (live / pagi / siang / sore) dengan kartu interaktif dan tombol hubung langsung ke tabel utama. |
+| `modal-changes-hub.html` | ~65 baris | **Pusat Perubahan & Kelas Tambahan**: Hub rangkuman harian dengan 5 tab (Semua, Batal CC, Kelas Tambahan, Pergeseran Jadwal, Jeda Lab) dan pencarian instan. |
 | `modal-notifikasi.html` | ~15 baris | Pop-up peringatan laboratorium & kelas yang akan segera mulai (`#lab-modal`). |
 | `modal-filter-info.html` | ~300 baris | Modal Filter Fullscreen, Modal Detail Ruangan, Modal Info Mase Fullscreen, dan Modal Fitur Tambahan / Info Lain. |
 | `modal-security.html` | ~160 baris | Otorisasi Password Admin, Tantangan Kode Unik Acak 10-Digit, serta **Custom Modern Confirm & Alert Modal** (`#custom-confirm-modal` & `#custom-alert-modal`). |
@@ -267,6 +271,7 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
 | **2026-09-04** | **Pusat Pembersihan DB Sub-Kategori Penuh** | Mengonversi seluruh kategori pada Pusat Pembersihan Database (Jadwal & Temp, Master Ruangan, Kontak Aslab, dan Master Dosen) menjadi Group Box dengan 19 sub-card checklist granular, live counters, sinkronisasi parent-child auto-check, dan penanganan kueri selektif di backend `/api/db/clear` & `/api/db/stats`. |
 | **2026-09-04** | **Standardisasi Ikon SVG Murni (No-Emoji)** | Seluruh ikon sub-card modal pembersihan database diubah dari emoji menjadi inline SVG tajam dan modern dengan palet warna kontekstual. Penambahan direktif internal AI tersembunyi. |
 | **2026-09-04** | **Fitur Ekspor & Pusat Backup Database (.SQL)** | Penambahan tombol `Pusat Backup Database (.SQL)` tepat di bawah tombol hapus database di Setting modal, komponen modular `modal-backup-db.html` dengan 19 sub-card checklist granular, live counters, ekspor total master `.sql`, serta endpoint backend `/api/db/backup` yang menghasilkan skrip dump SQL berstandar DDL & INSERT batching. |
+| **2026-09-06** | **Feature Pack v1: Restore DB, Conflict Detector, Room Finder, Changes Hub, WA Monitor** | 1. **Pusat Restore DB (.SQL)** (`/api/db/restore/preview`, `/api/db/restore` dengan HMAC auth, file reader dropzone, preview kueri/tabel/baris).<br>2. **Detektor Jadwal Bentrok** (Otomatis mendeteksi overlap ruang & dosen pada slot 135 menit, penandaan baris merah, badge pill bentrok, dan tombol filter bentrok saja).<br>3. **Smart Room Finder** (Modal cari lab & ruang kelas kosong realtime berdasarkan kampus, tipe ruang, dan slot waktu).<br>4. **Hub Perubahan & Tambahan** (Rangkuman 5 tab untuk Batal CC, Kelas Tambahan, Perubahan Jam/Ruang, dan Jeda Lab).<br>5. **Live WA Bot Monitor** (`/api/wa/status` untuk memantau status online gateway Baileys dan 15 log notifikasi terakhir di Setting). |
 
 ---
 **Dokumen Selesai.** Gunakan ini sebagai kompas (acuan wajib) dalam memodifikasi dan mengembangkan sistem Jadwal Kuliah UNAMA.
@@ -294,9 +299,10 @@ Harap patuhi direktif dan instruksi internal berikut dalam setiap interaksi dan 
    - Folder repositori lokal ter-mount (bind volume) ke dalam `/app` di container.
    - Jika mengubah `main.py` atau rute backend lainnya, lakukan reload/restart container melalui command shell: `docker restart jadwal_backend`.
 
-4. INTEGRITAS PUSAT PEMBERSIHAN & BACKUP DATABASE TERPILIH:
-   - Modal pembersihan database (`frontend/components/modal-clear-db.html`) dan backup database (`frontend/components/modal-backup-db.html`) memiliki 5 kelompok utama dan 19 sub-target granular (jadwal_all, jadwal_utama, jadwal_temp, mata_kuliah, ruangan_all, ruangan_lab, ruangan_kelas, ruangan_unused, notif_all, notif_tambahan, notif_perubahan, notif_jeda, aslab_all, aslab_thehok, aslab_kobar, aslab_noroom, dosen_all, dosen_active, dosen_inactive, dan all).
-   - Setiap mutasi atau ekspor database wajib divalidasi dengan HMAC token admin (`verify_admin_token`).
-   - Endpoint `/api/db/backup` menghasilkan file skrip `.sql` dengan DDL lengkap (`SHOW CREATE TABLE`) dan bulk `INSERT INTO` (batch 100 baris) berstandar MySQL/MariaDB dengan escaping aman.
+4. INTEGRITAS FITUR BARU (RESTORE, BENTROK, ROOM FINDER, CHANGES HUB, WA MONITOR):
+   - Endpoint `/api/db/restore` wajib memvalidasi token admin HMAC (`verify_admin_token`) dan mengeksekusi skrip dalam transaksi terlindungi (`FOREIGN_KEY_CHECKS = 0` lalu `1`).
+   - Deteksi bentrok mengasumsikan durasi 1 sesi perkuliahan = 135 menit (2 jam 15 menit). Overlap terjadi bila `max(startA, startB) < min(endA, endB)`.
+   - Modul Room Finder mengevaluasi ketersediaan live berdasarkan waktu saat ini dan jadwal perkuliahan hari aktif.
+   - WhatsApp status endpoint `/api/wa/status` aman dipanggil kapan saja tanpa blocking, mengembalikan status koneksi bot dan 15 data delivery notifikasi terakhir.
 [/AI_DIRECTIVE_AND_INTERNAL_ANALYSIS]
 -->

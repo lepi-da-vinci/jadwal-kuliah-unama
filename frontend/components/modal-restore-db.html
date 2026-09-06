@@ -1,0 +1,118 @@
+  <!-- ==================== MODAL PUSAT RESTORE / IMPOR DATABASE (.SQL) ==================== -->
+  <div id="db-restore-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Restore Database"
+    style="z-index: 10003;">
+    <div class="modal-box db-clear-modal-box" style="max-width: 680px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="modal-icon" style="margin: 0; background: rgba(59, 130, 246, 0.12); color: #3b82f6; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.35em; color: var(--text);">Pusat Restore Database (.SQL)</h2>
+            <p style="margin: 3px 0 0 0; font-size: 0.85em; color: var(--text-muted);">Pulihkan skema tabel dan baris data dari file backup skrip .sql.</p>
+          </div>
+        </div>
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(59, 130, 246, 0.12); color: #3b82f6; font-size: 0.78em; font-weight: 600;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #3b82f6;"></span>
+          Admin Terverifikasi
+        </span>
+      </div>
+
+      <!-- Warning Callout -->
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-sm); font-size: 0.84em; color: var(--text); margin-bottom: 18px; line-height: 1.45;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>
+          <b>Perhatian:</b> File .sql yang berisi perintah <code>DROP TABLE</code> atau <code>INSERT</code> akan menimpa data yang ada saat ini. Pastikan Anda telah memeriksa pratinjau sebelum memulihkan.
+        </span>
+      </div>
+
+      <!-- Dropzone Area -->
+      <div id="sql-dropzone" style="border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 32px 20px; text-align: center; background: var(--bg-elevated); cursor: pointer; transition: all 0.2s ease;">
+        <input type="file" id="sql-file-input" accept=".sql,text/plain" style="display: none;">
+        <div style="width: 52px; height: 52px; border-radius: 16px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto;">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+            <path d="M12 12v9"></path>
+            <path d="m16 16-4-4-4 4"></path>
+          </svg>
+        </div>
+        <div style="font-weight: 600; font-size: 1em; color: var(--text); margin-bottom: 4px;">Pilih atau Tarik File Backup .SQL ke Sini</div>
+        <div style="font-size: 0.83em; color: var(--text-muted); margin-bottom: 14px;">Mendukung file dump skrip SQL (.sql) standar UTF-8</div>
+        <button type="button" class="modal-btn" id="btn-browse-sql" style="background: var(--primary); color: #fff; padding: 7px 18px; font-size: 0.85em; border-radius: var(--radius-sm);">
+          Cari File di Komputer
+        </button>
+      </div>
+
+      <!-- File Preview Card (Hidden by default) -->
+      <div id="sql-preview-card" style="display: none; margin-top: 18px; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.12); color: #10b981; display: flex; align-items: center; justify-content: center;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </div>
+            <div>
+              <div id="preview-sql-filename" style="font-weight: 700; font-size: 0.95em; color: var(--text);">backup.sql</div>
+              <div id="preview-sql-filesize" style="font-size: 0.8em; color: var(--text-muted);">0 KB</div>
+            </div>
+          </div>
+          <button type="button" id="btn-remove-sql-file" title="Ganti file" style="background: transparent; border: none; color: var(--badge-cc); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.82em; font-weight: 600;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <span>Hapus / Ganti</span>
+          </button>
+        </div>
+
+        <div style="font-size: 0.82em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Tabel Terdeteksi di Dalam File:</div>
+        <div id="preview-tables-container" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
+          <!-- Injected dynamically -->
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; background: var(--bg-elevated); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.84em;">
+          <div>
+            <div style="color: var(--text-muted);">Total Kueri SQL:</div>
+            <div id="preview-stat-queries" style="font-weight: 700; color: var(--text);">0 Kueri</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted);">Estimasi Baris Data:</div>
+            <div id="preview-stat-rows" style="font-weight: 700; color: #10b981;">0 Baris</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted);">Status Struktur:</div>
+            <div id="preview-stat-structure" style="font-weight: 700; color: #3b82f6;">Lengkap (DDL)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Footer (Centered) -->
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 22px; border-top: 1.5px solid var(--border); padding-top: 16px; gap: 12px; text-align: center;">
+        <div id="db-restore-status-text" style="font-size: 0.88em; color: var(--text-muted);">
+          Silakan masukkan file .sql untuk memulai validasi
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+          <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-restore-cancel-btn">Batal</button>
+          <button type="button" class="modal-btn" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);" id="db-restore-submit-btn" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span id="db-restore-submit-label">Mulai Restore Database</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
