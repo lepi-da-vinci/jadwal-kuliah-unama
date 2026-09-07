@@ -138,6 +138,38 @@ def init_db_schema():
         except Exception:
             pass
         
+        # ─── MASTER SEMESTER & MIGRATION ────────────────────────────
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS semester (
+                id_semester INT AUTO_INCREMENT PRIMARY KEY,
+                nama_semester VARCHAR(50) UNIQUE NOT NULL,
+                is_active TINYINT(1) DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        cursor.execute("INSERT IGNORE INTO semester (nama_semester, is_active) VALUES ('Genap 2025', 1)")
+
+        try:
+            cursor.execute("ALTER TABLE jadwal ADD COLUMN semester VARCHAR(50) DEFAULT 'Genap 2025'")
+            cursor.execute("ALTER TABLE jadwal ADD INDEX idx_jadwal_semester (semester)")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE jadwal_temp ADD COLUMN semester VARCHAR(50) DEFAULT 'Genap 2025'")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE notifikasi_lab ADD COLUMN semester VARCHAR(50) DEFAULT 'Genap 2025'")
+        except Exception:
+            pass
+        try:
+            cursor.execute("UPDATE jadwal SET semester = 'Genap 2025' WHERE semester IS NULL OR semester = ''")
+            cursor.execute("UPDATE jadwal_temp SET semester = 'Genap 2025' WHERE semester IS NULL OR semester = ''")
+            cursor.execute("UPDATE notifikasi_lab SET semester = 'Genap 2025' WHERE semester IS NULL OR semester = ''")
+        except Exception:
+            pass
+        # ─────────────────────────────────────────────────────────────
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS asisten_lab (
                 id_aslab INT AUTO_INCREMENT PRIMARY KEY,
@@ -177,7 +209,84 @@ def init_db_schema():
         print(f"[Database] Info skema: {e}")
 
 
-def parse_html_content(html_content, fallback_tanggal=None):
+def get_active_semester(conn=None, cursor=None):
+    """Mengambil nama semester yang sedang aktif dari database (default: 'Genap 2025')."""
+    should_close = False
+    if not conn or not cursor:
+        conn = get_db()
+        cursor = conn.cursor()
+        should_close = True
+    try:
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        row = cursor.fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+        return "Genap 2025"
+    except Exception:
+        return "Genap 2025"
+    finally:
+        if should_close:
+            cursor.close()
+            conn.close()
+
+
+def ensure_semester_exists(nama_semester, set_active=False, conn=None, cursor=None):
+    """Memastikan nama semester terdaftar di tabel master semester."""
+    if not nama_semester:
+        return
+    nama_semester = str(nama_semester).strip()
+    should_close = False
+    if not conn or not cursor:
+        conn = get_db()
+        cursor = conn.cursor()
+        should_close = True
+    try:
+        cursor.execute("INSERT IGNORE INTO semester (nama_semester, is_active) VALUES (%s, 0)", (nama_semester,))
+        if set_active:
+            cursor.execute("UPDATE semester SET is_active = 0")
+            cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (nama_semester,))
+        conn.commit()
+    except Exception as e:
+        print(f"[Semester] Error ensure semester: {e}")
+    finally:
+        if should_close:
+            cursor.close()
+            conn.close()
+
+
+def detect_semester_from_html(html_content):
+    """
+    Mendeteksi judul semester dari header portal BAAK UNAMA.
+    Contoh: 'KELAS PERKULIAHAN GENAP 2025' -> 'Genap 2025'
+            'KELAS PERKULIAHAN GANJIL 2026' -> 'Ganjil 2026'
+    """
+    if not html_content:
+        return None
+    try:
+        # 1. Regex langsung pada teks HTML
+        match = re.search(r'KELAS\s+PERKULIAHAN\s+([A-Za-z0-9\s/]+?)(?:<|\n|\r|\t|$)', html_content, re.IGNORECASE)
+        if match:
+            raw = match.group(1).strip()
+            m_period = re.search(r'(GENAP|GANJIL|PENDEK)\s+(\d{4}(?:/\d{4})?)', raw, re.IGNORECASE)
+            if m_period:
+                return f"{m_period.group(1).title()} {m_period.group(2)}"
+            if len(raw) <= 30 and any(c.isdigit() for c in raw):
+                return raw.title()
+                
+        # 2. Parsing elemen header via BeautifulSoup
+        soup = BeautifulSoup(html_content, 'html.parser')
+        for el in soup.find_all(['h1', 'h2', 'h3', 'h4', 'div', 'span', 'b', 'strong', 'a']):
+            txt = el.get_text(" ", strip=True)
+            if 'KELAS PERKULIAHAN' in txt.upper():
+                m_period = re.search(r'(GENAP|GANJIL|PENDEK)\s+(\d{4}(?:/\d{4})?)', txt, re.IGNORECASE)
+                if m_period:
+                    return f"{m_period.group(1).title()} {m_period.group(2)}"
+    except Exception as e:
+        print(f"[Detect Semester] Error parsing semester: {e}")
+    return None
+
+
+def parse_html_content(html_content, fallback_tanggal=None, target_semester=None):
     soup = BeautifulSoup(html_content, 'html.parser')
     rows = soup.find_all('tr', class_='table-content')
     if not rows:
@@ -187,6 +296,11 @@ def parse_html_content(html_content, fallback_tanggal=None):
             target = tbody if tbody else table
             rows = [tr for tr in target.find_all('tr') if len(tr.find_all('td')) >= 4]
     
+    # Deteksi semester dari header HTML atau gunakan semester aktif
+    detected_sem = detect_semester_from_html(html_content) if not target_semester else target_semester
+    final_sem = target_semester or detected_sem or get_active_semester()
+    ensure_semester_exists(final_sem)
+
     hasil_scraping = []
     
     for row in rows:
@@ -280,7 +394,8 @@ def parse_html_content(html_content, fallback_tanggal=None):
             "kampus": kampus,
             "ruangan": nama_ruangan,
             "status": status_jadwal,
-            "metode": metode
+            "metode": metode,
+            "semester": final_sem
         })
         
     return hasil_scraping
@@ -332,16 +447,17 @@ def is_lab(nama_ruangan):
     name = nama_ruangan.lower()
     return 'lab' in name or 'praktek' in name
 
-def calculate_and_save_gaps(conn, cursor, target_date):
-    cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA'", (target_date,))
+def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
+    sem_final = target_semester or get_active_semester(conn, cursor)
+    cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA' AND semester = %s", (target_date, sem_final))
     
     cursor.execute("""
         SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
         FROM jadwal j
         JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-        WHERE j.tanggal = %s AND (j.metode_pembelajaran != 'CC' OR j.metode_pembelajaran IS NULL)
+        WHERE j.tanggal = %s AND j.semester = %s AND (j.metode_pembelajaran != 'CC' OR j.metode_pembelajaran IS NULL)
         ORDER BY r.nama_ruangan, j.jam
-    """, (target_date,))
+    """, (target_date, sem_final))
     schedules = cursor.fetchall()
     
     room_schedules = {}
@@ -390,7 +506,7 @@ def calculate_and_save_gaps(conn, cursor, target_date):
                 end_str = f"{eh:02d}:{em:02d}"
                 
                 pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara {end_str} s/d {nxt['jam']}."
-                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'JEDA', pesan))
+                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
     conn.commit()
 
 def create_temp_table(cursor):
@@ -407,20 +523,29 @@ def create_temp_table(cursor):
             id_ruangan int(11) DEFAULT NULL,
             status_jadwal varchar(50) DEFAULT NULL,
             metode_pembelajaran varchar(50) DEFAULT NULL,
+            semester varchar(50) DEFAULT 'Genap 2025',
             PRIMARY KEY (id_jadwal)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """)
-def save_to_db(data, target_date=None, page="1"):
+    try:
+        cursor.execute("ALTER TABLE jadwal_temp ADD COLUMN semester varchar(50) DEFAULT 'Genap 2025'")
+    except Exception:
+        pass
+
+def save_to_db(data, target_date=None, page="1", target_semester=None):
     try:
         conn = get_db()
         cursor = conn.cursor()
         create_temp_table(cursor)
         
-        # Hapus data temporary jika halaman 1
+        sem_default = target_semester or (data[0].get('semester') if data else None) or get_active_semester(conn, cursor)
+        ensure_semester_exists(sem_default, conn=conn, cursor=cursor)
+
+        # Hapus data temporary jika halaman 1 (hanya untuk semester terkait)
         if target_date and str(page) == "1":
-            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s", (target_date,))
+            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (target_date, sem_default))
         elif not target_date and str(page) == "1":
-            cursor.execute("DELETE FROM jadwal_temp")
+            cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (sem_default,))
             
         for item in data:
             # Insert atau ignore dosen
@@ -458,22 +583,23 @@ def save_to_db(data, target_date=None, page="1"):
                 id_ruangan = None
 
             # Insert ke tabel jadwal_temp
+            item_sem = item.get('semester') or sem_default
             tgl_final = item.get('tanggal') or target_date
             jam_final = item.get('jam') or "08:00"
             
             if tgl_final:
                 query_jadwal = """
-                    INSERT INTO jadwal_temp (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO jadwal_temp (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(query_jadwal, (
                     tgl_final, item.get('hari', ''), jam_final, 
                     id_dosen, kode_mk, item.get('nama_mk', ''), item.get('kelas', ''), id_ruangan, 
-                    item.get('status', 'OnSchedule'), item.get('metode', 'TM')
+                    item.get('status', 'OnSchedule'), item.get('metode', 'TM'), item_sem
                 ))
 
         conn.commit()
-        print(f"Berhasil menyimpan {len(data)} jadwal ke database temporary.")
+        print(f"Berhasil menyimpan {len(data)} jadwal ke database temporary (Semester: {sem_default}).")
         
     except mysql.connector.Error as err:
         print(f"Error Database: {err}")
@@ -482,26 +608,34 @@ def save_to_db(data, target_date=None, page="1"):
             cursor.close()
             conn.close()
 
-def compare_and_finalize_sync(target_date=None):
+def compare_and_finalize_sync(target_date=None, target_semester=None):
     conn = get_db()
     cursor = conn.cursor()
     
     try:
+        sem_final = target_semester
+        if not sem_final:
+            cursor.execute("SELECT semester FROM jadwal_temp WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
+            row = cursor.fetchone()
+            sem_final = row[0] if row else get_active_semester(conn, cursor)
+            
+        ensure_semester_exists(sem_final, conn=conn, cursor=cursor)
+
         if target_date:
             target_dates = [target_date]
         else:
-            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp")
+            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE semester = %s", (sem_final,))
             target_dates = [row[0].strftime('%Y-%m-%d') if hasattr(row[0], 'strftime') else str(row[0]) for row in cursor.fetchall()]
             
         for target_date in target_dates:
-            # 1. Ambil data lama dari jadwal
+            # 1. Ambil data lama dari jadwal untuk semester ini
             cursor.execute("""
                 SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
                 FROM jadwal j
                 JOIN ruangan r ON j.id_ruangan = r.id_ruangan
                 LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE j.tanggal = %s
-            """, (target_date,))
+                WHERE j.tanggal = %s AND j.semester = %s
+            """, (target_date, sem_final))
             old_schedules = cursor.fetchall()
             
             is_update = len(old_schedules) > 0
@@ -518,14 +652,14 @@ def compare_and_finalize_sync(target_date=None):
                     'status': status, 'metode': metode, 'nama_mk': nama_mk, 'dosen': dosen
                 }
                     
-            # 2. Ambil data baru dari jadwal_temp
+            # 2. Ambil data baru dari jadwal_temp untuk semester ini
             cursor.execute("""
                 SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
                 FROM jadwal_temp j
                 JOIN ruangan r ON j.id_ruangan = r.id_ruangan
                 LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE j.tanggal = %s
-            """, (target_date,))
+                WHERE j.tanggal = %s AND j.semester = %s
+            """, (target_date, sem_final))
             new_schedules = cursor.fetchall()
             
             # 3. Bandingkan dan buat notifikasi
@@ -544,50 +678,50 @@ def compare_and_finalize_sync(target_date=None):
                 if key not in old_lab_cache:
                     if is_update:
                         pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
-                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'TAMBAHAN', pesan))
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'TAMBAHAN', pesan, sem_final))
                 else:
                     old_data = old_lab_cache[key]
                     if old_data['status'] != status or old_data['metode'] != metode:
                         pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
-                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan) VALUES (%s, %s, %s)", (target_date, 'PERUBAHAN', pesan))
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'PERUBAHAN', pesan, sem_final))
             
-            # 4. Finalisasi Pindah Data untuk 1 tanggal
-            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s", (target_date,))
+            # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA semester bersangkutan)
+            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (target_date, sem_final))
             cursor.execute("""
-                INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
-                SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran
-                FROM jadwal_temp WHERE tanggal = %s
-            """, (target_date,))
+                INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
+                SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_temp WHERE tanggal = %s AND semester = %s
+            """, (target_date, sem_final))
             
-            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s", (target_date,))
-            calculate_and_save_gaps(conn, cursor, target_date)
+            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (target_date, sem_final))
+            calculate_and_save_gaps(conn, cursor, target_date, sem_final)
             
         else:
             # ═══ FULL SYNC (SEMUA TANGGAL / 1 SEMESTER PENUH) ═══
-            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE tanggal IS NOT NULL")
+            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE tanggal IS NOT NULL AND semester = %s", (sem_final,))
             unique_dates = [str(r[0]) for r in cursor.fetchall()]
             
             if unique_dates:
-                # Pindahkan seluruh jadwal
-                cursor.execute("DELETE FROM jadwal")
+                # Pindahkan seluruh jadwal HANYA untuk semester bersangkutan
+                cursor.execute("DELETE FROM jadwal WHERE semester = %s", (sem_final,))
                 cursor.execute("""
-                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
-                    SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran
-                    FROM jadwal_temp WHERE tanggal IS NOT NULL
-                """)
-                cursor.execute("DELETE FROM jadwal_temp")
+                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
+                    SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                    FROM jadwal_temp WHERE tanggal IS NOT NULL AND semester = %s
+                """, (sem_final,))
+                cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (sem_final,))
                 
                 # Hitung jeda untuk setiap tanggal yang ada
                 for d in unique_dates:
-                    calculate_and_save_gaps(conn, cursor, d)
+                    calculate_and_save_gaps(conn, cursor, d, sem_final)
             else:
                 # Fallback: jika ada baris di jadwal_temp
                 cursor.execute("""
-                    INSERT IGNORE INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran)
-                    SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran
-                    FROM jadwal_temp WHERE tanggal IS NOT NULL
-                """)
-                cursor.execute("DELETE FROM jadwal_temp")
+                    INSERT IGNORE INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
+                    SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                    FROM jadwal_temp WHERE tanggal IS NOT NULL AND semester = %s
+                """, (sem_final,))
+                cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (sem_final,))
                 
         conn.commit()
     except mysql.connector.Error as err:
@@ -597,7 +731,7 @@ def compare_and_finalize_sync(target_date=None):
             cursor.close()
             conn.close()
 
-def scrape_baak_direct(target_date=None):
+def scrape_baak_direct(target_date=None, target_semester=None):
     """
     Melakukan scraping data langsung dari BAAK UNAMA menggunakan HTTP request backend
     (Sangat cepat & otomatis tanpa tergantung Chrome Extension dibuka di PC).
@@ -617,6 +751,7 @@ def scrape_baak_direct(target_date=None):
     page = 1
     total_scraped = 0
     all_data = []
+    sem_to_use = target_semester
     
     try:
         while True:
@@ -633,13 +768,18 @@ def scrape_baak_direct(target_date=None):
                 print("[Direct Scraper] Terdeteksi Cloudflare challenge, menggunakan fallback ekstensi.")
                 return False, 0, "Cloudflare challenge"
                 
-            data = parse_html_content(html, target_date)
+            if not sem_to_use:
+                detected = detect_semester_from_html(html)
+                sem_to_use = detected or get_active_semester()
+                ensure_semester_exists(sem_to_use)
+
+            data = parse_html_content(html, target_date, sem_to_use)
             if not data:
                 print("[Direct Scraper] Tidak ada baris data pada halaman ini.")
                 break
                 
             all_data.extend(data)
-            save_to_db(data, target_date, str(page))
+            save_to_db(data, target_date, str(page), sem_to_use)
             total_scraped += len(data)
             
             # Cek tombol pagination
@@ -662,9 +802,10 @@ def scrape_baak_direct(target_date=None):
                 break
                 
         if total_scraped > 0 or target_date:
-            compare_and_finalize_sync(target_date)
-            print(f"[Direct Scraper] Berhasil finalisasi {total_scraped} jadwal untuk tanggal {target_date}.")
-            return True, total_scraped, f"Berhasil sinkronisasi {total_scraped} jadwal dari BAAK."
+            final_sem = sem_to_use or (all_data[0].get('semester') if all_data else None) or get_active_semester()
+            compare_and_finalize_sync(target_date, final_sem)
+            print(f"[Direct Scraper] Berhasil finalisasi {total_scraped} jadwal ({final_sem}) untuk tanggal {target_date}.")
+            return True, total_scraped, f"Berhasil sinkronisasi {total_scraped} jadwal ({final_sem}) dari BAAK."
         else:
             return False, 0, "Tidak ada data jadwal ditemukan di BAAK."
             

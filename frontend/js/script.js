@@ -232,12 +232,283 @@ function showSkeleton() {
   tbody.innerHTML = rows;
 }
 
+// ==================== STATE DATABASE SEMESTER ====================
+let currentActiveSemester = 'Genap 2025';
+let allSemestersList = [];
+let selectedSemesterTemp = 'Genap 2025';
+
+function updateSemesterDisplay(semName) {
+  if (!semName) return;
+  currentActiveSemester = semName;
+  const headerSemText = document.getElementById('header-semester-text');
+  if (headerSemText) headerSemText.textContent = semName;
+  const settingSemPill = document.getElementById('setting-active-semester-pill');
+  if (settingSemPill) settingSemPill.textContent = semName;
+}
+
+async function fetchSemestersData() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/semesters?_t=${Date.now()}`);
+    const json = await res.json();
+    if (json.status === 'success') {
+      allSemestersList = json.data || [];
+      if (json.active_semester) {
+        updateSemesterDisplay(json.active_semester);
+      }
+      renderSemesterCardList();
+    }
+  } catch (err) {
+    console.error("Gagal mengambil data semester:", err);
+  }
+}
+
+function renderSemesterCardList() {
+  const container = document.getElementById('semester-cards-list');
+  if (!container) return;
+
+  if (!allSemestersList || allSemestersList.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data semester.</div>`;
+    return;
+  }
+
+  container.innerHTML = allSemestersList.map(sem => {
+    const isSelected = (selectedSemesterTemp === sem.nama_semester);
+    const isCurrentActive = (currentActiveSemester === sem.nama_semester);
+    
+    return `
+      <div class="semester-card-item ${isSelected ? 'is-selected' : ''}" onclick="selectSemesterInModal('${escapeHtml(sem.nama_semester)}')">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="semester-radio-indicator"></div>
+          <div>
+            <div style="font-weight: 700; font-size: 1.02em; color: var(--text);">${escapeHtml(sem.nama_semester)}</div>
+            <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">
+              ${sem.total_jadwal || 0} Jadwal Tercatat
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${isCurrentActive 
+            ? '<span class="semester-meta-tag active">Aktif</span>' 
+            : '<span class="semester-meta-tag idle">Tersedia</span>'}
+          ${(isAslabAdmin && !isCurrentActive && allSemestersList.length > 1) 
+            ? `<button class="btn-icon" title="Hapus Semester" style="background: none; border: none; cursor: pointer; color: var(--badge-cc); padding: 4px;" onclick="event.stopPropagation(); deleteSemesterAction('${escapeHtml(sem.nama_semester)}')">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+               </button>` 
+            : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.selectSemesterInModal = function(namaSemester) {
+  selectedSemesterTemp = namaSemester;
+  renderSemesterCardList();
+};
+
+window.openSemesterModal = function() {
+  const testModal = document.getElementById('test-wa-modal');
+  if (!testModal) return;
+
+  // Sembunyikan view lainnya
+  const viewIds = ['wa-modal-menu', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-edit', 'wa-modal-qr', 'wa-modal-data-ruangan', 'wa-modal-add-ruangan', 'wa-modal-monitor'];
+  viewIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const semView = document.getElementById('wa-modal-semester');
+  if (semView) semView.style.display = 'flex';
+
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) modalTitle.innerText = "Database Semester";
+
+  const modalIcon = document.getElementById('wa-modal-icon');
+  if (modalIcon) {
+    modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" style="color: #8b5cf6;"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>`;
+  }
+
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  if (adminToggle) adminToggle.style.display = 'block';
+
+  selectedSemesterTemp = currentActiveSemester;
+  testModal.classList.add('open');
+
+  fetchSemestersData();
+};
+
+window.closeSemesterModalToMenu = function() {
+  const semView = document.getElementById('wa-modal-semester');
+  const menuView = document.getElementById('wa-modal-menu');
+  if (semView) semView.style.display = 'none';
+  if (menuView) menuView.style.display = 'flex';
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) modalTitle.innerText = "Setting";
+  const modalIcon = document.getElementById('wa-modal-icon');
+  if (modalIcon) {
+    modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+  }
+};
+
+window.applySelectedSemester = async function() {
+  if (!selectedSemesterTemp) {
+    alert("Silakan pilih database semester terlebih dahulu.");
+    return;
+  }
+
+  const btnApply = document.getElementById('btn-apply-selected-semester');
+  const originalHtml = btnApply ? btnApply.innerHTML : '';
+  if (btnApply) {
+    btnApply.disabled = true;
+    btnApply.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+      Menerapkan Semester...
+    `;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/semesters/active`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nama_semester: selectedSemesterTemp })
+    });
+    const json = await res.json();
+    if (json.status === 'success') {
+      updateSemesterDisplay(selectedSemesterTemp);
+      await fetchAllJadwal();
+
+      // Refresh notifikasi lab jika ada filter tanggal
+      const tgl = document.getElementById('filter-tanggal')?.value;
+      if (tgl && typeof fetchNotifikasiLab === 'function') {
+        try {
+          await fetchNotifikasiLab(tgl, false);
+        } catch (e) {
+          console.warn("fetchNotifikasiLab error:", e);
+        }
+      }
+
+      // Tutup modal
+      const testModal = document.getElementById('test-wa-modal');
+      if (testModal) testModal.classList.remove('open');
+
+      if (typeof showModernAlert === 'function') {
+        await showModernAlert({
+          title: 'Database Semester Aktif',
+          message: `Tampilan jadwal kini difilter untuk semester: <b>${escapeHtml(selectedSemesterTemp)}</b>.`,
+          type: 'success'
+        });
+      } else {
+        alert(`Database semester aktif dialihkan ke: ${selectedSemesterTemp}`);
+      }
+    } else {
+      alert("Gagal mengubah semester: " + (json.message || 'Error'));
+    }
+  } catch (err) {
+    console.error("Gagal mengalihkan semester:", err);
+    alert("Terjadi kesalahan saat mengalihkan database semester: " + (err.message || err));
+  } finally {
+    if (btnApply) {
+      btnApply.disabled = false;
+      btnApply.innerHTML = originalHtml;
+    }
+  }
+};
+
+window.addNewSemesterAction = async function() {
+  const inputEl = document.getElementById('input-new-semester-name');
+  if (!inputEl) return;
+  const name = inputEl.value.trim();
+  if (!name) {
+    alert("Nama semester tidak boleh kosong (contoh: Ganjil 2026).");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/semesters/add`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nama_semester: name })
+    });
+    const json = await res.json();
+    if (json.status === 'success') {
+      inputEl.value = '';
+      await fetchSemestersData();
+      selectedSemesterTemp = name;
+      renderSemesterCardList();
+      if (typeof showModernAlert === 'function') {
+        await showModernAlert({
+          title: 'Semester Ditambahkan',
+          message: `Database semester <b>${escapeHtml(name)}</b> berhasil dibuat.`,
+          type: 'success'
+        });
+      } else {
+        alert(`Semester ${name} berhasil ditambahkan.`);
+      }
+    } else {
+      alert(json.message || "Gagal menambah semester.");
+    }
+  } catch (err) {
+    console.error("Gagal menambah semester:", err);
+    alert("Terjadi kesalahan jaringan: " + (err.message || err));
+  }
+};
+
+window.deleteSemesterAction = async function(namaSemester) {
+  let confirmed = false;
+  if (typeof showModernConfirm === 'function') {
+    confirmed = await showModernConfirm({
+      title: 'Hapus Database Semester?',
+      message: `Yakin ingin menghapus database semester <b>${escapeHtml(namaSemester)}</b> beserta seluruh jadwal di dalamnya? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Ya, Hapus',
+      cancelText: 'Batal',
+      danger: true
+    });
+  } else {
+    confirmed = confirm(`Yakin ingin menghapus database semester "${namaSemester}"?`);
+  }
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/semesters/${encodeURIComponent(namaSemester)}`, {
+      method: 'DELETE',
+      headers: getAdminHeaders()
+    });
+    const json = await res.json();
+    if (json.status === 'success') {
+      await fetchSemestersData();
+      if (selectedSemesterTemp === namaSemester) {
+        selectedSemesterTemp = currentActiveSemester;
+      }
+      renderSemesterCardList();
+      if (typeof showModernAlert === 'function') {
+        await showModernAlert({
+          title: 'Semester Dihapus',
+          message: `Database semester <b>${escapeHtml(namaSemester)}</b> berhasil dihapus.`,
+          type: 'success'
+        });
+      } else {
+        alert(`Semester ${namaSemester} berhasil dihapus.`);
+      }
+    } else {
+      alert(json.message || "Gagal menghapus semester.");
+    }
+  } catch (err) {
+    console.error("Gagal menghapus semester:", err);
+    alert("Terjadi kesalahan jaringan: " + (err.message || err));
+  }
+};
+
 async function fetchAllJadwal() {
   try {
     showSkeleton();
-    const response = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}`);
+    const semParam = currentActiveSemester ? `&semester=${encodeURIComponent(currentActiveSemester)}` : '';
+    const response = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}${semParam}`);
     const data = await response.json();
     if (data.status === 'success') {
+      if (data.active_semester) {
+        updateSemesterDisplay(data.active_semester);
+      }
       allJadwal = data.data.map(item => {
         if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
         return item;
@@ -255,6 +526,7 @@ async function fetchAllJadwal() {
 }
 
 fetchAllJadwal();
+fetchSemestersData();
 
 function updateRuanganFilterOptions() {
   const dropdownRuangan = document.getElementById('dropdown-ruangan').querySelector('.aslab-list-container') || document.getElementById('dropdown-ruangan');
@@ -958,7 +1230,7 @@ async function syncData(tanggal) {
     const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tanggal: tgl || null, from_dashboard: true })
+      body: JSON.stringify({ tanggal: tgl || null, from_dashboard: true, semester: currentActiveSemester || null })
     });
     const result = await response.json();
 
@@ -1812,6 +2084,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-monitor')) document.getElementById('wa-modal-monitor').style.display = 'none';
+      if (document.getElementById('wa-modal-semester')) document.getElementById('wa-modal-semester').style.display = 'none';
       modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
@@ -1831,6 +2104,52 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         closeSettingModal(false);
       }
     };
+
+    // Navigasi ke Database Semester dari Menu Setting
+    const btnShowSemester = document.getElementById('btn-show-semester-menu');
+    if (btnShowSemester) {
+      btnShowSemester.onclick = () => {
+        openSemesterModal();
+      };
+    }
+
+    const btnBackSemester = document.getElementById('btn-back-from-semester');
+    if (btnBackSemester) {
+      btnBackSemester.onclick = () => {
+        showMenu();
+      };
+    }
+
+    const btnCloseSemester = document.getElementById('btn-close-semester-modal');
+    if (btnCloseSemester) {
+      btnCloseSemester.onclick = () => {
+        showMenu();
+      };
+    }
+
+    const btnApplySemester = document.getElementById('btn-apply-selected-semester');
+    if (btnApplySemester) {
+      btnApplySemester.onclick = () => {
+        applySelectedSemester();
+      };
+    }
+
+    const btnAddSemester = document.getElementById('btn-add-new-semester');
+    if (btnAddSemester) {
+      btnAddSemester.onclick = () => {
+        addNewSemesterAction();
+      };
+    }
+
+    const inputNewSemester = document.getElementById('input-new-semester-name');
+    if (inputNewSemester) {
+      inputNewSemester.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addNewSemesterAction();
+        }
+      };
+    }
 
     // Navigasi ke QR Code Akses HP
     const btnShowQr = document.getElementById('btn-show-qr-access');
@@ -5782,23 +6101,33 @@ const ALERT_SVGS = {
 
 // Generic Custom Alert function
 function showCustomAlert(title, message, icon = 'info') {
-  const alertModal = document.getElementById('alert-modal');
-  document.getElementById('alert-modal-title').textContent = title;
-  document.getElementById('alert-modal-message').textContent = message;
-
-  const iconEl = document.getElementById('alert-modal-icon');
-  if (iconEl) {
-    if (icon === '✅' || icon === 'success') iconEl.innerHTML = ALERT_SVGS.success;
-    else if (icon === '❌' || icon === 'error') iconEl.innerHTML = ALERT_SVGS.error;
-    else if (icon === '⚠️' || icon === 'warning') iconEl.innerHTML = ALERT_SVGS.warning;
-    else iconEl.innerHTML = ALERT_SVGS.info;
+  if (typeof showModernAlert === 'function') {
+    return showModernAlert({
+      title: title,
+      message: message,
+      type: (icon === '✅' || icon === 'success') ? 'success' : (icon === '❌' || icon === 'error') ? 'error' : 'warning'
+    });
   }
 
+  const alertModal = document.getElementById('custom-alert-modal') || document.getElementById('alert-modal');
+  if (!alertModal) {
+    alert(title + "\n\n" + message);
+    return;
+  }
+
+  const titleEl = document.getElementById('custom-alert-title') || document.getElementById('alert-modal-title');
+  const msgEl = document.getElementById('custom-alert-message') || document.getElementById('alert-modal-message');
+  const closeBtn = document.getElementById('custom-alert-close-btn') || document.getElementById('alert-modal-close-btn');
+
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.innerHTML = message;
   alertModal.classList.add('open');
 
-  document.getElementById('alert-modal-close-btn').onclick = () => {
-    alertModal.classList.remove('open');
-  };
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      alertModal.classList.remove('open');
+    };
+  }
 }
 
 document.addEventListener('click', (e) => {
@@ -6344,7 +6673,8 @@ setInterval(async () => {
 
   try {
     // 1. Refresh Jadwal
-    const resJadwal = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}`);
+    const semParam = currentActiveSemester ? `&semester=${encodeURIComponent(currentActiveSemester)}` : '';
+    const resJadwal = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}${semParam}`);
     const dataJadwal = await resJadwal.json();
     if (dataJadwal.status === 'success') {
       allJadwal = dataJadwal.data;

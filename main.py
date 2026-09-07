@@ -338,13 +338,173 @@ def get_server_urls(refresh: bool = False):
 
 
 
-@app.get("/api/jadwal")
-def get_semua_jadwal():
-    """Mengembalikan daftar semua jadwal dengan join ke master tabel"""
+class SemesterActiveRequest(BaseModel):
+    nama_semester: str
+
+class SemesterAddRequest(BaseModel):
+    nama_semester: str
+    set_active: bool | None = False
+
+@app.get("/api/semesters")
+def get_semesters():
+    """Mengambil daftar seluruh semester, status aktif, dan statistik jumlah jadwal per semester"""
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
+        # Pastikan skema tabel master semester terinisialisasi
+        scraper.init_db_schema()
+        
+        cursor.execute("""
+            SELECT 
+                s.id_semester, 
+                s.nama_semester, 
+                s.is_active,
+                COUNT(j.id_jadwal) AS total_jadwal
+            FROM semester s
+            LEFT JOIN jadwal j ON s.nama_semester = j.semester
+            GROUP BY s.id_semester, s.nama_semester, s.is_active
+            ORDER BY s.id_semester DESC
+        """)
+        rows = cursor.fetchall()
+        
+        active_sem = "Genap 2025"
+        for r in rows:
+            if r.get('is_active') == 1:
+                active_sem = r.get('nama_semester')
+                break
+                
+        return {
+            "status": "success",
+            "active_semester": active_sem,
+            "data": rows
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/semesters/active")
+def set_active_semester(req: SemesterActiveRequest):
+    """Mengubah semester aktif sistem"""
+    try:
+        nama_sem = req.nama_semester.strip()
+        if not nama_sem:
+            return {"status": "error", "message": "Nama semester tidak boleh kosong"}
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id_semester FROM semester WHERE nama_semester = %s", (nama_sem,))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES (%s, 0)", (nama_sem,))
+            
+        cursor.execute("UPDATE semester SET is_active = 0")
+        cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (nama_sem,))
+        conn.commit()
+        
+        return {
+            "status": "success", 
+            "message": f"Semester aktif berhasil diubah menjadi {nama_sem}",
+            "active_semester": nama_sem
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/semesters/add")
+def add_new_semester(req: SemesterAddRequest):
+    """Menambahkan nama semester baru ke dalam sistem"""
+    try:
+        nama_sem = req.nama_semester.strip()
+        if not nama_sem:
+            return {"status": "error", "message": "Nama semester tidak boleh kosong"}
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id_semester FROM semester WHERE nama_semester = %s", (nama_sem,))
+        if cursor.fetchone():
+            return {"status": "error", "message": f"Semester '{nama_sem}' sudah terdaftar"}
+            
+        is_act = 1 if req.set_active else 0
+        if is_act == 1:
+            cursor.execute("UPDATE semester SET is_active = 0")
+            
+        cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES (%s, %s)", (nama_sem, is_act))
+        conn.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Semester '{nama_sem}' berhasil ditambahkan.",
+            "nama_semester": nama_sem,
+            "is_active": is_act == 1
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/semesters/{nama_semester}")
+def delete_semester(nama_semester: str, token: str = Depends(verify_admin_token)):
+    """Menghapus semester dan seluruh jadwal di dalamnya (Admin only)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id_semester, is_active FROM semester WHERE nama_semester = %s", (nama_semester,))
+        row = cursor.fetchone()
+        if not row:
+            return {"status": "error", "message": f"Semester '{nama_semester}' tidak ditemukan"}
+            
+        is_act = row[1]
+        
+        # Hapus transaksi data terkait semester ini
+        cursor.execute("DELETE FROM jadwal WHERE semester = %s", (nama_semester,))
+        deleted_count = cursor.rowcount
+        cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (nama_semester,))
+        cursor.execute("DELETE FROM notifikasi_lab WHERE semester = %s", (nama_semester,))
+        cursor.execute("DELETE FROM semester WHERE nama_semester = %s", (nama_semester,))
+        
+        # Jika yang dihapus adalah semester aktif, aktifkan semester lain yang tersisa
+        if is_act == 1:
+            cursor.execute("SELECT nama_semester FROM semester ORDER BY id_semester DESC LIMIT 1")
+            fallback_row = cursor.fetchone()
+            if fallback_row:
+                cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (fallback_row[0],))
+            else:
+                cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES ('Genap 2025', 1)")
+                
+        conn.commit()
+        return {
+            "status": "success", 
+            "message": f"Semester '{nama_semester}' dan {deleted_count} jadwal terkait berhasil dihapus."
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/jadwal")
+def get_semua_jadwal(semester: str = None):
+    """Mengembalikan daftar semua jadwal dengan filter semester aktif (atau spesifik)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        target_sem = semester
+        if not target_sem:
+            target_sem = scraper.get_active_semester(conn, cursor)
+            
         query = '''
             SELECT 
                 j.hari, 
@@ -356,14 +516,16 @@ def get_semua_jadwal():
                 r.kampus,
                 r.nama_ruangan, 
                 j.status_jadwal, 
-                j.metode_pembelajaran
+                j.metode_pembelajaran,
+                j.semester
             FROM jadwal j
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
             LEFT JOIN mata_kuliah mk ON j.kode_mk = mk.kode_mk
             LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE j.semester = %s
             ORDER BY j.tanggal ASC, j.jam ASC
         '''
-        cursor.execute(query)
+        cursor.execute(query, (target_sem,))
         hasil = cursor.fetchall()
         
         # Format date and time for JSON serialization
@@ -384,7 +546,12 @@ def get_semua_jadwal():
                 # Append Kampus name to make it explicitly distinct
                 item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
                 
-        return {"status": "success", "data": hasil}
+        return {
+            "status": "success", 
+            "active_semester": target_sem,
+            "total": len(hasil),
+            "data": hasil
+        }
     except mysql.connector.Error as err:
         return {"status": "error", "message": str(err)}
     finally:
@@ -1112,14 +1279,17 @@ def clear_jadwal(admin: str = Depends(verify_admin_token)):
 class SyncRequest(BaseModel):
     tanggal: str | None = None
     from_dashboard: bool | None = False
+    semester: str | None = None
 
 class SyncHtmlRequest(BaseModel):
     html: str
     tanggal: str | None = None
     page: str | None = "1"
+    semester: str | None = None
 
 class SyncCompleteRequest(BaseModel):
     tanggal: str | None = None
+    semester: str | None = None
 
 import time
 
@@ -1150,7 +1320,7 @@ async def sync_data(req: SyncRequest):
             last_sync_times[tgl_key] = start_time
             
             # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
-            success, count, msg = scraper.scrape_baak_direct(req.tanggal)
+            success, count, msg = scraper.scrape_baak_direct(req.tanggal, req.semester)
             if success:
                 sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
                 pending_sync_queue.pop(tgl_key, None)
@@ -1203,12 +1373,13 @@ def clear_pending_sync(req: dict = None):
 def sync_html_data(req: SyncHtmlRequest):
     """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
     try:
-        data = scraper.parse_html_content(req.html, req.tanggal)
-        scraper.save_to_db(data, req.tanggal, req.page)
+        data = scraper.parse_html_content(req.html, req.tanggal, req.semester)
+        sem_to_use = req.semester or (data[0].get('semester') if data else None) or scraper.get_active_semester()
+        scraper.save_to_db(data, req.tanggal, req.page, sem_to_use)
         tgl_key = req.tanggal or ""
         prev_count = sync_status.get(tgl_key, {}).get("count", 0)
-        sync_status[tgl_key] = {"status": "in_progress", "time": time.time(), "count": prev_count + len(data)}
-        return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi.", "count": len(data)}
+        sync_status[tgl_key] = {"status": "in_progress", "time": time.time(), "count": prev_count + len(data), "semester": sem_to_use}
+        return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi ({sem_to_use}).", "count": len(data), "semester": sem_to_use}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -1217,10 +1388,11 @@ def sync_complete(req: SyncCompleteRequest):
     """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
     try:
         tgl_key = req.tanggal or ""
-        scraper.compare_and_finalize_sync(req.tanggal)
+        sem_to_use = req.semester or sync_status.get(tgl_key, {}).get("semester") or scraper.get_active_semester()
+        scraper.compare_and_finalize_sync(req.tanggal, sem_to_use)
         prev_count = sync_status.get(tgl_key, {}).get("count", 0)
-        sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count}
-        return {"status": "success", "message": "Proses perbandingan dan finalisasi selesai.", "count": prev_count}
+        sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
+        return {"status": "success", "message": f"Proses perbandingan dan finalisasi selesai ({sem_to_use}).", "count": prev_count, "semester": sem_to_use}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -1234,25 +1406,26 @@ def finalize_temp():
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/notifikasi-lab")
-def get_notifikasi_lab(tanggal: str):
-    """Ambil notifikasi ruangan (Labor & Ruang Kelas) untuk tanggal tertentu"""
+def get_notifikasi_lab(tanggal: str, semester: str = None):
+    """Ambil notifikasi ruangan (Labor & Ruang Kelas) untuk tanggal dan semester tertentu"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
+        sem_active = semester or scraper.get_active_semester(conn, cursor)
         # Hitung dan pastikan jeda ruangan untuk tanggal ini selalu sinkron & up-to-date
         try:
-            scraper.calculate_and_save_gaps(conn, cursor, tanggal)
+            scraper.calculate_and_save_gaps(conn, cursor, tanggal, sem_active)
         except Exception as e_gap:
             print(f"Error calculating gaps on fetch: {e_gap}")
 
         cursor.execute("""
             SELECT tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu
             FROM notifikasi_lab 
-            WHERE tanggal = %s 
+            WHERE tanggal = %s AND (semester = %s OR semester IS NULL)
             ORDER BY created_at DESC
-        """, (tanggal,))
+        """, (tanggal, sem_active))
         results = cursor.fetchall()
-        return {"status": "success", "data": results}
+        return {"status": "success", "semester": sem_active, "data": results}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:

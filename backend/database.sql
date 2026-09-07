@@ -36,10 +36,13 @@ CREATE TABLE IF NOT EXISTS jadwal (
     id_ruangan INT,
     status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
     metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM',
+    semester VARCHAR(50) DEFAULT 'Genap 2025',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_dosen) REFERENCES dosen(id_dosen) ON DELETE SET NULL,
     FOREIGN KEY (kode_mk) REFERENCES mata_kuliah(kode_mk) ON DELETE SET NULL,
-    FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
+    FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL,
+    INDEX idx_jadwal_semester (semester),
+    INDEX idx_jadwal_tgl_sem (tanggal, semester)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 5. Tabel Temporary Jadwal (Penampung Scraping)
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS jadwal_temp (
     id_ruangan INT,
     status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
     metode_pembelajaran VARCHAR(50) DEFAULT 'TM',
+    semester VARCHAR(50) DEFAULT 'Genap 2025',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -64,6 +68,7 @@ CREATE TABLE IF NOT EXISTS notifikasi_lab (
     tanggal DATE NOT NULL,
     tipe_notif VARCHAR(50) NOT NULL,
     pesan TEXT NOT NULL,
+    semester VARCHAR(50) DEFAULT 'Genap 2025',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -76,3 +81,13 @@ CREATE TABLE IF NOT EXISTS asisten_lab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 8. Tabel Master Semester (Pemisah Database Periode Perkuliahan)
+CREATE TABLE IF NOT EXISTS semester (
+    id_semester INT AUTO_INCREMENT PRIMARY KEY,
+    nama_semester VARCHAR(50) UNIQUE NOT NULL,
+    is_active TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO semester (nama_semester, is_active) VALUES ('Genap 2025', 1);
