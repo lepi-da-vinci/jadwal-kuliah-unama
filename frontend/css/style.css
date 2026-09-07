@@ -3393,5 +3393,260 @@ tr.table-row-conflict td:first-child {
   border: 1px solid var(--border);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   TV / KIOSK MODE LIVING ANIMATIONS
+   ══════════════════════════════════════════════════════════════ */
+@keyframes tvOverlayEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 
+.tv-mode-overlay.active {
+  animation: tvOverlayEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
 
+@keyframes tvBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.tv-clock-colon {
+  display: inline-block;
+  animation: tvBlink 1s infinite step-start;
+}
+
+.tv-progress-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.tv-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6366f1, #10b981, #06b6d4);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.6);
+  border-radius: 3px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DETAIL RUANGAN / KELAS RICH SCHEDULE CARD (Spacious & Modern)
+   ══════════════════════════════════════════════════════════════ */
+.room-detail-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  border-left: 5px solid var(--primary);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.room-detail-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.room-detail-card.active-now {
+  border-left-color: #10b981;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, var(--bg-card) 100%);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.room-detail-card.upcoming {
+  border-left-color: #6366f1;
+}
+
+.room-detail-card.finished {
+  border-left-color: #94a3b8;
+  opacity: 0.85;
+}
+
+.room-detail-card.cancelled {
+  border-left-color: #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, var(--bg-card) 100%);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.room-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .room-card-top,
+body.dark-theme .room-card-top {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.room-card-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.12em;
+  color: var(--text-dark);
+}
+
+.room-card-duration {
+  font-size: 0.74em;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+  letter-spacing: 0.2px;
+}
+
+.room-card-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.room-card-badge {
+  font-size: 0.72em;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.room-card-badge.status-ongoing {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.room-card-badge.status-future {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.room-card-badge.status-done {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.room-card-badge.badge-tm {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.room-card-badge.badge-ol {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.room-card-badge.badge-cc {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.room-card-title {
+  font-size: 1.15em;
+  font-weight: 800;
+  color: var(--text-dark);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.room-card-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 16px;
+  background: rgba(0, 0, 0, 0.02);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .room-card-meta-grid,
+body.dark-theme .room-card-meta-grid {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.room-card-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88em;
+  color: var(--text);
+}
+
+.room-card-meta-item svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.room-card-meta-item strong {
+  color: var(--text-dark);
+}
+
+.room-card-aslab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px dashed rgba(99, 102, 241, 0.3);
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 0.86em;
+}
+
+[data-theme="dark"] .room-card-aslab,
+body.dark-theme .room-card-aslab {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.room-card-aslab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #10b981;
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 0.82em;
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.room-card-aslab-btn:hover {
+  opacity: 0.88;
+}

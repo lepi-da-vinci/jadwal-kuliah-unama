@@ -2699,14 +2699,14 @@ document.getElementById('toggle-notif-btn').addEventListener('click', () => {
   }
 });
 
-// Handle Modal Detail Ruangan
+// Handle Modal Detail Ruangan (Spacious & Rich Cards)
 window.showRoomDetail = function (roomName, kampusStr) {
   const filterTanggal = document.getElementById('filter-tanggal');
   const today = new Date();
   const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-  const activeDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr;
+  let activeDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr;
 
-  const schedules = allJadwal.filter(item => {
+  let schedules = allJadwal.filter(item => {
     if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
     if (item.tanggal !== activeDate) return false;
 
@@ -2719,47 +2719,214 @@ window.showRoomDetail = function (roomName, kampusStr) {
     return true;
   });
 
+  // Jika tanggal aktif kosong (misal belum ada jadwal hari ini), coba cari tanggal terdekat yang memiliki jadwal di ruangan ini
+  if (schedules.length === 0 && (!filterTanggal || !filterTanggal.value)) {
+    const roomAllDates = allJadwal.filter(item => {
+      if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
+      if (item.nama_ruangan.split(" (Kampus")[0] !== roomName) return false;
+      if (kampusStr) {
+        if (kampusStr === 'Thehok' && item.nama_ruangan.includes('Kampus Kobar')) return false;
+        if (kampusStr === 'Kobar' && item.nama_ruangan.includes('Kampus Thehok')) return false;
+      }
+      return true;
+    });
+    if (roomAllDates.length > 0) {
+      const dates = [...new Set(roomAllDates.map(r => r.tanggal))].sort().reverse();
+      activeDate = dates[0];
+      schedules = roomAllDates.filter(r => r.tanggal === activeDate);
+    }
+  }
+
   schedules.sort((a, b) => {
-    const aParts = a.jam.split(':');
-    const bParts = b.jam.split(':');
-    return (parseInt(aParts[0], 10) * 60 + parseInt(aParts[1], 10)) - (parseInt(bParts[0], 10) * 60 + parseInt(bParts[1], 10));
+    const aParts = (a.jam || '').split(/[-–—:]/).map(p => parseInt(p.trim(), 10) || 0);
+    const bParts = (b.jam || '').split(/[-–—:]/).map(p => parseInt(p.trim(), 10) || 0);
+    return (aParts[0] * 60 + aParts[1]) - (bParts[0] * 60 + bParts[1]);
   });
 
-  document.getElementById('room-detail-title').innerText = `${roomName} (${kampusStr || ''})`;
+  // Cari aslab untuk ruangan ini jika ruangan merupakan Labor
+  let matchedAslab = null;
+  if (Array.isArray(globalAslabData)) {
+    matchedAslab = globalAslabData.find(a => {
+      if (!a.nama_ruangan) return false;
+      const cleanAslabRoom = a.nama_ruangan.split(" (Kampus")[0].trim().toLowerCase();
+      const cleanCurrentRoom = roomName.trim().toLowerCase();
+      return cleanAslabRoom === cleanCurrentRoom;
+    });
+  }
+
+  const titleEl = document.getElementById('room-detail-title');
+  if (titleEl) titleEl.innerText = `${roomName} ${kampusStr ? `(${kampusStr})` : ''}`;
+
+  const badgeEl = document.getElementById('room-detail-badge');
+  if (badgeEl) {
+    badgeEl.innerText = `${schedules.length} Jadwal`;
+    badgeEl.style.display = 'inline-block';
+  }
+
+  const subdescEl = document.getElementById('room-detail-subdesc');
+  if (subdescEl) {
+    subdescEl.innerText = `Daftar perkuliahan tanggal ${formatTanggalIndo(activeDate)}`;
+  }
+
   const listContainer = document.getElementById('room-detail-list');
 
   if (schedules.length === 0) {
-    listContainer.innerHTML = '<li><em>Tidak ada jadwal tercatat hari ini.</em></li>';
+    listContainer.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 48px 20px;">
+        <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.45;">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <div style="font-weight: 700; font-size: 1.1em; color: var(--text-dark);">Tidak Ada Jadwal Tercatat</div>
+        <div style="font-size: 0.88em; margin-top: 4px;">Tidak ada sesi perkuliahan aktif di ruangan ini pada tanggal <strong>${escapeHtml(formatTanggalIndo(activeDate))}</strong>.</div>
+      </div>
+    `;
   } else {
-    listContainer.innerHTML = schedules.map(s => {
-      let methodBadge = '';
-      if (s.metode_pembelajaran) {
-        methodBadge = `<span style="font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: var(--primary); margin-left: 8px; font-weight: bold;">${s.metode_pembelajaran}</span>`;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const isToday = (activeDate === currentDayStr);
+
+    listContainer.innerHTML = schedules.map((s, idx) => {
+      // 1. Waktu & Durasi
+      let startTimeStr = s.jam || '08:00';
+      let endTimeStr = 'Selesai';
+      let startM = 0, endM = 0;
+      let durationMins = 135;
+
+      const parts = (s.jam || '').split(/[-–—]/).map(p => p.trim());
+      if (parts.length >= 1 && parts[0].includes(':')) {
+        const [sh, sm] = parts[0].split(':').map(Number);
+        if (!isNaN(sh) && !isNaN(sm)) {
+          startM = sh * 60 + sm;
+          startTimeStr = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+          
+          if (parts.length >= 2 && parts[1].includes(':')) {
+            const [eh, em] = parts[1].split(':').map(Number);
+            if (!isNaN(eh) && !isNaN(em)) {
+              endM = eh * 60 + em;
+              endTimeStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+              durationMins = endM - startM;
+            }
+          } else {
+            durationMins = (typeof getClassDuration === 'function') ? getClassDuration(s) : 135;
+            endM = startM + durationMins;
+            const eh = Math.floor(endM / 60);
+            const em = endM % 60;
+            endTimeStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+          }
+        }
       }
 
-      let statusBadge = '';
+      // 2. Status Waktu (Live ongoing, upcoming, finished, cancelled)
+      let cardStatusClass = 'upcoming';
+      let liveBadgeHtml = '';
+
+      if (s.metode_pembelajaran === 'CC') {
+        cardStatusClass = 'cancelled';
+        liveBadgeHtml = `<span class="room-card-badge badge-cc"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Ditiadakan</span>`;
+      } else if (isToday) {
+        if (currentMinutes >= startM && currentMinutes <= endM) {
+          cardStatusClass = 'active-now';
+          liveBadgeHtml = `<span class="room-card-badge status-ongoing"><span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981; width:7px; height:7px; border-radius:50%; display:inline-block;"></span> Sedang Berlangsung</span>`;
+        } else if (currentMinutes < startM) {
+          cardStatusClass = 'upcoming';
+          liveBadgeHtml = `<span class="room-card-badge status-future"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Akan Datang</span>`;
+        } else {
+          cardStatusClass = 'finished';
+          liveBadgeHtml = `<span class="room-card-badge status-done"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Selesai</span>`;
+        }
+      } else {
+        liveBadgeHtml = `<span class="room-card-badge status-future">Sesi ${idx + 1}</span>`;
+      }
+
+      // 3. Metode Pembelajaran Badge
+      let methodBadge = '';
+      if (s.metode_pembelajaran === 'TM') {
+        methodBadge = `<span class="room-card-badge badge-tm" title="Tatap Muka"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Tatap Muka</span>`;
+      } else if (s.metode_pembelajaran === 'OL') {
+        methodBadge = `<span class="room-card-badge badge-ol" title="Online"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line></svg> Online</span>`;
+      } else if (s.metode_pembelajaran === 'CC') {
+        methodBadge = `<span class="room-card-badge badge-cc">Cancel</span>`;
+      }
+
+      // 4. Status Perubahan BAAK (Tambahan, Perubahan, Jeda)
+      let changeBadgeHtml = '';
       if (s.status_jadwal && s.status_jadwal.trim() !== '' && s.status_jadwal.trim() !== '-') {
-        let sText = s.status_jadwal.toUpperCase();
-        let bg = 'rgba(107, 114, 128, 0.15)';
-        let c = '#9ca3af';
+        const st = s.status_jadwal.toUpperCase();
+        let bg = 'rgba(107, 114, 128, 0.15)', c = '#9ca3af';
+        if (st.includes('TAMBAHAN')) { bg = 'rgba(34, 197, 94, 0.15)'; c = '#10b981'; }
+        else if (st.includes('PERUBAHAN')) { bg = 'rgba(239, 68, 68, 0.15)'; c = '#ef4444'; }
+        else if (st.includes('JEDA')) { bg = 'rgba(245, 158, 11, 0.15)'; c = '#f59e0b'; }
+        changeBadgeHtml = `<span style="font-size: 0.72em; padding: 3px 8px; border-radius: 6px; background: ${bg}; color: ${c}; font-weight: 700; border: 1px solid ${c}40;">${escapeHtml(st)}</span>`;
+      }
 
-        if (sText.includes('TAMBAHAN')) { bg = 'rgba(34, 197, 94, 0.15)'; c = '#4ade80'; }
-        else if (sText.includes('PERUBAHAN')) { bg = 'rgba(239, 68, 68, 0.15)'; c = '#f87171'; }
-        else if (sText.includes('JEDA')) { bg = 'rgba(245, 158, 11, 0.15)'; c = '#fbbf24'; }
-
-        statusBadge = `<div style="font-size: 0.65em; padding: 4px 8px; border-radius: 6px; background: ${bg}; color: ${c}; font-weight: bold; border: 1px solid ${c}40; text-align: center; display: flex; align-items: center; justify-content: center; max-width: 90px; line-height: 1.2;">${sText}</div>`;
+      // 5. Aslab row (jika ada matched aslab)
+      let aslabRowHtml = '';
+      if (matchedAslab) {
+        let waLinkBtn = '';
+        if (matchedAslab.no_wa && matchedAslab.no_wa !== '-' && matchedAslab.no_wa.trim() !== '') {
+          let cleanPhone = matchedAslab.no_wa.replace(/\D/g, '');
+          if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
+          const msgText = encodeURIComponent(`Halo kak ${matchedAslab.nama_aslab}, saya ingin menanyakan terkait ruang ${roomName} untuk perkuliahan ${s.nama_mk} (Kelas: ${s.kelas}).`);
+          waLinkBtn = `
+            <a href="https://api.whatsapp.com/send?phone=${cleanPhone}&text=${msgText}" target="_blank" class="room-card-aslab-btn" title="Kirim Pesan WhatsApp">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              Chat WA
+            </a>
+          `;
+        }
+        aslabRowHtml = `
+          <div class="room-card-aslab">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="color: #6366f1;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span>Asisten Lab: <strong>${escapeHtml(matchedAslab.nama_aslab)}</strong></span>
+            </div>
+            ${waLinkBtn}
+          </div>
+        `;
       }
 
       return `
-            <li style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); box-shadow: var(--shadow-xs);">
-              <div>
-                <div style="font-weight: bold; font-size: 1.05em; color: var(--text-dark); margin-bottom: 4px;">${escapeHtml(s.jam)} - Selesai ${methodBadge}</div>
-                <div style="color: var(--text);">${escapeHtml(s.nama_mk)}</div>
-                <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Kelas ${escapeHtml(s.kelas)} • ${escapeHtml(s.nama_dosen)}</div>
-              </div>
-              ${statusBadge}
-            </li>
-          `;
+        <div class="room-detail-card ${cardStatusClass}">
+          <div class="room-card-top">
+            <div class="room-card-time">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
+              <span class="room-card-duration">${durationMins} Menit</span>
+            </div>
+            <div class="room-card-pill-group">
+              ${liveBadgeHtml}
+              ${methodBadge}
+              ${changeBadgeHtml}
+            </div>
+          </div>
+
+          <h4 class="room-card-title">${escapeHtml(s.nama_mk)}</h4>
+
+          <div class="room-card-meta-grid">
+            <div class="room-card-meta-item">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+              <span>Kelas: <strong>${escapeHtml(s.kelas || '-')}</strong></span>
+            </div>
+            <div class="room-card-meta-item">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span>Dosen: <strong>${escapeHtml(s.nama_dosen || '-')}</strong></span>
+            </div>
+            <div class="room-card-meta-item">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+              <span>Ruangan: <strong>${escapeHtml(s.nama_ruangan || roomName)}</strong></span>
+            </div>
+            <div class="room-card-meta-item">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <span>Hari: <strong>${escapeHtml(s.hari || '-')}, ${escapeHtml(formatTanggalIndo(s.tanggal || activeDate))}</strong></span>
+            </div>
+          </div>
+
+          ${aslabRowHtml}
+        </div>
+      `;
     }).join('');
   }
 
@@ -6678,7 +6845,7 @@ setInterval(async () => {
     const dataJadwal = await resJadwal.json();
     if (dataJadwal.status === 'success') {
       allJadwal = dataJadwal.data;
-      updateJadwalTable();
+      applyFilters();
       if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
     }
 
@@ -7501,6 +7668,34 @@ function formatTanggalIndo(dateStr) {
   return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+const TV_ROLL_INTERVAL_MS = 3800; // Siklus rotasi TV otomatis setiap 3.8 detik
+
+function resetTvProgressBar() {
+  const bar = document.getElementById('tv-progress-bar');
+  if (!bar) return;
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  setTimeout(() => {
+    if (bar) {
+      bar.style.transition = `width ${TV_ROLL_INTERVAL_MS}ms linear`;
+      bar.style.width = '100%';
+    }
+  }, 40);
+}
+
+function updateTvCounter() {
+  const counterEl = document.getElementById('tv-rolling-counter');
+  if (!counterEl || !tvAllDayJadwal || tvAllDayJadwal.length === 0) {
+    if (counterEl) counterEl.innerText = '0 / 0';
+    return;
+  }
+  const total = tvAllDayJadwal.length;
+  const visible = Math.min(TV_VISIBLE_ROWS_COUNT, total);
+  const start = tvCurrentHeadIndex + 1;
+  const end = Math.min(tvCurrentHeadIndex + visible, total);
+  counterEl.innerText = `${start}-${end} dari ${total}`;
+}
+
 async function openTvMode() {
   const overlay = document.getElementById('tv-mode-overlay');
   if (!overlay) return;
@@ -7514,33 +7709,39 @@ async function openTvMode() {
     document.documentElement.webkitRequestFullscreen();
   }
 
+  isTvTickerPaused = false;
+
   const selectedDate = document.getElementById('filter-tanggal')?.value;
   const todayStr = getTodayLocalDateStr();
-  const targetDate = selectedDate || todayStr;
+  let targetDate = selectedDate || todayStr;
 
   if (tvClockTimer) clearInterval(tvClockTimer);
   tvClockTimer = setInterval(updateTvClock, 1000);
   updateTvClock();
 
-  // Setup hover pause
-  const container = document.getElementById('tv-grid-container');
-  if (container && !container._hoverBound) {
-    container.addEventListener('mouseenter', () => { isTvTickerPaused = true; });
-    container.addEventListener('mouseleave', () => { isTvTickerPaused = false; });
-    container._hoverBound = true;
-  }
-
   // Cek apakah data untuk tanggal tersebut sudah ada di memori allJadwal
   let dayJadwal = (Array.isArray(allJadwal)) ? allJadwal.filter(j => j.tanggal === targetDate) : [];
 
-  // Jika data tanggal hari ini belum ada, otomatis jalankan Realtime Direct Scraper BAAK!
+  // Jika tidak ada data pada tanggal tersebut dan user tidak memilih tanggal spesifik di filter dashboard,
+  // gunakan tanggal jadwal terakhir yang ada di database agar Mode TV langsung hidup dan bergerak!
+  if (dayJadwal.length === 0 && !selectedDate && Array.isArray(allJadwal) && allJadwal.length > 0) {
+    const datesWithData = [...new Set(allJadwal.map(j => j.tanggal).filter(Boolean))].sort().reverse();
+    if (datesWithData.length > 0) {
+      targetDate = datesWithData[0];
+      dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
+    }
+  }
+
+  const container = document.getElementById('tv-grid-container');
+
+  // Jika tetap kosong dan belum auto-sync, jalankan Realtime Direct Scraper BAAK
   if (dayJadwal.length === 0 && !isTvAutoSyncing) {
     isTvAutoSyncing = true;
     if (container) {
       container.innerHTML = `
         <div style="text-align: center; color: var(--text); padding: 80px 20px;">
           <div style="margin: 0 auto 20px; width: 46px; height: 46px; border: 4px solid rgba(99, 102, 241, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-          <div style="font-size: 1.25em; font-weight: 800; color: var(--text);">Menyinkronkan Jadwal Hari Ini Realtime...</div>
+          <div style="font-size: 1.25em; font-weight: 800; color: var(--text);">Menyinkronkan Jadwal Realtime...</div>
           <div style="font-size: 0.9em; margin-top: 6px; color: var(--text-muted);">
             Mengambil data perkuliahan langsung dari BAAK UNAMA untuk tanggal <strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>.
           </div>
@@ -7562,10 +7763,10 @@ async function openTvMode() {
     }
   }
 
-  updateTvModeData(true);
+  updateTvModeData(true, targetDate);
 
   if (tvAutoRefreshTimer) clearInterval(tvAutoRefreshTimer);
-  tvAutoRefreshTimer = setInterval(() => updateTvModeData(false), 30000);
+  tvAutoRefreshTimer = setInterval(() => updateTvModeData(false, targetDate), 30000);
 }
 
 function closeTvMode(exitFullscreen = true) {
@@ -7588,6 +7789,8 @@ function closeTvMode(exitFullscreen = true) {
   if (tvClockTimer) { clearInterval(tvClockTimer); tvClockTimer = null; }
   if (tvAutoRefreshTimer) { clearInterval(tvAutoRefreshTimer); tvAutoRefreshTimer = null; }
   if (tvTickerInterval) { clearInterval(tvTickerInterval); tvTickerInterval = null; }
+  const bar = document.getElementById('tv-progress-bar');
+  if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
 }
 
 function createTvRowHtml(item, isEnter = false) {
@@ -7656,7 +7859,10 @@ function updateTvClock() {
   const dateEl = document.getElementById('tv-live-date');
 
   if (timeEl) {
-    timeEl.innerText = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    timeEl.innerHTML = `${hh}<span class="tv-clock-colon">:</span>${mm}<span class="tv-clock-colon">:</span>${ss}`;
   }
   if (dateEl) {
     dateEl.innerText = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -7668,17 +7874,25 @@ function updateTvClock() {
   }
 }
 
-function updateTvModeData(isInitial = false) {
+function updateTvModeData(isInitial = false, forceTargetDate = null) {
   const grid = document.getElementById('tv-grid-container');
   if (!grid) return;
 
   const selectedDate = document.getElementById('filter-tanggal')?.value;
   const todayStr = getTodayLocalDateStr();
-  const targetDate = selectedDate || todayStr;
+  let targetDate = forceTargetDate || selectedDate || todayStr;
 
   let dayJadwal = [];
   if (Array.isArray(allJadwal)) {
     dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
+  }
+
+  if (dayJadwal.length === 0 && !selectedDate && Array.isArray(allJadwal) && allJadwal.length > 0) {
+    const datesWithData = [...new Set(allJadwal.map(j => j.tanggal).filter(Boolean))].sort().reverse();
+    if (datesWithData.length > 0) {
+      targetDate = datesWithData[0];
+      dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
+    }
   }
 
   // 1. Hitung Statistik Metode (TM, OL, CC, Total)
@@ -7857,8 +8071,14 @@ function startTvRollingTicker() {
   if (tvTickerInterval) clearInterval(tvTickerInterval);
 
   if (!tvAllDayJadwal || tvAllDayJadwal.length <= TV_VISIBLE_ROWS_COUNT) {
+    updateTvCounter();
+    const bar = document.getElementById('tv-progress-bar');
+    if (bar) bar.style.width = '100%';
     return;
   }
+
+  updateTvCounter();
+  resetTvProgressBar();
 
   tvTickerInterval = setInterval(() => {
     if (isTvTickerPaused) return;
@@ -7869,10 +8089,12 @@ function startTvRollingTicker() {
     const firstCard = container.firstElementChild;
     if (!firstCard) return;
 
-    // 1. Tambahkan kelas animasi keluar pada kartu teratas (fade out & slide up)
+    // Hitung tinggi asli kartu agar animasi slide-up mulus sempurna tanpa lompatan
+    const cardHeight = firstCard.offsetHeight || 58;
+    firstCard.style.setProperty('margin-top', `-${cardHeight + 6}px`, 'important');
     firstCard.classList.add('tv-row-exit');
 
-    // 2. Siapkan kartu berikutnya dari antrean jadwal (rolling carousel)
+    // Siapkan kartu berikutnya dari antrean jadwal (rolling carousel)
     const nextIndex = (tvCurrentHeadIndex + TV_VISIBLE_ROWS_COUNT) % tvAllDayJadwal.length;
     const nextItem = tvAllDayJadwal[nextIndex];
 
@@ -7884,17 +8106,19 @@ function startTvRollingTicker() {
     // Tambahkan kartu baru di baris paling bawah
     container.appendChild(newCardEl);
 
-    // Geser index head
+    // Geser index head & perbarui counter dan progress bar
     tvCurrentHeadIndex = (tvCurrentHeadIndex + 1) % tvAllDayJadwal.length;
+    updateTvCounter();
+    resetTvProgressBar();
 
-    // 3. Hapus elemen teratas setelah animasi exit selesai (620ms)
+    // Hapus elemen teratas setelah animasi exit selesai (500ms)
     setTimeout(() => {
       if (firstCard && firstCard.parentNode) {
         firstCard.parentNode.removeChild(firstCard);
       }
-    }, 620);
+    }, 500);
 
-  }, 5200); // Bergantian setiap 5.2 detik secara santai & berjiwa
+  }, TV_ROLL_INTERVAL_MS);
 }
 
 // =========================================================================

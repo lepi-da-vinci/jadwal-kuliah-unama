@@ -190,13 +190,13 @@
   <div id="room-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Detail Ruangan"
     style="display: none;">
     <div class="modal-box"
-      style="margin: auto; width: 92%; max-width: 500px; padding: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border); overflow: hidden;">
+      style="margin: auto; width: 94%; max-width: 760px; padding: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border); overflow: hidden;">
       <div
-        style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.06);">
-        <div style="display: flex; align-items: center; gap: 10px;">
+        style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.04);">
+        <div style="display: flex; align-items: center; gap: 12px;">
           <div
-            style="background: var(--primary-bg); color: var(--primary); width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            style="background: var(--primary-bg); color: var(--primary); width: 40px; height: 40px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -206,13 +206,16 @@
             </svg>
           </div>
           <div>
-            <h3 id="room-detail-title"
-              style="margin: 0; font-size: 1.15em; font-family: var(--font-heading); color: var(--text-dark);">Detail Ruangan</h3>
-            <p style="margin: 0; font-size: 0.8em; color: var(--text-muted);">Daftar jadwal kelas di ruangan ini</p>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 id="room-detail-title"
+                style="margin: 0; font-size: 1.22em; font-family: var(--font-heading); color: var(--text-dark); font-weight: 700;">Detail Ruangan</h3>
+              <span id="room-detail-badge" class="badge" style="font-size: 0.75em; padding: 2px 8px; border-radius: 12px; background: rgba(99, 102, 241, 0.12); color: var(--primary); font-weight: 700;">0 Jadwal</span>
+            </div>
+            <p id="room-detail-subdesc" style="margin: 3px 0 0 0; font-size: 0.82em; color: var(--text-muted);">Daftar jadwal kelas & mata kuliah aktif di ruangan ini</p>
           </div>
         </div>
         <span id="room-detail-close-btn"
-          style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 4px;">
+          style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 6px; border-radius: 50%;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -220,14 +223,13 @@
         </span>
       </div>
       <div class="modal-body"
-        style="padding: 20px 24px; text-align: left; max-height: 55vh; overflow-y: auto; margin-bottom: 0;">
-        <ul id="room-detail-list"
-          style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px;"></ul>
+        style="padding: 20px 24px; text-align: left; max-height: 65vh; overflow-y: auto; margin-bottom: 0;">
+        <div id="room-detail-list"
+          style="display: flex; flex-direction: column; gap: 14px;"></div>
       </div>
       <div
-        style="padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: rgba(0,0,0,0.02);">
-        <button class="btn btn-ghost" onclick="document.getElementById('room-detail-close-btn').click()"
-          style="border-radius: var(--radius-sm); font-size: 0.85em; padding: 8px 20px;">Tutup</button>
+        style="padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: center; background: rgba(0,0,0,0.02);">
+        <button class="modal-btn" style="background: var(--text-muted); min-width: 140px;" onclick="document.getElementById('room-detail-close-btn').click()">Tutup</button>
       </div>
     </div>
   </div>

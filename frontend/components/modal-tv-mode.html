@@ -3,7 +3,14 @@
     <div class="tv-header">
       <div class="tv-title-area">
         <h1>JADWAL KULIAH KELAS & LABOR</h1>
-        <p>Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
+          <p style="margin: 0;">Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
+          <div class="tv-live-pill" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 10px; border-radius: 20px; font-size: 0.76em; color: #10b981; font-weight: 700;">
+            <span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981; width:7px; height:7px; border-radius:50%; display:inline-block;"></span>
+            <span>AUTO-SCROLL</span>
+            <span id="tv-rolling-counter" style="background: rgba(16, 185, 129, 0.2); color: #059669; padding: 1px 7px; border-radius: 10px; font-size: 0.95em; font-weight: 700;">0 / 0</span>
+          </div>
+        </div>
       </div>
 
       <div class="tv-header-right">
@@ -87,6 +94,11 @@
         </svg>
         <span>Total: <strong id="tv-room-total-count">0</strong> Ruangan (<span id="tv-lab-total-count">0</span> Lab • <span id="tv-kelas-total-count">0</span> Kelas)</span>
       </div>
+    </div>
+
+    <!-- TV Carousel Dynamic Rolling Progress Bar -->
+    <div class="tv-progress-track" style="height: 3px; background: rgba(99, 102, 241, 0.12); border-radius: 3px; overflow: hidden; margin-bottom: 4px;">
+      <div id="tv-progress-bar" class="tv-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #6366f1, #10b981); transition: width 0.1s linear;"></div>
     </div>
 
     <!-- TV Schedule Table Header (Matching Image 2) -->
