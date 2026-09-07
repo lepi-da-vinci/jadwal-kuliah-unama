@@ -296,9 +296,9 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
             target = tbody if tbody else table
             rows = [tr for tr in target.find_all('tr') if len(tr.find_all('td')) >= 4]
     
-    # Deteksi semester dari header HTML atau gunakan semester aktif
-    detected_sem = detect_semester_from_html(html_content) if not target_semester else target_semester
-    final_sem = target_semester or detected_sem or get_active_semester()
+    # Deteksi semester dari header HTML BAAK (Sumber kebenaran utama data BAAK!)
+    detected_sem = detect_semester_from_html(html_content)
+    final_sem = detected_sem or target_semester or get_active_semester()
     ensure_semester_exists(final_sem)
 
     hasil_scraping = []
@@ -768,10 +768,12 @@ def scrape_baak_direct(target_date=None, target_semester=None):
                 print("[Direct Scraper] Terdeteksi Cloudflare challenge, menggunakan fallback ekstensi.")
                 return False, 0, "Cloudflare challenge"
                 
-            if not sem_to_use:
-                detected = detect_semester_from_html(html)
-                sem_to_use = detected or get_active_semester()
-                ensure_semester_exists(sem_to_use)
+            detected = detect_semester_from_html(html)
+            if detected:
+                sem_to_use = detected
+            elif not sem_to_use:
+                sem_to_use = target_semester or get_active_semester()
+            ensure_semester_exists(sem_to_use)
 
             data = parse_html_content(html, target_date, sem_to_use)
             if not data:

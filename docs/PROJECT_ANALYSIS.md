@@ -183,7 +183,7 @@ sequenceDiagram
 
 ## 5. Struktur Database (`database.sql`) Secara Terperinci
 
-Database `db_jadwal_kuliah` memiliki 8 tabel utama dengan relasi *Foreign Key* yang ketat (menggunakan `ON DELETE SET NULL` / `CASCADE`).
+Database `db_jadwal_kuliah` memiliki 9 tabel utama dengan relasi *Foreign Key* yang ketat (menggunakan `ON DELETE SET NULL` / `CASCADE`).
 
 ### A. Tabel Master
 1.  **`dosen`**: `(id_dosen INT PK, nama_dosen VARCHAR(150))`
@@ -191,12 +191,14 @@ Database `db_jadwal_kuliah` memiliki 8 tabel utama dengan relasi *Foreign Key* y
 3.  **`ruangan`**: `(id_ruangan INT PK, kampus VARCHAR(50), nama_ruangan VARCHAR(50))`
     *   **Penting**: Penamaan sangat kritikal karena fungsi JS `.includes('lab')` dan `isLab()` bergantung pada nama string ruangan.
 4.  **`asisten_lab`**: `(id_aslab INT PK, nama_aslab VARCHAR(150), no_wa VARCHAR(50), id_ruangan INT FK)`
+5.  **`semester`**: `(id_semester INT PK AUTO_INCREMENT, kode_semester VARCHAR(50) UNIQUE, is_active TINYINT(1), total_jadwal INT DEFAULT 0)`
+    *   Mencatat daftar semester (misal: "Genap 2025", "Ganjil 2026") dan menandai mana database semester yang sedang aktif digunakan.
 
 ### B. Tabel Transaksional
-5.  **`jadwal`**: Tabel utama untuk menampilkan data ke layar. Memiliki kolom `nama_mk`, `kelas`, dan `metode_pembelajaran ENUM('TM', 'OL', 'CC')`.
-6.  **`jadwal_temp`**: Tabel transit / *staging* untuk penampung hasil *scraping* kotor.
-7.  **`notifikasi_lab`**: Menyimpan riwayat perubahan (`TAMBAHAN`, `PERUBAHAN`, `JEDA`).
-8.  **`jeda_lab`**: Menyimpan riwayat ruang/lab kosong berdurasi panjang (`>= 90 menit`).
+6.  **`jadwal`**: Tabel utama untuk menampilkan data ke layar. Memiliki kolom `semester VARCHAR(50)`, `nama_mk`, `kelas`, dan `metode_pembelajaran ENUM('TM', 'OL', 'CC')`.
+7.  **`jadwal_temp`**: Tabel transit / *staging* untuk penampung hasil *scraping* kotor.
+8.  **`notifikasi_lab`**: Menyimpan riwayat perubahan (`TAMBAHAN`, `PERUBAHAN`, `JEDA`).
+9.  **`jeda_lab`**: Menyimpan riwayat ruang/lab kosong berdurasi panjang (`>= 90 menit`).
 
 ---
 
@@ -219,6 +221,7 @@ Sistem menggunakan metode **Dual-Engine Scraping** (Direct Backend + Chrome Exte
 *   **Auto Re-Authentication & Seamless Retry**: Jika token kedaluwarsa atau hilang (status `401 Unauthorized`), frontend secara otomatis menampilkan prompt otorisasi Admin & Master, kemudian langsung melanjutkan aksi penghapusan tanpa memunculkan error gagal buntu.
 *   **Custom UI Confirmation & Alert Modal**: Seluruh dialog browser bawaan (`confirm()` dan `alert()`) telah digantikan oleh custom UI modal modern dengan efek claymorphism, animasi pulse warning ring, chip list ringkasan target terpilih, dan banner peringatan.
 *   **Akses QR Code & Link HP (Monitor Standby)**: Fitur "Scan QR Code / Link Akses HP" di dalam Modal Setting yang otomatis mendeteksi URL aktif (Cloudflare Tunnel, Ngrok, atau IP Wi-Fi Lokal Lab `192.168.x.x`) dan me-render QR Code tajam di layar monitor.
+*   **Pemisah Database Multi-Semester (Semester Management)**: Fitur pemisah data perkuliahan antar-semester (misal: "Genap 2025" dan "Ganjil 2026"). Tersedia di dalam Modal Setting tepat di bawah grup "LIHAT DATA" (`Pilih Database Semester`). Sistem mendeteksi semester secara otomatis dari header BAAK (`KELAS PERKULIAHAN <SEMESTER>`), dan menyediakan isolasi data serta filter aktif sehingga jadwal semester sebelumnya tetap aman saat portal kampus berganti semester.
 *   **Spotlight Search (`Ctrl + K`)**: Pencarian instan multi-entitas (Dosen, Mata Kuliah, Ruangan, Asisten Lab) dengan navigasi keyboard panah atas-bawah dan preview modal.
 *   **TV / Kiosk Display Mode**: Tampilan layar penuh monitor aula / lab dengan live time, 4 status pill (TM, OL, CC, Total), tabel status 6 kolom, dan auto-scroll carousel jadwal per 7 baris.
 

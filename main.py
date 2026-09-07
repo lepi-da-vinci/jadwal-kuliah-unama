@@ -1320,7 +1320,7 @@ async def sync_data(req: SyncRequest):
             last_sync_times[tgl_key] = start_time
             
             # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
-            success, count, msg = scraper.scrape_baak_direct(req.tanggal, req.semester)
+            success, count, msg = scraper.scrape_baak_direct(req.tanggal, None)
             if success:
                 sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
                 pending_sync_queue.pop(tgl_key, None)
@@ -1373,8 +1373,9 @@ def clear_pending_sync(req: dict = None):
 def sync_html_data(req: SyncHtmlRequest):
     """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
     try:
-        data = scraper.parse_html_content(req.html, req.tanggal, req.semester)
-        sem_to_use = req.semester or (data[0].get('semester') if data else None) or scraper.get_active_semester()
+        detected = scraper.detect_semester_from_html(req.html)
+        sem_to_use = detected or req.semester or scraper.get_active_semester()
+        data = scraper.parse_html_content(req.html, req.tanggal, sem_to_use)
         scraper.save_to_db(data, req.tanggal, req.page, sem_to_use)
         tgl_key = req.tanggal or ""
         prev_count = sync_status.get(tgl_key, {}).get("count", 0)

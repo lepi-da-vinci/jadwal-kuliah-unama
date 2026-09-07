@@ -1230,7 +1230,7 @@ async function syncData(tanggal) {
     const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tanggal: tgl || null, from_dashboard: true, semester: currentActiveSemester || null })
+      body: JSON.stringify({ tanggal: tgl || null, from_dashboard: true })
     });
     const result = await response.json();
 
