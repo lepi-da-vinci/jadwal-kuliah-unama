@@ -465,46 +465,43 @@
   <div id="room-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Detail Ruangan"
     style="display: none;">
     <div class="modal-box"
-      style="margin: auto; width: 94%; max-width: 760px; padding: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border); overflow: hidden;">
+      style="margin: auto; width: 92%; max-width: 680px; padding: 0; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); overflow: hidden;">
       <div
-        style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.04);">
+        style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated);">
         <div style="display: flex; align-items: center; gap: 12px;">
           <div
-            style="background: var(--primary-bg); color: var(--primary); width: 40px; height: 40px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+            style="background: var(--primary-bg); color: var(--primary); width: 42px; height: 42px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-xs);">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
           </div>
           <div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <h3 id="room-detail-title"
-                style="margin: 0; font-size: 1.22em; font-family: var(--font-heading); color: var(--text-dark); font-weight: 700;">Detail Ruangan</h3>
-              <span id="room-detail-badge" class="badge" style="font-size: 0.75em; padding: 2px 8px; border-radius: 12px; background: rgba(99, 102, 241, 0.12); color: var(--primary); font-weight: 700;">0 Jadwal</span>
+                style="margin: 0; font-size: 1.25em; font-family: var(--font-heading); color: var(--text-dark); font-weight: 800;">Detail Ruangan</h3>
+              <span id="room-detail-badge" class="badge" style="font-size: 0.76em; padding: 2px 9px; border-radius: var(--radius-full); background: var(--primary-bg); color: var(--primary); font-weight: 700;">0 Jadwal</span>
             </div>
-            <p id="room-detail-subdesc" style="margin: 3px 0 0 0; font-size: 0.82em; color: var(--text-muted);">Daftar jadwal kelas & mata kuliah aktif di ruangan ini</p>
+            <p id="room-detail-subdesc" style="margin: 3px 0 0 0; font-size: 0.82em; color: var(--text-muted); font-weight: 500;">Daftar perkuliahan aktif di ruangan ini</p>
           </div>
         </div>
-        <span id="room-detail-close-btn"
-          style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 6px; border-radius: 50%;">
+        <button id="room-detail-close-btn" class="btn-icon" title="Tutup"
+          style="background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
-        </span>
+        </button>
       </div>
       <div class="modal-body"
-        style="padding: 20px 24px; text-align: left; max-height: 65vh; overflow-y: auto; margin-bottom: 0;">
+        style="padding: 20px 24px; text-align: left; max-height: 60vh; overflow-y: auto; margin-bottom: 0;">
         <div id="room-detail-list"
           style="display: flex; flex-direction: column; gap: 14px;"></div>
       </div>
       <div
-        style="padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: center; background: rgba(0,0,0,0.02);">
-        <button class="modal-btn" style="background: var(--text-muted); min-width: 140px;" onclick="document.getElementById('room-detail-close-btn').click()">Tutup</button>
+        style="padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: center; background: var(--bg-elevated);">
+        <button class="modal-btn" style="background: var(--text-muted); min-width: 130px; border-radius: var(--radius-full);" onclick="document.getElementById('room-detail-close-btn').click()">Tutup</button>
       </div>
     </div>
   </div>
@@ -2840,14 +2837,7 @@
     <div class="tv-header">
       <div class="tv-title-area">
         <h1>JADWAL KULIAH KELAS & LABOR</h1>
-        <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
-          <p style="margin: 0;">Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
-          <div class="tv-live-pill" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 10px; border-radius: 20px; font-size: 0.76em; color: #10b981; font-weight: 700;">
-            <span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981; width:7px; height:7px; border-radius:50%; display:inline-block;"></span>
-            <span>AUTO-SCROLL</span>
-            <span id="tv-rolling-counter" style="background: rgba(16, 185, 129, 0.2); color: #059669; padding: 1px 7px; border-radius: 10px; font-size: 0.95em; font-weight: 700;">0 / 0</span>
-          </div>
-        </div>
+        <p>Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
       </div>
 
       <div class="tv-header-right">
@@ -2931,11 +2921,6 @@
         </svg>
         <span>Total: <strong id="tv-room-total-count">0</strong> Ruangan (<span id="tv-lab-total-count">0</span> Lab • <span id="tv-kelas-total-count">0</span> Kelas)</span>
       </div>
-    </div>
-
-    <!-- TV Carousel Dynamic Rolling Progress Bar -->
-    <div class="tv-progress-track" style="height: 3px; background: rgba(99, 102, 241, 0.12); border-radius: 3px; overflow: hidden; margin-bottom: 4px;">
-      <div id="tv-progress-bar" class="tv-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #6366f1, #10b981); transition: width 0.1s linear;"></div>
     </div>
 
     <!-- TV Schedule Table Header (Matching Image 2) -->

@@ -2825,41 +2825,39 @@ window.showRoomDetail = function (roomName, kampusStr) {
 
       if (s.metode_pembelajaran === 'CC') {
         cardStatusClass = 'cancelled';
-        liveBadgeHtml = `<span class="room-card-badge badge-cc"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Ditiadakan</span>`;
+        liveBadgeHtml = `<span class="badge cc" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Ditiadakan</span>`;
       } else if (isToday) {
         if (currentMinutes >= startM && currentMinutes <= endM) {
           cardStatusClass = 'active-now';
-          liveBadgeHtml = `<span class="room-card-badge status-ongoing"><span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981; width:7px; height:7px; border-radius:50%; display:inline-block;"></span> Sedang Berlangsung</span>`;
+          liveBadgeHtml = `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 700; border-radius: var(--radius-full); padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 0.78em;"><span class="tv-pulse-dot" style="background:#10b981; box-shadow:0 0 8px #10b981; width:7px; height:7px; border-radius:50%; display:inline-block;"></span> Sedang Berlangsung</span>`;
         } else if (currentMinutes < startM) {
           cardStatusClass = 'upcoming';
-          liveBadgeHtml = `<span class="room-card-badge status-future"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Akan Datang</span>`;
+          liveBadgeHtml = `<span class="badge" style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Akan Datang</span>`;
         } else {
           cardStatusClass = 'finished';
-          liveBadgeHtml = `<span class="room-card-badge status-done"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Selesai</span>`;
+          liveBadgeHtml = `<span class="badge" style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Selesai</span>`;
         }
-      } else {
-        liveBadgeHtml = `<span class="room-card-badge status-future">Sesi ${idx + 1}</span>`;
       }
 
       // 3. Metode Pembelajaran Badge
       let methodBadge = '';
       if (s.metode_pembelajaran === 'TM') {
-        methodBadge = `<span class="room-card-badge badge-tm" title="Tatap Muka"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Tatap Muka</span>`;
+        methodBadge = `<span class="badge tm" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;" title="Tatap Muka">Tatap Muka</span>`;
       } else if (s.metode_pembelajaran === 'OL') {
-        methodBadge = `<span class="room-card-badge badge-ol" title="Online"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line></svg> Online</span>`;
+        methodBadge = `<span class="badge ol" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;" title="Online">Online</span>`;
       } else if (s.metode_pembelajaran === 'CC') {
-        methodBadge = `<span class="room-card-badge badge-cc">Cancel</span>`;
+        methodBadge = ``;
       }
 
       // 4. Status Perubahan BAAK (Tambahan, Perubahan, Jeda)
       let changeBadgeHtml = '';
-      if (s.status_jadwal && s.status_jadwal.trim() !== '' && s.status_jadwal.trim() !== '-') {
+      if (s.status_jadwal && s.status_jadwal.trim() !== '' && s.status_jadwal.trim() !== '-' && s.status_jadwal.toLowerCase() !== 'onschedule') {
         const st = s.status_jadwal.toUpperCase();
         let bg = 'rgba(107, 114, 128, 0.15)', c = '#9ca3af';
         if (st.includes('TAMBAHAN')) { bg = 'rgba(34, 197, 94, 0.15)'; c = '#10b981'; }
         else if (st.includes('PERUBAHAN')) { bg = 'rgba(239, 68, 68, 0.15)'; c = '#ef4444'; }
         else if (st.includes('JEDA')) { bg = 'rgba(245, 158, 11, 0.15)'; c = '#f59e0b'; }
-        changeBadgeHtml = `<span style="font-size: 0.72em; padding: 3px 8px; border-radius: 6px; background: ${bg}; color: ${c}; font-weight: 700; border: 1px solid ${c}40;">${escapeHtml(st)}</span>`;
+        changeBadgeHtml = `<span class="badge" style="padding: 3px 9px; border-radius: var(--radius-full); background: ${bg}; color: ${c}; font-weight: 700; font-size: 0.78em;">${escapeHtml(st)}</span>`;
       }
 
       // 5. Aslab row (jika ada matched aslab)
@@ -2871,56 +2869,75 @@ window.showRoomDetail = function (roomName, kampusStr) {
           if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
           const msgText = encodeURIComponent(`Halo kak ${matchedAslab.nama_aslab}, saya ingin menanyakan terkait ruang ${roomName} untuk perkuliahan ${s.nama_mk} (Kelas: ${s.kelas}).`);
           waLinkBtn = `
-            <a href="https://api.whatsapp.com/send?phone=${cleanPhone}&text=${msgText}" target="_blank" class="room-card-aslab-btn" title="Kirim Pesan WhatsApp">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-              Chat WA
+            <a href="https://api.whatsapp.com/send?phone=${cleanPhone}&text=${msgText}" target="_blank" class="room-card-wa-btn" title="Kirim Pesan WhatsApp">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              <span>Chat WA</span>
             </a>
           `;
         }
         aslabRowHtml = `
           <div class="room-card-aslab">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="color: #6366f1;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-              <span>Asisten Lab: <strong>${escapeHtml(matchedAslab.nama_aslab)}</strong></span>
+            <div class="room-card-aslab-info">
+              <div class="room-card-aslab-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              </div>
+              <div>
+                <div class="room-card-aslab-lbl">Asisten Laboratorium</div>
+                <div class="room-card-aslab-name">${escapeHtml(matchedAslab.nama_aslab)}</div>
+              </div>
             </div>
             ${waLinkBtn}
           </div>
         `;
       }
 
+      // Kampus string formatted
+      let kampusText = kampusStr ? `Kampus ${kampusStr}` : '';
+      if (!kampusText && s.nama_ruangan) {
+        if (s.nama_ruangan.includes('Thehok')) kampusText = 'Kampus Thehok';
+        else if (s.nama_ruangan.includes('Kobar')) kampusText = 'Kampus Kobar';
+      }
+      if (!kampusText) kampusText = 'UNAMA';
+
       return `
         <div class="room-detail-card ${cardStatusClass}">
-          <div class="room-card-top">
-            <div class="room-card-time">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
-              <span class="room-card-duration">${durationMins} Menit</span>
+          <div class="room-card-header">
+            <div class="room-card-session-group">
+              <span class="room-session-badge">Sesi ${idx + 1}</span>
+              <div class="room-card-time">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
+              </div>
+              <span class="room-card-duration-chip">${durationMins} Menit</span>
             </div>
-            <div class="room-card-pill-group">
+            <div class="room-card-badges-right">
               ${liveBadgeHtml}
               ${methodBadge}
               ${changeBadgeHtml}
             </div>
           </div>
 
-          <h4 class="room-card-title">${escapeHtml(s.nama_mk)}</h4>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <h4 class="room-card-title">${escapeHtml(s.nama_mk)}</h4>
+            ${s.kode_mk ? `<span style="font-size: 0.78em; font-family: monospace; font-weight: 700; color: var(--primary); background: var(--primary-bg); padding: 2px 8px; border-radius: 6px; width: fit-content;">Kode: ${escapeHtml(s.kode_mk)}</span>` : ''}
+          </div>
 
-          <div class="room-card-meta-grid">
-            <div class="room-card-meta-item">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+          <div class="room-card-chips">
+            <div class="room-card-chip">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               <span>Kelas: <strong>${escapeHtml(s.kelas || '-')}</strong></span>
             </div>
-            <div class="room-card-meta-item">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <div class="room-card-chip">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
               <span>Dosen: <strong>${escapeHtml(s.nama_dosen || '-')}</strong></span>
             </div>
-            <div class="room-card-meta-item">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-              <span>Ruangan: <strong>${escapeHtml(s.nama_ruangan || roomName)}</strong></span>
+            <div class="room-card-chip">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <span>Lokasi: <strong>${escapeHtml(kampusText)}</strong></span>
             </div>
-            <div class="room-card-meta-item">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-              <span>Hari: <strong>${escapeHtml(s.hari || '-')}, ${escapeHtml(formatTanggalIndo(s.tanggal || activeDate))}</strong></span>
+            <div class="room-card-chip">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+              <span>Semester: <strong>${escapeHtml(s.semester || 'Genap 2025')}</strong></span>
             </div>
           </div>
 
