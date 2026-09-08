@@ -725,7 +725,16 @@ window.applySemesterExplorerFilters = function() {
   const tmCount = filtered.filter(j => j.metode_pembelajaran === 'TM').length;
   const olCount = filtered.filter(j => j.metode_pembelajaran === 'OL').length;
   const ccCount = filtered.filter(j => j.metode_pembelajaran === 'CC').length;
-  const uniqueDosenCount = new Set(filtered.map(j => (j.nama_dosen || '').trim()).filter(d => d && d !== '-')).size;
+  const uniqueDosenSet = new Set();
+  filtered.forEach(j => {
+    if (j.nama_dosen && j.nama_dosen !== '-' && j.nama_dosen.trim() !== '') {
+      j.nama_dosen.split(',').forEach(d => {
+        const trimmed = d.trim();
+        if (trimmed && trimmed !== '-') uniqueDosenSet.add(trimmed);
+      });
+    }
+  });
+  const uniqueDosenCount = uniqueDosenSet.size;
   const uniqueRuangCount = new Set(filtered.map(j => (j.nama_ruangan || '').trim()).filter(r => r && r !== '-')).size;
 
   const setStat = (id, val) => {
