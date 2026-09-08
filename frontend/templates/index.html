@@ -14,19 +14,26 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260907_semester_v1">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260908_semester_v4">
 </head>
 
 <body>
   <div class="container">
-    <!-- HEADER & FILTERS -->
-    <!-- INCLUDE: components/header-filter.html -->
+    <!-- VIEW 1: DASHBOARD REALTIME UTAMA (GAMBAR 2) -->
+    <div id="live-dashboard-view">
+      <!-- HEADER & FILTERS -->
+      <!-- INCLUDE: components/header-filter.html -->
 
-    <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
-    <!-- INCLUDE: components/active-lab-panel.html -->
+      <!-- STATUS RUANGAN & ACTIVE LAB PANEL -->
+      <!-- INCLUDE: components/active-lab-panel.html -->
 
-    <!-- COLLAPSIBLE INFO MASE & MAIN SCHEDULE TABLE -->
-    <!-- INCLUDE: components/table-schedule.html -->
+      <!-- COLLAPSIBLE INFO MASE & MAIN SCHEDULE TABLE -->
+      <!-- INCLUDE: components/table-schedule.html -->
+    </div>
+
+    <!-- VIEW 2: MODE EKSPLORASI DATABASE SEMESTER (GAMBAR 3) -->
+    <!-- INCLUDE: components/semester-explorer.html -->
+  </div> <!-- End container -->
 
   <!-- MODAL: SECURITY & OTORISASI ADMIN -->
   <!-- INCLUDE: components/modal-security.html -->
@@ -54,7 +61,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260907_semester_v2"></script>
+  <script src="frontend/js/script.js?v=20260908_semester_v4"></script>
 </body>
 
 </html>

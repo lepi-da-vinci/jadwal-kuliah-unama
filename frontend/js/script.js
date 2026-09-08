@@ -267,34 +267,52 @@ function renderSemesterCardList() {
   if (!container) return;
 
   if (!allSemestersList || allSemestersList.length === 0) {
-    container.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted);">Belum ada data semester.</div>`;
+    container.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-muted);">Belum ada data semester.</div>`;
     return;
   }
 
   container.innerHTML = allSemestersList.map(sem => {
-    const isSelected = (selectedSemesterTemp === sem.nama_semester);
     const isCurrentActive = (currentActiveSemester === sem.nama_semester);
+    const countText = sem.total_jadwal ? `${Number(sem.total_jadwal).toLocaleString('id-ID')} Jadwal Tersimpan` : '0 Jadwal';
     
     return `
-      <div class="semester-card-item ${isSelected ? 'is-selected' : ''}" onclick="selectSemesterInModal('${escapeHtml(sem.nama_semester)}')">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div class="semester-radio-indicator"></div>
-          <div>
-            <div style="font-weight: 700; font-size: 1.02em; color: var(--text);">${escapeHtml(sem.nama_semester)}</div>
-            <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">
-              ${sem.total_jadwal || 0} Jadwal Tercatat
-            </div>
+      <div class="sem-modal-card ${isCurrentActive ? 'is-active' : ''}">
+        <div class="sem-modal-card-info">
+          <div class="sem-modal-card-header">
+            <span class="sem-modal-card-title">${escapeHtml(sem.nama_semester)}</span>
+            ${isCurrentActive 
+              ? '<span class="sem-modal-badge active"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;"></span> Aktif di Dashboard</span>' 
+              : '<span class="sem-modal-badge idle">Tersedia di DB</span>'}
+          </div>
+          <div class="sem-modal-card-subtitle">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <span>${countText} • Database Lokal</span>
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          ${isCurrentActive 
-            ? '<span class="semester-meta-tag active">Aktif</span>' 
-            : '<span class="semester-meta-tag idle">Tersedia</span>'}
-          ${(isAslabAdmin && !isCurrentActive && allSemestersList.length > 1) 
-            ? `<button class="btn-icon" title="Hapus Semester" style="background: none; border: none; cursor: pointer; color: var(--badge-cc); padding: 4px;" onclick="event.stopPropagation(); deleteSemesterAction('${escapeHtml(sem.nama_semester)}')">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-               </button>` 
-            : ''}
+
+        <div class="sem-modal-card-actions">
+          <button type="button" class="sem-card-btn sem-card-btn-explore" onclick="enterSemesterExplorerMode('${escapeHtml(sem.nama_semester)}')" title="Buka Mode Eksplorasi untuk semester ini">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>Buka Eksplorasi</span>
+          </button>
+          
+          ${!isCurrentActive ? `
+            <button type="button" class="sem-card-btn sem-card-btn-activate" onclick="applySpecificSemester('${escapeHtml(sem.nama_semester)}')" title="Jadikan semester ini sebagai database aktif utama">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Jadikan Aktif</span>
+            </button>
+          ` : `
+            <span class="sem-card-active-label" title="Semester ini sedang digunakan sebagai tampilan utama">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Sedang Digunakan</span>
+            </span>
+          `}
+
+          ${(isAslabAdmin && !isCurrentActive && allSemestersList.length > 1) ? `
+            <button type="button" class="sem-card-btn-delete" title="Hapus Semester Ini" onclick="deleteSemesterAction('${escapeHtml(sem.nama_semester)}')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          ` : ''}
         </div>
       </div>
     `;
@@ -305,6 +323,551 @@ window.selectSemesterInModal = function(namaSemester) {
   selectedSemesterTemp = namaSemester;
   renderSemesterCardList();
 };
+
+window.applySpecificSemester = async function(namaSemester) {
+  if (!namaSemester) return;
+  selectedSemesterTemp = namaSemester;
+  await applySelectedSemester();
+};
+
+// =========================================================================
+// MODE EKSPLORASI DATABASE SEMESTER (ARSIP & SCHEDULER EXPLORER TANPA SCRAPER)
+// =========================================================================
+let isSemesterExplorerMode = false;
+let currentExplorerSemester = null;
+let explorerAllJadwal = [];
+let explorerFilteredJadwal = [];
+let explorerCurrentPage = 1;
+const EXPLORER_PAGE_SIZE = 50;
+let explorerFlatpickrInstance = null;
+let isExplorerAllDates = true;
+let explorerSearchTimeout = null;
+
+window.enterSemesterExplorerMode = async function(namaSemester) {
+  if (!namaSemester) {
+    namaSemester = selectedSemesterTemp || currentActiveSemester || 'Genap 2025';
+  }
+  currentExplorerSemester = namaSemester;
+  isSemesterExplorerMode = true;
+
+  // Tutup modal setting / semester jika terbuka
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+
+  // Aktifkan tampilan mode explorer di body (menyembunyikan dashboard realtime utama)
+  document.body.classList.add('semester-explorer-active');
+
+  const liveDash = document.getElementById('live-dashboard-view');
+  if (liveDash) liveDash.style.display = 'none';
+
+  const explorerContainer = document.getElementById('semester-explorer-container');
+  if (explorerContainer) explorerContainer.style.display = 'flex';
+
+  // Scroll mulus ke atas
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Update dropdown pilihan semester di banner explorer
+  updateExplorerSemesterDropdown(namaSemester);
+
+  // Muat data jadwal semester murni dari database lokal
+  await loadSemesterExplorerData(namaSemester);
+};
+
+window.launchSelectedSemesterExplorer = function() {
+  const target = selectedSemesterTemp || currentActiveSemester || 'Genap 2025';
+  enterSemesterExplorerMode(target);
+};
+
+window.exitSemesterExplorerMode = function() {
+  isSemesterExplorerMode = false;
+  document.body.classList.remove('semester-explorer-active');
+
+  const liveDash = document.getElementById('live-dashboard-view');
+  if (liveDash) liveDash.style.display = 'block';
+
+  const explorerContainer = document.getElementById('semester-explorer-container');
+  if (explorerContainer) explorerContainer.style.display = 'none';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  applyFilters();
+};
+
+window.switchExplorerSemester = function(namaSemester) {
+  if (!namaSemester || namaSemester === currentExplorerSemester) return;
+  enterSemesterExplorerMode(namaSemester);
+};
+
+function updateExplorerSemesterDropdown(currentSem) {
+  const select = document.getElementById('sem-explorer-select');
+  if (!select) return;
+  if (!allSemestersList || allSemestersList.length === 0) {
+    select.innerHTML = `<option value="${escapeHtml(currentSem)}">${escapeHtml(currentSem)}</option>`;
+    return;
+  }
+  select.innerHTML = allSemestersList.map(s => `
+    <option value="${escapeHtml(s.nama_semester)}" ${s.nama_semester === currentSem ? 'selected' : ''}>
+      ${escapeHtml(s.nama_semester)} (${s.total_jadwal || 0} Jadwal)
+    </option>
+  `).join('');
+}
+
+async function loadSemesterExplorerData(namaSemester) {
+  const tbody = document.getElementById('sem-jadwal-tbody');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 60px 20px; color: var(--primary);">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+            <div style="width: 36px; height: 36px; border: 3px solid rgba(99, 102, 241, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <span style="font-weight: 700; font-size: 1.05em;">Memuat database semester <b>${escapeHtml(namaSemester)}</b>...</span>
+            <span style="font-size: 0.85em; color: var(--text-muted);">Menarik data langsung dari database lokal (tanpa scraper BAAK)</span>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/jadwal?semester=${encodeURIComponent(namaSemester)}&_t=${Date.now()}`);
+    const json = await res.json();
+    if (json.status === 'success') {
+      explorerAllJadwal = (json.data || []).map(item => {
+        if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
+        return item;
+      });
+    } else {
+      explorerAllJadwal = [];
+    }
+  } catch (err) {
+    console.error("Gagal memuat jadwal explorer:", err);
+    explorerAllJadwal = [];
+  }
+
+  // Isi dropdown Dosen, MK, Ruangan khusus semester ini
+  populateExplorerDynamicFilters();
+
+  // Inisialisasi Flatpickr khusus explorer (tanpa auto-sync scraper)
+  initExplorerDatePicker();
+
+  // Reset filter inputs ke default (Semua Tanggal aktif)
+  isExplorerAllDates = true;
+  const btnAll = document.getElementById('sem-btn-all-dates');
+  if (btnAll) btnAll.classList.add('active-all');
+  const inputTgl = document.getElementById('sem-filter-tanggal');
+  if (inputTgl) inputTgl.value = '';
+
+  const selectDosen = document.getElementById('sem-filter-dosen');
+  if (selectDosen) selectDosen.value = 'semua';
+  const selectMk = document.getElementById('sem-filter-mk');
+  if (selectMk) selectMk.value = 'semua';
+  const selectRuang = document.getElementById('sem-filter-ruangan');
+  if (selectRuang) selectRuang.value = 'semua';
+  const selectMetode = document.getElementById('sem-filter-metode');
+  if (selectMetode) selectMetode.value = 'semua';
+  const selectKampus = document.getElementById('sem-filter-kampus');
+  if (selectKampus) selectKampus.value = 'semua';
+  const inputKeyword = document.getElementById('sem-search-keyword');
+  if (inputKeyword) inputKeyword.value = '';
+  const btnClearKw = document.getElementById('sem-search-clear');
+  if (btnClearKw) btnClearKw.style.display = 'none';
+
+  // Jalankan filter & render
+  applySemesterExplorerFilters();
+}
+
+function populateExplorerDynamicFilters() {
+  const dosenSet = new Set();
+  const mkSet = new Set();
+  const ruangSet = new Set();
+
+  explorerAllJadwal.forEach(item => {
+    if (item.nama_dosen && item.nama_dosen !== '-' && item.nama_dosen.trim() !== '') {
+      // Jika team teaching (dipisah koma), tambahkan nama dosen secara utuh dan terpisah
+      item.nama_dosen.split(',').forEach(d => {
+        const trimmed = d.trim();
+        if (trimmed && trimmed !== '-') dosenSet.add(trimmed);
+      });
+    }
+    if (item.nama_mk && item.nama_mk !== '-' && item.nama_mk.trim() !== '') {
+      mkSet.add(item.nama_mk.trim());
+    }
+    if (item.nama_ruangan && item.nama_ruangan !== '-' && item.nama_ruangan.trim() !== '') {
+      ruangSet.add(item.nama_ruangan.trim());
+    }
+  });
+
+  const sortedDosen = Array.from(dosenSet).sort((a, b) => a.localeCompare(b));
+  const sortedMk = Array.from(mkSet).sort((a, b) => a.localeCompare(b));
+  const sortedRuang = Array.from(ruangSet).sort((a, b) => a.localeCompare(b));
+
+  const selectDosen = document.getElementById('sem-filter-dosen');
+  if (selectDosen) {
+    selectDosen.innerHTML = `<option value="semua">Semua Dosen (${sortedDosen.length})</option>` +
+      sortedDosen.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+
+  const selectMk = document.getElementById('sem-filter-mk');
+  if (selectMk) {
+    selectMk.innerHTML = `<option value="semua">Semua Mata Kuliah (${sortedMk.length})</option>` +
+      sortedMk.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  }
+
+  const selectRuang = document.getElementById('sem-filter-ruangan');
+  if (selectRuang) {
+    selectRuang.innerHTML = `<option value="semua">Semua Ruangan & Lab (${sortedRuang.length})</option>` +
+      sortedRuang.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  }
+}
+
+function initExplorerDatePicker() {
+  const dateInput = document.getElementById('sem-filter-tanggal');
+  if (!dateInput) return;
+
+  const datesWithData = [...new Set(explorerAllJadwal.map(j => j.tanggal).filter(Boolean))].sort();
+
+  if (explorerFlatpickrInstance) {
+    explorerFlatpickrInstance.destroy();
+    explorerFlatpickrInstance = null;
+  }
+
+  if (typeof flatpickr !== 'undefined') {
+    explorerFlatpickrInstance = flatpickr(dateInput, {
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d F Y",
+      enable: datesWithData.length > 0 ? datesWithData : undefined,
+      locale: (typeof flatpickr.l10ns !== 'undefined' && flatpickr.l10ns.id) ? flatpickr.l10ns.id : undefined,
+      onChange: function(selectedDates, dateStr) {
+        if (dateStr) {
+          isExplorerAllDates = false;
+          const btnAll = document.getElementById('sem-btn-all-dates');
+          if (btnAll) btnAll.classList.remove('active-all');
+          applySemesterExplorerFilters();
+        }
+      }
+    });
+  }
+}
+
+window.toggleSemesterAllDates = function() {
+  isExplorerAllDates = true;
+  const btnAll = document.getElementById('sem-btn-all-dates');
+  if (btnAll) btnAll.classList.add('active-all');
+
+  const inputTgl = document.getElementById('sem-filter-tanggal');
+  if (inputTgl) inputTgl.value = '';
+  if (explorerFlatpickrInstance) {
+    explorerFlatpickrInstance.clear();
+  }
+
+  applySemesterExplorerFilters();
+};
+
+window.handleSemesterSearchInput = function() {
+  const input = document.getElementById('sem-search-keyword');
+  const btnClear = document.getElementById('sem-search-clear');
+  if (btnClear) {
+    btnClear.style.display = (input && input.value.trim().length > 0) ? 'block' : 'none';
+  }
+
+  if (explorerSearchTimeout) clearTimeout(explorerSearchTimeout);
+  explorerSearchTimeout = setTimeout(() => {
+    applySemesterExplorerFilters();
+  }, 200);
+};
+
+window.clearSemesterSearch = function() {
+  const input = document.getElementById('sem-search-keyword');
+  if (input) input.value = '';
+  const btnClear = document.getElementById('sem-search-clear');
+  if (btnClear) btnClear.style.display = 'none';
+  applySemesterExplorerFilters();
+};
+
+window.resetSemesterExplorerFilters = function() {
+  toggleSemesterAllDates();
+  const selectDosen = document.getElementById('sem-filter-dosen');
+  if (selectDosen) selectDosen.value = 'semua';
+  const selectMk = document.getElementById('sem-filter-mk');
+  if (selectMk) selectMk.value = 'semua';
+  const selectRuang = document.getElementById('sem-filter-ruangan');
+  if (selectRuang) selectRuang.value = 'semua';
+  const selectMetode = document.getElementById('sem-filter-metode');
+  if (selectMetode) selectMetode.value = 'semua';
+  const selectKampus = document.getElementById('sem-filter-kampus');
+  if (selectKampus) selectKampus.value = 'semua';
+  clearSemesterSearch();
+};
+
+window.applySemesterExplorerFilters = function() {
+  const tglInput = document.getElementById('sem-filter-tanggal');
+  const fTanggal = (!isExplorerAllDates && tglInput) ? tglInput.value.trim() : '';
+  const fDosen = document.getElementById('sem-filter-dosen')?.value || 'semua';
+  const fMk = document.getElementById('sem-filter-mk')?.value || 'semua';
+  const fRuang = document.getElementById('sem-filter-ruangan')?.value || 'semua';
+  const fMetode = document.getElementById('sem-filter-metode')?.value || 'semua';
+  const fKampus = document.getElementById('sem-filter-kampus')?.value || 'semua';
+  const fKeyword = (document.getElementById('sem-search-keyword')?.value || '').trim().toLowerCase();
+
+  let filtered = explorerAllJadwal.filter(item => {
+    if (fTanggal && item.tanggal !== fTanggal) return false;
+    if (fDosen !== 'semua' && !(item.nama_dosen || '').includes(fDosen)) return false;
+    if (fMk !== 'semua' && item.nama_mk !== fMk) return false;
+    if (fRuang !== 'semua' && item.nama_ruangan !== fRuang) return false;
+    if (fMetode !== 'semua' && item.metode_pembelajaran !== fMetode) return false;
+    if (fKampus !== 'semua') {
+      const matchKampus = (item.kampus && item.kampus.trim() === fKampus) || (item.nama_ruangan && item.nama_ruangan.includes(fKampus));
+      if (!matchKampus) return false;
+    }
+    if (fKeyword) {
+      const combined = `${item.nama_mk || ''} ${item.nama_dosen || ''} ${item.kelas || ''} ${item.nama_ruangan || ''} ${item.jam || ''} ${item.hari || ''}`.toLowerCase();
+      if (!combined.includes(fKeyword)) return false;
+    }
+    return true;
+  });
+
+  // Urutkan jadwal (berdasarkan tanggal, lalu jam)
+  filtered.sort((a, b) => {
+    const tglA = a.tanggal || '';
+    const tglB = b.tanggal || '';
+    if (tglA !== tglB) return tglA.localeCompare(tglB);
+    const jamA = (a.jam || '').split(/[-–—:]/).map(Number);
+    const jamB = (b.jam || '').split(/[-–—:]/).map(Number);
+    return (jamA[0] * 60 + jamA[1]) - (jamB[0] * 60 + jamB[1]);
+  });
+
+  explorerFilteredJadwal = filtered;
+  explorerCurrentPage = 1;
+
+  // Hitung statistik (TM, OL, CC, Total, Dosen & Ruangan unik)
+  const tmCount = filtered.filter(j => j.metode_pembelajaran === 'TM').length;
+  const olCount = filtered.filter(j => j.metode_pembelajaran === 'OL').length;
+  const ccCount = filtered.filter(j => j.metode_pembelajaran === 'CC').length;
+  const uniqueDosenCount = new Set(filtered.map(j => (j.nama_dosen || '').trim()).filter(d => d && d !== '-')).size;
+  const uniqueRuangCount = new Set(filtered.map(j => (j.nama_ruangan || '').trim()).filter(r => r && r !== '-')).size;
+
+  const setStat = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  setStat('sem-stat-total', filtered.length);
+  setStat('sem-stat-tm', tmCount);
+  setStat('sem-stat-ol', olCount);
+  setStat('sem-stat-cc', ccCount);
+  setStat('sem-stat-dosen-ruang', `${uniqueDosenCount} Dosen • ${uniqueRuangCount} Ruang`);
+
+  renderSemesterExplorerTable();
+};
+
+function renderSemesterExplorerTable() {
+  const tbody = document.getElementById('sem-jadwal-tbody');
+  const countEl = document.getElementById('sem-results-count');
+  const pagTop = document.getElementById('sem-pagination-wrap');
+  const pagBottom = document.getElementById('sem-pagination-buttons-bottom');
+  const pageInfo = document.getElementById('sem-page-info');
+
+  if (!tbody) return;
+
+  const total = explorerFilteredJadwal.length;
+  if (countEl) {
+    countEl.innerHTML = `Menampilkan <strong>${total} jadwal</strong> di semester <b>${escapeHtml(currentExplorerSemester || '')}</b>`;
+  }
+
+  if (total === 0) {
+    if (explorerAllJadwal.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.4;">
+                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+              </svg>
+              <div style="font-weight: 700; font-size: 1.15em; color: var(--text-dark);">Belum Ada Data Jadwal Tersimpan</div>
+              <div style="font-size: 0.9em; max-width: 480px;">Database untuk semester <b>${escapeHtml(currentExplorerSemester || '')}</b> masih kosong. Data akan terisi ketika jadwal semester ini sudah dirilis atau disinkronkan.</div>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 50px 20px; color: var(--text-muted);">
+            <div style="font-size: 1.05em; font-weight: 700; color: var(--text-dark);">Tidak Ada Jadwal yang Cocok</div>
+            <div style="font-size: 0.88em; margin-top: 4px;">Silakan sesuaikan kembali filter Dosen, Mata Kuliah, Ruangan, atau kata kunci pencarian.</div>
+            <button type="button" class="btn btn-secondary sem-reset-btn" onclick="resetSemesterExplorerFilters()" style="margin: 12px auto 0;">Reset Filter</button>
+          </div>
+        </tr>
+      `;
+    }
+    if (pagTop) pagTop.innerHTML = '';
+    if (pagBottom) pagBottom.innerHTML = '';
+    if (pageInfo) pageInfo.textContent = 'Halaman 1 dari 1';
+    return;
+  }
+
+  const totalPages = Math.ceil(total / EXPLORER_PAGE_SIZE);
+  if (explorerCurrentPage > totalPages) explorerCurrentPage = totalPages;
+  if (explorerCurrentPage < 1) explorerCurrentPage = 1;
+
+  const startIdx = (explorerCurrentPage - 1) * EXPLORER_PAGE_SIZE;
+  const endIdx = Math.min(startIdx + EXPLORER_PAGE_SIZE, total);
+  const pageItems = explorerFilteredJadwal.slice(startIdx, endIdx);
+
+  tbody.innerHTML = pageItems.map(item => {
+    let badgeClass = 'default';
+    if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+    else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+    else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+
+    let displayStatus = item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : 'OnSchedule');
+    const safeItemJson = escapeHtml(JSON.stringify(item));
+
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(item.jam || '-')}</strong>
+          <br>
+          <small>${escapeHtml(item.hari || '-')}, ${escapeHtml(item.tanggal_format || item.tanggal || '')}</small>
+        </td>
+        <td>
+          <div style="font-weight: 600; color: var(--text-dark);">${escapeHtml(item.nama_mk || '-')}</div>
+          ${item.kelas ? `<small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${escapeHtml(item.kelas)})</small>` : ''}
+          <div>
+            <button class="btn-cal-mini" data-item="${safeItemJson}" onclick="handleSingleCalClick(this)" title="Simpan jadwal kuliah ini ke Google Calendar">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              + Google Calendar
+            </button>
+          </div>
+        </td>
+        <td>
+          ${escapeHtml(item.nama_dosen || '-')}
+        </td>
+        <td>
+          ${escapeHtml(item.nama_ruangan || '-')}
+        </td>
+        <td style="text-align: center;">
+          ${escapeHtml(displayStatus)}
+        </td>
+        <td style="text-align: center;">
+          <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Render Pagination Controls
+  renderExplorerPaginationControls(totalPages, startIdx, endIdx, total);
+}
+
+function renderExplorerPaginationControls(totalPages, startIdx, endIdx, total) {
+  const pagTop = document.getElementById('sem-pagination-wrap');
+  const pagBottom = document.getElementById('sem-pagination-buttons-bottom');
+  const pageInfo = document.getElementById('sem-page-info');
+
+  if (pageInfo) {
+    pageInfo.innerHTML = `Menampilkan <strong>${startIdx + 1} - ${endIdx}</strong> dari <strong>${total}</strong> jadwal (Halaman <b>${explorerCurrentPage}</b> / ${totalPages})`;
+  }
+
+  if (totalPages <= 1) {
+    if (pagTop) pagTop.innerHTML = '';
+    if (pagBottom) pagBottom.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  // Prev button
+  html += `
+    <button type="button" class="sem-page-btn" ${explorerCurrentPage === 1 ? 'disabled' : ''} onclick="changeExplorerPage(${explorerCurrentPage - 1})" title="Halaman Sebelumnya">
+      ‹
+    </button>
+  `;
+
+  // Page Numbers
+  const createPageBtn = (p) => `
+    <button type="button" class="sem-page-btn ${p === explorerCurrentPage ? 'active' : ''}" onclick="changeExplorerPage(${p})">
+      ${p}
+    </button>
+  `;
+
+  if (totalPages <= 7) {
+    for (let p = 1; p <= totalPages; p++) {
+      html += createPageBtn(p);
+    }
+  } else {
+    html += createPageBtn(1);
+    if (explorerCurrentPage > 3) {
+      html += `<span style="padding: 0 4px; color: var(--text-muted);">…</span>`;
+    }
+    const startP = Math.max(2, explorerCurrentPage - 1);
+    const endP = Math.min(totalPages - 1, explorerCurrentPage + 1);
+    for (let p = startP; p <= endP; p++) {
+      html += createPageBtn(p);
+    }
+    if (explorerCurrentPage < totalPages - 2) {
+      html += `<span style="padding: 0 4px; color: var(--text-muted);">…</span>`;
+    }
+    html += createPageBtn(totalPages);
+  }
+
+  // Next button
+  html += `
+    <button type="button" class="sem-page-btn" ${explorerCurrentPage === totalPages ? 'disabled' : ''} onclick="changeExplorerPage(${explorerCurrentPage + 1})" title="Halaman Berikutnya">
+      ›
+    </button>
+  `;
+
+  if (pagTop) pagTop.innerHTML = html;
+  if (pagBottom) pagBottom.innerHTML = html;
+}
+
+window.changeExplorerPage = function(p) {
+  explorerCurrentPage = p;
+  renderSemesterExplorerTable();
+  const container = document.querySelector('.sem-table-container');
+  if (container) {
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+window.exportSemesterExplorerExcel = function() {
+  if (!explorerFilteredJadwal || explorerFilteredJadwal.length === 0) {
+    alert("Tidak ada data jadwal untuk diexport.");
+    return;
+  }
+
+  let csvContent = "\uFEFF"; // UTF-8 BOM
+  csvContent += "Tanggal,Hari,Jam,Mata Kuliah,Kelas,Dosen,Ruangan,Metode,Status,Semester\r\n";
+
+  explorerFilteredJadwal.forEach(item => {
+    const row = [
+      item.tanggal || '',
+      item.hari || '',
+      item.jam || '',
+      item.nama_mk || '',
+      item.kelas || '',
+      item.nama_dosen || '',
+      item.nama_ruangan || '',
+      item.metode_pembelajaran || '',
+      item.status_jadwal || 'OnSchedule',
+      item.semester || currentExplorerSemester || ''
+    ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+    csvContent += row + "\r\n";
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  const cleanName = (currentExplorerSemester || 'Semester').replace(/[^a-zA-Z0-9_-]/g, '_');
+  link.setAttribute("download", `Jadwal_${cleanName}_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 
 window.openSemesterModal = function() {
   const testModal = document.getElementById('test-wa-modal');
