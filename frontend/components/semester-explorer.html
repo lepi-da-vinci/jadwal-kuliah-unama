@@ -142,36 +142,88 @@
       </div>
 
       <!-- 2. Lecturer Filter (Dosen) -->
+      <!-- 2. Lecturer Filter (Dosen) -->
       <div class="sem-filter-group" style="flex: 1.4; min-width: 200px;">
-        <label for="sem-filter-dosen" class="sem-filter-lbl">
+        <label class="sem-filter-lbl">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          Dosen Pengajar:
+          Dosen Pengajar
         </label>
-        <select id="sem-filter-dosen" class="sem-filter-select" onchange="applySemesterExplorerFilters()">
-          <option value="semua">Semua Dosen</option>
-        </select>
+        <div class="custom-select-wrapper" id="wrapper-sem-dosen">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+            onclick="toggleCustomSelect('sem-dosen', event)">
+            <span class="custom-select-label" id="sem-label-dosen">Semua Dosen</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="aslab-list-container custom-select-dropdown sem-custom-dropdown" id="dropdown-sem-dosen">
+            <div class="sem-dropdown-search-wrap">
+              <input type="text" class="sem-dropdown-search-input" placeholder="Cari nama dosen..." onclick="event.stopPropagation()" oninput="filterSemesterDropdownList(this, 'items-sem-dosen')">
+            </div>
+            <div class="sem-dropdown-list-scroll" id="items-sem-dosen">
+              <div class="aslab-list-item active" data-value="semua" onclick="selectSemesterExplorerOption('dosen', 'semua', 'Semua Dosen')">
+                <span>Semua Dosen</span>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="sem-filter-dosen" value="semua">
+        </div>
       </div>
 
       <!-- 3. Course Filter (Mata Kuliah) -->
       <div class="sem-filter-group" style="flex: 1.4; min-width: 200px;">
-        <label for="sem-filter-mk" class="sem-filter-lbl">
+        <label class="sem-filter-lbl">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          Mata Kuliah:
+          Mata Kuliah
         </label>
-        <select id="sem-filter-mk" class="sem-filter-select" onchange="applySemesterExplorerFilters()">
-          <option value="semua">Semua Mata Kuliah</option>
-        </select>
+        <div class="custom-select-wrapper" id="wrapper-sem-mk">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+            onclick="toggleCustomSelect('sem-mk', event)">
+            <span class="custom-select-label" id="sem-label-mk">Semua Mata Kuliah</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="aslab-list-container custom-select-dropdown sem-custom-dropdown" id="dropdown-sem-mk">
+            <div class="sem-dropdown-search-wrap">
+              <input type="text" class="sem-dropdown-search-input" placeholder="Cari mata kuliah..." onclick="event.stopPropagation()" oninput="filterSemesterDropdownList(this, 'items-sem-mk')">
+            </div>
+            <div class="sem-dropdown-list-scroll" id="items-sem-mk">
+              <div class="aslab-list-item active" data-value="semua" onclick="selectSemesterExplorerOption('mk', 'semua', 'Semua Mata Kuliah')">
+                <span>Semua Mata Kuliah</span>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="sem-filter-mk" value="semua">
+        </div>
       </div>
 
       <!-- 4. Room / Lab Filter (Ruangan) -->
       <div class="sem-filter-group" style="flex: 1.3; min-width: 190px;">
-        <label for="sem-filter-ruangan" class="sem-filter-lbl">
+        <label class="sem-filter-lbl">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          Ruangan / Labor:
+          Ruangan / Labor
         </label>
-        <select id="sem-filter-ruangan" class="sem-filter-select" onchange="applySemesterExplorerFilters()">
-          <option value="semua">Semua Ruangan & Lab</option>
-        </select>
+        <div class="custom-select-wrapper" id="wrapper-sem-ruangan">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+            onclick="toggleCustomSelect('sem-ruangan', event)">
+            <span class="custom-select-label" id="sem-label-ruangan">Semua Ruangan & Lab</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="aslab-list-container custom-select-dropdown sem-custom-dropdown" id="dropdown-sem-ruangan">
+            <div class="sem-dropdown-search-wrap">
+              <input type="text" class="sem-dropdown-search-input" placeholder="Cari ruangan / lab..." onclick="event.stopPropagation()" oninput="filterSemesterDropdownList(this, 'items-sem-ruangan')">
+            </div>
+            <div class="sem-dropdown-list-scroll" id="items-sem-ruangan">
+              <div class="aslab-list-item active" data-value="semua" onclick="selectSemesterExplorerOption('ruangan', 'semua', 'Semua Ruangan & Lab')">
+                <span>Semua Ruangan & Lab</span>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="sem-filter-ruangan" value="semua">
+        </div>
       </div>
     </div>
 
@@ -180,7 +232,7 @@
       <div class="sem-filter-group" style="flex: 1.8; min-width: 240px;">
         <label for="sem-search-keyword" class="sem-filter-lbl">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          Cari Cepat (Dosen / MK / Kelas / Ruang):
+          Cari Cepat (Dosen / MK / Kelas / Ruang)
         </label>
         <div style="position: relative;">
           <input type="text" id="sem-search-keyword" class="sem-filter-input" placeholder="Ketik kata kunci pencarian..." oninput="handleSemesterSearchInput()">
@@ -190,23 +242,56 @@
 
       <!-- 6. Metode Pembelajaran -->
       <div class="sem-filter-group" style="flex: 1; min-width: 140px;">
-        <label for="sem-filter-metode" class="sem-filter-lbl">Metode:</label>
-        <select id="sem-filter-metode" class="sem-filter-select" onchange="applySemesterExplorerFilters()">
-          <option value="semua">Semua Metode</option>
-          <option value="TM">Tatap Muka (TM)</option>
-          <option value="OL">Online (OL)</option>
-          <option value="CC">Dibatalkan (CC)</option>
-        </select>
+        <label class="sem-filter-lbl">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          Metode
+        </label>
+        <div class="custom-select-wrapper" id="wrapper-sem-metode">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+            onclick="toggleCustomSelect('sem-metode', event)">
+            <span class="custom-select-label" id="sem-label-metode">Semua Metode</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="aslab-list-container custom-select-dropdown" id="dropdown-sem-metode">
+            <div class="aslab-list-item active" data-value="semua"
+              onclick="selectSemesterExplorerOption('metode', 'semua', 'Semua Metode')">Semua Metode</div>
+            <div class="aslab-list-item" data-value="TM"
+              onclick="selectSemesterExplorerOption('metode', 'TM', 'Tatap Muka (TM)')">Tatap Muka (TM)</div>
+            <div class="aslab-list-item" data-value="OL"
+              onclick="selectSemesterExplorerOption('metode', 'OL', 'Online (OL)')">Online (OL)</div>
+            <div class="aslab-list-item" data-value="CC"
+              onclick="selectSemesterExplorerOption('metode', 'CC', 'Dibatalkan (CC)')">Dibatalkan (CC)</div>
+          </div>
+          <input type="hidden" id="sem-filter-metode" value="semua">
+        </div>
       </div>
 
       <!-- 7. Kampus -->
       <div class="sem-filter-group" style="flex: 1; min-width: 140px;">
-        <label for="sem-filter-kampus" class="sem-filter-lbl">Kampus:</label>
-        <select id="sem-filter-kampus" class="sem-filter-select" onchange="applySemesterExplorerFilters()">
-          <option value="semua">Semua Kampus</option>
-          <option value="Kampus Thehok">Kampus Thehok</option>
-          <option value="Kampus Kobar">Kampus Kobar</option>
-        </select>
+        <label class="sem-filter-lbl">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          Lokasi Kampus
+        </label>
+        <div class="custom-select-wrapper" id="wrapper-sem-kampus">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+            onclick="toggleCustomSelect('sem-kampus', event)">
+            <span class="custom-select-label" id="sem-label-kampus">Semua Kampus</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="aslab-list-container custom-select-dropdown" id="dropdown-sem-kampus">
+            <div class="aslab-list-item active" data-value="semua"
+              onclick="selectSemesterExplorerOption('kampus', 'semua', 'Semua Kampus')">Semua Kampus</div>
+            <div class="aslab-list-item" data-value="Kampus Kobar"
+              onclick="selectSemesterExplorerOption('kampus', 'Kampus Kobar', 'Kampus Kobar')">Kampus Kobar</div>
+            <div class="aslab-list-item" data-value="Kampus Thehok"
+              onclick="selectSemesterExplorerOption('kampus', 'Kampus Thehok', 'Kampus Thehok')">Kampus Thehok</div>
+          </div>
+          <input type="hidden" id="sem-filter-kampus" value="semua">
+        </div>
       </div>
 
       <!-- 8. Reset Button -->
@@ -227,8 +312,18 @@
     <div id="sem-results-count" class="sem-results-count">
       Menampilkan <strong>0 jadwal</strong>
     </div>
-    <div class="sem-pagination-wrap" id="sem-pagination-wrap">
-      <!-- Pagination buttons injected by JS -->
+    <div class="sem-controls-right">
+      <div class="sem-page-size-selector" title="Pilih jumlah baris yang ditampilkan per halaman">
+        <span class="sem-page-size-label">Baris:</span>
+        <div class="sem-size-pill-group">
+          <button type="button" class="sem-size-btn" data-size="25" onclick="changeExplorerPageSize(25)">25</button>
+          <button type="button" class="sem-size-btn active" data-size="50" onclick="changeExplorerPageSize(50)">50</button>
+          <button type="button" class="sem-size-btn" data-size="100" onclick="changeExplorerPageSize(100)">100</button>
+        </div>
+      </div>
+      <div class="sem-pagination-wrap" id="sem-pagination-wrap">
+        <!-- Pagination buttons injected by JS -->
+      </div>
     </div>
   </div>
 
@@ -252,12 +347,22 @@
   </div>
 
   <!-- BOTTOM PAGINATION -->
-  <div class="sem-pagination-bottom" id="sem-pagination-bottom" style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center;">
+  <div class="sem-pagination-bottom" id="sem-pagination-bottom" style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
     <div id="sem-page-info" style="font-size: 0.88em; color: var(--text-muted);">
       Halaman 1 dari 1
     </div>
-    <div class="sem-pagination-wrap" id="sem-pagination-buttons-bottom">
-      <!-- Bottom pagination injected by JS -->
+    <div class="sem-controls-right">
+      <div class="sem-page-size-selector" title="Pilih jumlah baris yang ditampilkan per halaman">
+        <span class="sem-page-size-label">Baris:</span>
+        <div class="sem-size-pill-group">
+          <button type="button" class="sem-size-btn" data-size="25" onclick="changeExplorerPageSize(25)">25</button>
+          <button type="button" class="sem-size-btn active" data-size="50" onclick="changeExplorerPageSize(50)">50</button>
+          <button type="button" class="sem-size-btn" data-size="100" onclick="changeExplorerPageSize(100)">100</button>
+        </div>
+      </div>
+      <div class="sem-pagination-wrap" id="sem-pagination-buttons-bottom">
+        <!-- Bottom pagination injected by JS -->
+      </div>
     </div>
   </div>
 </div>

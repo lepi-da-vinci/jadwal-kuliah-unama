@@ -3876,9 +3876,11 @@ body.semester-explorer-active #semester-explorer-container {
 }
 
 .sem-filter-lbl {
-  font-size: 0.82em;
+  font-size: 0.76em;
   font-weight: 700;
-  color: var(--text-dark);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
   margin-bottom: 6px;
   display: flex;
   align-items: center;
@@ -3889,10 +3891,10 @@ body.semester-explorer-active #semester-explorer-container {
   color: var(--primary);
 }
 
-.sem-filter-input,
-.sem-filter-select {
+.sem-filter-input {
+  height: 42px;
   padding: 10px 14px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   border: 1.5px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
@@ -3900,26 +3902,134 @@ body.semester-explorer-active #semester-explorer-container {
   outline: none;
   transition: all 0.2s ease;
   width: 100%;
+  box-sizing: border-box;
 }
 
-.sem-filter-input:focus,
-.sem-filter-select:focus {
+.sem-filter-input:focus {
   border-color: var(--primary);
   background: var(--bg-card);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
-.sem-btn-toggle-active {
-  padding: 9px 13px;
+/* Custom Select in Semester Explorer Filter Toolbar */
+.sem-filter-group .custom-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.sem-filter-group .custom-select-trigger {
+  height: 42px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.9em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  box-shadow: var(--clay-inner);
+  box-sizing: border-box;
+}
+
+.sem-filter-group .custom-select-trigger:hover,
+.sem-filter-group .custom-select-trigger:focus {
+  border-color: var(--primary);
+  background: var(--bg-card);
+  box-shadow: var(--clay-inner), 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.sem-filter-group .custom-select-trigger .custom-select-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  text-align: left;
+}
+
+.sem-filter-group .custom-select-trigger svg {
+  flex-shrink: 0;
+  margin-left: 8px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.custom-select-dropdown.sem-custom-dropdown {
+  padding: 4px;
+  max-height: 290px;
+  display: none;
+  flex-direction: column;
+  min-width: 100%;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  z-index: 10050;
+}
+
+.custom-select-dropdown.sem-custom-dropdown.open {
+  display: flex;
+  animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sem-dropdown-search-wrap {
+  padding: 6px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  z-index: 5;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.sem-dropdown-search-input {
+  width: 100%;
+  padding: 7px 11px;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.84em;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.sem-dropdown-search-input:focus {
+  border-color: var(--primary);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.sem-dropdown-list-scroll {
+  overflow-y: auto;
+  max-height: 230px;
+  padding: 2px;
+}
+
+.sem-btn-toggle-active {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
   border: 1.5px solid var(--primary);
   background: var(--primary-bg);
   color: var(--primary);
-  font-size: 0.82em;
+  font-size: 0.85em;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .sem-btn-toggle-active:hover {
@@ -3946,14 +4056,17 @@ body.semester-explorer-active #semester-explorer-container {
 }
 
 .sem-reset-btn {
-  padding: 10px 14px;
+  height: 42px;
+  padding: 0 16px;
   font-weight: 700;
   font-size: 0.88em;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 /* Results & Table */
@@ -3980,6 +4093,65 @@ body.semester-explorer-active #semester-explorer-container {
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1.5px solid var(--border);
+}
+
+.sem-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sem-page-size-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.sem-page-size-label {
+  font-size: 0.8em;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sem-size-pill-group {
+  display: inline-flex;
+  gap: 3px;
+  background: var(--bg-elevated);
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.sem-size-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78em;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  line-height: 1;
+}
+
+.sem-size-btn:hover:not(.active) {
+  color: var(--text);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.sem-size-btn.active {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
 }
 
 .sem-pagination-wrap {

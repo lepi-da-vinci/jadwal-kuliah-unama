@@ -338,7 +338,7 @@ let currentExplorerSemester = null;
 let explorerAllJadwal = [];
 let explorerFilteredJadwal = [];
 let explorerCurrentPage = 1;
-const EXPLORER_PAGE_SIZE = 50;
+let explorerPageSize = 50;
 let explorerFlatpickrInstance = null;
 let isExplorerAllDates = true;
 let explorerSearchTimeout = null;
@@ -456,16 +456,10 @@ async function loadSemesterExplorerData(namaSemester) {
   const inputTgl = document.getElementById('sem-filter-tanggal');
   if (inputTgl) inputTgl.value = '';
 
-  const selectDosen = document.getElementById('sem-filter-dosen');
-  if (selectDosen) selectDosen.value = 'semua';
-  const selectMk = document.getElementById('sem-filter-mk');
-  if (selectMk) selectMk.value = 'semua';
-  const selectRuang = document.getElementById('sem-filter-ruangan');
-  if (selectRuang) selectRuang.value = 'semua';
-  const selectMetode = document.getElementById('sem-filter-metode');
-  if (selectMetode) selectMetode.value = 'semua';
-  const selectKampus = document.getElementById('sem-filter-kampus');
-  if (selectKampus) selectKampus.value = 'semua';
+  // Reset custom filter options
+  selectSemesterExplorerOption('metode', 'semua', 'Semua Metode', true);
+  selectSemesterExplorerOption('kampus', 'semua', 'Semua Kampus', true);
+
   const inputKeyword = document.getElementById('sem-search-keyword');
   if (inputKeyword) inputKeyword.value = '';
   const btnClearKw = document.getElementById('sem-search-clear');
@@ -474,6 +468,45 @@ async function loadSemesterExplorerData(namaSemester) {
   // Jalankan filter & render
   applySemesterExplorerFilters();
 }
+
+window.selectSemesterExplorerOption = function(type, value, label, silent = false) {
+  const filterInput = document.getElementById(`sem-filter-${type}`);
+  if (filterInput) filterInput.value = value;
+
+  const labelEl = document.getElementById(`sem-label-${type}`);
+  if (labelEl) {
+    labelEl.innerText = label;
+    labelEl.title = label;
+  }
+
+  const items = document.querySelectorAll(`#dropdown-sem-${type} .aslab-list-item`);
+  items.forEach(item => {
+    const itemVal = item.getAttribute('data-value');
+    if (itemVal === value || (value === 'semua' && itemVal === 'semua')) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+
+  const dropdown = document.getElementById(`dropdown-sem-${type}`);
+  if (dropdown) dropdown.classList.remove('open');
+
+  if (!silent) {
+    applySemesterExplorerFilters();
+  }
+};
+
+window.filterSemesterDropdownList = function(inputEl, containerId) {
+  const q = (inputEl.value || '').toLowerCase().trim();
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const items = container.querySelectorAll('.aslab-list-item');
+  items.forEach(item => {
+    const text = (item.textContent || '').toLowerCase();
+    item.style.display = text.includes(q) ? 'flex' : 'none';
+  });
+};
 
 function populateExplorerDynamicFilters() {
   const dosenSet = new Set();
@@ -500,23 +533,65 @@ function populateExplorerDynamicFilters() {
   const sortedMk = Array.from(mkSet).sort((a, b) => a.localeCompare(b));
   const sortedRuang = Array.from(ruangSet).sort((a, b) => a.localeCompare(b));
 
-  const selectDosen = document.getElementById('sem-filter-dosen');
-  if (selectDosen) {
-    selectDosen.innerHTML = `<option value="semua">Semua Dosen (${sortedDosen.length})</option>` +
-      sortedDosen.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  // 1. Dosen
+  const itemsDosen = document.getElementById('items-sem-dosen');
+  if (itemsDosen) {
+    itemsDosen.innerHTML = `
+      <div class="aslab-list-item active" data-value="semua" onclick="selectSemesterExplorerOption('dosen', 'semua', 'Semua Dosen (${sortedDosen.length})')">
+        <span>Semua Dosen (${sortedDosen.length})</span>
+      </div>
+    ` + sortedDosen.map(d => {
+      const safeD = escapeHtml(d).replace(/'/g, "\\'");
+      return `<div class="aslab-list-item" data-value="${escapeHtml(d)}" onclick="selectSemesterExplorerOption('dosen', '${safeD}', '${safeD}')"><span>${escapeHtml(d)}</span></div>`;
+    }).join('');
   }
+  const labelDosen = document.getElementById('sem-label-dosen');
+  if (labelDosen) {
+    labelDosen.innerText = `Semua Dosen (${sortedDosen.length})`;
+    labelDosen.title = `Semua Dosen (${sortedDosen.length})`;
+  }
+  const hiddenDosen = document.getElementById('sem-filter-dosen');
+  if (hiddenDosen) hiddenDosen.value = 'semua';
 
-  const selectMk = document.getElementById('sem-filter-mk');
-  if (selectMk) {
-    selectMk.innerHTML = `<option value="semua">Semua Mata Kuliah (${sortedMk.length})</option>` +
-      sortedMk.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  // 2. Mata Kuliah
+  const itemsMk = document.getElementById('items-sem-mk');
+  if (itemsMk) {
+    itemsMk.innerHTML = `
+      <div class="aslab-list-item active" data-value="semua" onclick="selectSemesterExplorerOption('mk', 'semua', 'Semua Mata Kuliah (${sortedMk.length})')">
+        <span>Semua Mata Kuliah (${sortedMk.length})</span>
+      </div>
+    ` + sortedMk.map(m => {
+      const safeM = escapeHtml(m).replace(/'/g, "\\'");
+      return `<div class="aslab-list-item" data-value="${escapeHtml(m)}" onclick="selectSemesterExplorerOption('mk', '${safeM}', '${safeM}')"><span>${escapeHtml(m)}</span></div>`;
+    }).join('');
   }
+  const labelMk = document.getElementById('sem-label-mk');
+  if (labelMk) {
+    labelMk.innerText = `Semua Mata Kuliah (${sortedMk.length})`;
+    labelMk.title = `Semua Mata Kuliah (${sortedMk.length})`;
+  }
+  const hiddenMk = document.getElementById('sem-filter-mk');
+  if (hiddenMk) hiddenMk.value = 'semua';
 
-  const selectRuang = document.getElementById('sem-filter-ruangan');
-  if (selectRuang) {
-    selectRuang.innerHTML = `<option value="semua">Semua Ruangan & Lab (${sortedRuang.length})</option>` +
-      sortedRuang.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  // 3. Ruangan
+  const itemsRuang = document.getElementById('items-sem-ruangan');
+  if (itemsRuang) {
+    itemsRuang.innerHTML = `
+      <div class="aslab-list-item active" data-value="semua" onclick="selectSemesterExplorerOption('ruangan', 'semua', 'Semua Ruangan & Lab (${sortedRuang.length})')">
+        <span>Semua Ruangan & Lab (${sortedRuang.length})</span>
+      </div>
+    ` + sortedRuang.map(r => {
+      const safeR = escapeHtml(r).replace(/'/g, "\\'");
+      return `<div class="aslab-list-item" data-value="${escapeHtml(r)}" onclick="selectSemesterExplorerOption('ruangan', '${safeR}', '${safeR}')"><span>${escapeHtml(r)}</span></div>`;
+    }).join('');
   }
+  const labelRuang = document.getElementById('sem-label-ruangan');
+  if (labelRuang) {
+    labelRuang.innerText = `Semua Ruangan & Lab (${sortedRuang.length})`;
+    labelRuang.title = `Semua Ruangan & Lab (${sortedRuang.length})`;
+  }
+  const hiddenRuang = document.getElementById('sem-filter-ruangan');
+  if (hiddenRuang) hiddenRuang.value = 'semua';
 }
 
 function initExplorerDatePicker() {
@@ -586,16 +661,23 @@ window.clearSemesterSearch = function() {
 
 window.resetSemesterExplorerFilters = function() {
   toggleSemesterAllDates();
-  const selectDosen = document.getElementById('sem-filter-dosen');
-  if (selectDosen) selectDosen.value = 'semua';
-  const selectMk = document.getElementById('sem-filter-mk');
-  if (selectMk) selectMk.value = 'semua';
-  const selectRuang = document.getElementById('sem-filter-ruangan');
-  if (selectRuang) selectRuang.value = 'semua';
-  const selectMetode = document.getElementById('sem-filter-metode');
-  if (selectMetode) selectMetode.value = 'semua';
-  const selectKampus = document.getElementById('sem-filter-kampus');
-  if (selectKampus) selectKampus.value = 'semua';
+
+  const dActive = document.querySelector('#items-sem-dosen .aslab-list-item[data-value="semua"] span')?.innerText || 'Semua Dosen';
+  const mActive = document.querySelector('#items-sem-mk .aslab-list-item[data-value="semua"] span')?.innerText || 'Semua Mata Kuliah';
+  const rActive = document.querySelector('#items-sem-ruangan .aslab-list-item[data-value="semua"] span')?.innerText || 'Semua Ruangan & Lab';
+
+  selectSemesterExplorerOption('dosen', 'semua', dActive, true);
+  selectSemesterExplorerOption('mk', 'semua', mActive, true);
+  selectSemesterExplorerOption('ruangan', 'semua', rActive, true);
+  selectSemesterExplorerOption('metode', 'semua', 'Semua Metode', true);
+  selectSemesterExplorerOption('kampus', 'semua', 'Semua Kampus', true);
+
+  // Reset dropdown search inputs
+  document.querySelectorAll('.sem-dropdown-search-input').forEach(inp => {
+    inp.value = '';
+    inp.dispatchEvent(new Event('input'));
+  });
+
   clearSemesterSearch();
 };
 
@@ -708,12 +790,12 @@ function renderSemesterExplorerTable() {
     return;
   }
 
-  const totalPages = Math.ceil(total / EXPLORER_PAGE_SIZE);
+  const totalPages = Math.ceil(total / explorerPageSize);
   if (explorerCurrentPage > totalPages) explorerCurrentPage = totalPages;
   if (explorerCurrentPage < 1) explorerCurrentPage = 1;
 
-  const startIdx = (explorerCurrentPage - 1) * EXPLORER_PAGE_SIZE;
-  const endIdx = Math.min(startIdx + EXPLORER_PAGE_SIZE, total);
+  const startIdx = (explorerCurrentPage - 1) * explorerPageSize;
+  const endIdx = Math.min(startIdx + explorerPageSize, total);
   const pageItems = explorerFilteredJadwal.slice(startIdx, endIdx);
 
   tbody.innerHTML = pageItems.map(item => {
@@ -821,7 +903,35 @@ function renderExplorerPaginationControls(totalPages, startIdx, endIdx, total) {
 
   if (pagTop) pagTop.innerHTML = html;
   if (pagBottom) pagBottom.innerHTML = html;
+
+  // Sinkronkan status tombol Baris (25 | 50 | 100)
+  document.querySelectorAll('.sem-size-btn').forEach(btn => {
+    const btnSize = parseInt(btn.getAttribute('data-size'), 10);
+    if (btnSize === explorerPageSize) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 }
+
+window.changeExplorerPageSize = function(size) {
+  size = parseInt(size, 10);
+  if (![25, 50, 100].includes(size)) size = 50;
+  explorerPageSize = size;
+  explorerCurrentPage = 1;
+
+  document.querySelectorAll('.sem-size-btn').forEach(btn => {
+    const btnSize = parseInt(btn.getAttribute('data-size'), 10);
+    if (btnSize === size) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  renderSemesterExplorerTable();
+};
 
 window.changeExplorerPage = function(p) {
   explorerCurrentPage = p;
