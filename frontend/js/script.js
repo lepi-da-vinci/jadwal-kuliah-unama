@@ -398,18 +398,55 @@ window.switchExplorerSemester = function(namaSemester) {
 };
 
 function updateExplorerSemesterDropdown(currentSem) {
-  const select = document.getElementById('sem-explorer-select');
-  if (!select) return;
+  const labelEl = document.getElementById('sem-label-switch');
+  const itemsContainer = document.getElementById('items-sem-switch');
+  const inputEl = document.getElementById('sem-filter-switch');
+
+  if (inputEl) inputEl.value = currentSem;
+
+  const currentObj = (allSemestersList || []).find(s => s.nama_semester === currentSem);
+  const totalStr = currentObj ? ` (${currentObj.total_jadwal || 0} Jadwal)` : '';
+  const currentLabelText = `${currentSem}${totalStr}`;
+
+  if (labelEl) {
+    labelEl.innerText = currentLabelText;
+    labelEl.title = currentLabelText;
+  }
+
+  if (!itemsContainer) return;
+
   if (!allSemestersList || allSemestersList.length === 0) {
-    select.innerHTML = `<option value="${escapeHtml(currentSem)}">${escapeHtml(currentSem)}</option>`;
+    const safeSem = escapeHtml(currentSem).replace(/'/g, "\\'");
+    itemsContainer.innerHTML = `
+      <div class="aslab-list-item active" data-value="${escapeHtml(currentSem)}" onclick="selectExplorerSemesterSwitch('${safeSem}')">
+        <span>${escapeHtml(currentSem)}</span>
+      </div>
+    `;
     return;
   }
-  select.innerHTML = allSemestersList.map(s => `
-    <option value="${escapeHtml(s.nama_semester)}" ${s.nama_semester === currentSem ? 'selected' : ''}>
-      ${escapeHtml(s.nama_semester)} (${s.total_jadwal || 0} Jadwal)
-    </option>
-  `).join('');
+
+  itemsContainer.innerHTML = allSemestersList.map(s => {
+    const isActive = (s.nama_semester === currentSem);
+    const safeSem = escapeHtml(s.nama_semester).replace(/'/g, "\\'");
+    return `
+      <div class="aslab-list-item ${isActive ? 'active' : ''}" data-value="${escapeHtml(s.nama_semester)}"
+        onclick="selectExplorerSemesterSwitch('${safeSem}')">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px;">
+          <span style="font-weight: 700;">${escapeHtml(s.nama_semester)}</span>
+          <span class="badge-mini-sem" style="font-size: 0.78em; padding: 2px 8px; border-radius: 20px; background: rgba(139, 92, 246, 0.12); color: inherit;">${s.total_jadwal || 0} Jadwal</span>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
+
+window.selectExplorerSemesterSwitch = function(namaSemester) {
+  const dropdown = document.getElementById('dropdown-sem-switch');
+  if (dropdown) dropdown.classList.remove('open');
+
+  if (!namaSemester || namaSemester === currentExplorerSemester) return;
+  switchExplorerSemester(namaSemester);
+};
 
 async function loadSemesterExplorerData(namaSemester) {
   const tbody = document.getElementById('sem-jadwal-tbody');
@@ -8351,6 +8388,7 @@ let tvAllDayJadwal = [];
 let tvCurrentHeadIndex = 0;
 let isTvTickerPaused = false;
 let isTvAutoSyncing = false;
+let currentTvTargetDate = null;
 
 function getTodayLocalDateStr() {
   const now = new Date();
@@ -8410,39 +8448,35 @@ async function openTvMode() {
 
   isTvTickerPaused = false;
 
-  const selectedDate = document.getElementById('filter-tanggal')?.value;
+  const selectedDate = document.getElementById('filter-tanggal')?.value?.trim();
   const todayStr = getTodayLocalDateStr();
   let targetDate = selectedDate || todayStr;
+  currentTvTargetDate = targetDate;
 
   if (tvClockTimer) clearInterval(tvClockTimer);
   tvClockTimer = setInterval(updateTvClock, 1000);
   updateTvClock();
 
-  // Cek apakah data untuk tanggal tersebut sudah ada di memori allJadwal
-  let dayJadwal = (Array.isArray(allJadwal)) ? allJadwal.filter(j => j.tanggal === targetDate) : [];
-
-  // Jika tidak ada data pada tanggal tersebut dan user tidak memilih tanggal spesifik di filter dashboard,
-  // gunakan tanggal jadwal terakhir yang ada di database agar Mode TV langsung hidup dan bergerak!
-  if (dayJadwal.length === 0 && !selectedDate && Array.isArray(allJadwal) && allJadwal.length > 0) {
-    const datesWithData = [...new Set(allJadwal.map(j => j.tanggal).filter(Boolean))].sort().reverse();
-    if (datesWithData.length > 0) {
-      targetDate = datesWithData[0];
-      dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
+  const container = document.getElementById('tv-grid-container');
+  const subtitleEl = document.getElementById('tv-mode-subtitle');
+  if (subtitleEl) {
+    if (selectedDate && selectedDate !== todayStr) {
+      subtitleEl.innerText = `Universitas Dinamika Bangsa (UNAMA) • Jadwal Perkuliahan: ${formatTanggalIndo(targetDate)}`;
+    } else {
+      subtitleEl.innerText = `Universitas Dinamika Bangsa (UNAMA) • Live Status Display (Hari Ini)`;
     }
   }
 
-  const container = document.getElementById('tv-grid-container');
-
-  // Jika tetap kosong dan belum auto-sync, jalankan Realtime Direct Scraper BAAK
-  if (dayJadwal.length === 0 && !isTvAutoSyncing) {
+  // JIKA TANGGAL KOSONG: Pengguna meminta langsung scraping today dari BAAK secara otomatis
+  if (!selectedDate && !isTvAutoSyncing) {
     isTvAutoSyncing = true;
     if (container) {
       container.innerHTML = `
         <div style="text-align: center; color: var(--text); padding: 80px 20px;">
           <div style="margin: 0 auto 20px; width: 46px; height: 46px; border: 4px solid rgba(99, 102, 241, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-          <div style="font-size: 1.25em; font-weight: 800; color: var(--text);">Menyinkronkan Jadwal Realtime...</div>
+          <div style="font-size: 1.25em; font-weight: 800; color: var(--text);">Menyinkronkan Jadwal Hari Ini...</div>
           <div style="font-size: 0.9em; margin-top: 6px; color: var(--text-muted);">
-            Mengambil data perkuliahan langsung dari BAAK UNAMA untuk tanggal <strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>.
+            Mengambil data perkuliahan langsung dari BAAK UNAMA untuk hari ini (<strong>${escapeHtml(formatTanggalIndo(todayStr))}</strong>).
           </div>
         </div>
       `;
@@ -8452,13 +8486,43 @@ async function openTvMode() {
       await fetch(`${API_BASE_URL}/api/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tanggal: targetDate, from_dashboard: true })
+        body: JSON.stringify({ tanggal: todayStr, from_dashboard: true })
       });
       await fetchAllJadwal();
     } catch (err) {
-      console.error("Gagal realtime auto-sync TV mode:", err);
+      console.error("Gagal auto-sync today TV mode:", err);
     } finally {
       isTvAutoSyncing = false;
+    }
+  } else if (selectedDate && !isTvAutoSyncing) {
+    // JIKA USER MEMILIH TANGGAL SPESIFIK: Tampilkan tanggal yang dipilih
+    let dayJadwal = (Array.isArray(allJadwal)) ? allJadwal.filter(j => j.tanggal === targetDate) : [];
+    if (dayJadwal.length === 0) {
+      isTvAutoSyncing = true;
+      if (container) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text); padding: 80px 20px;">
+            <div style="margin: 0 auto 20px; width: 46px; height: 46px; border: 4px solid rgba(99, 102, 241, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <div style="font-size: 1.25em; font-weight: 800; color: var(--text);">Menyinkronkan Jadwal...</div>
+            <div style="font-size: 0.9em; margin-top: 6px; color: var(--text-muted);">
+              Mengambil data perkuliahan langsung dari BAAK UNAMA untuk tanggal <strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>.
+            </div>
+          </div>
+        `;
+      }
+
+      try {
+        await fetch(`${API_BASE_URL}/api/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tanggal: targetDate, from_dashboard: true })
+        });
+        await fetchAllJadwal();
+      } catch (err) {
+        console.error("Gagal auto-sync selected date TV mode:", err);
+      } finally {
+        isTvAutoSyncing = false;
+      }
     }
   }
 
@@ -8469,6 +8533,7 @@ async function openTvMode() {
 }
 
 function closeTvMode(exitFullscreen = true) {
+  currentTvTargetDate = null;
   const overlay = document.getElementById('tv-mode-overlay');
   if (overlay) {
     overlay.classList.remove('active');
@@ -8577,21 +8642,22 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
   const grid = document.getElementById('tv-grid-container');
   if (!grid) return;
 
-  const selectedDate = document.getElementById('filter-tanggal')?.value;
+  const selectedDate = document.getElementById('filter-tanggal')?.value?.trim();
   const todayStr = getTodayLocalDateStr();
-  let targetDate = forceTargetDate || selectedDate || todayStr;
+  let targetDate = forceTargetDate || currentTvTargetDate || selectedDate || todayStr;
+
+  const subtitleEl = document.getElementById('tv-mode-subtitle');
+  if (subtitleEl) {
+    if (selectedDate && selectedDate !== todayStr) {
+      subtitleEl.innerText = `Universitas Dinamika Bangsa (UNAMA) • Jadwal Perkuliahan: ${formatTanggalIndo(targetDate)}`;
+    } else {
+      subtitleEl.innerText = `Universitas Dinamika Bangsa (UNAMA) • Live Status Display (Hari Ini)`;
+    }
+  }
 
   let dayJadwal = [];
   if (Array.isArray(allJadwal)) {
     dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
-  }
-
-  if (dayJadwal.length === 0 && !selectedDate && Array.isArray(allJadwal) && allJadwal.length > 0) {
-    const datesWithData = [...new Set(allJadwal.map(j => j.tanggal).filter(Boolean))].sort().reverse();
-    if (datesWithData.length > 0) {
-      targetDate = datesWithData[0];
-      dayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
-    }
   }
 
   // 1. Hitung Statistik Metode (TM, OL, CC, Total)
@@ -8736,9 +8802,9 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
           <line x1="8" y1="2" x2="8" y2="6"></line>
           <line x1="3" y1="10" x2="21" y2="10"></line>
         </svg>
-        <div style="font-size: 1.2em; font-weight: 800; color: var(--text);">Tidak Ada Jadwal Kuliah</div>
+        <div style="font-size: 1.2em; font-weight: 800; color: var(--text);">${targetDate === todayStr ? 'Tidak Ada Jadwal Kuliah Hari Ini' : 'Tidak Ada Jadwal Kuliah'}</div>
         <div style="font-size: 0.92em; margin-top: 6px; color: var(--text-muted);">
-          Tidak ada perkuliahan aktif pada tanggal <strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>.
+          Tidak ada perkuliahan aktif pada ${targetDate === todayStr ? 'hari ini' : 'tanggal'} (<strong>${escapeHtml(formatTanggalIndo(targetDate))}</strong>).
         </div>
       </div>
     `;

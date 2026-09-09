@@ -1037,10 +1037,21 @@
         <div class="sem-banner-title-wrap">
           <h2 class="sem-banner-title">Eksplorasi Database Semester</h2>
           <div class="sem-switcher-box">
-            <label for="sem-explorer-select" class="visually-hidden">Pilih Semester:</label>
-            <select id="sem-explorer-select" class="sem-select-pill" onchange="switchExplorerSemester(this.value)">
-              <!-- Options populated dynamically -->
-            </select>
+            <div class="custom-select-wrapper sem-switcher-select-wrapper" id="wrapper-sem-switch">
+              <div class="custom-select-trigger sem-switcher-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+                onclick="toggleCustomSelect('sem-switch', event)">
+                <span class="custom-select-label sem-switcher-label" id="sem-label-switch">Pilih Semester...</span>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+              <div class="aslab-list-container custom-select-dropdown sem-custom-dropdown sem-switcher-dropdown" id="dropdown-sem-switch">
+                <div class="sem-dropdown-list-scroll" id="items-sem-switch">
+                  <!-- Semester options injected by JS -->
+                </div>
+              </div>
+              <input type="hidden" id="sem-filter-switch" value="">
+            </div>
           </div>
         </div>
         <p class="sem-banner-subdesc">
@@ -3205,7 +3216,7 @@
     <div class="tv-header">
       <div class="tv-title-area">
         <h1>JADWAL KULIAH KELAS & LABOR</h1>
-        <p>Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
+        <p id="tv-mode-subtitle">Universitas Dinamika Bangsa (UNAMA) • Live Status Display</p>
       </div>
 
       <div class="tv-header-right">

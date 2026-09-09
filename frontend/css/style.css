@@ -3721,25 +3721,98 @@ body.semester-explorer-active #semester-explorer-container {
   color: var(--text-dark);
 }
 
-.sem-select-pill {
+.sem-switcher-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sem-switcher-select-wrapper {
+  position: relative;
+  min-width: 200px;
+}
+
+.sem-switcher-trigger {
+  height: 38px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid rgba(139, 92, 246, 0.45);
+  background: var(--bg-card);
+  color: #8b5cf6;
   font-family: var(--font-heading);
   font-size: 0.9em;
   font-weight: 800;
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
-  border: 1.5px solid rgba(139, 92, 246, 0.4);
-  background: var(--bg-card);
-  color: #8b5cf6;
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   outline: none;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.15);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15);
+  user-select: none;
+  box-sizing: border-box;
 }
 
-.sem-select-pill:hover,
-.sem-select-pill:focus {
-  border-color: var(--primary);
+.sem-switcher-trigger:hover,
+.sem-switcher-trigger:focus {
+  border-color: #8b5cf6;
   background: var(--bg-elevated);
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.25), 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+.sem-switcher-trigger .custom-select-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.sem-switcher-trigger svg {
+  flex-shrink: 0;
+  color: #8b5cf6;
+  transition: transform 0.2s ease;
+}
+
+.custom-select-dropdown.sem-switcher-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 260px;
+  width: max-content;
+  max-width: 340px;
+  background: var(--bg-card);
+  border: 1.5px solid rgba(139, 92, 246, 0.35);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border);
+  padding: 6px;
+  z-index: 10060;
+}
+
+.aslab-list-item.active .badge-mini-sem {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #fff !important;
+}
+
+[data-theme="dark"] .sem-switcher-trigger {
+  background: var(--bg-card);
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.4);
+}
+
+[data-theme="dark"] .sem-switcher-trigger:hover,
+[data-theme="dark"] .sem-switcher-trigger:focus {
+  border-color: #c084fc;
+  box-shadow: 0 4px 14px rgba(192, 132, 252, 0.25), 0 0 0 3px rgba(192, 132, 252, 0.15);
+}
+
+[data-theme="dark"] .sem-switcher-trigger svg {
+  color: #c084fc;
+}
+
+[data-theme="dark"] .custom-select-dropdown.sem-switcher-dropdown {
+  background: var(--bg-card);
+  border-color: rgba(192, 132, 252, 0.3);
 }
 
 .sem-banner-subdesc {
