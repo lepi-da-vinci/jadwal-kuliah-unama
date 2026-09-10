@@ -731,6 +731,13 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   max-height: 90vh !important;
 }
 
+#lab-modal .modal-box {
+  width: 94% !important;
+  max-width: 720px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
 #modal-fs-filter .modal-box {
   overflow: visible !important;
 }
@@ -1140,7 +1147,14 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
 .text-muted { color: var(--text-secondary); }
 .search-result { color: var(--text-secondary); font-weight: 600; }
 
-/* ─── Modal ─── */
+/* ─── Modal & Body Scroll Lock ─── */
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  height: 100% !important;
+  overscroll-behavior: none !important;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1150,8 +1164,9 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 100000;
   animation: fadeIn 0.2s ease;
+  overscroll-behavior: contain;
 }
 .modal-overlay.open { display: flex; }
 .modal-box {
@@ -1229,7 +1244,8 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   transition: all var(--transition);
   box-shadow: var(--clay-outer-sm);
   flex-shrink: 0;
-  margin-top: auto;
+  margin-top: 0;
+  margin-bottom: 4px;
 }
 .modal-box .modal-btn:hover {
   background: var(--primary-dark);
@@ -4490,7 +4506,7 @@ body.semester-explorer-active #semester-explorer-container {
   border-top: 1px solid var(--border);
   justify-content: space-around;
   align-items: center;
-  z-index: 9999;
+  z-index: 9000;
   padding: 0 8px;
   padding-bottom: env(safe-area-inset-bottom);
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
@@ -4803,38 +4819,43 @@ body.semester-explorer-active #semester-explorer-container {
 
   .header-left {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
     width: 100%;
+    gap: 8px;
   }
 
   .header h1 {
-    font-size: 1.18rem !important;
+    font-size: 1.25rem !important;
     font-weight: 800 !important;
     letter-spacing: -0.02em;
     margin: 0 !important;
     padding: 0 !important;
     line-height: 1.2;
+    white-space: nowrap;
   }
 
   .header-actions {
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
-  .header-actions #sync-btn,
+  /* Sembunyikan tombol setting di header pada mode HP (ada di navbar bawah) */
   .header-actions #test-wa-btn {
-    padding: 6px 12px;
+    display: none !important;
+  }
+
+  .header-actions #sync-btn {
+    padding: 6px 14px;
     font-size: 0.82rem;
     height: 36px;
     gap: 5px;
   }
 
-  .header-actions #sync-btn svg,
-  .header-actions #test-wa-btn svg {
+  .header-actions #sync-btn svg {
     width: 15px;
     height: 15px;
   }
@@ -5024,27 +5045,83 @@ body.semester-explorer-active #semester-explorer-container {
   .modal-overlay {
     align-items: flex-end !important;
     padding: 0 !important;
+    z-index: 100000 !important;
   }
 
+  #modal-fs-filter .modal-box,
+  #room-detail-modal .modal-box,
+  #modal-fs-info .modal-box,
+  #modal-fitur .modal-box,
+  #lab-modal .modal-box,
   .modal-box {
     width: 100% !important;
     max-width: 100% !important;
-    max-height: 88vh !important;
-    border-radius: 24px 24px 0 0 !important;
+    max-height: calc(85vh - env(safe-area-inset-bottom)) !important;
+    border-radius: 26px 26px 0 0 !important;
     margin: 0 !important;
-    padding: 20px 16px calc(24px + env(safe-area-inset-bottom)) 16px !important;
-    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    margin-top: auto !important;
+    padding: 16px 18px calc(26px + env(safe-area-inset-bottom)) 18px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45) !important;
+    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
   }
 
   .modal-box::before {
     content: "";
     display: block;
-    width: 36px;
+    width: 40px;
     height: 4px;
     background: var(--border);
     border-radius: 2px;
-    margin: 0 auto 14px auto;
+    margin: 0 auto 12px auto;
     opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .modal-box .modal-icon {
+    width: 52px !important;
+    height: 52px !important;
+    font-size: 1.5em !important;
+    margin: 0 auto 10px auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .modal-box h2,
+  #lab-modal-title {
+    font-size: 1.18rem !important;
+    margin-bottom: 12px !important;
+    flex-shrink: 0 !important;
+    text-align: center !important;
+  }
+
+  .modal-box .modal-body,
+  #lab-modal-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    margin-bottom: 14px !important;
+    padding-right: 4px !important;
+    font-size: 0.92rem !important;
+    line-height: 1.5 !important;
+  }
+
+  .modal-box .modal-btn,
+  #modal-close-btn {
+    flex-shrink: 0 !important;
+    width: 100% !important;
+    padding: 13px 24px !important;
+    font-size: 0.98rem !important;
+    border-radius: var(--radius-full) !important;
+    margin-top: 0 !important;
+    margin-bottom: 4px !important;
+    box-sizing: border-box !important;
+    box-shadow: var(--clay-outer-sm) !important;
   }
 
   /* Spotlight Search & Details on Mobile */

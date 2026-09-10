@@ -6032,6 +6032,9 @@ let autoCloseTimeout = null;
 
 function openModal(isRepeat = false) {
   modal.classList.add('open');
+  modal.style.display = 'flex';
+  if (typeof pushModalHistory === 'function') pushModalHistory('lab-modal');
+  if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
   playNotificationSound();
 
   // Ulangi alarm setiap 3 menit jika belum ditutup dan isRepeat = true
@@ -6052,6 +6055,9 @@ function openModal(isRepeat = false) {
 
 function closeModal() {
   modal.classList.remove('open');
+  modal.style.display = 'none';
+  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('lab-modal');
+  if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
   if (alarmInterval) {
     clearInterval(alarmInterval);
     alarmInterval = null;
@@ -9193,6 +9199,134 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================================================
+// BODY SCROLL LOCK CONTROLLER (Mencegah background ikut scroll saat overlay aktif)
+// =========================================================================
+function isAnyOverlayOpen() {
+  const openSelectors = [
+    '.modal-overlay.open',
+    '.spotlight-backdrop.open',
+    '.spotlight-backdrop.active',
+    '.modal.open',
+    '#modal-fs-filter.open',
+    '#modal-fs-info.open',
+    '#lab-modal.open',
+    '#test-wa-modal.open',
+    '#security-modal.open',
+    '#security-pin-modal.open',
+    '#room-detail-modal.open',
+    '#db-clear-modal.open',
+    '#db-backup-modal.open',
+    '#db-restore-modal.open'
+  ];
+  for (const sel of openSelectors) {
+    const el = document.querySelector(sel);
+    if (el && window.getComputedStyle(el).display !== 'none') {
+      return true;
+    }
+  }
+  const checkElements = [
+    document.getElementById('lab-modal'),
+    document.getElementById('test-wa-modal'),
+    document.getElementById('spotlight-backdrop'),
+    document.getElementById('spotlight-detail-backdrop'),
+    document.getElementById('room-detail-modal'),
+    document.getElementById('modal-fs-filter'),
+    document.getElementById('modal-fs-info'),
+    document.getElementById('modal-fitur'),
+    document.getElementById('security-pin-modal'),
+    document.getElementById('db-clear-modal')
+  ];
+  for (const el of checkElements) {
+    if (el && (el.classList.contains('open') || el.style.display === 'flex' || el.style.display === 'block')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function updateBodyScrollLock() {
+  const shouldLock = isAnyOverlayOpen();
+  if (shouldLock) {
+    if (!document.body.classList.contains('modal-open')) {
+      document.body.classList.add('modal-open');
+      document.documentElement.classList.add('modal-open');
+    }
+  } else {
+    if (document.body.classList.contains('modal-open')) {
+      document.body.classList.remove('modal-open');
+      document.documentElement.classList.remove('modal-open');
+    }
+  }
+}
+window.updateBodyScrollLock = updateBodyScrollLock;
+
+// Pantau pembukaan/penutupan modal secara otomatis
+if (typeof MutationObserver !== 'undefined') {
+  const _bodyScrollLockObserver = new MutationObserver(() => {
+    updateBodyScrollLock();
+  });
+  _bodyScrollLockObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class', 'style'],
+    subtree: true
+  });
+}
+
+// Mencegah scroll pada backdrop atau background saat modal aktif di layar sentuh
+document.addEventListener('touchmove', (e) => {
+  if (document.body.classList.contains('modal-open')) {
+    let target = e.target;
+    let canScroll = false;
+    while (target && target !== document.body && target !== document.documentElement) {
+      if (
+        target.classList.contains('modal-body') ||
+        target.classList.contains('spotlight-results') ||
+        target.classList.contains('fs-modal-body') ||
+        target.classList.contains('spotlight-modal') ||
+        target.id === 'lab-modal-body' ||
+        target.id === 'wa-modal-body' ||
+        target.classList.contains('sem-modal-body')
+      ) {
+        if (target.scrollHeight > target.clientHeight) {
+          canScroll = true;
+          break;
+        }
+      }
+      target = target.parentElement;
+    }
+    if (!canScroll) {
+      e.preventDefault();
+    }
+  }
+}, { passive: false });
+
+// Mencegah scroll roda mouse desktop tembus ke background saat modal aktif
+document.addEventListener('wheel', (e) => {
+  if (document.body.classList.contains('modal-open')) {
+    let target = e.target;
+    let canScroll = false;
+    while (target && target !== document.body && target !== document.documentElement) {
+      if (
+        target.classList.contains('modal-body') ||
+        target.classList.contains('spotlight-results') ||
+        target.classList.contains('fs-modal-body') ||
+        target.id === 'lab-modal-body' ||
+        target.id === 'wa-modal-body'
+      ) {
+        if (target.scrollHeight > target.clientHeight) {
+          canScroll = true;
+          break;
+        }
+      }
+      target = target.parentElement;
+    }
+    if (!canScroll) {
+      e.preventDefault();
+    }
+  }
+}, { passive: false });
+
+// =========================================================================
 // MOBILE HARDWARE BACK BUTTON & MODAL HISTORY STACK MANAGER
 // =========================================================================
 let _suppressModalHistoryPop = false;
@@ -9248,6 +9382,13 @@ window.syncMobileNavActiveState = syncMobileNavActiveState;
 
 // Tutup semua modal saat berpindah tab via navigasi bawah
 function closeAllModalsForNav() {
+  // 0. Notifikasi Lab modal
+  const labModal = document.getElementById('lab-modal');
+  if (labModal && (labModal.classList.contains('open') || labModal.style.display === 'flex')) {
+    if (typeof closeModal === 'function') closeModal();
+    else { labModal.classList.remove('open'); labModal.style.display = 'none'; }
+  }
+
   // 1. Spotlight search & detail
   if (typeof closeSpotlightDetailModal === 'function') closeSpotlightDetailModal();
   if (typeof closeSpotlightModal === 'function') closeSpotlightModal();
@@ -9269,6 +9410,8 @@ function closeAllModalsForNav() {
   if (typeof closeTvMode === 'function' && typeof isTvModeActive !== 'undefined' && isTvModeActive) {
     closeTvMode();
   }
+
+  updateBodyScrollLock();
 }
 window.closeAllModalsForNav = closeAllModalsForNav;
 
@@ -9276,11 +9419,22 @@ window.closeAllModalsForNav = closeAllModalsForNav;
 window.addEventListener('popstate', (event) => {
   if (_suppressModalHistoryPop) return;
 
+  // 0. Modal Notifikasi Lab
+  const labModal = document.getElementById('lab-modal');
+  if (labModal && (labModal.classList.contains('open') || labModal.style.display === 'flex')) {
+    if (typeof closeModal === 'function') closeModal();
+    else { labModal.classList.remove('open'); labModal.style.display = 'none'; }
+    syncMobileNavActiveState();
+    updateBodyScrollLock();
+    return;
+  }
+
   // 1. Detail modal spotlight
   const detailBackdrop = document.getElementById('spotlight-detail-backdrop');
   if (detailBackdrop && detailBackdrop.classList.contains('open')) {
     if (typeof closeSpotlightDetailModal === 'function') closeSpotlightDetailModal();
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9289,6 +9443,7 @@ window.addEventListener('popstate', (event) => {
   if (spotlightBackdrop && spotlightBackdrop.classList.contains('open')) {
     if (typeof closeSpotlightModal === 'function') closeSpotlightModal();
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9312,6 +9467,7 @@ window.addEventListener('popstate', (event) => {
     }
     if (typeof closeSettingModal === 'function') closeSettingModal(false);
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9320,6 +9476,7 @@ window.addEventListener('popstate', (event) => {
   if (clearDbModal && clearDbModal.classList.contains('open')) {
     clearDbModal.classList.remove('open');
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9327,6 +9484,7 @@ window.addEventListener('popstate', (event) => {
   if (backupModal && backupModal.classList.contains('open')) {
     backupModal.classList.remove('open');
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9334,6 +9492,7 @@ window.addEventListener('popstate', (event) => {
   if (restoreModal && restoreModal.classList.contains('open')) {
     restoreModal.classList.remove('open');
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9341,6 +9500,7 @@ window.addEventListener('popstate', (event) => {
   if (secModal && secModal.classList.contains('open')) {
     secModal.classList.remove('open');
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
@@ -9348,10 +9508,12 @@ window.addEventListener('popstate', (event) => {
   if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode) {
     if (typeof exitSemesterExplorerMode === 'function') exitSemesterExplorerMode();
     syncMobileNavActiveState();
+    updateBodyScrollLock();
     return;
   }
 
   syncMobileNavActiveState();
+  updateBodyScrollLock();
 });
 
 // =========================================================================
