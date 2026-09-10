@@ -1,4 +1,4 @@
-<!-- ==================== FLOATING MOBILE BOTTOM NAVIGATION DOCK ==================== -->
+<!-- ==================== FLOATING MOBILE BOTTOM NAVIGATION DOCK (4 ITEMS) ==================== -->
 <nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="Navigasi Bawah Seluler">
   <button type="button" class="mobile-nav-btn active" id="mobile-nav-jadwal" onclick="handleMobileNavAction('jadwal')">
     <div class="mobile-nav-icon">
@@ -8,6 +8,7 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Jadwal</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 
   <button type="button" class="mobile-nav-btn" id="mobile-nav-search" onclick="handleMobileNavAction('search')">
@@ -18,16 +19,7 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Cari</span>
-  </button>
-
-  <button type="button" class="mobile-nav-btn" id="mobile-nav-tv" onclick="handleMobileNavAction('tv')">
-    <div class="mobile-nav-icon mobile-nav-highlight">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
-        <polyline points="17 2 12 7 7 2"></polyline>
-      </svg>
-    </div>
-    <span class="mobile-nav-label">Mode TV</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 
   <button type="button" class="mobile-nav-btn" id="mobile-nav-database" onclick="handleMobileNavAction('database')">
@@ -39,6 +31,7 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Database</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 
   <button type="button" class="mobile-nav-btn" id="mobile-nav-setting" onclick="handleMobileNavAction('setting')">
@@ -49,5 +42,6 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Setting</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 </nav>

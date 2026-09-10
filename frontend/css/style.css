@@ -161,10 +161,15 @@ button, input, select, textarea { font-family: var(--font); }
   border: none;
   transition: background var(--transition), box-shadow var(--transition);
 }
+.header-brand {
+  display: flex;
+  align-items: center;
+}
 .header h1 {
   font-size: 1.35em;
   font-weight: 700;
   letter-spacing: -0.02em;
+  margin: 0;
   background: linear-gradient(135deg, var(--primary), var(--primary-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -4489,39 +4494,51 @@ body.semester-explorer-active #semester-explorer-container {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 6px 0;
+  padding: 6px 0 4px 0;
   border-radius: var(--radius-md);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   outline: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
 }
 
 .mobile-nav-btn:active {
-  transform: scale(0.92);
+  transform: scale(0.91);
 }
 
 .mobile-nav-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-full);
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .mobile-nav-label {
   font-family: var(--font);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.2px;
-  transition: color 0.2s ease;
+  letter-spacing: 0.1px;
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: transparent;
+  margin-top: 2px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+  transform: scale(0);
 }
 
 .mobile-nav-btn.active {
@@ -4529,13 +4546,24 @@ body.semester-explorer-active #semester-explorer-container {
 }
 
 .mobile-nav-btn.active .mobile-nav-icon {
-  background: rgba(99, 102, 241, 0.14);
+  background: rgba(99, 102, 241, 0.15);
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.22);
 }
 
-.mobile-nav-highlight {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.25));
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  color: #8b5cf6;
+.mobile-nav-btn.active .mobile-nav-label {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.mobile-nav-btn.active .mobile-nav-dot {
+  background: var(--primary);
+  width: 14px;
+  height: 3px;
+  border-radius: 3px;
+  opacity: 1;
+  transform: scale(1);
+  box-shadow: 0 1px 6px rgba(99, 102, 241, 0.5);
 }
 
 [data-theme="dark"] .mobile-bottom-nav {
@@ -4755,53 +4783,84 @@ body.semester-explorer-active #semester-explorer-container {
     display: flex;
   }
 
-  /* Header Bar */
+  /* Header Bar Mobile */
   .header {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
-    padding: 10px 4px;
+    gap: 8px;
+    padding: 12px 14px;
     margin-bottom: 12px;
+    border-radius: var(--radius-lg);
+  }
+
+  .header-brand {
+    order: 1;
+    display: flex;
+    align-items: center;
   }
 
   .header h1 {
-    font-size: 1.35rem !important;
-    margin: 0;
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.2;
   }
 
   .header-actions {
+    order: 2;
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
-  .header-actions .btn {
-    padding: 8px 12px;
-    font-size: 0.84rem;
-    height: 38px;
+  /* Sembunyikan tombol setting di header atas pada mode HP */
+  .header-actions #test-wa-btn {
+    display: none !important;
+  }
+
+  .header-actions #sync-btn {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    height: 36px;
+    gap: 5px;
+  }
+
+  .header-actions #sync-btn svg {
+    width: 15px;
+    height: 15px;
   }
 
   .header-actions #theme-toggle {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .stats-row {
-    width: 100%;
-    margin-top: 4px;
-    justify-content: flex-start;
+  /* Statistik pas di tengah secara simetris dan rapi */
+  .header .stats-row,
+  #stat-container.stats-row {
+    order: 3;
+    width: 100% !important;
+    margin: 8px auto 0 auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 6px !important;
+    text-align: center !important;
   }
 
   .stat-badge {
     font-size: 0.78rem;
-    padding: 4px 10px;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
   }
 
   /* Filters */
@@ -4952,17 +5011,18 @@ body.semester-explorer-active #semester-explorer-container {
   }
 
   /* Modals as Modern Bottom Sheets */
-  .modal {
-    align-items: flex-end;
-    padding: 0;
+  .modal,
+  .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
   }
 
   .modal-box {
     width: 100% !important;
     max-width: 100% !important;
-    max-height: 88vh;
+    max-height: 88vh !important;
     border-radius: 24px 24px 0 0 !important;
-    margin: 0;
+    margin: 0 !important;
     padding: 20px 16px calc(24px + env(safe-area-inset-bottom)) 16px !important;
     animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -4978,9 +5038,97 @@ body.semester-explorer-active #semester-explorer-container {
     opacity: 0.7;
   }
 
+  /* Spotlight Search & Details on Mobile */
+  .spotlight-backdrop {
+    padding: 0 !important;
+    align-items: flex-end !important;
+    background: rgba(0, 0, 0, 0.65) !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+  }
+
+  .spotlight-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 90vh !important;
+    max-height: 90vh !important;
+    border-radius: 24px 24px 0 0 !important;
+    margin: 0 !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.45) !important;
+    transform: translateY(100%) !important;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  .spotlight-backdrop.open .spotlight-modal {
+    transform: translateY(0) !important;
+  }
+
+  .spotlight-input-wrap {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .spotlight-input {
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+    font-size: 0.95rem !important;
+    padding: 0 4px !important;
+  }
+
+  .spotlight-btn-close-wrap {
+    padding: 6px 10px !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    border-radius: var(--radius-full) !important;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border) !important;
+  }
+
+  .spotlight-esc-text,
   .spotlight-shortcut-hint,
-  .kbd-shortcut {
+  .kbd-shortcut,
+  .spotlight-btn-close-wrap .kbd-badge {
     display: none !important;
+  }
+
+  .spotlight-tabs {
+    padding: 8px 12px !important;
+    gap: 6px !important;
+    min-height: 48px !important;
+  }
+
+  .spotlight-tab-btn {
+    padding: 6px 12px !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap !important;
+  }
+
+  .spotlight-footer {
+    padding: 10px 14px !important;
+    font-size: 0.78rem !important;
+    justify-content: center !important;
+  }
+
+  .spotlight-keys {
+    display: none !important;
+  }
+
+  .spotlight-results {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .spotlight-item {
+    padding: 10px 12px !important;
+    border-radius: var(--radius-md) !important;
   }
 
   /* Semester Explorer Mobile */

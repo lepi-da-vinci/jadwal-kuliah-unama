@@ -2681,6 +2681,9 @@ function closeSettingModal(keepAdminSession = false) {
   if (!keepAdminSession && !isTestingPopupNotif) {
     exitAdminMode();
   }
+
+  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('setting');
+  if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
 }
 
 function getAdminHeaders(customHeaders = {}) {
@@ -3040,6 +3043,8 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 
     showMenu();
     testModal.classList.add('open');
+    if (typeof pushModalHistory === 'function') pushModalHistory('setting');
+    if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
 
     // Tutup modal
     document.getElementById('wa-modal-close-btn').onclick = () => {
@@ -8033,6 +8038,8 @@ function openSpotlightModal() {
     spotlightActiveIndex = 0;
     updateSpotlightCategoryTabs();
     renderSpotlightResults('');
+    if (typeof pushModalHistory === 'function') pushModalHistory('spotlight');
+    if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
     setTimeout(() => {
       input.focus();
       input.select();
@@ -8051,13 +8058,15 @@ window.handleSpotlightInput = handleSpotlightInput;
 function closeSpotlightModal(e) {
   if (e && e.target) {
     const isBackdrop = e.target === document.getElementById('spotlight-backdrop');
-    const isCloseBtn = e.target.closest('.spotlight-btn-close-wrap') || e.target.closest('.kbd-badge') || e.target.closest('.spotlight-btn-back');
+    const isCloseBtn = e.target.closest('.spotlight-btn-close-wrap') || e.target.closest('.spotlight-esc-text') || e.target.closest('.kbd-badge') || e.target.closest('.spotlight-btn-back');
     if (!isBackdrop && !isCloseBtn) {
       return;
     }
   }
   const backdrop = document.getElementById('spotlight-backdrop');
   if (backdrop) backdrop.classList.remove('open');
+  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('spotlight');
+  if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
 }
 
 function clearSpotlightInput() {
@@ -8551,15 +8560,18 @@ function openSpotlightDetailModal(item) {
   const spotlightBackdrop = document.getElementById('spotlight-backdrop');
   if (spotlightBackdrop) spotlightBackdrop.classList.remove('open');
   backdrop.classList.add('open');
+  if (typeof pushModalHistory === 'function') pushModalHistory('spotlight-detail');
 }
 
 function backToSpotlightModal() {
   const detailBackdrop = document.getElementById('spotlight-detail-backdrop');
   if (detailBackdrop) detailBackdrop.classList.remove('open');
+  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('spotlight-detail');
 
   const spotlightBackdrop = document.getElementById('spotlight-backdrop');
   if (spotlightBackdrop) {
     spotlightBackdrop.classList.add('open');
+    if (typeof pushModalHistory === 'function') pushModalHistory('spotlight');
     const input = document.getElementById('spotlight-input');
     if (input) input.focus();
   }
@@ -8571,6 +8583,8 @@ function closeSpotlightDetailModal(e) {
   }
   const backdrop = document.getElementById('spotlight-detail-backdrop');
   if (backdrop) backdrop.classList.remove('open');
+  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('spotlight-detail');
+  if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
 }
 
 function applySpotlightFilterToMainTable(type, val, schedules) {
@@ -9179,7 +9193,169 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================================================
-// MOBILE BOTTOM NAVIGATION DOCK HANDLER
+// MOBILE HARDWARE BACK BUTTON & MODAL HISTORY STACK MANAGER
+// =========================================================================
+let _suppressModalHistoryPop = false;
+
+function pushModalHistory(modalName) {
+  try {
+    const currentState = window.history.state || {};
+    if (currentState.modal !== modalName) {
+      window.history.pushState({ modal: modalName, ts: Date.now() }, '');
+    }
+  } catch (err) {
+    console.warn('History pushState error:', err);
+  }
+}
+window.pushModalHistory = pushModalHistory;
+
+function popModalHistoryIfNeeded(modalName) {
+  try {
+    const currentState = window.history.state;
+    if (currentState && currentState.modal === modalName) {
+      _suppressModalHistoryPop = true;
+      window.history.back();
+      setTimeout(() => {
+        _suppressModalHistoryPop = false;
+      }, 120);
+    }
+  } catch (err) {
+    console.warn('History back error:', err);
+  }
+}
+window.popModalHistoryIfNeeded = popModalHistoryIfNeeded;
+
+// Sinkronisasi tombol navigasi bawah agar selalu akurat terhadap tampilan aktif
+function syncMobileNavActiveState() {
+  document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+
+  const spotlightBackdrop = document.getElementById('spotlight-backdrop');
+  const spotlightDetail = document.getElementById('spotlight-detail-backdrop');
+  const settingModal = document.getElementById('test-wa-modal');
+
+  if ((spotlightBackdrop && spotlightBackdrop.classList.contains('open')) ||
+      (spotlightDetail && spotlightDetail.classList.contains('open'))) {
+    document.getElementById('mobile-nav-search')?.classList.add('active');
+  } else if (settingModal && settingModal.classList.contains('open')) {
+    document.getElementById('mobile-nav-setting')?.classList.add('active');
+  } else if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode) {
+    document.getElementById('mobile-nav-database')?.classList.add('active');
+  } else {
+    document.getElementById('mobile-nav-jadwal')?.classList.add('active');
+  }
+}
+window.syncMobileNavActiveState = syncMobileNavActiveState;
+
+// Tutup semua modal saat berpindah tab via navigasi bawah
+function closeAllModalsForNav() {
+  // 1. Spotlight search & detail
+  if (typeof closeSpotlightDetailModal === 'function') closeSpotlightDetailModal();
+  if (typeof closeSpotlightModal === 'function') closeSpotlightModal();
+
+  // 2. Setting modal
+  if (typeof closeSettingModal === 'function') closeSettingModal(false);
+
+  // 3. Database maintenance modals
+  document.getElementById('db-clear-modal')?.classList.remove('open');
+  document.getElementById('db-backup-modal')?.classList.remove('open');
+  document.getElementById('db-restore-modal')?.classList.remove('open');
+  document.getElementById('security-pin-modal')?.classList.remove('open');
+
+  // 4. Info & Filter Modals
+  if (typeof closeFullscreenFilterModal === 'function') closeFullscreenFilterModal();
+  if (typeof closeFullscreenInfoModal === 'function') closeFullscreenInfoModal();
+
+  // 5. TV Mode jika terbuka
+  if (typeof closeTvMode === 'function' && typeof isTvModeActive !== 'undefined' && isTvModeActive) {
+    closeTvMode();
+  }
+}
+window.closeAllModalsForNav = closeAllModalsForNav;
+
+// Tangani tombol navigasi/swipe kembali pada smartphone agar menutup modal dan tidak keluar dari web
+window.addEventListener('popstate', (event) => {
+  if (_suppressModalHistoryPop) return;
+
+  // 1. Detail modal spotlight
+  const detailBackdrop = document.getElementById('spotlight-detail-backdrop');
+  if (detailBackdrop && detailBackdrop.classList.contains('open')) {
+    if (typeof closeSpotlightDetailModal === 'function') closeSpotlightDetailModal();
+    syncMobileNavActiveState();
+    return;
+  }
+
+  // 2. Modal spotlight search
+  const spotlightBackdrop = document.getElementById('spotlight-backdrop');
+  if (spotlightBackdrop && spotlightBackdrop.classList.contains('open')) {
+    if (typeof closeSpotlightModal === 'function') closeSpotlightModal();
+    syncMobileNavActiveState();
+    return;
+  }
+
+  // 3. Modal setting & sub-modals (aslab, ruangan, semester)
+  const settingModal = document.getElementById('test-wa-modal');
+  if (settingModal && settingModal.classList.contains('open')) {
+    const aslabModal = document.getElementById('wa-modal-data-aslab');
+    const ruanganModal = document.getElementById('wa-modal-data-ruangan');
+    const semSelector = document.getElementById('wa-modal-semester-selector');
+    if (aslabModal && aslabModal.style.display === 'flex') {
+      document.getElementById('wa-modal-back-aslab-btn')?.click();
+      return;
+    }
+    if (ruanganModal && ruanganModal.style.display === 'flex') {
+      document.getElementById('wa-modal-back-ruangan-btn')?.click();
+      return;
+    }
+    if (semSelector && semSelector.style.display === 'flex') {
+      document.getElementById('wa-modal-back-semester-btn')?.click();
+      return;
+    }
+    if (typeof closeSettingModal === 'function') closeSettingModal(false);
+    syncMobileNavActiveState();
+    return;
+  }
+
+  // 4. Modal Database lainnya
+  const clearDbModal = document.getElementById('db-clear-modal');
+  if (clearDbModal && clearDbModal.classList.contains('open')) {
+    clearDbModal.classList.remove('open');
+    syncMobileNavActiveState();
+    return;
+  }
+
+  const backupModal = document.getElementById('db-backup-modal');
+  if (backupModal && backupModal.classList.contains('open')) {
+    backupModal.classList.remove('open');
+    syncMobileNavActiveState();
+    return;
+  }
+
+  const restoreModal = document.getElementById('db-restore-modal');
+  if (restoreModal && restoreModal.classList.contains('open')) {
+    restoreModal.classList.remove('open');
+    syncMobileNavActiveState();
+    return;
+  }
+
+  const secModal = document.getElementById('security-pin-modal');
+  if (secModal && secModal.classList.contains('open')) {
+    secModal.classList.remove('open');
+    syncMobileNavActiveState();
+    return;
+  }
+
+  // 5. Jika berada di Mode Explorer Semester -> kembali ke Jadwal Utama
+  if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode) {
+    if (typeof exitSemesterExplorerMode === 'function') exitSemesterExplorerMode();
+    syncMobileNavActiveState();
+    return;
+  }
+
+  syncMobileNavActiveState();
+});
+
+// =========================================================================
+// MOBILE BOTTOM NAVIGATION DOCK (4 ITEMS)
 // =========================================================================
 function openSettingModal() {
   const btn = document.getElementById('test-wa-btn');
@@ -9188,30 +9364,31 @@ function openSettingModal() {
 window.openSettingModal = openSettingModal;
 
 function handleMobileNavAction(action) {
-  document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
-  const activeBtn = document.getElementById(`mobile-nav-${action}`);
-  if (activeBtn) activeBtn.classList.add('active');
-
   if (action === 'jadwal') {
-    if (isSemesterExplorerMode) {
+    closeAllModalsForNav();
+    if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode) {
       exitSemesterExplorerMode();
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    syncMobileNavActiveState();
   } else if (action === 'search') {
+    if (typeof closeSettingModal === 'function') closeSettingModal(false);
     openSpotlightModal();
-  } else if (action === 'tv') {
-    openTvMode();
+    syncMobileNavActiveState();
   } else if (action === 'database') {
+    closeAllModalsForNav();
     if (!isSemesterExplorerMode) {
       launchSelectedSemesterExplorer();
     } else {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+    syncMobileNavActiveState();
   } else if (action === 'setting') {
+    if (typeof closeSpotlightModal === 'function') closeSpotlightModal();
     openSettingModal();
+    syncMobileNavActiveState();
   }
 }
-
 window.handleMobileNavAction = handleMobileNavAction;
 
 

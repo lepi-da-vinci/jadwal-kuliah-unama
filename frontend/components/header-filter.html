@@ -1,5 +1,7 @@
     <header class="header">
-      <h1>Jadwal Kuliah</h1>
+      <div class="header-brand">
+        <h1>Jadwal Kuliah</h1>
+      </div>
       <div class="header-actions">
         <button id="sync-btn" class="btn btn-primary" aria-label="Sinkron">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -20,9 +22,6 @@
           </svg>
           Setting
         </button>
-        <div class="stats-row" id="stat-container">
-          <div class="stat-badge">Memuat statistik...</div>
-        </div>
         <button id="theme-toggle" class="btn btn-ghost" aria-label="Ganti tema gelap terang">
           <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -41,6 +40,9 @@
             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
           </svg>
         </button>
+      </div>
+      <div class="stats-row" id="stat-container">
+        <div class="stat-badge">Memuat statistik...</div>
       </div>
     </header>
 

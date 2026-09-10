@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260908_semester_v4">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260910_mobile_v7">
 </head>
 
 <body>
@@ -23,7 +23,9 @@
     <div id="live-dashboard-view">
       <!-- HEADER & FILTERS -->
           <header class="header">
-      <h1>Jadwal Kuliah</h1>
+      <div class="header-brand">
+        <h1>Jadwal Kuliah</h1>
+      </div>
       <div class="header-actions">
         <button id="sync-btn" class="btn btn-primary" aria-label="Sinkron">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -44,9 +46,6 @@
           </svg>
           Setting
         </button>
-        <div class="stats-row" id="stat-container">
-          <div class="stat-badge">Memuat statistik...</div>
-        </div>
         <button id="theme-toggle" class="btn btn-ghost" aria-label="Ganti tema gelap terang">
           <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -65,6 +64,9 @@
             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
           </svg>
         </button>
+      </div>
+      <div class="stats-row" id="stat-container">
+        <div class="stat-badge">Memuat statistik...</div>
       </div>
     </header>
 
@@ -3125,14 +3127,13 @@
           </svg>
         </button>
         <button class="spotlight-btn-close-wrap" onclick="closeSpotlightModal(); event.stopPropagation();"
-          title="Tutup / Kembali (ESC)">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+          title="Tutup / Kembali (ESC)" aria-label="Tutup pencarian">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
-          <kbd class="kbd-badge"
-            style="background:transparent; border:none; box-shadow:none; padding:0; margin:0; font-size:0.95em;">ESC</kbd>
+          <span class="spotlight-esc-text">ESC</span>
         </button>
       </div>
 
@@ -3368,7 +3369,7 @@
 
 
   <!-- FLOATING MOBILE BOTTOM NAVIGATION DOCK -->
-  <!-- ==================== FLOATING MOBILE BOTTOM NAVIGATION DOCK ==================== -->
+  <!-- ==================== FLOATING MOBILE BOTTOM NAVIGATION DOCK (4 ITEMS) ==================== -->
 <nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="Navigasi Bawah Seluler">
   <button type="button" class="mobile-nav-btn active" id="mobile-nav-jadwal" onclick="handleMobileNavAction('jadwal')">
     <div class="mobile-nav-icon">
@@ -3378,6 +3379,7 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Jadwal</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 
   <button type="button" class="mobile-nav-btn" id="mobile-nav-search" onclick="handleMobileNavAction('search')">
@@ -3388,16 +3390,7 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Cari</span>
-  </button>
-
-  <button type="button" class="mobile-nav-btn" id="mobile-nav-tv" onclick="handleMobileNavAction('tv')">
-    <div class="mobile-nav-icon mobile-nav-highlight">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
-        <polyline points="17 2 12 7 7 2"></polyline>
-      </svg>
-    </div>
-    <span class="mobile-nav-label">Mode TV</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 
   <button type="button" class="mobile-nav-btn" id="mobile-nav-database" onclick="handleMobileNavAction('database')">
@@ -3409,6 +3402,7 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Database</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 
   <button type="button" class="mobile-nav-btn" id="mobile-nav-setting" onclick="handleMobileNavAction('setting')">
@@ -3419,13 +3413,14 @@
       </svg>
     </div>
     <span class="mobile-nav-label">Setting</span>
+    <span class="mobile-nav-dot"></span>
   </button>
 </nav>
 
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260908_semester_v4"></script>
+  <script src="frontend/js/script.js?v=20260910_mobile_v7"></script>
 </body>
 
 </html>
