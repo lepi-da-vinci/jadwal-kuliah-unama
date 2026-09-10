@@ -161,25 +161,33 @@ button, input, select, textarea { font-family: var(--font); }
   border: none;
   transition: background var(--transition), box-shadow var(--transition);
 }
-.header-brand {
+.header-left {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
 }
 .header h1 {
-  font-size: 1.35em;
-  font-weight: 700;
+  font-size: 1.4em;
+  font-weight: 800;
   letter-spacing: -0.02em;
   margin: 0;
   background: linear-gradient(135deg, var(--primary), var(--primary-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  line-height: 1.2;
 }
 .header-actions {
   display: flex;
   gap: var(--space-sm);
   align-items: center;
   flex-wrap: wrap;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 /* ─── Buttons ─── */
@@ -4785,24 +4793,24 @@ body.semester-explorer-active #semester-explorer-container {
 
   /* Header Bar Mobile */
   .header {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
     padding: 12px 14px;
     margin-bottom: 12px;
     border-radius: var(--radius-lg);
   }
 
-  .header-brand {
-    order: 1;
+  .header-left {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    width: 100%;
   }
 
   .header h1 {
-    font-size: 1.15rem !important;
+    font-size: 1.18rem !important;
     font-weight: 800 !important;
     letter-spacing: -0.02em;
     margin: 0 !important;
@@ -4811,26 +4819,22 @@ body.semester-explorer-active #semester-explorer-container {
   }
 
   .header-actions {
-    order: 2;
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
-  /* Sembunyikan tombol setting di header atas pada mode HP */
+  .header-actions #sync-btn,
   .header-actions #test-wa-btn {
-    display: none !important;
-  }
-
-  .header-actions #sync-btn {
     padding: 6px 12px;
     font-size: 0.82rem;
     height: 36px;
     gap: 5px;
   }
 
-  .header-actions #sync-btn svg {
+  .header-actions #sync-btn svg,
+  .header-actions #test-wa-btn svg {
     width: 15px;
     height: 15px;
   }
@@ -4844,12 +4848,17 @@ body.semester-explorer-active #semester-explorer-container {
     justify-content: center;
   }
 
+  .header-right {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
   /* Statistik pas di tengah secara simetris dan rapi */
   .header .stats-row,
   #stat-container.stats-row {
-    order: 3;
     width: 100% !important;
-    margin: 8px auto 0 auto !important;
+    margin: 2px auto 0 auto !important;
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
