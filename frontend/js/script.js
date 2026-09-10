@@ -363,6 +363,12 @@ window.enterSemesterExplorerMode = async function(namaSemester) {
   const explorerContainer = document.getElementById('semester-explorer-container');
   if (explorerContainer) explorerContainer.style.display = 'flex';
 
+  // Sync mobile bottom nav button
+  const navBtnDb = document.getElementById('mobile-nav-database');
+  const navBtnJadwal = document.getElementById('mobile-nav-jadwal');
+  if (navBtnDb) navBtnDb.classList.add('active');
+  if (navBtnJadwal) navBtnJadwal.classList.remove('active');
+
   // Scroll mulus ke atas
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -387,6 +393,12 @@ window.exitSemesterExplorerMode = function() {
 
   const explorerContainer = document.getElementById('semester-explorer-container');
   if (explorerContainer) explorerContainer.style.display = 'none';
+
+  // Sync mobile bottom nav button
+  const navBtnDb = document.getElementById('mobile-nav-database');
+  const navBtnJadwal = document.getElementById('mobile-nav-jadwal');
+  if (navBtnDb) navBtnDb.classList.remove('active');
+  if (navBtnJadwal) navBtnJadwal.classList.add('active');
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   applyFilters();
@@ -802,6 +814,8 @@ function renderSemesterExplorerTable() {
     countEl.innerHTML = `Menampilkan <strong>${total} jadwal</strong> di semester <b>${escapeHtml(currentExplorerSemester || '')}</b>`;
   }
 
+  const semCardsContainer = document.getElementById('sem-mobile-cards-container');
+
   if (total === 0) {
     if (explorerAllJadwal.length === 0) {
       tbody.innerHTML = `
@@ -819,6 +833,14 @@ function renderSemesterExplorerTable() {
           </td>
         </tr>
       `;
+      if (semCardsContainer) {
+        semCardsContainer.innerHTML = `
+          <div class="mobile-empty-cards">
+            <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; color: var(--text);">Belum Ada Data Jadwal Tersimpan</div>
+            <div>Database untuk semester <b>${escapeHtml(currentExplorerSemester || '')}</b> masih kosong.</div>
+          </div>
+        `;
+      }
     } else {
       tbody.innerHTML = `
         <tr>
@@ -829,6 +851,15 @@ function renderSemesterExplorerTable() {
           </div>
         </tr>
       `;
+      if (semCardsContainer) {
+        semCardsContainer.innerHTML = `
+          <div class="mobile-empty-cards">
+            <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; color: var(--text);">Tidak Ada Jadwal yang Cocok</div>
+            <div>Silakan sesuaikan kembali filter pencarian Anda.</div>
+            <button type="button" class="btn btn-secondary sem-reset-btn" onclick="resetSemesterExplorerFilters()" style="margin: 12px auto 0;">Reset Filter</button>
+          </div>
+        `;
+      }
     }
     if (pagTop) pagTop.innerHTML = '';
     if (pagBottom) pagBottom.innerHTML = '';
@@ -843,6 +874,9 @@ function renderSemesterExplorerTable() {
   const startIdx = (explorerCurrentPage - 1) * explorerPageSize;
   const endIdx = Math.min(startIdx + explorerPageSize, total);
   const pageItems = explorerFilteredJadwal.slice(startIdx, endIdx);
+
+  // Render mobile cards for Semester Explorer
+  renderSemesterExplorerMobileCards(pageItems);
 
   tbody.innerHTML = pageItems.map(item => {
     let badgeClass = 'default';
@@ -889,6 +923,91 @@ function renderSemesterExplorerTable() {
   // Render Pagination Controls
   renderExplorerPaginationControls(totalPages, startIdx, endIdx, total);
 }
+
+function renderSemesterExplorerMobileCards(items) {
+  const container = document.getElementById('sem-mobile-cards-container');
+  if (!container) return;
+
+  if (!items || items.length === 0) {
+    container.innerHTML = `
+      <div class="mobile-empty-cards">
+        <div>Tidak ada jadwal yang sesuai filter di halaman ini.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = items.map(item => {
+    let badgeClass = 'default';
+    if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+    else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+    else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+
+    let displayStatus = item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : 'OnSchedule');
+    const safeItemJson = escapeHtml(JSON.stringify(item));
+
+    return `
+      <div class="mobile-card">
+        <div class="mobile-card-header">
+          <div class="mobile-time-badge">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>${escapeHtml(item.jam || '-')}</span>
+            <small>• ${escapeHtml(item.hari || '-')}</small>
+          </div>
+          <div class="mobile-card-badges">
+            <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
+            <span class="mobile-status-pill">${escapeHtml(displayStatus)}</span>
+          </div>
+        </div>
+
+        <div class="mobile-card-body">
+          <h4 class="mobile-mk-title">${escapeHtml(item.nama_mk || '-')}</h4>
+          ${item.kelas ? `<div class="mobile-kelas-badge">Kelas: ${escapeHtml(item.kelas)}</div>` : ''}
+
+          <div class="mobile-card-meta">
+            <div class="mobile-meta-item">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span class="mobile-dosen-name">${escapeHtml(item.nama_dosen || '-')}</span>
+            </div>
+            <div class="mobile-meta-item">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+              <span class="mobile-room-name">${escapeHtml(item.nama_ruangan || '-')}</span>
+            </div>
+            <div class="mobile-meta-item" style="font-size: 0.8rem; color: var(--text-muted);">
+              <span>${escapeHtml(item.tanggal_format || item.tanggal || '')}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-card-footer">
+          <button class="mobile-cal-btn" data-item="${safeItemJson}" onclick="handleSingleCalClick(this)" title="Simpan ke Google Calendar">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>+ Google Calendar</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.setSemExplorerView = function(view) {
+  const btnCard = document.getElementById('sem-btn-view-card');
+  const btnTable = document.getElementById('sem-btn-view-table');
+  const cardsContainer = document.getElementById('sem-mobile-cards-container');
+  const tableWrap = document.getElementById('sem-table-wrap');
+
+  if (view === 'card') {
+    if (btnCard) btnCard.classList.add('active');
+    if (btnTable) btnTable.classList.remove('active');
+    if (cardsContainer) cardsContainer.classList.remove('mobile-cards-hidden');
+    if (tableWrap) tableWrap.classList.remove('mobile-table-active');
+  } else {
+    if (btnCard) btnCard.classList.remove('active');
+    if (btnTable) btnTable.classList.add('active');
+    if (cardsContainer) cardsContainer.classList.add('mobile-cards-hidden');
+    if (tableWrap) tableWrap.classList.add('mobile-table-active');
+  }
+};
 
 function renderExplorerPaginationControls(totalPages, startIdx, endIdx, total) {
   const pagTop = document.getElementById('sem-pagination-wrap');
@@ -1451,6 +1570,10 @@ function renderTable(data) {
   const hasilLabel = document.getElementById('hasil-pencarian');
   hasilLabel.innerHTML = `Hasil Pencarian: <strong style="color:var(--primary);">${data.length} jadwal</strong> ditemukan`;
   tbody.innerHTML = '';
+
+  // Render Mobile Schedule Cards
+  renderMobileScheduleCards(data);
+
   if (data.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Tidak ada jadwal yang sesuai dengan filter.</td></tr>';
     return;
@@ -1507,6 +1630,107 @@ function renderTable(data) {
   });
 }
 
+function renderMobileScheduleCards(data) {
+  const cardsContainer = document.getElementById('mobile-schedule-cards');
+  if (!cardsContainer) return;
+
+  if (!data || data.length === 0) {
+    cardsContainer.innerHTML = `
+      <div class="mobile-empty-cards">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.4;">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <div>Tidak ada jadwal yang sesuai dengan filter.</div>
+      </div>
+    `;
+    return;
+  }
+
+  cardsContainer.innerHTML = data.map((item, idx) => {
+    let badgeClass = 'default';
+    if (item.metode_pembelajaran === 'TM') badgeClass = 'tm';
+    else if (item.metode_pembelajaran === 'OL') badgeClass = 'ol';
+    else if (item.metode_pembelajaran === 'CC') badgeClass = 'cc';
+
+    let displayStatus = item.status_jadwal || (item.metode_pembelajaran === 'OL' ? 'Online' : 'OnSchedule');
+    const safeItemJson = escapeHtml(JSON.stringify(item));
+
+    const itemKey = getScheduleUniqueKey(item, idx);
+    const hasRoomConflict = window._currentScheduleConflicts && 
+      (window._currentScheduleConflicts.roomConflicts.has(itemKey) ||
+       Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const hasDosenConflict = window._currentScheduleConflicts && 
+      (window._currentScheduleConflicts.lecturerConflicts.has(itemKey) ||
+       Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const hasConflict = hasRoomConflict || hasDosenConflict;
+
+    return `
+      <div class="mobile-card ${hasConflict ? 'conflict' : ''}">
+        <div class="mobile-card-header">
+          <div class="mobile-time-badge">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>${escapeHtml(item.jam || '-')}</span>
+            <small>• ${escapeHtml(item.hari || '-')}</small>
+          </div>
+          <div class="mobile-card-badges">
+            <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
+            <span class="mobile-status-pill">${escapeHtml(displayStatus)}</span>
+          </div>
+        </div>
+
+        <div class="mobile-card-body">
+          <h4 class="mobile-mk-title">${escapeHtml(item.nama_mk || '-')}</h4>
+          ${item.kelas ? `<div class="mobile-kelas-badge">Kelas: ${escapeHtml(item.kelas)}</div>` : ''}
+
+          <div class="mobile-card-meta">
+            <div class="mobile-meta-item">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span class="mobile-dosen-name">${escapeHtml(item.nama_dosen || '-')}</span>
+            </div>
+            <div class="mobile-meta-item">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+              <span class="mobile-room-name">${escapeHtml(item.nama_ruangan || '-')}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-card-footer">
+          <button class="mobile-cal-btn" data-item="${safeItemJson}" onclick="handleSingleCalClick(this)" title="Simpan ke Google Calendar">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>+ Google Calendar</span>
+          </button>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            ${hasDosenConflict ? `<span class="conflict-pill dosen" style="font-size:0.72rem; padding:2px 8px;">Bentrok Dosen</span>` : ''}
+            ${hasRoomConflict ? `<span class="conflict-pill room" style="font-size:0.72rem; padding:2px 8px;">Bentrok Ruang</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.setMobileScheduleView = function(view) {
+  const btnCard = document.getElementById('btn-view-card');
+  const btnTable = document.getElementById('btn-view-table');
+  const cardsContainer = document.getElementById('mobile-schedule-cards');
+  const tableWrap = document.getElementById('main-table-wrap');
+
+  if (view === 'card') {
+    if (btnCard) btnCard.classList.add('active');
+    if (btnTable) btnTable.classList.remove('active');
+    if (cardsContainer) cardsContainer.classList.remove('mobile-cards-hidden');
+    if (tableWrap) tableWrap.classList.remove('mobile-table-active');
+  } else {
+    if (btnCard) btnCard.classList.remove('active');
+    if (btnTable) btnTable.classList.add('active');
+    if (cardsContainer) cardsContainer.classList.add('mobile-cards-hidden');
+    if (tableWrap) tableWrap.classList.add('mobile-table-active');
+  }
+};
+
 function handleSingleCalClick(btn) {
   try {
     const raw = btn.getAttribute('data-item');
@@ -1533,6 +1757,10 @@ function applyFilters() {
     const tbody = document.getElementById('jadwal-tbody') || document.getElementById('jadwal-table-body');
     if (tbody) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 1.1em;"><em style="display:inline-flex; align-items:center; gap:8px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Pilih tanggal dulu mas untuk mulai mencari jadwal</em></td></tr>';
+    }
+    const mobileCards = document.getElementById('mobile-schedule-cards');
+    if (mobileCards) {
+      mobileCards.innerHTML = '<div class="mobile-empty-cards"><em style="display:inline-flex; align-items:center; gap:8px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Pilih tanggal dulu mas untuk mulai mencari jadwal</em></div>';
     }
     const labList = document.getElementById('active-lab-list');
     if (labList) labList.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-style:italic;">Pilih tanggal dulu mas...</div>';
@@ -8949,6 +9177,43 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof initRoomFinderEvents === 'function') initRoomFinderEvents();
   if (typeof initChangesHubEvents === 'function') initChangesHubEvents();
 });
+
+// =========================================================================
+// MOBILE BOTTOM NAVIGATION DOCK HANDLER
+// =========================================================================
+function openSettingModal() {
+  const btn = document.getElementById('test-wa-btn');
+  if (btn) btn.click();
+}
+window.openSettingModal = openSettingModal;
+
+function handleMobileNavAction(action) {
+  document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = document.getElementById(`mobile-nav-${action}`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  if (action === 'jadwal') {
+    if (isSemesterExplorerMode) {
+      exitSemesterExplorerMode();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else if (action === 'search') {
+    openSpotlightModal();
+  } else if (action === 'tv') {
+    openTvMode();
+  } else if (action === 'database') {
+    if (!isSemesterExplorerMode) {
+      launchSelectedSemesterExplorer();
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  } else if (action === 'setting') {
+    openSettingModal();
+  }
+}
+
+window.handleMobileNavAction = handleMobileNavAction;
+
 
 
 

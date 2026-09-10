@@ -324,6 +324,18 @@
       Menampilkan <strong>0 jadwal</strong>
     </div>
     <div class="sem-controls-right">
+      <!-- Mobile View Switcher for Explorer -->
+      <div class="mobile-view-switch" id="sem-mobile-view-switch">
+        <button type="button" class="view-switch-btn active" id="sem-btn-view-card" onclick="setSemExplorerView('card')" title="Tampilan Kartu Seluler">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+          <span>Kartu</span>
+        </button>
+        <button type="button" class="view-switch-btn" id="sem-btn-view-table" onclick="setSemExplorerView('table')" title="Tampilan Tabel Horizontal">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          <span>Tabel</span>
+        </button>
+      </div>
+
       <div class="sem-page-size-selector" title="Pilih jumlah baris yang ditampilkan per halaman">
         <span class="sem-page-size-label">Baris:</span>
         <div class="sem-size-pill-group">
@@ -338,8 +350,15 @@
     </div>
   </div>
 
+  <!-- KONTEN KARTU JADWAL EKSPLORASI SELULER (DEFAULT DI MOBILE) -->
+  <div class="mobile-schedule-cards" id="sem-mobile-cards-container">
+    <div class="mobile-empty-cards text-center text-muted" style="padding: 40px 16px;">
+      Memuat data jadwal semester...
+    </div>
+  </div>
+
   <!-- SCHEDULE TABLE (MATCHING GAMBAR 2) -->
-  <div class="table-container sem-table-container">
+  <div class="table-container sem-table-container" id="sem-table-wrap">
     <table class="schedule-table">
       <thead>
         <tr>

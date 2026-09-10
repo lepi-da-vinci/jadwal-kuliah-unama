@@ -88,7 +88,19 @@
 
       <div class="card-header">
         <div id="hasil-pencarian" class="search-result">Hasil Pencarian: 0 jadwal</div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="card-header-actions">
+          <!-- Mobile View Switcher (Kartu vs Tabel) -->
+          <div class="mobile-view-switch" id="mobile-view-switch">
+            <button type="button" class="view-switch-btn active" id="btn-view-card" onclick="setMobileScheduleView('card')" title="Tampilan Kartu Seluler">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+              <span>Kartu</span>
+            </button>
+            <button type="button" class="view-switch-btn" id="btn-view-table" onclick="setMobileScheduleView('table')" title="Tampilan Tabel Horizontal">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              <span>Tabel</span>
+            </button>
+          </div>
+
           <button id="btn-export-excel" class="btn btn-secondary"
             title="Download jadwal hasil filter ke format Excel (.xls)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
@@ -113,7 +125,15 @@
         </div>
       </div>
 
-      <div class="table-wrap">
+      <!-- KONTEN TAMPILAN KARTU SELULER (DEFAULT DI MOBILE) -->
+      <div class="mobile-schedule-cards" id="mobile-schedule-cards">
+        <div class="mobile-empty-cards text-center text-muted" style="padding: 40px 16px;">
+          Memuat data jadwal...
+        </div>
+      </div>
+
+      <!-- KONTEN TAMPILAN TABEL LENGKAP -->
+      <div class="table-wrap" id="main-table-wrap">
         <table id="jadwal-table">
           <thead>
             <tr>

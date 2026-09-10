@@ -972,7 +972,19 @@
 
       <div class="card-header">
         <div id="hasil-pencarian" class="search-result">Hasil Pencarian: 0 jadwal</div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="card-header-actions">
+          <!-- Mobile View Switcher (Kartu vs Tabel) -->
+          <div class="mobile-view-switch" id="mobile-view-switch">
+            <button type="button" class="view-switch-btn active" id="btn-view-card" onclick="setMobileScheduleView('card')" title="Tampilan Kartu Seluler">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+              <span>Kartu</span>
+            </button>
+            <button type="button" class="view-switch-btn" id="btn-view-table" onclick="setMobileScheduleView('table')" title="Tampilan Tabel Horizontal">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              <span>Tabel</span>
+            </button>
+          </div>
+
           <button id="btn-export-excel" class="btn btn-secondary"
             title="Download jadwal hasil filter ke format Excel (.xls)">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
@@ -997,7 +1009,15 @@
         </div>
       </div>
 
-      <div class="table-wrap">
+      <!-- KONTEN TAMPILAN KARTU SELULER (DEFAULT DI MOBILE) -->
+      <div class="mobile-schedule-cards" id="mobile-schedule-cards">
+        <div class="mobile-empty-cards text-center text-muted" style="padding: 40px 16px;">
+          Memuat data jadwal...
+        </div>
+      </div>
+
+      <!-- KONTEN TAMPILAN TABEL LENGKAP -->
+      <div class="table-wrap" id="main-table-wrap">
         <table id="jadwal-table">
           <thead>
             <tr>
@@ -1347,6 +1367,18 @@
       Menampilkan <strong>0 jadwal</strong>
     </div>
     <div class="sem-controls-right">
+      <!-- Mobile View Switcher for Explorer -->
+      <div class="mobile-view-switch" id="sem-mobile-view-switch">
+        <button type="button" class="view-switch-btn active" id="sem-btn-view-card" onclick="setSemExplorerView('card')" title="Tampilan Kartu Seluler">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+          <span>Kartu</span>
+        </button>
+        <button type="button" class="view-switch-btn" id="sem-btn-view-table" onclick="setSemExplorerView('table')" title="Tampilan Tabel Horizontal">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          <span>Tabel</span>
+        </button>
+      </div>
+
       <div class="sem-page-size-selector" title="Pilih jumlah baris yang ditampilkan per halaman">
         <span class="sem-page-size-label">Baris:</span>
         <div class="sem-size-pill-group">
@@ -1361,8 +1393,15 @@
     </div>
   </div>
 
+  <!-- KONTEN KARTU JADWAL EKSPLORASI SELULER (DEFAULT DI MOBILE) -->
+  <div class="mobile-schedule-cards" id="sem-mobile-cards-container">
+    <div class="mobile-empty-cards text-center text-muted" style="padding: 40px 16px;">
+      Memuat data jadwal semester...
+    </div>
+  </div>
+
   <!-- SCHEDULE TABLE (MATCHING GAMBAR 2) -->
-  <div class="table-container sem-table-container">
+  <div class="table-container sem-table-container" id="sem-table-wrap">
     <table class="schedule-table">
       <thead>
         <tr>
@@ -3326,6 +3365,62 @@
       </marquee>
     </div>
   </div>
+
+
+  <!-- FLOATING MOBILE BOTTOM NAVIGATION DOCK -->
+  <!-- ==================== FLOATING MOBILE BOTTOM NAVIGATION DOCK ==================== -->
+<nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="Navigasi Bawah Seluler">
+  <button type="button" class="mobile-nav-btn active" id="mobile-nav-jadwal" onclick="handleMobileNavAction('jadwal')">
+    <div class="mobile-nav-icon">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+      </svg>
+    </div>
+    <span class="mobile-nav-label">Jadwal</span>
+  </button>
+
+  <button type="button" class="mobile-nav-btn" id="mobile-nav-search" onclick="handleMobileNavAction('search')">
+    <div class="mobile-nav-icon">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+    </div>
+    <span class="mobile-nav-label">Cari</span>
+  </button>
+
+  <button type="button" class="mobile-nav-btn" id="mobile-nav-tv" onclick="handleMobileNavAction('tv')">
+    <div class="mobile-nav-icon mobile-nav-highlight">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+        <polyline points="17 2 12 7 7 2"></polyline>
+      </svg>
+    </div>
+    <span class="mobile-nav-label">Mode TV</span>
+  </button>
+
+  <button type="button" class="mobile-nav-btn" id="mobile-nav-database" onclick="handleMobileNavAction('database')">
+    <div class="mobile-nav-icon">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+      </svg>
+    </div>
+    <span class="mobile-nav-label">Database</span>
+  </button>
+
+  <button type="button" class="mobile-nav-btn" id="mobile-nav-setting" onclick="handleMobileNavAction('setting')">
+    <div class="mobile-nav-icon">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </div>
+    <span class="mobile-nav-label">Setting</span>
+  </button>
+</nav>
 
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>

@@ -4459,4 +4459,629 @@ body.semester-explorer-active #semester-explorer-container {
   background: rgba(239, 68, 68, 0.1) !important;
 }
 
+/* =========================================================================
+   COMPREHENSIVE MOBILE & TABLET RESPONSIVE SYSTEM (UI/UX 2.0)
+   ========================================================================= */
+
+/* ─── Floating Mobile Bottom Navigation Dock ─── */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  justify-content: space-around;
+  align-items: center;
+  z-index: 9999;
+  padding: 0 8px;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px 0;
+  border-radius: var(--radius-md);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-btn:active {
+  transform: scale(0.92);
+}
+
+.mobile-nav-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-label {
+  font-family: var(--font);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: color 0.2s ease;
+}
+
+.mobile-nav-btn.active {
+  color: var(--primary);
+}
+
+.mobile-nav-btn.active .mobile-nav-icon {
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.mobile-nav-highlight {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.25));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #8b5cf6;
+}
+
+[data-theme="dark"] .mobile-bottom-nav {
+  background: rgba(15, 23, 42, 0.92);
+  border-top-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Mobile Schedule Cards View ─── */
+.mobile-schedule-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mobile-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--clay-outer-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.mobile-card:active {
+  transform: scale(0.99);
+}
+
+.mobile-card.conflict {
+  border-color: #ef4444;
+  background: linear-gradient(to bottom, rgba(239, 68, 68, 0.04), var(--bg-card));
+}
+
+.mobile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mobile-time-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+
+.mobile-time-badge small {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.mobile-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-status-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+}
+
+.mobile-card-body {
+  margin-bottom: 12px;
+}
+
+.mobile-mk-title {
+  margin: 0 0 4px 0;
+  font-family: var(--font-heading);
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.mobile-kelas-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--badge-tm);
+  margin-bottom: 8px;
+}
+
+.mobile-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mobile-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.mobile-meta-item svg {
+  flex-shrink: 0;
+  color: var(--primary);
+  opacity: 0.8;
+}
+
+.mobile-dosen-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mobile-room-name {
+  font-weight: 700;
+  color: var(--badge-ol);
+}
+
+.mobile-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.mobile-cal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mobile-cal-btn:active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.mobile-empty-cards {
+  text-align: center;
+  padding: 40px 16px;
+  background: var(--bg-card);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+/* ─── Mobile View Switcher (Kartu vs Tabel) ─── */
+.mobile-view-switch {
+  display: none;
+  align-items: center;
+  background: var(--bg-elevated);
+  padding: 3px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  box-shadow: var(--clay-inner-sm);
+}
+
+.view-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.view-switch-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+}
+
+/* ─── Responsive Breakpoints Overhaul (Tablet & Mobile) ─── */
+@media (max-width: 768px) {
+  body {
+    padding: 12px 10px calc(76px + env(safe-area-inset-bottom)) 10px !important;
+  }
+
+  .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .mobile-bottom-nav {
+    display: flex;
+  }
+
+  /* Header Bar */
+  .header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 4px;
+    margin-bottom: 12px;
+  }
+
+  .header h1 {
+    font-size: 1.35rem !important;
+    margin: 0;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .header-actions .btn {
+    padding: 8px 12px;
+    font-size: 0.84rem;
+    height: 38px;
+  }
+
+  .header-actions #theme-toggle {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stats-row {
+    width: 100%;
+    margin-top: 4px;
+    justify-content: flex-start;
+  }
+
+  .stat-badge {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+  }
+
+  /* Filters */
+  .card {
+    padding: 14px 12px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 14px;
+  }
+
+  .filters {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .filter-group label {
+    font-size: 0.82rem;
+    margin-bottom: 4px;
+  }
+
+  .filter-group input[type="date"],
+  .filter-group input[type="text"],
+  .filter-group .custom-select-trigger {
+    height: 44px;
+    font-size: 0.9rem;
+    border-radius: var(--radius-md);
+  }
+
+  #btn-fitur-tambahan {
+    width: 100%;
+    height: 44px !important;
+    justify-content: center;
+  }
+
+  /* Status Ruangan Panel */
+  .status-ruangan-section {
+    margin-top: 14px;
+    margin-bottom: 16px;
+  }
+
+  .status-ruangan-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+  }
+
+  .status-ruangan-title-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .status-ruangan-title {
+    font-size: 1.05rem;
+    flex: 1;
+  }
+
+  .btn-fullscreen-toggle,
+  .btn-fs-filter,
+  .btn-fs-info {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  .status-legend-group {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.76rem;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .panels-row {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .panel {
+    min-width: 100%;
+    width: 100%;
+    padding: 14px 12px;
+    box-sizing: border-box;
+  }
+
+  .panel h3 {
+    font-size: 1.02rem;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+
+  /* Card Header in Schedule Table */
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .card-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .mobile-view-switch {
+    display: inline-flex;
+  }
+
+  .card-header-actions .btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  /* Schedule Display Switch: Cards vs Table on Mobile */
+  .table-wrap {
+    display: none; /* Hidden by default on mobile when cards are active */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-md);
+  }
+
+  .table-wrap.mobile-table-active {
+    display: block !important;
+  }
+
+  .mobile-schedule-cards {
+    display: flex;
+  }
+
+  .mobile-schedule-cards.mobile-cards-hidden {
+    display: none !important;
+  }
+
+  /* Modals as Modern Bottom Sheets */
+  .modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 88vh;
+    border-radius: 24px 24px 0 0 !important;
+    margin: 0;
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom)) 16px !important;
+    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .modal-box::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 14px auto;
+    opacity: 0.7;
+  }
+
+  .spotlight-shortcut-hint,
+  .kbd-shortcut {
+    display: none !important;
+  }
+
+  /* Semester Explorer Mobile */
+  .sem-explorer-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px 12px;
+  }
+
+  .sem-banner-title {
+    font-size: 1.2rem;
+  }
+
+  .sem-banner-right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .sem-banner-right .btn {
+    flex: 1;
+    min-width: 130px;
+    justify-content: center;
+    font-size: 0.82rem;
+  }
+
+  .sem-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .sem-stats-grid .card-meta {
+    grid-column: span 2;
+  }
+
+  .sem-stat-card {
+    padding: 10px 12px;
+  }
+
+  .sem-stat-val {
+    font-size: 1.1rem;
+  }
+
+  .sem-filter-toolbar {
+    padding: 12px;
+  }
+
+  .sem-filter-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sem-filter-group {
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  .sem-results-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .sem-controls-right {
+    justify-content: space-between;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .sem-table-container {
+    display: none;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sem-table-container.mobile-table-active {
+    display: block !important;
+  }
+}
+
+@keyframes modalSlideUp {
+  from { transform: translateY(100%); opacity: 0.5; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .sem-banner-title-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sem-switcher-select-wrapper {
+    width: 100%;
+  }
+
+  .sem-switcher-trigger {
+    width: 100%;
+  }
+}
+
 
