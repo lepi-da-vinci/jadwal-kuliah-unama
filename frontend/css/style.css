@@ -4958,11 +4958,19 @@ body.semester-explorer-active #semester-explorer-container {
     flex: 1;
   }
 
+  /* Sembunyikan Mode Full Screen, Filter Ruangan, dan Info Mase pada mode HP */
   .btn-fullscreen-toggle,
   .btn-fs-filter,
-  .btn-fs-info {
-    padding: 6px 10px;
-    font-size: 0.78rem;
+  .btn-fs-info,
+  #btn-fullscreen-ruangan,
+  #btn-fs-filter-modal,
+  #btn-fs-info-modal {
+    display: none !important;
+  }
+
+  /* Sembunyikan tombol Mode Layar TV pada menu Setting di mode HP */
+  #btn-setting-tv-mode {
+    display: none !important;
   }
 
   .status-legend-group {
