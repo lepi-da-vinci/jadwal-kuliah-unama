@@ -1185,6 +1185,9 @@ body.modal-open {
   overflow: hidden;
   box-sizing: border-box;
 }
+.setting-modal-box {
+  max-width: 840px;
+}
 .modal-box .modal-icon {
   font-size: 2.2em;
   margin: 0 auto 14px;
@@ -5040,6 +5043,16 @@ body.semester-explorer-active #semester-explorer-container {
     display: none !important;
   }
 
+  /* Pastikan bottom navigation bar tidak pernah menimpa / overlap modal bottom sheet */
+  body.modal-open .mobile-bottom-nav,
+  .modal-overlay.open ~ .mobile-bottom-nav,
+  .modal.open ~ .mobile-bottom-nav,
+  .spotlight-backdrop.open ~ .mobile-bottom-nav {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
   /* Modals as Modern Bottom Sheets */
   .modal,
   .modal-overlay {
@@ -5053,20 +5066,23 @@ body.semester-explorer-active #semester-explorer-container {
   #modal-fs-info .modal-box,
   #modal-fitur .modal-box,
   #lab-modal .modal-box,
+  .setting-modal-box,
+  .db-clear-modal-box,
   .modal-box {
     width: 100% !important;
     max-width: 100% !important;
-    max-height: calc(85vh - env(safe-area-inset-bottom)) !important;
+    max-height: calc(88vh - env(safe-area-inset-bottom)) !important;
     border-radius: 26px 26px 0 0 !important;
     margin: 0 !important;
     margin-top: auto !important;
-    padding: 16px 18px calc(26px + env(safe-area-inset-bottom)) 18px !important;
+    padding: 16px 18px calc(24px + env(safe-area-inset-bottom)) 18px !important;
     display: flex !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
     box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45) !important;
     animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+    z-index: 100001 !important;
   }
 
   .modal-box::before {
@@ -5098,28 +5114,49 @@ body.semester-explorer-active #semester-explorer-container {
   }
 
   .modal-box .modal-body,
-  #lab-modal-body {
+  #lab-modal-body,
+  #wa-modal-menu,
+  #wa-modal-qr,
+  #wa-modal-test,
+  #wa-modal-data,
+  #wa-modal-add,
+  #wa-modal-data-ruangan,
+  #wa-modal-add-ruangan,
+  #wa-modal-edit,
+  #wa-modal-monitor,
+  #wa-modal-semester,
+  .db-clear-modal-box {
     flex: 1 1 auto !important;
     min-height: 0 !important;
     max-height: none !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
     overscroll-behavior: contain !important;
-    margin-bottom: 14px !important;
+    margin-bottom: 6px !important;
     padding-right: 4px !important;
+    padding-bottom: calc(36px + env(safe-area-inset-bottom)) !important;
+    scroll-padding-bottom: calc(36px + env(safe-area-inset-bottom)) !important;
     font-size: 0.92rem !important;
     line-height: 1.5 !important;
   }
 
+  .modal-box .modal-body > div:last-child {
+    padding-bottom: 16px !important;
+    margin-bottom: 6px !important;
+  }
+
   .modal-box .modal-btn,
-  #modal-close-btn {
+  #modal-close-btn,
+  #wa-modal-close-btn {
     flex-shrink: 0 !important;
     width: 100% !important;
+    min-height: 48px !important;
     padding: 13px 24px !important;
     font-size: 0.98rem !important;
+    font-weight: 600 !important;
     border-radius: var(--radius-full) !important;
     margin-top: 0 !important;
-    margin-bottom: 4px !important;
+    margin-bottom: 8px !important;
     box-sizing: border-box !important;
     box-shadow: var(--clay-outer-sm) !important;
   }

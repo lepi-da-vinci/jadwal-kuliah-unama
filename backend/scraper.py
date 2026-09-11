@@ -627,7 +627,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE semester = %s", (sem_final,))
             target_dates = [row[0].strftime('%Y-%m-%d') if hasattr(row[0], 'strftime') else str(row[0]) for row in cursor.fetchall()]
             
-        for target_date in target_dates:
+        for t_date in target_dates:
             # 1. Ambil data lama dari jadwal untuk semester ini
             cursor.execute("""
                 SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
@@ -635,7 +635,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 JOIN ruangan r ON j.id_ruangan = r.id_ruangan
                 LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
                 WHERE j.tanggal = %s AND j.semester = %s
-            """, (target_date, sem_final))
+            """, (t_date, sem_final))
             old_schedules = cursor.fetchall()
             
             is_update = len(old_schedules) > 0
@@ -659,7 +659,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 JOIN ruangan r ON j.id_ruangan = r.id_ruangan
                 LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
                 WHERE j.tanggal = %s AND j.semester = %s
-            """, (target_date, sem_final))
+            """, (t_date, sem_final))
             new_schedules = cursor.fetchall()
             
             # 3. Bandingkan dan buat notifikasi
@@ -678,50 +678,26 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 if key not in old_lab_cache:
                     if is_update:
                         pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
-                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'TAMBAHAN', pesan, sem_final))
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'TAMBAHAN', pesan, sem_final))
                 else:
                     old_data = old_lab_cache[key]
                     if old_data['status'] != status or old_data['metode'] != metode:
                         pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
-                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'PERUBAHAN', pesan, sem_final))
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan, sem_final))
             
             # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA semester bersangkutan)
-            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (target_date, sem_final))
+            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             cursor.execute("""
                 INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
                 SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
                 FROM jadwal_temp WHERE tanggal = %s AND semester = %s
-            """, (target_date, sem_final))
+            """, (t_date, sem_final))
             
-            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (target_date, sem_final))
-            calculate_and_save_gaps(conn, cursor, target_date, sem_final)
-            
-        else:
-            # ═══ FULL SYNC (SEMUA TANGGAL / 1 SEMESTER PENUH) ═══
-            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE tanggal IS NOT NULL AND semester = %s", (sem_final,))
-            unique_dates = [str(r[0]) for r in cursor.fetchall()]
-            
-            if unique_dates:
-                # Pindahkan seluruh jadwal HANYA untuk semester bersangkutan
-                cursor.execute("DELETE FROM jadwal WHERE semester = %s", (sem_final,))
-                cursor.execute("""
-                    INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
-                    SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                    FROM jadwal_temp WHERE tanggal IS NOT NULL AND semester = %s
-                """, (sem_final,))
-                cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (sem_final,))
-                
-                # Hitung jeda untuk setiap tanggal yang ada
-                for d in unique_dates:
-                    calculate_and_save_gaps(conn, cursor, d, sem_final)
-            else:
-                # Fallback: jika ada baris di jadwal_temp
-                cursor.execute("""
-                    INSERT IGNORE INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
-                    SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                    FROM jadwal_temp WHERE tanggal IS NOT NULL AND semester = %s
-                """, (sem_final,))
-                cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (sem_final,))
+            cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
+            calculate_and_save_gaps(conn, cursor, t_date, sem_final)
+
+        # Bersihkan sisa data temp tanpa tanggal jika ada
+        cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s AND (tanggal IS NULL OR tanggal = '')", (sem_final,))
                 
         conn.commit()
     except mysql.connector.Error as err:

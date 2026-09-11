@@ -1,8 +1,7 @@
   <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
 
   <!-- Modal Password Admin -->
-  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin"
-    style="z-index: 10000;">
+  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin">
     <div class="modal-box" style="max-width: 480px; width: 94%;">
       <div class="modal-icon" style="color: var(--primary);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
@@ -18,16 +17,15 @@
           style="width: 100%; padding: 12px; text-align: center; font-size: 1.2em; letter-spacing: 2px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="••••••••">
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="password-cancel-btn">Batal</button>
-        <button class="modal-btn" id="password-submit-btn">Lanjut</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); min-height: 48px; flex: 1;" id="password-cancel-btn">Batal</button>
+        <button class="modal-btn" style="min-height: 48px; flex: 1;" id="password-submit-btn">Lanjut</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Konfirmasi Bahaya -->
-  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya"
-    style="z-index: 10000;">
+  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya">
     <div class="modal-box" style="max-width: 540px; width: 94%; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
@@ -42,16 +40,15 @@
         <p id="danger-message" style="margin-bottom: 5px; font-weight: 500;">Pusat Pembersihan Database: Anda akan diarahkan untuk memverifikasi kode unik sebelum membuka menu pemilihan data yang ingin dihapus.</p>
         <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan penghapusan data bersifat permanen. Lanjutkan ke verifikasi kode unik?</p>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="danger-cancel-btn">Batal</button>
-        <button class="modal-btn" style="background: var(--badge-cc);" id="danger-submit-btn">Lanjut Verifikasi Kode</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); min-height: 48px; flex: 1;" id="danger-cancel-btn">Batal</button>
+        <button class="modal-btn" style="background: var(--badge-cc); min-height: 48px; flex: 1;" id="danger-submit-btn">Lanjut Verifikasi Kode</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Konfirmasi Teks Final -->
-  <div id="final-danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Akhir"
-    style="z-index: 10001;">
+  <div id="final-danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Akhir">
     <div class="modal-box" style="max-width: 540px; width: 94%; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
@@ -70,17 +67,16 @@
           style="width: 100%; padding: 12px; margin-top: 15px; text-align: center; font-size: 1.1em; letter-spacing: 1px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="Ketik kode di sini">
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="final-danger-cancel-btn">Batal</button>
-        <button class="modal-btn" style="background: var(--badge-cc); opacity: 0.5; cursor: not-allowed;"
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); min-height: 48px; flex: 1;" id="final-danger-cancel-btn">Batal</button>
+        <button class="modal-btn" style="background: var(--badge-cc); opacity: 0.5; cursor: not-allowed; min-height: 48px; flex: 1;"
           id="final-danger-submit-btn" disabled>Buka Menu Pembersihan</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Konfirmasi Aksi Kustom (Pengganti confirm browser native) -->
-  <div id="custom-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Tindakan"
-    style="z-index: 10010;">
+  <div id="custom-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Tindakan">
     <div class="modal-box custom-confirm-box" style="max-width: 520px; width: 94%; border-radius: var(--radius-xl); overflow: hidden; padding: 0; text-align: left; background: var(--bg-card); border: 1.5px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);">
       
       <!-- Glowing Status Header -->
@@ -120,7 +116,7 @@
       </div>
 
       <!-- Action Buttons (Centered) -->
-      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--bg-elevated);">
+      <div style="padding: 16px 24px calc(24px + env(safe-area-inset-bottom)) 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--bg-elevated);">
         <button type="button" class="modal-btn btn-confirm-cancel" id="custom-confirm-cancel-btn">Batal</button>
         <button type="button" class="modal-btn btn-confirm-ok danger" id="custom-confirm-ok-btn">
           <span id="custom-confirm-ok-icon" style="display: inline-flex; align-items: center;">
@@ -136,8 +132,7 @@
   </div>
 
   <!-- Modal Alert Kustom (Pengganti alert browser native) -->
-  <div id="custom-alert-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Sistem"
-    style="z-index: 10011;">
+  <div id="custom-alert-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Sistem">
     <div class="modal-box custom-confirm-box" style="max-width: 480px; width: 94%; border-radius: var(--radius-xl); overflow: hidden; padding: 0; text-align: center; background: var(--bg-card); border: 1.5px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);">
       
       <div style="padding: 30px 24px 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
@@ -153,8 +148,8 @@
         </div>
       </div>
 
-      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; background: var(--bg-elevated);">
-        <button type="button" class="modal-btn btn-primary" id="custom-alert-close-btn" style="min-width: 140px; border-radius: var(--radius-md); padding: 10px 24px; font-weight: 600;">Selesai</button>
+      <div style="padding: 16px 24px calc(24px + env(safe-area-inset-bottom)) 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; background: var(--bg-elevated);">
+        <button type="button" class="modal-btn btn-primary" id="custom-alert-close-btn" style="min-width: 140px; min-height: 48px; border-radius: var(--radius-md); padding: 10px 24px; font-weight: 600;">Selesai</button>
       </div>
     </div>
   </div>

@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260910_mobile_v10">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260911_mobile_v11">
 </head>
 
 <body>
@@ -1450,8 +1450,7 @@
     <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
 
   <!-- Modal Password Admin -->
-  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin"
-    style="z-index: 10000;">
+  <div id="password-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Password Admin">
     <div class="modal-box" style="max-width: 480px; width: 94%;">
       <div class="modal-icon" style="color: var(--primary);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
@@ -1467,16 +1466,15 @@
           style="width: 100%; padding: 12px; text-align: center; font-size: 1.2em; letter-spacing: 2px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="••••••••">
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="password-cancel-btn">Batal</button>
-        <button class="modal-btn" id="password-submit-btn">Lanjut</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); min-height: 48px; flex: 1;" id="password-cancel-btn">Batal</button>
+        <button class="modal-btn" style="min-height: 48px; flex: 1;" id="password-submit-btn">Lanjut</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Konfirmasi Bahaya -->
-  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya"
-    style="z-index: 10000;">
+  <div id="danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Peringatan Bahaya">
     <div class="modal-box" style="max-width: 540px; width: 94%; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
@@ -1491,16 +1489,15 @@
         <p id="danger-message" style="margin-bottom: 5px; font-weight: 500;">Pusat Pembersihan Database: Anda akan diarahkan untuk memverifikasi kode unik sebelum membuka menu pemilihan data yang ingin dihapus.</p>
         <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 15px;">Tindakan penghapusan data bersifat permanen. Lanjutkan ke verifikasi kode unik?</p>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="danger-cancel-btn">Batal</button>
-        <button class="modal-btn" style="background: var(--badge-cc);" id="danger-submit-btn">Lanjut Verifikasi Kode</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); min-height: 48px; flex: 1;" id="danger-cancel-btn">Batal</button>
+        <button class="modal-btn" style="background: var(--badge-cc); min-height: 48px; flex: 1;" id="danger-submit-btn">Lanjut Verifikasi Kode</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Konfirmasi Teks Final -->
-  <div id="final-danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Akhir"
-    style="z-index: 10001;">
+  <div id="final-danger-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Akhir">
     <div class="modal-box" style="max-width: 540px; width: 94%; border-top: 5px solid var(--badge-cc);">
       <div class="modal-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--badge-cc);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
@@ -1519,17 +1516,16 @@
           style="width: 100%; padding: 12px; margin-top: 15px; text-align: center; font-size: 1.1em; letter-spacing: 1px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="Ketik kode di sini">
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="final-danger-cancel-btn">Batal</button>
-        <button class="modal-btn" style="background: var(--badge-cc); opacity: 0.5; cursor: not-allowed;"
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); min-height: 48px; flex: 1;" id="final-danger-cancel-btn">Batal</button>
+        <button class="modal-btn" style="background: var(--badge-cc); opacity: 0.5; cursor: not-allowed; min-height: 48px; flex: 1;"
           id="final-danger-submit-btn" disabled>Buka Menu Pembersihan</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Konfirmasi Aksi Kustom (Pengganti confirm browser native) -->
-  <div id="custom-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Tindakan"
-    style="z-index: 10010;">
+  <div id="custom-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Konfirmasi Tindakan">
     <div class="modal-box custom-confirm-box" style="max-width: 520px; width: 94%; border-radius: var(--radius-xl); overflow: hidden; padding: 0; text-align: left; background: var(--bg-card); border: 1.5px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);">
       
       <!-- Glowing Status Header -->
@@ -1569,7 +1565,7 @@
       </div>
 
       <!-- Action Buttons (Centered) -->
-      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--bg-elevated);">
+      <div style="padding: 16px 24px calc(24px + env(safe-area-inset-bottom)) 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 14px; background: var(--bg-elevated);">
         <button type="button" class="modal-btn btn-confirm-cancel" id="custom-confirm-cancel-btn">Batal</button>
         <button type="button" class="modal-btn btn-confirm-ok danger" id="custom-confirm-ok-btn">
           <span id="custom-confirm-ok-icon" style="display: inline-flex; align-items: center;">
@@ -1585,8 +1581,7 @@
   </div>
 
   <!-- Modal Alert Kustom (Pengganti alert browser native) -->
-  <div id="custom-alert-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Sistem"
-    style="z-index: 10011;">
+  <div id="custom-alert-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Sistem">
     <div class="modal-box custom-confirm-box" style="max-width: 480px; width: 94%; border-radius: var(--radius-xl); overflow: hidden; padding: 0; text-align: center; background: var(--bg-card); border: 1.5px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);">
       
       <div style="padding: 30px 24px 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
@@ -1602,8 +1597,8 @@
         </div>
       </div>
 
-      <div style="padding: 16px 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; background: var(--bg-elevated);">
-        <button type="button" class="modal-btn btn-primary" id="custom-alert-close-btn" style="min-width: 140px; border-radius: var(--radius-md); padding: 10px 24px; font-weight: 600;">Selesai</button>
+      <div style="padding: 16px 24px calc(24px + env(safe-area-inset-bottom)) 24px; border-top: 1.5px solid var(--border); display: flex; justify-content: center; background: var(--bg-elevated);">
+        <button type="button" class="modal-btn btn-primary" id="custom-alert-close-btn" style="min-width: 140px; min-height: 48px; border-radius: var(--radius-md); padding: 10px 24px; font-weight: 600;">Selesai</button>
       </div>
     </div>
   </div>
@@ -1613,8 +1608,7 @@
 
   <!-- MODAL: PUSAT PEMBERSIHAN DATABASE -->
     <!-- ==================== MODAL PUSAT PEMBERSIHAN DATABASE TERPILIH ==================== -->
-  <div id="db-clear-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Pembersihan Database"
-    style="z-index: 10002;">
+  <div id="db-clear-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Pembersihan Database">
     <div class="modal-box db-clear-modal-box" style="max-width: 760px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -2019,7 +2013,7 @@
         <div style="font-size: 0.88em; color: var(--text-muted);">
           Status: <b id="db-clear-summary-text" style="color: var(--primary);">0 opsi data dipilih</b>
         </div>
-        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%; margin-bottom: 12px; padding-bottom: 16px;">
           <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-clear-cancel-btn">Batal</button>
           <button type="button" class="modal-btn" style="background: var(--badge-cc); display: inline-flex; align-items: center; gap: 6px;" id="db-clear-submit-btn" disabled>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2045,8 +2039,7 @@
 
   <!-- MODAL: PUSAT BACKUP DATABASE (.SQL) -->
     <!-- ==================== MODAL PUSAT BACKUP DATABASE (.SQL) ==================== -->
-  <div id="db-backup-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Backup Database"
-    style="z-index: 10002;">
+  <div id="db-backup-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Backup Database">
     <div class="modal-box db-clear-modal-box" style="max-width: 760px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -2450,7 +2443,7 @@
         <div style="font-size: 0.88em; color: var(--text-muted);">
           Status: <b id="db-backup-summary-text" style="color: #10b981;">0 opsi data dipilih</b>
         </div>
-        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%; margin-bottom: 12px; padding-bottom: 16px;">
           <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-backup-cancel-btn">Batal</button>
           <button type="button" class="modal-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);" id="db-backup-submit-btn" disabled>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2477,8 +2470,7 @@
 
   <!-- MODAL: PUSAT RESTORE / IMPOR DATABASE (.SQL) -->
     <!-- ==================== MODAL PUSAT RESTORE / IMPOR DATABASE (.SQL) ==================== -->
-  <div id="db-restore-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Restore Database"
-    style="z-index: 10003;">
+  <div id="db-restore-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Menu Restore Database">
     <div class="modal-box db-clear-modal-box" style="max-width: 680px; width: 95%; max-height: 90vh; overflow-y: auto; text-align: left;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1.5px solid var(--border); padding-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -2580,7 +2572,7 @@
         <div id="db-restore-status-text" style="font-size: 0.88em; color: var(--text-muted);">
           Silakan masukkan file .sql untuk memulai validasi
         </div>
-        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%;">
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: 100%; margin-bottom: 12px; padding-bottom: 16px;">
           <button type="button" class="modal-btn" style="background: var(--text-muted); min-width: 90px;" id="db-restore-cancel-btn">Batal</button>
           <button type="button" class="modal-btn" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);" id="db-restore-submit-btn" disabled>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2599,7 +2591,7 @@
   <!-- MODAL: SETTING & MASTER DATA ASLAB/RUANGAN -->
   <!-- ==================== MODAL SETTING & DATA MASTER ASLAB/RUANGAN ==================== -->
 <div id="test-wa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Setting">
-  <div class="modal-box" style="max-width: 840px; width: 94%;">
+  <div class="modal-box setting-modal-box">
     <div class="modal-icon" id="wa-modal-icon">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
         stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
@@ -2800,8 +2792,8 @@
         Pusat Restore Database (.SQL)
       </button>
 
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="wa-modal-close-btn">Tutup</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="wa-modal-close-btn">Tutup</button>
       </div>
     </div>
 
@@ -2870,8 +2862,8 @@
         </div>
       </div>
 
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 5px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="qr-back-btn">Kembali ke Menu</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="qr-back-btn">Kembali ke Menu</button>
       </div>
     </div>
 
@@ -2886,9 +2878,9 @@
         <input type="hidden" id="aslab-select" value="">
       </div>
       <input type="hidden" id="test-action-select" value="test">
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="test-wa-back-btn">Kembali</button>
-        <button class="modal-btn" id="test-wa-submit-btn">Kirim Pesan</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); flex: 1; min-height: 48px;" id="test-wa-back-btn">Kembali</button>
+        <button class="modal-btn" style="flex: 1; min-height: 48px;" id="test-wa-submit-btn">Kirim Pesan</button>
       </div>
     </div>
 
@@ -2912,8 +2904,8 @@
           </tbody>
         </table>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="data-wa-back-btn">Kembali</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="data-wa-back-btn">Kembali</button>
       </div>
     </div>
 
@@ -2937,9 +2929,9 @@
           <option value="">-- Pilih Ruangan / Labor --</option>
         </select>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="add-wa-back-btn">Kembali</button>
-        <button class="modal-btn" id="add-wa-submit-btn">Simpan Data</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); flex: 1; min-height: 48px;" id="add-wa-back-btn">Kembali</button>
+        <button class="modal-btn" style="flex: 1; min-height: 48px;" id="add-wa-submit-btn">Simpan Data</button>
       </div>
     </div>
 
@@ -2961,8 +2953,8 @@
           </tbody>
         </table>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="data-ruangan-back-btn">Kembali</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="data-ruangan-back-btn">Kembali</button>
       </div>
     </div>
 
@@ -2980,9 +2972,9 @@
         <input type="text" id="add-ruangan-nama" placeholder="Contoh: Labor 1.1 atau R. 2.18"
           style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;">
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="add-ruangan-back-btn">Kembali</button>
-        <button class="modal-btn" id="add-ruangan-submit-btn">Simpan Ruangan</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); flex: 1; min-height: 48px;" id="add-ruangan-back-btn">Kembali</button>
+        <button class="modal-btn" style="flex: 1; min-height: 48px;" id="add-ruangan-submit-btn">Simpan Ruangan</button>
       </div>
     </div>
 
@@ -3007,9 +2999,9 @@
           <option value="">-- Pilih Ruangan / Labor --</option>
         </select>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="edit-wa-back-btn">Batal</button>
-        <button class="modal-btn" id="edit-wa-submit-btn">Update Data</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); flex: 1; min-height: 48px;" id="edit-wa-back-btn">Batal</button>
+        <button class="modal-btn" style="flex: 1; min-height: 48px;" id="edit-wa-submit-btn">Update Data</button>
       </div>
     </div>
 
@@ -3061,8 +3053,8 @@
         </div>
       </div>
 
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
-        <button class="modal-btn" style="background: var(--text-muted);" id="wa-monitor-back-btn">Kembali ke Menu</button>
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="wa-monitor-back-btn">Kembali ke Menu</button>
       </div>
     </div>
 
@@ -3101,8 +3093,8 @@
         </div>
       </div>
 
-      <div style="display: flex; justify-content: center; margin-top: 8px;">
-        <button class="modal-btn" style="background: var(--text-muted); padding: 10px 28px;" id="btn-close-semester-modal" onclick="closeSemesterModalToMenu()">Kembali ke Menu</button>
+      <div style="display: flex; justify-content: center; margin-top: 12px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+        <button class="modal-btn" style="background: var(--text-muted); padding: 10px 28px; width: 100%; min-height: 48px; font-weight: 600;" id="btn-close-semester-modal" onclick="closeSemesterModalToMenu()">Kembali ke Menu</button>
       </div>
     </div>
   </div>
@@ -3422,7 +3414,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260910_mobile_v10"></script>
+  <script src="frontend/js/script.js?v=20260911_mobile_v11"></script>
 </body>
 
 </html>
