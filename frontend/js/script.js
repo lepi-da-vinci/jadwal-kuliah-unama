@@ -5752,19 +5752,76 @@ function renderRoomFinderResults() {
 }
 
 function filterMainTableToRoom(roomName) {
+  // 1. Tutup modal fitur / info lain secara tuntas
+  if (typeof closeInfoLainModal === 'function') {
+    closeInfoLainModal();
+  }
   const modalFitur = document.getElementById('modal-fitur');
-  if (modalFitur) modalFitur.style.display = 'none';
+  if (modalFitur) {
+    modalFitur.style.display = 'none';
+    modalFitur.classList.remove('open');
+  }
+  document.body.classList.remove('modal-open');
+
+  // Tutup modal lain jika ada yang terbuka
   const modalFinder = document.getElementById('room-finder-modal');
   if (modalFinder) modalFinder.classList.remove('open');
   const modalHub = document.getElementById('changes-hub-modal');
   if (modalHub) modalHub.classList.remove('open');
+  const modalFsFilter = document.getElementById('modal-fs-filter');
+  if (modalFsFilter) modalFsFilter.style.display = 'none';
 
+  if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
+
+  // 2. Pastikan kembali ke dashboard utama jika sedang di explorer mode
+  if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode) {
+    if (typeof exitSemesterExplorerMode === 'function') exitSemesterExplorerMode();
+  }
+
+  // 3. Set filter ruangan
   const filterRuangan = document.getElementById('filter-ruangan');
   const labelRuangan = document.getElementById('label-ruangan');
   if (filterRuangan) filterRuangan.value = roomName;
   if (labelRuangan) labelRuangan.textContent = roomName;
 
+  // Update item aktif pada dropdown custom
+  const dropdownRuangan = document.getElementById('dropdown-ruangan');
+  if (dropdownRuangan) {
+    const items = dropdownRuangan.querySelectorAll('.aslab-list-item');
+    items.forEach(item => {
+      const val = item.getAttribute('data-value') || item.textContent.trim();
+      if (val === roomName) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  }
+
+  // 4. Sinkronkan kategori ruangan agar tidak terjadi konflik
+  const filterKatRuang = document.getElementById('filter-kategori-ruang');
+  const labelKatRuang = document.getElementById('label-kategori-ruang');
+  if (filterKatRuang && filterKatRuang.value !== 'semua') {
+    const roomIsLab = typeof isLab === 'function' ? isLab(roomName) : false;
+    if ((roomIsLab && filterKatRuang.value === 'kelas') || (!roomIsLab && filterKatRuang.value === 'labor')) {
+      filterKatRuang.value = 'semua';
+      if (labelKatRuang) labelKatRuang.textContent = 'Semua Kategori';
+    }
+  }
+
+  // 5. Terapkan filter ke tabel dan kartu jadwal
   applyFilters();
+  if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+
+  // 6. Gulir (scroll) halus langsung ke daftar kartu hasil pencarian jadwal (Gambar 2)
+  setTimeout(() => {
+    const targetEl = document.querySelector('.card-header') || document.getElementById('hasil-pencarian') || document.getElementById('mobile-schedule-cards') || document.getElementById('table-container');
+    if (targetEl) {
+      const yOffset = -14;
+      const y = targetEl.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+  }, 100);
 }
 window.filterMainTableToRoom = filterMainTableToRoom;
 
@@ -6388,6 +6445,8 @@ window.handleFiturDateChange = handleFiturDateChange;
 function openInfoLainModal(initialTab = 'kosong') {
   if (!modalFitur) return;
   modalFitur.style.display = 'block';
+  modalFitur.classList.add('open');
+  document.body.classList.add('modal-open');
 
   initFiturTanggalFlatpickr();
   updateInfoLainBadges();
@@ -6396,7 +6455,11 @@ function openInfoLainModal(initialTab = 'kosong') {
 window.openInfoLainModal = openInfoLainModal;
 
 function closeInfoLainModal() {
-  if (modalFitur) modalFitur.style.display = 'none';
+  if (modalFitur) {
+    modalFitur.style.display = 'none';
+    modalFitur.classList.remove('open');
+  }
+  document.body.classList.remove('modal-open');
 }
 window.closeInfoLainModal = closeInfoLainModal;
 
@@ -6418,7 +6481,7 @@ window.addEventListener('click', (e) => {
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && modalFitur && modalFitur.style.display === 'block') {
+  if (e.key === 'Escape' && modalFitur && (modalFitur.style.display === 'block' || modalFitur.classList.contains('open'))) {
     closeInfoLainModal();
   }
 });
@@ -6502,6 +6565,43 @@ function setFiturJenisRuangan(val) {
 if (btnFiturJenisLab) btnFiturJenisLab.addEventListener('click', () => setFiturJenisRuangan('Lab'));
 if (btnFiturJenisKelas) btnFiturJenisKelas.addEventListener('click', () => setFiturJenisRuangan('Kelas'));
 if (btnFiturJenisSemua) btnFiturJenisSemua.addEventListener('click', () => setFiturJenisRuangan(''));
+
+function selectFiturCustomOption(type, value, label) {
+  if (type === 'kampus') {
+    const sel = document.getElementById('fitur-filter-kampus');
+    if (sel) {
+      sel.value = value;
+      sel.dispatchEvent(new Event('change'));
+    }
+    const lbl = document.getElementById('label-fitur-kampus');
+    if (lbl) lbl.innerText = label;
+    const items = document.querySelectorAll('#dropdown-fitur-kampus .aslab-list-item');
+    items.forEach(item => {
+      const itemVal = item.getAttribute('data-value') ?? '';
+      if (itemVal === value) item.classList.add('active');
+      else item.classList.remove('active');
+    });
+    const dropdown = document.getElementById('dropdown-fitur-kampus');
+    if (dropdown) dropdown.classList.remove('open');
+  } else if (type === 'waktu') {
+    const sel = document.getElementById('fitur-filter-waktu');
+    if (sel) {
+      sel.value = value;
+      sel.dispatchEvent(new Event('change'));
+    }
+    const lbl = document.getElementById('label-fitur-waktu');
+    if (lbl) lbl.innerText = label;
+    const items = document.querySelectorAll('#dropdown-fitur-waktu .aslab-list-item');
+    items.forEach(item => {
+      const itemVal = item.getAttribute('data-value') ?? '';
+      if (itemVal === value) item.classList.add('active');
+      else item.classList.remove('active');
+    });
+    const dropdown = document.getElementById('dropdown-fitur-waktu');
+    if (dropdown) dropdown.classList.remove('open');
+  }
+}
+window.selectFiturCustomOption = selectFiturCustomOption;
 
 document.getElementById('fitur-filter-kampus')?.addEventListener('change', renderFiturRooms);
 document.getElementById('fitur-filter-waktu')?.addEventListener('change', renderFiturRooms);

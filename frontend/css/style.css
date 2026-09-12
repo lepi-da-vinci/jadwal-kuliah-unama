@@ -760,13 +760,64 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   margin-bottom: 12px;
 }
 
-#modal-fitur .modal-box {
+#modal-fitur .modal-box,
+.fitur-modal-box {
   width: 96% !important;
   max-width: 1480px !important;
   max-height: 94vh !important;
   margin: 1.5vh auto !important;
   display: flex !important;
   flex-direction: column !important;
+  overflow: hidden !important;
+  border-radius: var(--radius-xl) !important;
+}
+
+.fitur-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.fitur-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.fitur-filter-col label.fitur-filter-lbl {
+  display: block;
+  font-size: 0.76em;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.fitur-jenis-segmented {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.fitur-jenis-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.84em;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fitur-tabs-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 10px;
 }
 
 /* ─── Panels (Lab & Notification) ─── */
@@ -5072,7 +5123,6 @@ body.semester-explorer-active #semester-explorer-container {
   #modal-fs-filter .modal-box,
   #room-detail-modal .modal-box,
   #modal-fs-info .modal-box,
-  #modal-fitur .modal-box,
   #lab-modal .modal-box,
   .setting-modal-box,
   .db-clear-modal-box,
@@ -5091,6 +5141,248 @@ body.semester-explorer-active #semester-explorer-container {
     box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45) !important;
     animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
     z-index: 100001 !important;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     MODAL FITUR / PUSAT INFO MOBILE OVERHAUL (BOTTOM SHEET)
+     ══════════════════════════════════════════════════════════════ */
+  #modal-fitur .modal-box,
+  .fitur-modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 94vh !important;
+    max-height: 94vh !important;
+    border-radius: 26px 26px 0 0 !important;
+    margin: 0 !important;
+    margin-top: auto !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5) !important;
+    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+    z-index: 100001 !important;
+  }
+
+  #modal-fitur .modal-box::before {
+    margin: 8px auto 6px auto !important;
+  }
+
+  /* Header Modal: Ringkas, to-the-point */
+  #modal-fitur .fitur-modal-header {
+    padding: 8px 16px 10px 16px !important;
+    border-bottom: 1px solid var(--border) !important;
+    background: var(--bg-elevated) !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  #modal-fitur .fitur-modal-header h2 {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+    text-align: left !important;
+    color: var(--text) !important;
+  }
+
+  #modal-fitur .fitur-modal-header p.fitur-header-desc {
+    display: none !important;
+  }
+
+  #modal-fitur .fitur-header-icon {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+  }
+
+  #modal-fitur .fitur-header-icon svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  /* Tabs Bar: Semua 5 Tab muat 1 baris di HP (Icon-first / Logo saja) */
+  #modal-fitur .fitur-tabs-bar {
+    display: flex !important;
+    gap: 4px !important;
+    padding: 6px 10px !important;
+    background: var(--bg-elevated) !important;
+    border-bottom: 1px solid var(--border) !important;
+    justify-content: space-between !important;
+    flex-shrink: 0 !important;
+  }
+
+  #modal-fitur .info-main-tab {
+    flex: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 8px 4px !important;
+    min-height: 38px !important;
+    border-radius: var(--radius-sm) !important;
+    position: relative !important;
+    border: none !important;
+  }
+
+  #modal-fitur .info-main-tab .tab-label {
+    display: none !important;
+  }
+
+  #modal-fitur .info-main-tab svg {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 auto !important;
+  }
+
+  #modal-fitur .info-main-tab .db-mini-badge {
+    position: absolute !important;
+    top: 2px !important;
+    right: 3px !important;
+    font-size: 0.62rem !important;
+    padding: 1px 4px !important;
+    border-radius: 9999px !important;
+    min-width: 14px !important;
+    text-align: center !important;
+    line-height: 1 !important;
+  }
+
+  /* Body Modal: Scroll lancar & mulus tanpa macet */
+  #modal-fitur .fitur-modal-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    padding: 12px 14px calc(14px + env(safe-area-inset-bottom)) 14px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Segmented Category Buttons (Semua vs Labor vs Ruang Kelas): Logo ikon saja */
+  #modal-fitur .fitur-jenis-segmented {
+    display: flex !important;
+    width: 100% !important;
+    gap: 4px !important;
+    background: var(--bg-card) !important;
+    padding: 4px !important;
+    border-radius: var(--radius-md) !important;
+    border: 1px solid var(--border) !important;
+    box-sizing: border-box !important;
+    margin-bottom: 10px !important;
+    box-shadow: var(--clay-inner-sm) !important;
+  }
+
+  #modal-fitur .fitur-jenis-btn {
+    flex: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 8px 6px !important;
+    min-height: 38px !important;
+    border-radius: var(--radius-sm) !important;
+    border: none !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+  }
+
+  #modal-fitur .fitur-jenis-btn .fitur-jenis-text {
+    display: none !important;
+  }
+
+  #modal-fitur .fitur-jenis-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 !important;
+  }
+
+  /* Filter Grid (Kampus, Tanggal, Waktu) */
+  #modal-fitur .fitur-filter-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  #modal-fitur .fitur-filter-col label.fitur-filter-lbl {
+    font-size: 0.74rem !important;
+    font-weight: 700 !important;
+    color: var(--text-muted) !important;
+    text-transform: uppercase !important;
+    margin-bottom: 3px !important;
+    display: block !important;
+  }
+
+  #modal-fitur .fitur-filter-col .custom-select-trigger,
+  #modal-fitur .fitur-filter-col .fitur-tanggal-wrapper input,
+  #modal-fitur .fitur-filter-col input[type="text"]#fitur-filter-tanggal {
+    height: 40px !important;
+    font-size: 0.86rem !important;
+    padding: 8px 12px !important;
+  }
+
+  #modal-fitur .fitur-filter-col .fitur-tanggal-wrapper input,
+  #modal-fitur .fitur-filter-col input[type="text"]#fitur-filter-tanggal {
+    padding-left: 36px !important;
+  }
+
+  /* Room Cards Grid di HP mengalir tanpa nested overflow scroll trap */
+  #modal-fitur #result-lab-kosong-grid {
+    grid-template-columns: 1fr !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow-y: visible !important;
+    gap: 10px !important;
+    padding: 4px 0 !important;
+  }
+
+  #modal-fitur .room-grid-card {
+    padding: 12px 14px !important;
+    min-height: 0 !important;
+    gap: 8px !important;
+  }
+
+  /* Tab 2, 3, 4, 5 List Containers juga mengalir bebas di scroll modal */
+  #modal-fitur #info-hub-changes-container,
+  #modal-fitur #info-bentrok-list-container,
+  #modal-fitur #result-cari-dosen,
+  #modal-fitur #result-cari-kelas {
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow-y: visible !important;
+  }
+
+  /* Footer Modal: Tombol Tutup rapi dan teks boilerplate disembunyikan */
+  #modal-fitur .fitur-modal-footer {
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom)) 16px !important;
+    border-top: 1px solid var(--border) !important;
+    background: var(--bg-card) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  #modal-fitur #info-modal-footer-hint {
+    display: none !important;
+  }
+
+  #modal-fitur .fitur-modal-footer .modal-btn,
+  #modal-fitur .fitur-modal-footer #btn-tutup-fitur {
+    width: 100% !important;
+    min-height: 42px !important;
+    padding: 10px 16px !important;
+    font-size: 0.92rem !important;
+    font-weight: 600 !important;
+    border-radius: var(--radius-full) !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    background: var(--bg-elevated) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: var(--shadow-xs) !important;
+    cursor: pointer !important;
   }
 
   .modal-box::before {
