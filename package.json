@@ -1,0 +1,15 @@
+{
+  "name": "jadwal-kuliah-unama",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "scrape:test": "bun run --cwd apps/scrapper test",
+    "scrape:sync": "bun run --cwd apps/scrapper sync",
+    "db:push": "bun run --cwd packages/db db:push",
+    "db:studio": "bun run --cwd packages/db db:studio"
+  }
+}
