@@ -6810,6 +6810,9 @@ function openInfoLainModal(initialTab = 'kosong') {
   modalFitur.classList.add('open');
   document.body.classList.add('modal-open');
 
+  const modalBody = modalFitur.querySelector('.fitur-modal-body');
+  if (modalBody) modalBody.scrollTop = 0;
+
   initFiturTanggalFlatpickr();
   updateInfoLainBadges();
   switchInfoMainTab(initialTab);
@@ -6879,6 +6882,9 @@ function switchInfoMainTab(tabKey) {
       content.style.display = (k === tabKey) ? 'block' : 'none';
     }
   });
+
+  const modalBody = modalFitur?.querySelector('.fitur-modal-body');
+  if (modalBody) modalBody.scrollTop = 0;
 
   if (tabKey === 'kosong') {
     renderFiturRooms();
@@ -7265,50 +7271,65 @@ function renderFiturRooms() {
     let badgeClass = 'free';
     let statusIcon = '<polyline points="20 6 9 17 4 12"></polyline>';
     let cardClass = 'is-free';
+    let badgeText = 'Kosong Bebas';
 
     if (r.statusType === 'has-gaps') {
       badgeClass = 'busy';
       statusIcon = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
       cardClass = 'is-gap';
+      badgeText = r.gapsInfo.length === 1 ? 'Ada 1 Jam Kosong' : `Ada ${r.gapsInfo.length} Jam Kosong`;
     } else if (r.statusType === 'full-busy') {
       cardClass = 'is-busy';
+      badgeClass = 'full-busy';
       statusIcon = '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>';
+      badgeText = r.isKobar ? 'Jadwal Penuh' : 'Terpakai Penuh';
     }
 
     return `
       <div class="room-grid-card ${cardClass}">
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
-            <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 700; font-size: 1.08em; color: var(--text); line-height: 1.35; word-break: break-word;">${formatRoomNameHtml(r.roomName)}</div>
-              <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 3px;">
-                ${escapeHtml(formatCampusName(r.kampus))} • <span class="title-desktop">${r.isLab ? 'Labor' : 'Ruang Kelas'}</span><span class="title-mobile">${r.isLab ? 'Lab' : 'Ruang Kelas'}</span> • <span style="color: ${r.isKobar ? 'var(--text-secondary)' : '#6366f1'}; font-weight: 600;">${r.isKobar ? 'Maks 17:00 (Non-Malam)' : 'Ada Kelas Malam (s/d 21:00)'}</span>
+        <div class="room-card-body">
+          <div class="room-card-header">
+            <div class="room-card-title-wrap">
+              <div class="room-card-name">${formatRoomNameHtml(r.roomName)}</div>
+              <div class="room-card-meta">
+                <span class="room-meta-item">${escapeHtml(formatCampusName(r.kampus))}</span>
+                <span class="room-meta-sep">•</span>
+                <span class="room-meta-item"><span class="title-desktop">${r.isLab ? 'Laboratorium' : 'Ruang Kelas'}</span><span class="title-mobile">${r.isLab ? 'Lab' : 'Ruang Kelas'}</span></span>
+                <span class="room-meta-sep">•</span>
+                <span class="room-meta-item ${r.isKobar ? 'room-kobar-tag' : 'room-thehok-tag'}">${r.isKobar ? 'Maks 17:00 (Non-Malam)' : 'Ada Kelas Malam (s/d 21:00)'}</span>
               </div>
             </div>
-            <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0; white-space: nowrap;">
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5">${statusIcon}</svg>
-              ${escapeHtml(r.statusLabel)}
-            </span>
+            <div class="room-card-badge-wrap">
+              <span class="room-status-badge ${badgeClass}">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5">${statusIcon}</svg>
+                <span>${escapeHtml(badgeText)}</span>
+              </span>
+            </div>
           </div>
 
-          <div style="margin-top: 10px; font-size: 0.84em; color: var(--text-muted);">
+          <div class="room-card-status-detail">
             ${r.statusType === 'full-free' 
-              ? `<div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: #10b981; font-weight: 600; font-size: 0.84em;">
+              ? `<div class="room-free-banner">
                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                    <span>${r.isKobar ? 'Bebas digunakan (08:00 - 17:00 • Kobar tutup jam 17:00)' : 'Bebas digunakan sepanjang hari (08:00 - 21:00)'}</span>
                  </div>` 
               : r.statusType === 'has-gaps' 
-                ? `<div>Jam kosong tersedia:</div>
-                   <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;">
-                     ${r.gapsInfo.map(g => `<span class="info-time-chip" style="font-size: 0.8em; padding: 3px 8px;">${escapeHtml(g)}</span>`).join('')}
+                ? `<div class="room-gaps-block">
+                     <div class="room-gaps-title">Jam kosong yang tersedia:</div>
+                     <div class="room-gaps-chips">
+                       ${r.gapsInfo.map(g => `<span class="info-time-chip">${escapeHtml(g)}</span>`).join('')}
+                     </div>
                    </div>`
-                : `<span style="color: var(--text-muted);">${r.isKobar ? 'Jadwal penuh s/d jam 17:00 (Kelas terakhir selesai).' : 'Jadwal penuh untuk seluruh sesi perkuliahan.'}</span>`
+                : `<div class="room-busy-banner">
+                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                     <span>${r.isKobar ? 'Jadwal penuh s/d jam 17:00 (Kelas terakhir selesai).' : 'Jadwal penuh untuk seluruh sesi perkuliahan.'}</span>
+                   </div>`
             }
           </div>
         </div>
 
-        <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(r.roomName)}')" style="width: 100%; font-size: 0.84em; padding: 7px 12px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
+        <div class="room-card-footer">
+          <button type="button" class="btn btn-secondary btn-sm room-action-btn" onclick="filterMainTableToRoom('${escapeHtml(r.roomName)}')">
             <span>Lihat Jadwal Ruangan</span>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </button>

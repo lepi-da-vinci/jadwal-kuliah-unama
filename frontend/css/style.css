@@ -3334,7 +3334,21 @@ tr.table-row-conflict td:first-child {
   gap: 5px;
 }
 
-/* Room Cards in Unified Info Hub */
+/* ─── Room Cards & Grid in Unified Info Hub ─── */
+.fitur-rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  padding: 4px 2px 24px 2px;
+}
+
+.fitur-scroll-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px 24px 2px;
+}
+
 .room-grid-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -3345,8 +3359,9 @@ tr.table-row-conflict td:first-child {
   flex-direction: column;
   justify-content: space-between;
   min-height: 175px;
-  gap: 12px;
+  gap: 14px;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
 .room-grid-card:hover {
@@ -3365,7 +3380,170 @@ tr.table-row-conflict td:first-child {
 
 .room-grid-card.is-busy {
   border-left: 5px solid #94a3b8;
-  opacity: 0.85;
+  opacity: 0.9;
+}
+
+.room-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.room-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.room-card-title-wrap {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.room-card-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text);
+  line-height: 1.35;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.room-card-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  line-height: 1.4;
+}
+
+.room-meta-sep {
+  opacity: 0.45;
+  font-size: 0.75em;
+}
+
+.room-meta-item.room-kobar-tag {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.room-meta-item.room-thehok-tag {
+  color: #6366f1;
+  font-weight: 600;
+}
+
+.room-card-badge-wrap {
+  flex-shrink: 0;
+}
+
+.room-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.room-status-badge.free {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.room-status-badge.busy {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.room-status-badge.full-busy {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.room-card-status-detail {
+  margin-top: 2px;
+}
+
+.room-free-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+  font-weight: 600;
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.room-free-banner svg {
+  flex-shrink: 0;
+}
+
+.room-busy-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: var(--text-muted);
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.room-busy-banner svg {
+  flex-shrink: 0;
+}
+
+.room-gaps-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.room-gaps-title {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.room-gaps-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.room-card-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.room-action-btn {
+  width: 100%;
+  font-size: 0.84rem;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+  transition: all 0.15s ease;
 }
 
 /* 5. WhatsApp Gateway Monitor */
@@ -5364,7 +5542,8 @@ body.semester-explorer-active #semester-explorer-container {
   }
 
   /* Room Cards Grid di HP mengalir tanpa nested overflow scroll trap */
-  #modal-fitur #result-lab-kosong-grid {
+  #modal-fitur #result-lab-kosong-grid,
+  #modal-fitur .fitur-rooms-grid {
     grid-template-columns: 1fr !important;
     max-height: none !important;
     min-height: 0 !important;
@@ -5376,17 +5555,23 @@ body.semester-explorer-active #semester-explorer-container {
   #modal-fitur .room-grid-card {
     padding: 12px 14px !important;
     min-height: 0 !important;
-    gap: 8px !important;
+    gap: 10px !important;
+  }
+
+  #modal-fitur .room-card-name {
+    font-size: 1.02rem !important;
   }
 
   /* Tab 2, 3, 4, 5 List Containers juga mengalir bebas di scroll modal */
   #modal-fitur #info-hub-changes-container,
   #modal-fitur #info-bentrok-list-container,
   #modal-fitur #result-cari-dosen,
-  #modal-fitur #result-cari-kelas {
+  #modal-fitur #result-cari-kelas,
+  #modal-fitur .fitur-scroll-container {
     max-height: none !important;
     min-height: 0 !important;
     overflow-y: visible !important;
+    padding: 4px 0 !important;
   }
 
   /* Footer Modal: Tombol Tutup rapi dan teks boilerplate disembunyikan */
