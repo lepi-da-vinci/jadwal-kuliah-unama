@@ -1603,8 +1603,17 @@ function renderTable(data) {
     }
 
     const safeItemJson = escapeHtml(JSON.stringify(item));
+    const isNight = typeof isNightClass === 'function' && isNightClass(item);
+    const nightBadgeHtml = isNight 
+      ? `<span class="badge malam" style="font-size:0.72em; padding:2px 8px; margin-top:4px; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Kampus Thehok)"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` 
+      : '';
+
     row.innerHTML = `
-          <td><strong>${escapeHtml(item.jam)}</strong><br><small>${escapeHtml(item.hari)}, ${escapeHtml(item.tanggal_format || item.tanggal)}</small></td>
+          <td>
+            <strong>${escapeHtml(item.jam)}</strong>
+            ${nightBadgeHtml ? `<br>${nightBadgeHtml}` : ''}
+            <br><small>${escapeHtml(item.hari)}, ${escapeHtml(item.tanggal_format || item.tanggal)}</small>
+          </td>
           <td>
             ${escapeHtml(item.nama_mk || '-')} 
             ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${escapeHtml(item.kelas)})</small>` : ''}
@@ -1666,6 +1675,7 @@ function renderMobileScheduleCards(data) {
       (window._currentScheduleConflicts.lecturerConflicts.has(itemKey) ||
        Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
     const hasConflict = hasRoomConflict || hasDosenConflict;
+    const isNight = typeof isNightClass === 'function' && isNightClass(item);
 
     return `
       <div class="mobile-card ${hasConflict ? 'conflict' : ''}">
@@ -1676,6 +1686,7 @@ function renderMobileScheduleCards(data) {
             <small>• ${escapeHtml(item.hari || '-')}</small>
           </div>
           <div class="mobile-card-badges">
+            ${isNight ? `<span class="badge malam" title="Kelas Malam (Mulai jam 17:00 • Kampus Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` : ''}
             <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
             <span class="mobile-status-pill">${escapeHtml(displayStatus)}</span>
           </div>
@@ -1748,6 +1759,76 @@ function isLab(namaRuangan) {
   const name = namaRuangan.toLowerCase();
   return name.includes('lab') || name.includes('praktek');
 }
+
+// ─── Aturan Kampus & Kelas Malam (Thehok vs Kobar) ───
+// Kobar: Tidak ada kelas malam. Operasional berakhir maksimal jam 17:00 (5 sore).
+// Thehok: Memiliki kelas malam mulai jam 17:00 s/d 21:00 (toleransi operasional s/d 21:30).
+const OPERATIONAL_RULES = {
+  kobar: {
+    name: 'Kampus Kobar',
+    closeMinute: 17 * 60, // 17:00 (1020 mnt)
+    closeTimeStr: '17:00',
+    hasNightClasses: false
+  },
+  thehok: {
+    name: 'Kampus Thehok',
+    nightStartMinute: 17 * 60, // 17:00 (1020 mnt)
+    nightStartTimeStr: '17:00',
+    closeMinute: 21 * 60, // 21:00 (1260 mnt)
+    maxCloseMinute: 21 * 60 + 30, // 21:30 (1290 mnt)
+    closeTimeStr: '21:00',
+    hasNightClasses: true
+  }
+};
+window.OPERATIONAL_RULES = OPERATIONAL_RULES;
+
+function getRoomCampus(roomName, defaultCampus = '') {
+  if (!roomName) return defaultCampus || 'Kampus Thehok';
+  const lower = String(roomName).toLowerCase();
+  if (lower.includes('kobar')) return 'Kampus Kobar';
+  if (lower.includes('thehok')) return 'Kampus Thehok';
+
+  if (typeof allRuanganData !== 'undefined' && Array.isArray(allRuanganData)) {
+    const found = allRuanganData.find(r => r && r.nama_ruangan === roomName);
+    if (found && found.kampus) {
+      return found.kampus.toLowerCase().includes('kobar') ? 'Kampus Kobar' : 'Kampus Thehok';
+    }
+  }
+
+  if (typeof allJadwal !== 'undefined' && Array.isArray(allJadwal)) {
+    const found = allJadwal.find(j => j && j.nama_ruangan === roomName && j.kampus);
+    if (found && found.kampus) {
+      return found.kampus.toLowerCase().includes('kobar') ? 'Kampus Kobar' : 'Kampus Thehok';
+    }
+  }
+
+  if (lower.includes('4.') || lower.includes('pasca') || lower.includes('b2.') || lower.includes('b1.') || lower.includes('b3.') || lower.includes('cisco')) {
+    return 'Kampus Thehok';
+  }
+  return defaultCampus || 'Kampus Thehok';
+}
+window.getRoomCampus = getRoomCampus;
+
+function isRoomKobar(roomName) {
+  return getRoomCampus(roomName).includes('Kobar');
+}
+window.isRoomKobar = isRoomKobar;
+
+function isRoomThehok(roomName) {
+  return getRoomCampus(roomName).includes('Thehok');
+}
+window.isRoomThehok = isRoomThehok;
+
+function isNightClass(item) {
+  if (!item || !item.jam) return false;
+  const parts = item.jam.split(':');
+  if (parts.length < 2) return false;
+  const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  // Kelas malam mulai jam 17:00 (5 sore) ke atas, hanya berlaku di Kampus Thehok
+  const campus = item.kampus || getRoomCampus(item.nama_ruangan);
+  return startMin >= 17 * 60 && !campus.toLowerCase().includes('kobar');
+}
+window.isNightClass = isNightClass;
 
 function applyFilters() {
   const ft = filterTanggal ? filterTanggal.value : '';
@@ -1929,16 +2010,15 @@ function updateActiveLabPanel() {
     if (filterRuangan !== 'semua' && r.nama_ruangan !== filterRuangan) return;
 
     let rawName = r.nama_ruangan;
-    let isThehok = true;
-    if (rawName.includes("(Kampus Kobar)") || (r.kampus && r.kampus.toLowerCase().includes("kobar"))) {
-      isThehok = false;
-    }
+    let kampus = getRoomCampus(rawName, r.kampus || '');
+    let isThehok = !kampus.includes('Kobar');
+    let isKobar = !isThehok;
     let cleanName = rawName.replace(/ \(Kampus.*?\)/, "");
     let isRoomLab = isLab(rawName);
 
     let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
 
-    let state = 'empty'; // empty (red), waiting (orange), occupied (green)
+    let state = 'empty'; // empty (red), waiting (orange), occupied (green), finished (gray)
     let text = 'Kosong';
     let jamText = '';
 
@@ -1972,7 +2052,26 @@ function updateActiveLabPanel() {
     } else if (hasFutureClass) {
       state = 'waiting';
       text = 'Jeda';
-      jamText = `(Buka: ${nextClass.jam})`;
+      const isNight = nextClass.start >= 17 * 60;
+      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+    } else if (isToday && schedules.length > 0) {
+      // Kelas terjadwal hari ini sudah selesai
+      const lastClass = schedules[schedules.length - 1];
+      if (currentTime > lastClass.end) {
+        state = 'finished';
+        text = 'Selesai';
+        jamText = isKobar ? '(Kelas Terakhir)' : (lastClass.start >= 17 * 60 ? '(Malam Selesai)' : '(Operasional Selesai)');
+      }
+    } else if (isToday && isKobar && currentTime >= 17 * 60) {
+      // Kobar tutup jam 17:00 (tidak ada kelas malam)
+      state = 'finished';
+      text = 'Selesai';
+      jamText = '(Tutup 17:00)';
+    } else if (isToday && !isKobar && currentTime >= 21 * 60) {
+      // Thehok tutup jam 21:00
+      state = 'finished';
+      text = 'Selesai';
+      jamText = '(Tutup 21:00)';
     } else if (!isToday && schedules.length > 0) {
       state = 'scheduled';
       text = 'Terjadwal';
@@ -1987,8 +2086,9 @@ function updateActiveLabPanel() {
     // Check if already processed in allRuanganData
     if (allRuanganData.some(r => r.nama_ruangan === rawName)) return;
 
-    let isThehok = true;
-    if (rawName.includes("(Kampus Kobar)")) isThehok = false; // Fallback check
+    let kampus = getRoomCampus(rawName);
+    let isThehok = !kampus.includes('Kobar');
+    let isKobar = !isThehok;
 
     let cleanName = rawName.replace(/ \(Kampus.*?\)/, "");
     let isRoomLab = isLab(rawName);
@@ -2027,7 +2127,23 @@ function updateActiveLabPanel() {
     } else if (hasFutureClass) {
       state = 'waiting';
       text = 'Jeda';
-      jamText = `(Buka: ${nextClass.jam})`;
+      const isNight = nextClass.start >= 17 * 60;
+      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+    } else if (isToday && schedules.length > 0) {
+      const lastClass = schedules[schedules.length - 1];
+      if (currentTime > lastClass.end) {
+        state = 'finished';
+        text = 'Selesai';
+        jamText = isKobar ? '(Kelas Terakhir)' : (lastClass.start >= 17 * 60 ? '(Malam Selesai)' : '(Operasional Selesai)');
+      }
+    } else if (isToday && isKobar && currentTime >= 17 * 60) {
+      state = 'finished';
+      text = 'Selesai';
+      jamText = '(Tutup 17:00)';
+    } else if (isToday && !isKobar && currentTime >= 21 * 60) {
+      state = 'finished';
+      text = 'Selesai';
+      jamText = '(Tutup 21:00)';
     } else if (!isToday && schedules.length > 0) {
       state = 'scheduled';
       text = 'Terjadwal';
@@ -2056,6 +2172,10 @@ function updateActiveLabPanel() {
           ? `<span class="notif-cat-badge labor">Labor</span>` 
           : `<span class="notif-cat-badge kelas">Kelas</span>`;
 
+        const roomCampus = getRoomCampus(room);
+        const isKobarRoom = roomCampus.includes('Kobar');
+        const campusNote = isKobarRoom ? ' (Kampus Kobar - Tidak ada kelas malam)' : (lastClassEndTime >= 17 * 60 ? ' (Sesi Malam Kampus Thehok)' : '');
+
         const itemHTML = `
           <div class="notif-item" style="border-left: 4px solid ${color};">
             <div class="notif-header">
@@ -2064,7 +2184,7 @@ function updateActiveLabPanel() {
                 ${badgeHTML}
               </div>
             </div>
-            <div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.</div>
+            <div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.${campusNote}</div>
           </div>
         `;
 
@@ -3715,9 +3835,15 @@ window.showRoomDetail = function (roomName, kampusStr) {
     badgeEl.style.display = 'inline-block';
   }
 
+  const roomCampus = getRoomCampus(roomName, kampusStr || '');
+  const isKobarRoom = roomCampus.includes('Kobar');
+
   const subdescEl = document.getElementById('room-detail-subdesc');
   if (subdescEl) {
-    subdescEl.innerText = `Daftar perkuliahan tanggal ${formatTanggalIndo(activeDate)}`;
+    const hoursNote = isKobarRoom 
+      ? 'Operasional 08:00 - 17:00 (Kampus Kobar • Tidak ada kelas malam)' 
+      : 'Operasional 08:00 - 21:00 (Kampus Thehok • Tersedia kelas malam mulai 17:00)';
+    subdescEl.innerHTML = `Daftar perkuliahan tanggal ${formatTanggalIndo(activeDate)}<br><small style="color:var(--text-muted);font-weight:600;">${hoursNote}</small>`;
   }
 
   const listContainer = document.getElementById('room-detail-list');
@@ -3801,6 +3927,12 @@ window.showRoomDetail = function (roomName, kampusStr) {
         methodBadge = ``;
       }
 
+      // Badge Kelas Malam (mulai jam 17:00 di Kampus Thehok)
+      const isNight = typeof isNightClass === 'function' && isNightClass(s);
+      const nightBadge = isNight 
+        ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Kampus Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>` 
+        : '';
+
       // 4. Status Perubahan BAAK (Tambahan, Perubahan, Jeda)
       let changeBadgeHtml = '';
       if (s.status_jadwal && s.status_jadwal.trim() !== '' && s.status_jadwal.trim() !== '-' && s.status_jadwal.toLowerCase() !== 'onschedule') {
@@ -3864,6 +3996,7 @@ window.showRoomDetail = function (roomName, kampusStr) {
             </div>
             <div class="room-card-badges-right">
               ${liveBadgeHtml}
+              ${nightBadge}
               ${methodBadge}
               ${changeBadgeHtml}
             </div>
@@ -5652,16 +5785,27 @@ function renderRoomFinderResults() {
     let isFree = true;
     let busyReason = '';
 
+    const rKampus = getRoomCampus(r.nama_ruangan, r.kampus || '');
+    const isKobarRoom = rKampus.includes('Kobar');
+
     if (fWaktu === 'sekarang') {
-      const currentClass = roomClasses.find(c => {
-        const start = parseTimeToMinutes(c.jam);
-        if (start === null) return false;
-        const dur = getClassDuration(c);
-        return (currentMins >= start && currentMins < start + dur);
-      });
-      if (currentClass) {
+      if (isKobarRoom && currentMins >= 17 * 60) {
         isFree = false;
-        busyReason = `Sedang Berlangsung: ${currentClass.jam} • ${currentClass.nama_mk || '-'} (${currentClass.nama_dosen || '-'})`;
+        busyReason = 'Kampus Kobar tutup jam 17:00 (Tidak ada kelas malam)';
+      } else if (!isKobarRoom && currentMins >= 21 * 60) {
+        isFree = false;
+        busyReason = 'Kampus Thehok tutup jam 21:00 (Operasional malam selesai)';
+      } else {
+        const currentClass = roomClasses.find(c => {
+          const start = parseTimeToMinutes(c.jam);
+          if (start === null) return false;
+          const dur = getClassDuration(c);
+          return (currentMins >= start && currentMins < start + dur);
+        });
+        if (currentClass) {
+          isFree = false;
+          busyReason = `Sedang Berlangsung: ${currentClass.jam} • ${currentClass.nama_mk || '-'} (${currentClass.nama_dosen || '-'})`;
+        }
       }
     } else if (fWaktu === 'semua') {
       if (roomClasses.length > 0) {
@@ -5688,21 +5832,35 @@ function renderRoomFinderResults() {
         isFree = false;
         busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
       }
-    } else if (fWaktu === 'sore') { // 16:00 - 21:00 (960 - 1260)
-      const cl = roomClasses.find(c => {
-        const s = parseTimeToMinutes(c.jam);
-        const dur = getClassDuration(c);
-        return s !== null && (s < 1260 && (s + dur) > 960);
-      });
-      if (cl) {
-        isFree = false;
-        busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
+    } else if (fWaktu === 'sore') { // 16:00 - 21:00
+      if (isKobarRoom) {
+        // Kobar hanya buka sampai 17:00 (16:00 - 17:00, tidak ada kelas malam)
+        const cl = roomClasses.find(c => {
+          const s = parseTimeToMinutes(c.jam);
+          const dur = getClassDuration(c);
+          return s !== null && (s < 1020 && (s + dur) > 960);
+        });
+        if (cl) {
+          isFree = false;
+          busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
+        }
+      } else {
+        // Thehok 16:00 - 21:00 (tersedia sesi kelas malam mulai 17:00)
+        const cl = roomClasses.find(c => {
+          const s = parseTimeToMinutes(c.jam);
+          const dur = getClassDuration(c);
+          return s !== null && (s < 1260 && (s + dur) > 960);
+        });
+        if (cl) {
+          isFree = false;
+          busyReason = `Terpakai: ${cl.jam} • ${cl.nama_mk || '-'}`;
+        }
       }
     }
 
     return {
       nama_ruangan: r.nama_ruangan,
-      kampus: r.kampus || (r.nama_ruangan.toLowerCase().includes('thehok') ? 'Kampus Thehok' : 'Kampus Kobar'),
+      kampus: rKampus,
       is_lab: isLab(r.nama_ruangan),
       is_free: isFree,
       busy_reason: busyReason,
@@ -6751,16 +6909,16 @@ function renderFiturRooms() {
     if (filterJenis === 'Kelas' && isRoomLab) return;
 
     const roomClasses = activeScheds.filter(j => j.nama_ruangan === roomName);
-    let kampus = 'Kampus Kobar';
+    let kampus = getRoomCampus(roomName);
     if (roomClasses.length > 0 && roomClasses[0].kampus) {
       kampus = roomClasses[0].kampus;
-    } else if (roomName.toLowerCase().includes('thehok') || roomName.toLowerCase().includes('4.')) {
-      kampus = 'Kampus Thehok';
     }
 
     if (filterKampus && !kampus.toLowerCase().includes(filterKampus.toLowerCase())) {
       return;
     }
+
+    const isKobar = kampus.toLowerCase().includes('kobar');
 
     const sortedClasses = [...roomClasses].map(c => {
       const parts = (c.jam || '').split(':');
@@ -6775,12 +6933,12 @@ function renderFiturRooms() {
 
     let isFree = true;
     let statusType = 'full-free'; // 'full-free', 'has-gaps', 'full-busy'
-    let statusLabel = 'Kosong Seharian Penuh';
+    let statusLabel = isKobar ? 'Kosong Bebas (08:00 - 17:00)' : 'Kosong Bebas (08:00 - 21:00)';
     let gapsInfo = [];
 
     if (sortedClasses.length === 0) {
       statusType = 'full-free';
-      statusLabel = 'Kosong Bebas Jadwal';
+      statusLabel = isKobar ? 'Kosong Bebas (08:00 - 17:00)' : 'Kosong Bebas (08:00 - 21:00)';
     } else {
       statusType = 'has-gaps';
       if (sortedClasses[0].startMin >= 9 * 60) {
@@ -6803,15 +6961,35 @@ function renderFiturRooms() {
       }
 
       const lastClass = sortedClasses[sortedClasses.length - 1];
-      if (lastClass.endMin <= 17 * 60) {
-        const lh = Math.floor(lastClass.endMin / 60).toString().padStart(2, '0');
-        const lm = (lastClass.endMin % 60).toString().padStart(2, '0');
-        gapsInfo.push(`${lh}:${lm} - 21:00`);
+      if (isKobar) {
+        // ATURAN KAMPUS KOBAR:
+        // Tidak ada kelas malam. Maksimal operasional jam 17:00 (5 sore).
+        // Jika ada kelas jam 5 selesai di Kobar (endMin >= 1020), itu kelas terakhir (tidak ada jam kosong setelahnya).
+        // Jika kelas terakhir selesai sebelum jam 17:00 dan ada sisa waktu >= 45 menit, jam kosong hanya s/d 17:00.
+        if (lastClass.endMin < 17 * 60) {
+          const remMin = (17 * 60) - lastClass.endMin;
+          if (remMin >= 45) {
+            const lh = Math.floor(lastClass.endMin / 60).toString().padStart(2, '0');
+            const lm = (lastClass.endMin % 60).toString().padStart(2, '0');
+            gapsInfo.push(`${lh}:${lm} - 17:00`);
+          }
+        }
+      } else {
+        // ATURAN KAMPUS THEHOK:
+        // Ada kelas malam mulai jam 17:00. Operasional selesai jam 21:00 (toleransi s/d 21:30).
+        if (lastClass.endMin < 21 * 60) {
+          const remMin = (21 * 60) - lastClass.endMin;
+          if (remMin >= 45) {
+            const lh = Math.floor(lastClass.endMin / 60).toString().padStart(2, '0');
+            const lm = (lastClass.endMin % 60).toString().padStart(2, '0');
+            gapsInfo.push(`${lh}:${lm} - 21:00`);
+          }
+        }
       }
 
       if (gapsInfo.length === 0) {
         statusType = 'full-busy';
-        statusLabel = 'Terpakai Penuh';
+        statusLabel = isKobar ? 'Jadwal Penuh (Maks 17:00)' : 'Terpakai Penuh';
         isFree = false;
       } else {
         statusLabel = `Ada ${gapsInfo.length} Jam Kosong`;
@@ -6819,6 +6997,8 @@ function renderFiturRooms() {
     }
 
     if (filterWaktu === 'sekarang') {
+      if (isKobar && currentMinutes >= 17 * 60) return; // Kobar tutup setelah 17:00
+      if (!isKobar && currentMinutes >= 21 * 60) return; // Thehok tutup setelah 21:00
       const isBusyNow = sortedClasses.some(c => currentMinutes >= c.startMin && currentMinutes < c.endMin);
       if (isBusyNow) return;
     } else if (filterWaktu === 'pagi') {
@@ -6828,13 +7008,21 @@ function renderFiturRooms() {
       const busyNoon = sortedClasses.some(c => c.startMin < 960 && c.endMin > 720);
       if (busyNoon && statusType !== 'has-gaps') return;
     } else if (filterWaktu === 'sore') {
-      const busyEve = sortedClasses.some(c => c.startMin < 1260 && c.endMin > 960);
-      if (busyEve && statusType !== 'has-gaps') return;
+      if (isKobar) {
+        // Kobar sore hanya 16:00 - 17:00 (karena jam 17:00 tutup)
+        const busyKobar = sortedClasses.some(c => c.startMin < 1020 && c.endMin > 960);
+        if (busyKobar && statusType !== 'has-gaps') return;
+      } else {
+        // Thehok sore/malam 16:00 - 21:00 (mencakup kelas malam)
+        const busyEve = sortedClasses.some(c => c.startMin < 1260 && c.endMin > 960);
+        if (busyEve && statusType !== 'has-gaps') return;
+      }
     }
 
     results.push({
       roomName,
       kampus,
+      isKobar,
       isLab: isRoomLab,
       statusType,
       statusLabel,
@@ -6882,7 +7070,7 @@ function renderFiturRooms() {
             <div style="flex: 1; min-width: 0;">
               <div style="font-weight: 700; font-size: 1.08em; color: var(--text); line-height: 1.35; word-break: break-word;">${escapeHtml(r.roomName)}</div>
               <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 3px;">
-                ${escapeHtml(r.kampus)} • ${r.isLab ? 'Labor' : 'Ruang Kelas'}
+                ${escapeHtml(r.kampus)} • ${r.isLab ? 'Labor' : 'Ruang Kelas'} • <span style="color: ${r.isKobar ? 'var(--text-secondary)' : '#6366f1'}; font-weight: 600;">${r.isKobar ? 'Maks 17:00 (Non-Malam)' : 'Ada Kelas Malam (s/d 21:00)'}</span>
               </div>
             </div>
             <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0; white-space: nowrap;">
@@ -6895,14 +7083,14 @@ function renderFiturRooms() {
             ${r.statusType === 'full-free' 
               ? `<div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: #10b981; font-weight: 600; font-size: 0.84em;">
                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                   <span>Bebas digunakan sepanjang hari ini</span>
+                   <span>${r.isKobar ? 'Bebas digunakan (08:00 - 17:00 • Kampus Kobar tutup jam 17:00)' : 'Bebas digunakan sepanjang hari (08:00 - 21:00)'}</span>
                  </div>` 
               : r.statusType === 'has-gaps' 
                 ? `<div>Jam kosong tersedia:</div>
                    <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;">
                      ${r.gapsInfo.map(g => `<span class="info-time-chip" style="font-size: 0.8em; padding: 3px 8px;">${escapeHtml(g)}</span>`).join('')}
                    </div>`
-                : '<span style="color: var(--text-muted);">Jadwal penuh untuk seluruh sesi perkuliahan.</span>'
+                : `<span style="color: var(--text-muted);">${r.isKobar ? 'Jadwal penuh s/d jam 17:00 (Kelas terakhir selesai).' : 'Jadwal penuh untuk seluruh sesi perkuliahan.'}</span>`
             }
           </div>
         </div>
@@ -7191,11 +7379,13 @@ function renderBentrokList() {
           <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 2px;">
             ${escapeHtml(c.itemA.nama_mk || '-')} <small style="color: var(--text-muted);">(${escapeHtml(c.itemA.kelas || '-')})</small>
           </div>
-          <div style="font-size: 0.8em; color: var(--text-muted);">
-            👤 ${escapeHtml(c.itemA.nama_dosen || '-')}
+          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <span>${escapeHtml(c.itemA.nama_dosen || '-')}</span>
           </div>
-          <div style="font-size: 0.8em; color: var(--text-muted);">
-            📍 ${escapeHtml(c.itemA.nama_ruangan || '-')}
+          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>${escapeHtml(c.itemA.nama_ruangan || '-')}</span>
           </div>
         </div>
 
@@ -7208,11 +7398,13 @@ function renderBentrokList() {
           <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 2px;">
             ${escapeHtml(c.itemB.nama_mk || '-')} <small style="color: var(--text-muted);">(${escapeHtml(c.itemB.kelas || '-')})</small>
           </div>
-          <div style="font-size: 0.8em; color: var(--text-muted);">
-            👤 ${escapeHtml(c.itemB.nama_dosen || '-')}
+          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <span>${escapeHtml(c.itemB.nama_dosen || '-')}</span>
           </div>
-          <div style="font-size: 0.8em; color: var(--text-muted);">
-            📍 ${escapeHtml(c.itemB.nama_ruangan || '-')}
+          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>${escapeHtml(c.itemB.nama_ruangan || '-')}</span>
           </div>
         </div>
       </div>

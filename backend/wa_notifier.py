@@ -186,15 +186,20 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str):
                 msg += f"- {rname}: "
                 scheds = sorted(scheds, key=lambda x: x[0])
                 current = 480
-                end_of_day = max(1020, max((s + d for s, d in scheds), default=1020))
+                is_kobar = "kobar" in kampus.lower() or "kobar" in rname.lower()
+                # Aturan UNAMA: Kobar operasional s/d 17:00 (tidak ada kelas malam). Thehok ada kelas malam s/d 21:00.
+                end_of_day = 1020 if is_kobar else 1260
                 kosong_list = []
                 for sm, dur in scheds:
                     if sm > current:
                         kosong_list.append(f"{current//60:02d}:{current%60:02d} - {sm//60:02d}:{sm%60:02d}")
                     current = max(current, sm + dur)
-                if current < end_of_day:
+                if current < end_of_day and (end_of_day - current) >= 45:
                     kosong_list.append(f"{current//60:02d}:{current%60:02d} - {end_of_day//60:02d}:{end_of_day%60:02d}")
-                msg += ", ".join(kosong_list) + " kosong.\n"
+                if kosong_list:
+                    msg += ", ".join(kosong_list) + f" kosong ({'Kobar s/d 17:00' if is_kobar else 'Thehok s/d 21:00'}).\n"
+                else:
+                    msg += f"jadwal penuh hari ini ({'kelas terakhir selesai di Kobar' if is_kobar else 'operasional Thehok penuh'}).\n"
         return msg
     except Exception as e:
         return f"Error: {e}"
