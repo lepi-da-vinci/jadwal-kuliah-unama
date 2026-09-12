@@ -186,8 +186,8 @@ def init_db_schema():
             default_rooms = [
                 ('Thehok', 'Gedung Pasca, Lab. B2.3'), ('Thehok', 'Labor 1.3'), ('Thehok', 'Labor 1.4'),
                 ('Thehok', 'Labor 1.5'), ('Thehok', 'Labor 2.7'), ('Thehok', 'Labor 3.2'),
-                ('Thehok', 'Labor 4.1'), ('Thehok', 'Labor Cisco 4.3'), ('Thehok', 'R. Praktek 3.1'),
-                ('Thehok', 'R. Praktek 3.4'), ('Thehok', 'Gedung Pasca, R. B1.3'), ('Thehok', 'Gedung Pasca, R. B3.4'),
+                ('Thehok', 'Labor 4.1'), ('Thehok', 'Labor Cisco 4.3'), ('Thehok', 'R. 3.1'),
+                ('Thehok', 'R. 3.4'), ('Thehok', 'Gedung Pasca, R. B1.3'), ('Thehok', 'Gedung Pasca, R. B3.4'),
                 ('Thehok', 'R. 1.6'), ('Thehok', 'R. 1.7'), ('Thehok', 'R. 2.10'),
                 ('Thehok', 'R. 3.10'), ('Thehok', 'R. 3.5'), ('Thehok', 'R. 3.6'),
                 ('Thehok', 'R. 3.7'), ('Thehok', 'R. 3.8'), ('Thehok', 'R. 3.9'),
@@ -371,6 +371,12 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
             nama_ruangan = ", ".join(parts[1:])
         else:
             nama_ruangan = ruang_raw
+
+        # Normalisasi kampus: hapus kata 'Kampus ' (cukup 'Thehok' atau 'Kobar')
+        kampus = re.sub(r'\bKampus\s+', '', kampus, flags=re.I).strip()
+        # Normalisasi ruang: 3.1 dan 3.4 tidak pakai 'Praktek', cukup 'R. 3.1' / 'R. 3.4'
+        nama_ruangan = re.sub(r'\b(R\.|Ruang|Ruangan)?\s*Praktek\s*(3\.[14])\b', r'R. \2', nama_ruangan, flags=re.I)
+        nama_ruangan = re.sub(r'Praktek\s*(3\.[14])', r'R. \1', nama_ruangan, flags=re.I)
             
         # 4. Parsing Kolom STATUS (OnSchedule (TM))
         status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
@@ -445,7 +451,10 @@ def get_class_duration(nama_mk: str) -> int:
 def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
-    return 'lab' in name or 'praktek' in name
+    # Ruang 3.1 dan 3.4 bukan lab (cukup ruangan biasa, tidak ada praktek)
+    if ('3.1' in name or '3.4' in name) and not ('b3.4' in name or 'b2.3' in name):
+        return False
+    return 'lab' in name or 'cisco' in name
 
 def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
     sem_final = target_semester or get_active_semester(conn, cursor)

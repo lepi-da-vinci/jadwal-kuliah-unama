@@ -106,7 +106,7 @@
             <div class="custom-select-wrapper" id="wrapper-fs-kampus">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-kampus', event)">
-                <span class="custom-select-label" id="label-fs-kampus">Semua Kampus</span>
+                <span class="custom-select-label" id="label-fs-kampus">Semua Lokasi</span>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
                   stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
@@ -114,11 +114,11 @@
               </div>
               <div class="aslab-list-container custom-select-dropdown" id="dropdown-fs-kampus">
                 <div class="aslab-list-item active" data-value="semua"
-                  onclick="selectFsModalOption('kampus', 'semua', 'Semua Kampus')">Semua Kampus</div>
-                <div class="aslab-list-item" data-value="Kampus Kobar"
-                  onclick="selectFsModalOption('kampus', 'Kampus Kobar', 'Kampus Kobar')">Kampus Kobar</div>
-                <div class="aslab-list-item" data-value="Kampus Thehok"
-                  onclick="selectFsModalOption('kampus', 'Kampus Thehok', 'Kampus Thehok')">Kampus Thehok</div>
+                  onclick="selectFsModalOption('kampus', 'semua', 'Semua Lokasi')">Semua Lokasi</div>
+                <div class="aslab-list-item" data-value="Thehok"
+                  onclick="selectFsModalOption('kampus', 'Thehok', 'Thehok')">Thehok</div>
+                <div class="aslab-list-item" data-value="Kobar"
+                  onclick="selectFsModalOption('kampus', 'Kobar', 'Kobar')">Kobar</div>
               </div>
               <input type="hidden" id="fs-val-kampus" value="semua">
             </div>
@@ -267,7 +267,7 @@
         style="display: flex; gap: 4px; margin: 12px 24px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
         <button type="button" class="info-mase-kampus-btn active" data-kampus="semua"
           onclick="switchInfoMaseKampus('semua')"
-          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Kampus</button>
+          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Lokasi</button>
         <button type="button" class="info-mase-kampus-btn" data-kampus="thehok"
           onclick="switchInfoMaseKampus('thehok')"
           style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
@@ -438,15 +438,15 @@
                 <div class="custom-select-wrapper" id="wrapper-fitur-kampus">
                   <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                     onclick="toggleCustomSelect('fitur-kampus', event)">
-                    <span class="custom-select-label" id="label-fitur-kampus">Semua Kampus</span>
+                    <span class="custom-select-label" id="label-fitur-kampus">Semua Lokasi</span>
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                   </div>
                   <div class="aslab-list-container custom-select-dropdown" id="dropdown-fitur-kampus">
-                    <div class="aslab-list-item active" data-value="" onclick="selectFiturCustomOption('kampus', '', 'Semua Kampus')">Semua Kampus</div>
-                    <div class="aslab-list-item" data-value="Thehok" onclick="selectFiturCustomOption('kampus', 'Thehok', 'Kampus Thehok')">Kampus Thehok</div>
-                    <div class="aslab-list-item" data-value="Kobar" onclick="selectFiturCustomOption('kampus', 'Kobar', 'Kampus Kobar')">Kampus Kobar</div>
+                    <div class="aslab-list-item active" data-value="" onclick="selectFiturCustomOption('kampus', '', 'Semua Lokasi')">Semua Lokasi</div>
+                    <div class="aslab-list-item" data-value="Thehok" onclick="selectFiturCustomOption('kampus', 'Thehok', 'Thehok')">Thehok</div>
+                    <div class="aslab-list-item" data-value="Kobar" onclick="selectFiturCustomOption('kampus', 'Kobar', 'Kobar')">Kobar</div>
                   </div>
                   <input type="hidden" id="fitur-filter-kampus" value="">
                 </div>

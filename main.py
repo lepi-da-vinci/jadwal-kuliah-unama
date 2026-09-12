@@ -542,9 +542,19 @@ def get_semua_jadwal(semester: str = None):
                 minutes = (total_seconds % 3600) // 60
                 item['jam'] = f"{hours:02d}:{minutes:02d}"
                 
-            if item['nama_ruangan'] and item['kampus']:
-                # Append Kampus name to make it explicitly distinct
-                item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
+            if item.get('kampus'):
+                item['kampus'] = re.sub(r'\bKampus\s+', '', item['kampus']).strip()
+
+            if item.get('nama_ruangan'):
+                # Hapus kata 'Praktek' dari ruang 3.1 dan 3.4
+                item['nama_ruangan'] = re.sub(r'\b(R\.|Ruang|Ruangan)?\s*Praktek\s*(3\.[14])\b', r'R. \2', item['nama_ruangan'], flags=re.I)
+                item['nama_ruangan'] = re.sub(r'Praktek\s*(3\.[14])', r'R. \1', item['nama_ruangan'], flags=re.I)
+                # Bersihkan kata 'Kampus ' berulang
+                item['nama_ruangan'] = re.sub(r'\(Kampus\s+(Thehok|Kobar)\)', r'(\1)', item['nama_ruangan'], flags=re.I)
+                item['nama_ruangan'] = re.sub(r'\bKampus\s+(Thehok|Kobar)\b', r'\1', item['nama_ruangan'], flags=re.I)
+
+                if item.get('kampus') and f"({item['kampus']})" not in item['nama_ruangan']:
+                    item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
                 
         return {
             "status": "success", 

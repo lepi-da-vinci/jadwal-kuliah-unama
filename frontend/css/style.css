@@ -1221,6 +1221,16 @@ td small { color: var(--text-secondary); font-size: 0.85em; font-weight: 600; }
   fill: currentColor;
 }
 
+/* ─── Responsive Text Utility (Desktop vs HP / Mobile) ─── */
+@media (max-width: 768px) {
+  .title-desktop { display: none !important; }
+  .title-mobile { display: inline !important; }
+}
+@media (min-width: 769px) {
+  .title-desktop { display: inline !important; }
+  .title-mobile { display: none !important; }
+}
+
 .text-center { text-align: center; }
 .text-muted { color: var(--text-secondary); }
 .search-result { color: var(--text-secondary); font-weight: 600; }

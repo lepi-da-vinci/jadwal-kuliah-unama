@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260912_rules_v2">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260912_rules_v3">
 </head>
 
 <body>
@@ -126,18 +126,18 @@
           <div class="custom-select-wrapper" id="wrapper-kampus">
             <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
               onclick="toggleCustomSelect('kampus', event)">
-              <span class="custom-select-label" id="label-kampus">Semua Kampus</span>
+              <span class="custom-select-label" id="label-kampus">Semua Lokasi</span>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </div>
             <div class="aslab-list-container custom-select-dropdown" id="dropdown-kampus">
               <div class="aslab-list-item active" data-value="semua"
-                onclick="selectCustomOption('kampus', 'semua', 'Semua Kampus')">Semua Kampus</div>
-              <div class="aslab-list-item" data-value="Kampus Kobar"
-                onclick="selectCustomOption('kampus', 'Kampus Kobar', 'Kampus Kobar')">Kampus Kobar</div>
-              <div class="aslab-list-item" data-value="Kampus Thehok"
-                onclick="selectCustomOption('kampus', 'Kampus Thehok', 'Kampus Thehok')">Kampus Thehok</div>
+                onclick="selectCustomOption('kampus', 'semua', 'Semua Lokasi')">Semua Lokasi</div>
+              <div class="aslab-list-item" data-value="Thehok"
+                onclick="selectCustomOption('kampus', 'Thehok', 'Thehok')">Thehok</div>
+              <div class="aslab-list-item" data-value="Kobar"
+                onclick="selectCustomOption('kampus', 'Kobar', 'Kobar')">Kobar</div>
             </div>
             <input type="hidden" id="filter-kampus" value="semua">
           </div>
@@ -258,7 +258,8 @@
                   <line x1="8" y1="21" x2="16" y2="21" />
                   <line x1="12" y1="17" x2="12" y2="21" />
                 </svg>
-                Labor yang lagi dipakai
+                <span class="title-desktop">Labor yang lagi dipakai</span>
+                <span class="title-mobile">Lab yang lagi dipakai</span>
               </div>
             </h3>
             <div class="panel-content" id="active-lab-list"><em>Memeriksa status lab...</em></div>
@@ -272,7 +273,8 @@
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                   <polyline points="9 22 9 12 15 12 15 22"></polyline>
                 </svg>
-                Ruangan yang lagi dipakai
+                <span class="title-desktop">Ruangan yang lagi dipakai</span>
+                <span class="title-mobile">Ruang yang lagi dipakai</span>
               </div>
             </h3>
             <div class="panel-content" id="active-room-list"><em>Memeriksa status ruangan...</em></div>
@@ -388,7 +390,7 @@
             <div class="custom-select-wrapper" id="wrapper-fs-kampus">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('fs-kampus', event)">
-                <span class="custom-select-label" id="label-fs-kampus">Semua Kampus</span>
+                <span class="custom-select-label" id="label-fs-kampus">Semua Lokasi</span>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
                   stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
@@ -396,11 +398,11 @@
               </div>
               <div class="aslab-list-container custom-select-dropdown" id="dropdown-fs-kampus">
                 <div class="aslab-list-item active" data-value="semua"
-                  onclick="selectFsModalOption('kampus', 'semua', 'Semua Kampus')">Semua Kampus</div>
-                <div class="aslab-list-item" data-value="Kampus Kobar"
-                  onclick="selectFsModalOption('kampus', 'Kampus Kobar', 'Kampus Kobar')">Kampus Kobar</div>
-                <div class="aslab-list-item" data-value="Kampus Thehok"
-                  onclick="selectFsModalOption('kampus', 'Kampus Thehok', 'Kampus Thehok')">Kampus Thehok</div>
+                  onclick="selectFsModalOption('kampus', 'semua', 'Semua Lokasi')">Semua Lokasi</div>
+                <div class="aslab-list-item" data-value="Thehok"
+                  onclick="selectFsModalOption('kampus', 'Thehok', 'Thehok')">Thehok</div>
+                <div class="aslab-list-item" data-value="Kobar"
+                  onclick="selectFsModalOption('kampus', 'Kobar', 'Kobar')">Kobar</div>
               </div>
               <input type="hidden" id="fs-val-kampus" value="semua">
             </div>
@@ -549,7 +551,7 @@
         style="display: flex; gap: 4px; margin: 12px 24px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
         <button type="button" class="info-mase-kampus-btn active" data-kampus="semua"
           onclick="switchInfoMaseKampus('semua')"
-          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Kampus</button>
+          style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua Lokasi</button>
         <button type="button" class="info-mase-kampus-btn" data-kampus="thehok"
           onclick="switchInfoMaseKampus('thehok')"
           style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
@@ -720,15 +722,15 @@
                 <div class="custom-select-wrapper" id="wrapper-fitur-kampus">
                   <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                     onclick="toggleCustomSelect('fitur-kampus', event)">
-                    <span class="custom-select-label" id="label-fitur-kampus">Semua Kampus</span>
+                    <span class="custom-select-label" id="label-fitur-kampus">Semua Lokasi</span>
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                   </div>
                   <div class="aslab-list-container custom-select-dropdown" id="dropdown-fitur-kampus">
-                    <div class="aslab-list-item active" data-value="" onclick="selectFiturCustomOption('kampus', '', 'Semua Kampus')">Semua Kampus</div>
-                    <div class="aslab-list-item" data-value="Thehok" onclick="selectFiturCustomOption('kampus', 'Thehok', 'Kampus Thehok')">Kampus Thehok</div>
-                    <div class="aslab-list-item" data-value="Kobar" onclick="selectFiturCustomOption('kampus', 'Kobar', 'Kampus Kobar')">Kampus Kobar</div>
+                    <div class="aslab-list-item active" data-value="" onclick="selectFiturCustomOption('kampus', '', 'Semua Lokasi')">Semua Lokasi</div>
+                    <div class="aslab-list-item" data-value="Thehok" onclick="selectFiturCustomOption('kampus', 'Thehok', 'Thehok')">Thehok</div>
+                    <div class="aslab-list-item" data-value="Kobar" onclick="selectFiturCustomOption('kampus', 'Kobar', 'Kobar')">Kobar</div>
                   </div>
                   <input type="hidden" id="fitur-filter-kampus" value="">
                 </div>
@@ -932,8 +934,7 @@
           style="display: flex; gap: 4px; margin-bottom: 12px; padding: 4px; background: rgba(0,0,0,0.04); border-radius: 12px; font-size: 0.85em; position: relative; z-index: 50;">
           <button type="button" class="info-mase-kampus-btn active" data-kampus="semua"
             onclick="switchInfoMaseKampus('semua')"
-            style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua
-            Kampus</button>
+            style="flex:1; padding: 8px; border: none; background: var(--bg-card); color: var(--text); border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;">Semua</button>
           <button type="button" class="info-mase-kampus-btn" data-kampus="thehok"
             onclick="switchInfoMaseKampus('thehok')"
             style="flex:1; padding: 8px; border: none; background: transparent; color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: 0.3s; font-weight: 500;">Thehok</button>
@@ -951,7 +952,7 @@
                 <line x1="8" y1="21" x2="16" y2="21" />
                 <line x1="12" y1="17" x2="12" y2="21" />
               </svg>
-              <span>Labor</span>
+              <span class="title-desktop">Labor</span><span class="title-mobile">Lab</span>
               <span class="info-mase-tab-badge" id="panel-tab-badge-lab">0</span>
             </button>
             <button type="button" class="info-mase-tab-btn" data-tab="ruang" onclick="switchInfoMaseTab('ruang')">
@@ -1362,18 +1363,18 @@
         <div class="custom-select-wrapper" id="wrapper-sem-kampus">
           <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
             onclick="toggleCustomSelect('sem-kampus', event)">
-            <span class="custom-select-label" id="sem-label-kampus">Semua Kampus</span>
+            <span class="custom-select-label" id="sem-label-kampus">Semua Lokasi</span>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </div>
           <div class="aslab-list-container custom-select-dropdown" id="dropdown-sem-kampus">
             <div class="aslab-list-item active" data-value="semua"
-              onclick="selectSemesterExplorerOption('kampus', 'semua', 'Semua Kampus')">Semua Kampus</div>
-            <div class="aslab-list-item" data-value="Kampus Kobar"
-              onclick="selectSemesterExplorerOption('kampus', 'Kampus Kobar', 'Kampus Kobar')">Kampus Kobar</div>
-            <div class="aslab-list-item" data-value="Kampus Thehok"
-              onclick="selectSemesterExplorerOption('kampus', 'Kampus Thehok', 'Kampus Thehok')">Kampus Thehok</div>
+              onclick="selectSemesterExplorerOption('kampus', 'semua', 'Semua Lokasi')">Semua Lokasi</div>
+            <div class="aslab-list-item" data-value="Thehok"
+              onclick="selectSemesterExplorerOption('kampus', 'Thehok', 'Thehok')">Thehok</div>
+            <div class="aslab-list-item" data-value="Kobar"
+              onclick="selectSemesterExplorerOption('kampus', 'Kobar', 'Kobar')">Kobar</div>
           </div>
           <input type="hidden" id="sem-filter-kampus" value="semua">
         </div>
@@ -1939,9 +1940,9 @@
               <div class="db-clear-subinfo">
                 <span class="db-clear-subtitle">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0ea5e9; flex-shrink: 0;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="22" x2="9" y2="22.01"></line><line x1="15" y1="22" x2="15" y2="22.01"></line><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line></svg>
-                  <b>Aslab Kampus Thehok</b>
+                  <b>Aslab Thehok</b>
                 </span>
-                <span class="db-clear-subdesc">Penugasan lab Kampus Thehok</span>
+                <span class="db-clear-subdesc">Penugasan lab Thehok</span>
               </div>
               <span class="db-mini-badge badge-blue"><span id="cnt-clear-aslab-thehok">0</span> Aslab</span>
             </label>
@@ -1952,9 +1953,9 @@
               <div class="db-clear-subinfo">
                 <span class="db-clear-subtitle">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b; flex-shrink: 0;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                  <b>Aslab Kampus Kobar</b>
+                  <b>Aslab Kobar</b>
                 </span>
-                <span class="db-clear-subdesc">Penugasan lab Kampus Kobar</span>
+                <span class="db-clear-subdesc">Penugasan lab Kobar</span>
               </div>
               <span class="db-mini-badge badge-yellow"><span id="cnt-clear-aslab-kobar">0</span> Aslab</span>
             </label>
@@ -2369,9 +2370,9 @@
               <div class="db-clear-subinfo">
                 <span class="db-clear-subtitle">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0ea5e9; flex-shrink: 0;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="22" x2="9" y2="22.01"></line><line x1="15" y1="22" x2="15" y2="22.01"></line><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line></svg>
-                  <b>Aslab Kampus Thehok</b>
+                  <b>Aslab Thehok</b>
                 </span>
-                <span class="db-clear-subdesc">Penugasan lab Kampus Thehok</span>
+                <span class="db-clear-subdesc">Penugasan lab Thehok</span>
               </div>
               <span class="db-mini-badge badge-blue"><span id="cnt-backup-aslab-thehok">0</span> Aslab</span>
             </label>
@@ -2382,9 +2383,9 @@
               <div class="db-clear-subinfo">
                 <span class="db-clear-subtitle">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b; flex-shrink: 0;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                  <b>Aslab Kampus Kobar</b>
+                  <b>Aslab Kobar</b>
                 </span>
-                <span class="db-clear-subdesc">Penugasan lab Kampus Kobar</span>
+                <span class="db-clear-subdesc">Penugasan lab Kobar</span>
               </div>
               <span class="db-mini-badge badge-yellow"><span id="cnt-backup-aslab-kobar">0</span> Aslab</span>
             </label>
@@ -3441,7 +3442,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260912_rules_v2"></script>
+  <script src="frontend/js/script.js?v=20260912_rules_v3"></script>
 </body>
 
 </html>

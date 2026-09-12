@@ -26,6 +26,62 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// ==================== FORMATTERS: KAMPUS & RUANGAN ====================
+// Aturan:
+// 1. Persingkat sebutan 'labor' jadi 'lab' di mode HP (<= 768px), mode desktop tetap 'labor'.
+// 2. Tidak boleh ada kata 'Kampus', cukup 'Thehok' atau 'Kobar'.
+// 3. Ruang 3.1 dan 3.4 tidak pakai kata 'praktek', cukup 'R. 3.1' dan 'R. 3.4' di semua mode (desktop/HP), dan bukan lab.
+
+function formatCampusName(campus) {
+  if (!campus) return 'Thehok';
+  let c = String(campus).trim();
+  c = c.replace(/\bKampus\s+/gi, '').trim();
+  if (c.toLowerCase().includes('kobar')) return 'Kobar';
+  if (c.toLowerCase().includes('thehok')) return 'Thehok';
+  return c || 'Thehok';
+}
+window.formatCampusName = formatCampusName;
+
+function formatRoomName(rawName, isMobile = null) {
+  if (!rawName) return '';
+  if (isMobile === null || isMobile === undefined) {
+    isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  }
+  let name = String(rawName).trim();
+
+  // 1. Bersihkan kata 'Kampus' dari kurung atau teks: misal (Kampus Thehok) -> (Thehok)
+  name = name.replace(/\(Kampus\s+(Thehok|Kobar)\)/gi, '($1)')
+             .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
+             .replace(/\bKampus\s+UNAMA\b/gi, 'UNAMA');
+
+  // 2. Ruang 3.1 dan 3.4 tidak pakai 'praktek', cukup ruangan biasa (R. 3.1 / R. 3.4)
+  name = name.replace(/(?:R\.|Ruang|Labor)?\s*Praktek\s*(3\.[14])\b/gi, 'R. $1');
+  name = name.replace(/\b(?:Labor|Lab)\s*(3\.[14])\b/gi, 'R. $1');
+  name = name.replace(/\bPraktek\s*(3\.[14])\b/gi, 'R. $1');
+
+  // 3. Persingkat sebutan labor jadi lab kalau mode HP, desktop tetap labor
+  if (isMobile) {
+    name = name.replace(/\bLaboratorium\b/gi, 'Lab')
+               .replace(/\bLabor\b/gi, 'Lab');
+  } else {
+    name = name.replace(/\bLab\s+(\d)/gi, 'Labor $1')
+               .replace(/\bLaboratorium\b/gi, 'Labor');
+  }
+
+  return name;
+}
+window.formatRoomName = formatRoomName;
+
+function formatRoomNameHtml(rawName) {
+  if (!rawName) return '';
+  const desk = formatRoomName(rawName, false);
+  const mob = formatRoomName(rawName, true);
+  if (desk === mob) return escapeHtml(desk);
+  return `<span class="title-desktop">${escapeHtml(desk)}</span><span class="title-mobile">${escapeHtml(mob)}</span>`;
+}
+window.formatRoomNameHtml = formatRoomNameHtml;
+
+
 function selectAslabItem(element, value) {
   document.getElementById('aslab-select').value = value;
   const items = document.querySelectorAll('#aslab-list-container .aslab-list-item');
@@ -507,7 +563,7 @@ async function loadSemesterExplorerData(namaSemester) {
 
   // Reset custom filter options
   selectSemesterExplorerOption('metode', 'semua', 'Semua Metode', true);
-  selectSemesterExplorerOption('kampus', 'semua', 'Semua Kampus', true);
+  selectSemesterExplorerOption('kampus', 'semua', 'Semua Lokasi', true);
 
   const inputKeyword = document.getElementById('sem-search-keyword');
   if (inputKeyword) inputKeyword.value = '';
@@ -719,7 +775,7 @@ window.resetSemesterExplorerFilters = function() {
   selectSemesterExplorerOption('mk', 'semua', mActive, true);
   selectSemesterExplorerOption('ruangan', 'semua', rActive, true);
   selectSemesterExplorerOption('metode', 'semua', 'Semua Metode', true);
-  selectSemesterExplorerOption('kampus', 'semua', 'Semua Kampus', true);
+  selectSemesterExplorerOption('kampus', 'semua', 'Semua Lokasi', true);
 
   // Reset dropdown search inputs
   document.querySelectorAll('.sem-dropdown-search-input').forEach(inp => {
@@ -747,8 +803,9 @@ window.applySemesterExplorerFilters = function() {
     if (fRuang !== 'semua' && item.nama_ruangan !== fRuang) return false;
     if (fMetode !== 'semua' && item.metode_pembelajaran !== fMetode) return false;
     if (fKampus !== 'semua') {
-      const matchKampus = (item.kampus && item.kampus.trim() === fKampus) || (item.nama_ruangan && item.nama_ruangan.includes(fKampus));
-      if (!matchKampus) return false;
+      const targetCamp = formatCampusName(fKampus);
+      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+      if (itemCamp !== targetCamp) return false;
     }
     if (fKeyword) {
       const combined = `${item.nama_mk || ''} ${item.nama_dosen || ''} ${item.kelas || ''} ${item.nama_ruangan || ''} ${item.jam || ''} ${item.hari || ''}`.toLowerCase();
@@ -908,7 +965,7 @@ function renderSemesterExplorerTable() {
           ${escapeHtml(item.nama_dosen || '-')}
         </td>
         <td>
-          ${escapeHtml(item.nama_ruangan || '-')}
+          ${formatRoomNameHtml(item.nama_ruangan || '-')}
         </td>
         <td style="text-align: center;">
           ${escapeHtml(displayStatus)}
@@ -971,7 +1028,7 @@ function renderSemesterExplorerMobileCards(items) {
             </div>
             <div class="mobile-meta-item">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-              <span class="mobile-room-name">${escapeHtml(item.nama_ruangan || '-')}</span>
+              <span class="mobile-room-name">${escapeHtml(formatRoomName(item.nama_ruangan || '-', true))}</span>
             </div>
             <div class="mobile-meta-item" style="font-size: 0.8rem; color: var(--text-muted);">
               <span>${escapeHtml(item.tanggal_format || item.tanggal || '')}</span>
@@ -1381,7 +1438,11 @@ function updateRuanganFilterOptions() {
 
   allJadwal.forEach(item => {
     if (!item.nama_ruangan) return;
-    if (fKampus !== 'semua' && (!item.kampus || item.kampus.trim() !== fKampus)) return;
+    if (fKampus !== 'semua') {
+      const targetCamp = formatCampusName(fKampus);
+      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+      if (itemCamp !== targetCamp) return;
+    }
     if (fTanggal && item.tanggal !== fTanggal) return;
     if (fMetode !== 'semua' && item.metode_pembelajaran !== fMetode) return;
 
@@ -1411,7 +1472,9 @@ function updateRuanganFilterOptions() {
   let foundOld = false;
   Array.from(ruanganSet).sort().forEach(r => {
     if (r === oldVal) foundOld = true;
-    html += `<div class="aslab-list-item" onclick="selectCustomOption('ruangan', '${r}', '${r}')">${r}</div>`;
+    const roomHtml = formatRoomNameHtml(r);
+    const roomText = formatRoomName(r, window.innerWidth <= 768);
+    html += `<div class="aslab-list-item" onclick="selectCustomOption('ruangan', '${r}', '${roomText}')">${roomHtml}</div>`;
   });
 
   dropdownRuangan.innerHTML = html;
@@ -1605,7 +1668,7 @@ function renderTable(data) {
     const safeItemJson = escapeHtml(JSON.stringify(item));
     const isNight = typeof isNightClass === 'function' && isNightClass(item);
     const nightBadgeHtml = isNight 
-      ? `<span class="badge malam" style="font-size:0.72em; padding:2px 8px; margin-top:4px; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Kampus Thehok)"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` 
+      ? `<span class="badge malam" style="font-size:0.72em; padding:2px 8px; margin-top:4px; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` 
       : '';
 
     row.innerHTML = `
@@ -1629,7 +1692,7 @@ function renderTable(data) {
             ${hasDosenConflict ? `<br><span class="conflict-pill dosen" title="Dosen terdaftar mengajar di 2 ruangan pada jam yang sama"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Bentrok Dosen</span>` : ''}
           </td>
           <td>
-            ${escapeHtml(item.nama_ruangan || '-')}
+            ${formatRoomNameHtml(item.nama_ruangan || '-')}
             ${hasRoomConflict ? `<br><span class="conflict-pill room" title="Ruangan digunakan oleh 2 kelas berbeda pada jam yang bersamaan"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Bentrok Ruang</span>` : ''}
           </td>
           <td>${escapeHtml(displayStatus)}</td>
@@ -1686,7 +1749,7 @@ function renderMobileScheduleCards(data) {
             <small>• ${escapeHtml(item.hari || '-')}</small>
           </div>
           <div class="mobile-card-badges">
-            ${isNight ? `<span class="badge malam" title="Kelas Malam (Mulai jam 17:00 • Kampus Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` : ''}
+            ${isNight ? `<span class="badge malam" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` : ''}
             <span class="badge ${badgeClass}">${escapeHtml(item.metode_pembelajaran || '-')}</span>
             <span class="mobile-status-pill">${escapeHtml(displayStatus)}</span>
           </div>
@@ -1703,7 +1766,7 @@ function renderMobileScheduleCards(data) {
             </div>
             <div class="mobile-meta-item">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-              <span class="mobile-room-name">${escapeHtml(item.nama_ruangan || '-')}</span>
+              <span class="mobile-room-name">${escapeHtml(formatRoomName(item.nama_ruangan || '-', true))}</span>
             </div>
           </div>
         </div>
@@ -1757,6 +1820,8 @@ function handleSingleCalClick(btn) {
 function isLab(namaRuangan) {
   if (!namaRuangan) return false;
   const name = namaRuangan.toLowerCase();
+  // Ruang 3.1 dan 3.4 bukan lab (ruang kelas biasa tanpa kata praktek)
+  if (name.includes('3.1') || name.includes('3.4')) return false;
   return name.includes('lab') || name.includes('praktek');
 }
 
@@ -1765,13 +1830,13 @@ function isLab(namaRuangan) {
 // Thehok: Memiliki kelas malam mulai jam 17:00 s/d 21:00 (toleransi operasional s/d 21:30).
 const OPERATIONAL_RULES = {
   kobar: {
-    name: 'Kampus Kobar',
+    name: 'Kobar',
     closeMinute: 17 * 60, // 17:00 (1020 mnt)
     closeTimeStr: '17:00',
     hasNightClasses: false
   },
   thehok: {
-    name: 'Kampus Thehok',
+    name: 'Thehok',
     nightStartMinute: 17 * 60, // 17:00 (1020 mnt)
     nightStartTimeStr: '17:00',
     closeMinute: 21 * 60, // 21:00 (1260 mnt)
@@ -1783,29 +1848,29 @@ const OPERATIONAL_RULES = {
 window.OPERATIONAL_RULES = OPERATIONAL_RULES;
 
 function getRoomCampus(roomName, defaultCampus = '') {
-  if (!roomName) return defaultCampus || 'Kampus Thehok';
+  if (!roomName) return formatCampusName(defaultCampus) || 'Thehok';
   const lower = String(roomName).toLowerCase();
-  if (lower.includes('kobar')) return 'Kampus Kobar';
-  if (lower.includes('thehok')) return 'Kampus Thehok';
+  if (lower.includes('kobar')) return 'Kobar';
+  if (lower.includes('thehok')) return 'Thehok';
 
   if (typeof allRuanganData !== 'undefined' && Array.isArray(allRuanganData)) {
-    const found = allRuanganData.find(r => r && r.nama_ruangan === roomName);
+    const found = allRuanganData.find(r => r && (r.nama_ruangan === roomName || formatRoomName(r.nama_ruangan, false) === formatRoomName(roomName, false)));
     if (found && found.kampus) {
-      return found.kampus.toLowerCase().includes('kobar') ? 'Kampus Kobar' : 'Kampus Thehok';
+      return formatCampusName(found.kampus);
     }
   }
 
   if (typeof allJadwal !== 'undefined' && Array.isArray(allJadwal)) {
     const found = allJadwal.find(j => j && j.nama_ruangan === roomName && j.kampus);
     if (found && found.kampus) {
-      return found.kampus.toLowerCase().includes('kobar') ? 'Kampus Kobar' : 'Kampus Thehok';
+      return formatCampusName(found.kampus);
     }
   }
 
   if (lower.includes('4.') || lower.includes('pasca') || lower.includes('b2.') || lower.includes('b1.') || lower.includes('b3.') || lower.includes('cisco')) {
-    return 'Kampus Thehok';
+    return 'Thehok';
   }
-  return defaultCampus || 'Kampus Thehok';
+  return formatCampusName(defaultCampus) || 'Thehok';
 }
 window.getRoomCampus = getRoomCampus;
 
@@ -1919,7 +1984,13 @@ function applyFilters() {
   if (fr !== 'semua') filtered = filtered.filter(item => item.nama_ruangan === fr);
   if (fk === 'labor') filtered = filtered.filter(item => isLab(item.nama_ruangan));
   else if (fk === 'kelas') filtered = filtered.filter(item => !isLab(item.nama_ruangan));
-  if (fKampus !== 'semua') filtered = filtered.filter(item => item.kampus && item.kampus.trim() === fKampus);
+  if (fKampus !== 'semua') {
+    const targetCamp = formatCampusName(fKampus);
+    filtered = filtered.filter(item => {
+      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+      return itemCamp === targetCamp;
+    });
+  }
 
   // Jika filter bentrok sedang aktif, saring hanya jadwal yang mengalami bentrok
   if (window._filterOnlyConflicts && allConflictKeys.size > 0) {
@@ -2013,8 +2084,8 @@ function updateActiveLabPanel() {
     let kampus = getRoomCampus(rawName, r.kampus || '');
     let isThehok = !kampus.includes('Kobar');
     let isKobar = !isThehok;
-    let cleanName = rawName.replace(/ \(Kampus.*?\)/, "");
-    let isRoomLab = isLab(rawName);
+    let cleanName = formatRoomName(rawName, false).replace(/ \((?:Kampus )?.*?\)/, "").trim();
+    let isRoomLab = isLab(cleanName);
 
     let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
 
@@ -2090,8 +2161,8 @@ function updateActiveLabPanel() {
     let isThehok = !kampus.includes('Kobar');
     let isKobar = !isThehok;
 
-    let cleanName = rawName.replace(/ \(Kampus.*?\)/, "");
-    let isRoomLab = isLab(rawName);
+    let cleanName = formatRoomName(rawName, false).replace(/ \((?:Kampus )?.*?\)/, "").trim();
+    let isRoomLab = isLab(cleanName);
 
     let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
 
@@ -2167,14 +2238,16 @@ function updateActiveLabPanel() {
         const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
         const m = (lastClassEndTime % 60).toString().padStart(2, '0');
         const roomIsLab = isLab(room);
-        const titleText = roomIsLab ? `TUTUP LABOR (${minsLeft} mnt lagi)` : `SELESAI KELAS (${minsLeft} mnt lagi)`;
+        const titleText = roomIsLab 
+          ? `<span class="title-desktop">TUTUP LABOR</span><span class="title-mobile">TUTUP LAB</span> (${minsLeft} mnt lagi)` 
+          : `SELESAI KELAS (${minsLeft} mnt lagi)`;
         const badgeHTML = roomIsLab 
-          ? `<span class="notif-cat-badge labor">Labor</span>` 
+          ? `<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>` 
           : `<span class="notif-cat-badge kelas">Kelas</span>`;
 
         const roomCampus = getRoomCampus(room);
         const isKobarRoom = roomCampus.includes('Kobar');
-        const campusNote = isKobarRoom ? ' (Kampus Kobar - Tidak ada kelas malam)' : (lastClassEndTime >= 17 * 60 ? ' (Sesi Malam Kampus Thehok)' : '');
+        const campusNote = isKobarRoom ? ' (Kobar - Tidak ada kelas malam)' : (lastClassEndTime >= 17 * 60 ? ' (Sesi Malam Thehok)' : '');
 
         const itemHTML = `
           <div class="notif-item" style="border-left: 4px solid ${color};">
@@ -2184,7 +2257,7 @@ function updateActiveLabPanel() {
                 ${badgeHTML}
               </div>
             </div>
-            <div class="notif-message">Kelas terakhir di <b>${room}</b> selesai pada ${h}:${m}.${campusNote}</div>
+            <div class="notif-message">Kelas terakhir di <b>${formatRoomNameHtml(room)}</b> selesai pada ${h}:${m}.${campusNote}</div>
           </div>
         `;
 
@@ -2210,9 +2283,9 @@ function updateActiveLabPanel() {
     for (const room of sortedRooms) {
       const data = dict[room];
       html += `
-              <div class="lab-card ${data.state}" onclick="showRoomDetail('${room}', '${kampusStr}')">
-                <div class="lab-name">${room}</div>
-                <div class="lab-status">${data.state === 'empty' ? 'Kosong' : data.text + ' ' + data.jamText}</div>
+              <div class="lab-card ${data.state}" onclick="showRoomDetail('${escapeHtml(room)}', '${kampusStr}')">
+                <div class="lab-name">${formatRoomNameHtml(room)}</div>
+                <div class="lab-status">${data.state === 'empty' ? 'Kosong' : escapeHtml(data.text) + ' ' + escapeHtml(data.jamText)}</div>
               </div>
             `;
     }
@@ -2222,10 +2295,10 @@ function updateActiveLabPanel() {
 
   // Render Lab Panel
   let htmlLab = '';
-  if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Thehok') && Object.keys(labsThehok).length > 0) {
+  if ((kampusFilter === 'semua' || kampusFilter === 'Thehok' || kampusFilter === 'Kampus Thehok') && Object.keys(labsThehok).length > 0) {
     htmlLab += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(labsThehok, 'Thehok')}</div>`;
   }
-  if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Kobar') && Object.keys(labsKobar).length > 0) {
+  if ((kampusFilter === 'semua' || kampusFilter === 'Kobar' || kampusFilter === 'Kampus Kobar') && Object.keys(labsKobar).length > 0) {
     htmlLab += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(labsKobar, 'Kobar')}</div>`;
   }
   if (htmlLab === '') htmlLab = '<em>Tidak ada lab yang sesuai.</em>';
@@ -2233,10 +2306,10 @@ function updateActiveLabPanel() {
 
   // Render Room Panel
   let htmlRoom = '';
-  if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Thehok') && Object.keys(roomsThehok).length > 0) {
+  if ((kampusFilter === 'semua' || kampusFilter === 'Thehok' || kampusFilter === 'Kampus Thehok') && Object.keys(roomsThehok).length > 0) {
     htmlRoom += `<div><div class="lab-section-title">Thehok</div>${renderBlocks(roomsThehok, 'Thehok')}</div>`;
   }
-  if ((kampusFilter === 'semua' || kampusFilter === 'Kampus Kobar') && Object.keys(roomsKobar).length > 0) {
+  if ((kampusFilter === 'semua' || kampusFilter === 'Kobar' || kampusFilter === 'Kampus Kobar') && Object.keys(roomsKobar).length > 0) {
     htmlRoom += `<div><div class="lab-section-title">Kobar</div>${renderBlocks(roomsKobar, 'Kobar')}</div>`;
   }
   if (htmlRoom === '') htmlRoom = '<em>Tidak ada ruangan yang sesuai.</em>';
@@ -2327,6 +2400,8 @@ let currentRuangWarnings = [];
 
 function isLabNotification(pesan = '') {
   const p = String(pesan).toLowerCase();
+  // Ruang 3.1 dan 3.4 bukan lab
+  if (p.includes('3.1') || p.includes('3.4')) return false;
   return p.includes('labor') || p.includes('lab ') || p.includes('lab.') || p.includes('praktek') || p.includes('cisco');
 }
 
@@ -2511,7 +2586,7 @@ function renderInfoMaseNotifications(showPopup = false) {
   if (filtered.length === 0) {
     const emptyMsg = activeInfoMaseTab === 'ruang'
       ? '<em>Tidak ada notifikasi khusus untuk Ruang Kelas pada tanggal ini.</em>'
-      : '<em>Tidak ada notifikasi khusus untuk Labor pada tanggal ini.</em>';
+      : '<em>Tidak ada notifikasi khusus untuk <span class="title-desktop">Labor</span><span class="title-mobile">Lab</span> pada tanggal ini.</em>';
 
     if (panelList) panelList.innerHTML = emptyMsg;
     if (fsList) fsList.innerHTML = emptyMsg;
@@ -2523,7 +2598,7 @@ function renderInfoMaseNotifications(showPopup = false) {
     let cls = '';
     const isLab = isLabNotification(n.pesan);
     const categoryBadge = isLab 
-      ? '<span class="notif-cat-badge labor">Labor</span>' 
+      ? '<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>' 
       : '<span class="notif-cat-badge kelas">Kelas</span>';
 
     if (n.tipe_notif === 'TAMBAHAN') {
@@ -2534,9 +2609,11 @@ function renderInfoMaseNotifications(showPopup = false) {
       cls = 'jeda';
     }
     
+    const cleanPesan = formatRoomNameHtml(n.pesan.replace(/\(Kampus\s+(Thehok|Kobar)\)/gi, '($1)').replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1'));
+
     // Fix Bug Visual: Semua tipe notif dimasukkan ke popupContent, bukan cuma TAMBAHAN
     if (showPopup) {
-      popupContent += `<div class="notif-item ${cls}"><strong>${n.tipe_notif}</strong><br>${n.pesan}</div>`;
+      popupContent += `<div class="notif-item ${cls}"><strong>${n.tipe_notif}</strong><br>${cleanPesan}</div>`;
     }
 
     html += `
@@ -2548,7 +2625,7 @@ function renderInfoMaseNotifications(showPopup = false) {
           </div>
           <span class="notif-time">${n.waktu}</span>
         </div>
-        <div>${n.pesan}</div>
+        <div>${cleanPesan}</div>
       </div>
     `;
   });
@@ -2962,7 +3039,9 @@ window.deleteAslab = async function (id_aslab, nama) {
 
 function populateSortedRuanganSelect(selectElement, selectedValue = "") {
   if (!selectElement) return;
-  selectElement.innerHTML = '<option value="">-- Pilih Ruangan / Labor --</option>';
+  const isMob = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const labWord = isMob ? "Lab" : "Labor";
+  selectElement.innerHTML = `<option value="">-- Pilih Ruangan / ${labWord} --</option>`;
 
   // Natural Sort agar nomor ruangan urut rapi (1.2 sebelum 1.10, dsb)
   const naturalSort = (a, b) => (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' });
@@ -2977,11 +3056,11 @@ function populateSortedRuanganSelect(selectElement, selectedValue = "") {
 
   if (kobarLabs.length > 0) {
     const group = document.createElement('optgroup');
-    group.label = "Labor (Kobar)";
+    group.label = `${labWord} (Kobar)`;
     kobarLabs.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id_ruangan;
-      opt.textContent = `${r.nama_ruangan}`;
+      opt.textContent = formatRoomName(r.nama_ruangan, isMob);
       group.appendChild(opt);
     });
     selectElement.appendChild(group);
@@ -2989,11 +3068,11 @@ function populateSortedRuanganSelect(selectElement, selectedValue = "") {
 
   if (thehokLabs.length > 0) {
     const group = document.createElement('optgroup');
-    group.label = "Labor (Thehok)";
+    group.label = `${labWord} (Thehok)`;
     thehokLabs.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id_ruangan;
-      opt.textContent = `${r.nama_ruangan}`;
+      opt.textContent = formatRoomName(r.nama_ruangan, isMob);
       group.appendChild(opt);
     });
     selectElement.appendChild(group);
@@ -3005,7 +3084,7 @@ function populateSortedRuanganSelect(selectElement, selectedValue = "") {
     kobarKelas.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id_ruangan;
-      opt.textContent = `${r.nama_ruangan}`;
+      opt.textContent = formatRoomName(r.nama_ruangan, isMob);
       group.appendChild(opt);
     });
     selectElement.appendChild(group);
@@ -3017,7 +3096,7 @@ function populateSortedRuanganSelect(selectElement, selectedValue = "") {
     thehokKelas.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id_ruangan;
-      opt.textContent = `${r.nama_ruangan}`;
+      opt.textContent = formatRoomName(r.nama_ruangan, isMob);
       group.appendChild(opt);
     });
     selectElement.appendChild(group);
@@ -3827,7 +3906,10 @@ window.showRoomDetail = function (roomName, kampusStr) {
   }
 
   const titleEl = document.getElementById('room-detail-title');
-  if (titleEl) titleEl.innerText = `${roomName} ${kampusStr ? `(${kampusStr})` : ''}`;
+  const cleanCamp = formatCampusName(kampusStr || getRoomCampus(roomName));
+  if (titleEl) {
+    titleEl.innerHTML = `${formatRoomNameHtml(roomName)} ${cleanCamp ? `<span style="font-weight:normal;opacity:0.85;">(${escapeHtml(cleanCamp)})</span>` : ''}`;
+  }
 
   const badgeEl = document.getElementById('room-detail-badge');
   if (badgeEl) {
@@ -3841,8 +3923,8 @@ window.showRoomDetail = function (roomName, kampusStr) {
   const subdescEl = document.getElementById('room-detail-subdesc');
   if (subdescEl) {
     const hoursNote = isKobarRoom 
-      ? 'Operasional 08:00 - 17:00 (Kampus Kobar • Tidak ada kelas malam)' 
-      : 'Operasional 08:00 - 21:00 (Kampus Thehok • Tersedia kelas malam mulai 17:00)';
+      ? 'Operasional 08:00 - 17:00 (Kobar • Tidak ada kelas malam)' 
+      : 'Operasional 08:00 - 21:00 (Thehok • Tersedia kelas malam mulai 17:00)';
     subdescEl.innerHTML = `Daftar perkuliahan tanggal ${formatTanggalIndo(activeDate)}<br><small style="color:var(--text-muted);font-weight:600;">${hoursNote}</small>`;
   }
 
@@ -3930,7 +4012,7 @@ window.showRoomDetail = function (roomName, kampusStr) {
       // Badge Kelas Malam (mulai jam 17:00 di Kampus Thehok)
       const isNight = typeof isNightClass === 'function' && isNightClass(s);
       const nightBadge = isNight 
-        ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Kampus Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>` 
+        ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>` 
         : '';
 
       // 4. Status Perubahan BAAK (Tambahan, Perubahan, Jeda)
@@ -3976,10 +4058,10 @@ window.showRoomDetail = function (roomName, kampusStr) {
       }
 
       // Kampus string formatted
-      let kampusText = kampusStr ? `Kampus ${kampusStr}` : '';
+      let kampusText = kampusStr ? formatCampusName(kampusStr) : '';
       if (!kampusText && s.nama_ruangan) {
-        if (s.nama_ruangan.includes('Thehok')) kampusText = 'Kampus Thehok';
-        else if (s.nama_ruangan.includes('Kobar')) kampusText = 'Kampus Kobar';
+        if (s.nama_ruangan.includes('Thehok')) kampusText = 'Thehok';
+        else if (s.nama_ruangan.includes('Kobar')) kampusText = 'Kobar';
       }
       if (!kampusText) kampusText = 'UNAMA';
 
@@ -4645,7 +4727,7 @@ window.showModernAlert = showModernAlert;
         targets.push('ruangan_all');
         targetLabels.push('Semua Master Ruangan & Labor');
       } else {
-        if (chkRuanganLab?.checked) { targets.push('ruangan_lab'); targetLabels.push('Ruang Labor & Praktek'); }
+        if (chkRuanganLab?.checked) { targets.push('ruangan_lab'); targetLabels.push('Ruang Labor'); }
         if (chkRuanganKelas?.checked) { targets.push('ruangan_kelas'); targetLabels.push('Ruang Kelas / Teori'); }
         if (chkRuanganUnused?.checked) { targets.push('ruangan_unused'); targetLabels.push('Ruangan Tanpa Jadwal'); }
       }
@@ -4675,8 +4757,8 @@ window.showModernAlert = showModernAlert;
         targets.push('aslab_all');
         targetLabels.push('Semua Kontak WA Asisten Lab');
       } else {
-        if (chkAslabThehok?.checked) { targets.push('aslab_thehok'); targetLabels.push('Aslab Kampus Thehok'); }
-        if (chkAslabKobar?.checked) { targets.push('aslab_kobar'); targetLabels.push('Aslab Kampus Kobar'); }
+        if (chkAslabThehok?.checked) { targets.push('aslab_thehok'); targetLabels.push('Aslab Thehok'); }
+        if (chkAslabKobar?.checked) { targets.push('aslab_kobar'); targetLabels.push('Aslab Kobar'); }
         if (chkAslabNoroom?.checked) { targets.push('aslab_noroom'); targetLabels.push('Aslab Tanpa Ruangan'); }
       }
 
@@ -5198,8 +5280,8 @@ function initDbBackupModalEvents() {
         selectedTargets.push('aslab_all');
         selectedLabels.push('Semua Kontak Aslab');
       } else {
-        if (chkAslabThehok?.checked) { selectedTargets.push('aslab_thehok'); selectedLabels.push('Aslab Kampus Thehok'); }
-        if (chkAslabKobar?.checked) { selectedTargets.push('aslab_kobar'); selectedLabels.push('Aslab Kampus Kobar'); }
+        if (chkAslabThehok?.checked) { selectedTargets.push('aslab_thehok'); selectedLabels.push('Aslab Thehok'); }
+        if (chkAslabKobar?.checked) { selectedTargets.push('aslab_kobar'); selectedLabels.push('Aslab Kobar'); }
         if (chkAslabNoroom?.checked) { selectedTargets.push('aslab_noroom'); selectedLabels.push('Aslab Tanpa Ruangan'); }
       }
 
@@ -5769,7 +5851,11 @@ function renderRoomFinderResults() {
   }
 
   if (fKampus) {
-    rooms = rooms.filter(r => (r.kampus || '').toLowerCase().includes(fKampus.toLowerCase()));
+    const targetCamp = formatCampusName(fKampus);
+    rooms = rooms.filter(r => {
+      const camp = formatCampusName(r.kampus || getRoomCampus(r.nama_ruangan));
+      return camp === targetCamp;
+    });
   }
   if (fJenis === 'Lab') {
     rooms = rooms.filter(r => isLab(r.nama_ruangan));
@@ -5791,10 +5877,10 @@ function renderRoomFinderResults() {
     if (fWaktu === 'sekarang') {
       if (isKobarRoom && currentMins >= 17 * 60) {
         isFree = false;
-        busyReason = 'Kampus Kobar tutup jam 17:00 (Tidak ada kelas malam)';
+        busyReason = 'Kobar tutup jam 17:00 (Tidak ada kelas malam)';
       } else if (!isKobarRoom && currentMins >= 21 * 60) {
         isFree = false;
-        busyReason = 'Kampus Thehok tutup jam 21:00 (Operasional malam selesai)';
+        busyReason = 'Thehok tutup jam 21:00 (Operasional malam selesai)';
       } else {
         const currentClass = roomClasses.find(c => {
           const start = parseTimeToMinutes(c.jam);
@@ -5889,8 +5975,8 @@ function renderRoomFinderResults() {
       <div>
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
           <div>
-            <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">${escapeHtml(r.nama_ruangan)}</div>
-            <div style="font-size: 0.78em; color: var(--text-muted);">${escapeHtml(r.kampus)} • ${r.is_lab ? 'Labor' : 'Ruang Kelas'}</div>
+            <div style="font-weight: 700; font-size: 1.05em; color: var(--text);">${formatRoomNameHtml(r.nama_ruangan)}</div>
+            <div style="font-size: 0.78em; color: var(--text-muted);">${escapeHtml(formatCampusName(r.kampus))} • <span class="title-desktop">${r.is_lab ? 'Labor' : 'Ruang Kelas'}</span><span class="title-mobile">${r.is_lab ? 'Lab' : 'Ruang Kelas'}</span></div>
           </div>
           <span class="room-status-badge ${r.is_free ? 'free' : 'busy'}">
             <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
@@ -6914,8 +7000,10 @@ function renderFiturRooms() {
       kampus = roomClasses[0].kampus;
     }
 
-    if (filterKampus && !kampus.toLowerCase().includes(filterKampus.toLowerCase())) {
-      return;
+    if (filterKampus) {
+      const targetCamp = formatCampusName(filterKampus);
+      const camp = formatCampusName(kampus);
+      if (camp !== targetCamp) return;
     }
 
     const isKobar = kampus.toLowerCase().includes('kobar');
@@ -7068,9 +7156,9 @@ function renderFiturRooms() {
         <div>
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
             <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 700; font-size: 1.08em; color: var(--text); line-height: 1.35; word-break: break-word;">${escapeHtml(r.roomName)}</div>
+              <div style="font-weight: 700; font-size: 1.08em; color: var(--text); line-height: 1.35; word-break: break-word;">${formatRoomNameHtml(r.roomName)}</div>
               <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 3px;">
-                ${escapeHtml(r.kampus)} • ${r.isLab ? 'Labor' : 'Ruang Kelas'} • <span style="color: ${r.isKobar ? 'var(--text-secondary)' : '#6366f1'}; font-weight: 600;">${r.isKobar ? 'Maks 17:00 (Non-Malam)' : 'Ada Kelas Malam (s/d 21:00)'}</span>
+                ${escapeHtml(formatCampusName(r.kampus))} • <span class="title-desktop">${r.isLab ? 'Labor' : 'Ruang Kelas'}</span><span class="title-mobile">${r.isLab ? 'Lab' : 'Ruang Kelas'}</span> • <span style="color: ${r.isKobar ? 'var(--text-secondary)' : '#6366f1'}; font-weight: 600;">${r.isKobar ? 'Maks 17:00 (Non-Malam)' : 'Ada Kelas Malam (s/d 21:00)'}</span>
               </div>
             </div>
             <span class="room-status-badge ${badgeClass}" style="flex-shrink: 0; white-space: nowrap;">
@@ -7083,7 +7171,7 @@ function renderFiturRooms() {
             ${r.statusType === 'full-free' 
               ? `<div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); color: #10b981; font-weight: 600; font-size: 0.84em;">
                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                   <span>${r.isKobar ? 'Bebas digunakan (08:00 - 17:00 • Kampus Kobar tutup jam 17:00)' : 'Bebas digunakan sepanjang hari (08:00 - 21:00)'}</span>
+                   <span>${r.isKobar ? 'Bebas digunakan (08:00 - 17:00 • Kobar tutup jam 17:00)' : 'Bebas digunakan sepanjang hari (08:00 - 21:00)'}</span>
                  </div>` 
               : r.statusType === 'has-gaps' 
                 ? `<div>Jam kosong tersedia:</div>
@@ -7182,11 +7270,11 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
       tag: 'Jeda Kosong Lab',
       jam: g.jam || 'Jeda Waktu',
       durasi: g.durasi || '',
-      title: `Ruang ${roomName} Bebas Jadwal`,
+      title: `${formatRoomName(roomName, false)} Bebas Jadwal`,
       dosen: '-',
       ruangan: roomName,
-      kampus: roomName.toLowerCase().includes('thehok') ? 'Kampus Thehok' : 'Kampus Kobar',
-      desc: `Labor tidak memiliki jadwal kuliah pada rentang jam ini dan dapat digunakan.`
+      kampus: roomName.toLowerCase().includes('thehok') ? 'Thehok' : 'Kobar',
+      desc: `<span class="title-desktop">Labor</span><span class="title-mobile">Lab</span> tidak memiliki jadwal kuliah pada rentang jam ini dan dapat digunakan.`
     });
   });
 
@@ -8599,10 +8687,10 @@ function renderSpotlightResults(query) {
       let kampusLabel = 'UNAMA';
       let kampusPriority = 3;
       if (isThehok) {
-        kampusLabel = 'Kampus Thehok';
+        kampusLabel = 'Thehok';
         kampusPriority = 1;
       } else if (isKobar) {
-        kampusLabel = 'Kampus Kobar';
+        kampusLabel = 'Kobar';
         kampusPriority = 2;
       }
 
@@ -8725,7 +8813,7 @@ function renderSpotlightResults(query) {
         <div class="spotlight-icon">${r.svgIcon}</div>
         <div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="spotlight-title">${escapeHtml(r.title)}</span>
+            <span class="spotlight-title">${r.type === 'ruangan' ? formatRoomNameHtml(r.title) : escapeHtml(r.title)}</span>
             <span class="spotlight-badge ${r.badgeClass}">${r.badgeText}</span>
           </div>
           <div class="spotlight-subtitle">${escapeHtml(r.subtitle)}</div>
