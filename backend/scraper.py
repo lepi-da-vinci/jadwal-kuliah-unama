@@ -470,13 +470,23 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
         FROM jadwal j
         JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-        WHERE j.tanggal = %s AND j.semester = %s AND (j.metode_pembelajaran != 'CC' OR j.metode_pembelajaran IS NULL)
+        WHERE j.tanggal = %s AND j.semester = %s 
+          AND (j.metode_pembelajaran NOT IN ('CC', 'OL') OR j.metode_pembelajaran IS NULL)
+          AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
         ORDER BY r.nama_ruangan, j.jam
     """, (target_date, sem_final))
     schedules = cursor.fetchall()
     
     room_schedules = {}
-    for jam, nama_ruangan, lokasi, nama_mk in schedules:
+    for row in schedules:
+        if isinstance(row, dict):
+            jam = row.get('jam')
+            nama_ruangan = row.get('nama_ruangan')
+            lokasi = row.get('kampus')
+            nama_mk = row.get('nama_mk')
+        else:
+            jam, nama_ruangan, lokasi, nama_mk = row
+
         if not nama_ruangan or not jam: continue
         ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
         if ruang_lengkap not in room_schedules:
@@ -505,7 +515,21 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         })
             
     for room, scheds in room_schedules.items():
+        if not scheds:
+            continue
         scheds = sorted(scheds, key=lambda x: x['start'])
+        
+        # 1. Jeda Pagi: Jika kelas tatap muka pertama mulai >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
+        first_cls = scheds[0]
+        if first_cls['start'] - 480 >= 90:
+            gap = first_cls['start'] - 480
+            hours = gap // 60
+            mins = gap % 60
+            dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
+            pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara 08:00 s/d {first_cls['jam']} (Persiapan Buka Lab jam {first_cls['jam']})."
+            cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+
+        # 2. Jeda Antar Kelas
         for i in range(len(scheds) - 1):
             curr = scheds[i]
             nxt = scheds[i+1]

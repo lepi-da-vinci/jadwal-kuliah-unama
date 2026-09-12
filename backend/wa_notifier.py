@@ -161,7 +161,10 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str):
         cursor.execute('''
             SELECT r.nama_ruangan, j.jam, j.nama_mk
             FROM ruangan r
-            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
+            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
+                               AND j.tanggal = %s 
+                               AND j.metode_pembelajaran NOT IN ('CC', 'OL')
+                               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
             WHERE r.kampus LIKE %s 
               AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
             ORDER BY r.nama_ruangan, j.jam

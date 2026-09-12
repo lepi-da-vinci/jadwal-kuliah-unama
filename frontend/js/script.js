@@ -1575,12 +1575,28 @@ function getScheduleUniqueKey(item, idx) {
   return `key_${item.tanggal || ''}_${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}_${item.nama_dosen || ''}_${idx}`;
 }
 
+function isOnlineOrCancelled(item) {
+  if (!item) return true;
+  const met = (item.metode_pembelajaran || '').toUpperCase();
+  const st = (item.status_jadwal || '').toLowerCase();
+  return met === 'OL' || met === 'CC' || st.includes('batal') || st.includes('cancel');
+}
+
+function isCancelled(item) {
+  if (!item) return true;
+  const met = (item.metode_pembelajaran || '').toUpperCase();
+  const st = (item.status_jadwal || '').toLowerCase();
+  return met === 'CC' || st.includes('batal') || st.includes('cancel');
+}
+
 function detectScheduleConflicts(scheduleList) {
   const roomConflicts = new Map();
   const lecturerConflicts = new Map();
+  const extraAddedClasses = [];
+  const extraAddedClassKeys = new Set();
 
   const validItems = (scheduleList || []).filter(item =>
-    item && item.jam && item.metode_pembelajaran !== 'CC'
+    item && item.jam && !isCancelled(item)
   );
 
   for (let i = 0; i < validItems.length; i++) {
@@ -1590,6 +1606,9 @@ function detectScheduleConflicts(scheduleList) {
     const durA = getClassDuration(a);
     const endA = startA + durA;
     const keyA = getScheduleUniqueKey(a, i);
+
+    const isOnlineA = (a.metode_pembelajaran || '').toUpperCase() === 'OL';
+    const kelasA = (a.kelas || '').trim().toLowerCase();
 
     for (let j = i + 1; j < validItems.length; j++) {
       const b = validItems[j];
@@ -1603,20 +1622,61 @@ function detectScheduleConflicts(scheduleList) {
       const overlaps = (startA < endB) && (startB < endA);
       if (!overlaps) continue;
 
-      // 1. Room conflict (same room, excluding online/empty)
+      const isOnlineB = (b.metode_pembelajaran || '').toUpperCase() === 'OL';
+      const kelasB = (b.kelas || '').trim().toLowerCase();
+
+      // ATURAN 1: Jadwal yang jam dan kelasnya sama (sebelumnya OL -> TM adalah Kelas Tambahan, BUKAN bentrok)
+      const isSameClass = kelasA && kelasB && kelasA === kelasB;
+      if (isSameClass) {
+        if (isOnlineA && !isOnlineB) {
+          if (!extraAddedClassKeys.has(keyB)) {
+            extraAddedClassKeys.add(keyB);
+            extraAddedClasses.push(b);
+          }
+          continue;
+        } else if (!isOnlineA && isOnlineB) {
+          if (!extraAddedClassKeys.has(keyA)) {
+            extraAddedClassKeys.add(keyA);
+            extraAddedClasses.push(a);
+          }
+          continue;
+        } else if (!isOnlineA && !isOnlineB) {
+          const stA = (a.status_jadwal || '').toLowerCase();
+          const stB = (b.status_jadwal || '').toLowerCase();
+          if (stA.includes('tambahan') || stA.includes('pengganti')) {
+            if (!extraAddedClassKeys.has(keyA)) {
+              extraAddedClassKeys.add(keyA);
+              extraAddedClasses.push(a);
+            }
+          }
+          if (stB.includes('tambahan') || stB.includes('pengganti')) {
+            if (!extraAddedClassKeys.has(keyB)) {
+              extraAddedClassKeys.add(keyB);
+              extraAddedClasses.push(b);
+            }
+          }
+          continue;
+        } else {
+          continue;
+        }
+      }
+
+      // ATURAN 2: Bentrok Ruangan Fisik (Room Conflict)
+      // HANYA bentrok jika KEDUA jadwal Tatap Muka (bukan OL, bukan Cancel) dan kelas berbeda
       const roomA = (a.nama_ruangan || '').trim().toLowerCase();
       const roomB = (b.nama_ruangan || '').trim().toLowerCase();
-      if (roomA && roomB && roomA === roomB && roomA !== '-' && roomA !== 'online') {
+      if (!isOnlineA && !isOnlineB && roomA && roomB && roomA === roomB && roomA !== '-' && roomA !== 'online') {
         if (!roomConflicts.has(keyA)) roomConflicts.set(keyA, { item: a, list: [] });
         if (!roomConflicts.has(keyB)) roomConflicts.set(keyB, { item: b, list: [] });
         roomConflicts.get(keyA).list.push(b);
         roomConflicts.get(keyB).list.push(a);
       }
 
-      // 2. Lecturer conflict (same lecturer in different rooms, excluding empty)
+      // ATURAN 3: Bentrok Dosen (Lecturer Conflict)
+      // Dosen yang sama mengajar 2 kelas berbeda di jam yang overlap
       const dosenA = (a.nama_dosen || '').trim().toLowerCase();
       const dosenB = (b.nama_dosen || '').trim().toLowerCase();
-      if (dosenA && dosenB && dosenA === dosenB && dosenA !== '-' && dosenA !== 'team teaching') {
+      if (dosenA && dosenB && dosenA === dosenB && dosenA !== '-' && dosenA !== 'team teaching' && kelasA !== kelasB) {
         if (!lecturerConflicts.has(keyA)) lecturerConflicts.set(keyA, { item: a, list: [] });
         if (!lecturerConflicts.has(keyB)) lecturerConflicts.set(keyB, { item: b, list: [] });
         lecturerConflicts.get(keyA).list.push(b);
@@ -1625,7 +1685,7 @@ function detectScheduleConflicts(scheduleList) {
     }
   }
 
-  return { roomConflicts, lecturerConflicts };
+  return { roomConflicts, lecturerConflicts, extraAddedClasses };
 }
 
 function renderTable(data) {
@@ -1651,14 +1711,17 @@ function renderTable(data) {
       displayStatus = 'Online';
     }
 
-    // Check conflict status
+    // Check conflict status & extra added class
     const itemKey = getScheduleUniqueKey(item, idx);
-    const hasRoomConflict = window._currentScheduleConflicts && 
+    const isOnlineItem = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
+    const hasRoomConflict = !isOnlineItem && window._currentScheduleConflicts && 
       (window._currentScheduleConflicts.roomConflicts.has(itemKey) ||
        Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
     const hasDosenConflict = window._currentScheduleConflicts && 
       (window._currentScheduleConflicts.lecturerConflicts.has(itemKey) ||
        Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const isExtraAdded = window._currentExtraAddedClasses && 
+      window._currentExtraAddedClasses.some(x => (x.id && item.id && x.id === item.id) || (x.jam === item.jam && x.kelas === item.kelas && x.nama_mk === item.nama_mk));
 
     const row = document.createElement('tr');
     if (hasRoomConflict || hasDosenConflict) {
@@ -1680,6 +1743,7 @@ function renderTable(data) {
           <td>
             ${escapeHtml(item.nama_mk || '-')} 
             ${item.kelas ? `<br><small style="color:var(--badge-tm);font-weight:bold;">(Kelas: ${escapeHtml(item.kelas)})</small>` : ''}
+            ${isExtraAdded ? `<br><span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:0.72em; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:3px; margin-top:3px;" title="Kelas Tambahan (Perubahan jadwal dari kelas daring menjadi tatap muka)"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Kelas Tambahan</span>` : ''}
             <div>
               <button class="btn-cal-mini" data-item="${safeItemJson}" onclick="handleSingleCalClick(this)" title="Simpan jadwal kuliah ini ke Google Calendar">
                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -1731,7 +1795,8 @@ function renderMobileScheduleCards(data) {
     const safeItemJson = escapeHtml(JSON.stringify(item));
 
     const itemKey = getScheduleUniqueKey(item, idx);
-    const hasRoomConflict = window._currentScheduleConflicts && 
+    const isOnlineItem = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
+    const hasRoomConflict = !isOnlineItem && window._currentScheduleConflicts && 
       (window._currentScheduleConflicts.roomConflicts.has(itemKey) ||
        Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
     const hasDosenConflict = window._currentScheduleConflicts && 
@@ -1739,6 +1804,8 @@ function renderMobileScheduleCards(data) {
        Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
     const hasConflict = hasRoomConflict || hasDosenConflict;
     const isNight = typeof isNightClass === 'function' && isNightClass(item);
+    const isExtraAdded = window._currentExtraAddedClasses && 
+      window._currentExtraAddedClasses.some(x => (x.id && item.id && x.id === item.id) || (x.jam === item.jam && x.kelas === item.kelas && x.nama_mk === item.nama_mk));
 
     return `
       <div class="mobile-card ${hasConflict ? 'conflict' : ''}">
@@ -1758,6 +1825,7 @@ function renderMobileScheduleCards(data) {
         <div class="mobile-card-body">
           <h4 class="mobile-mk-title">${escapeHtml(item.nama_mk || '-')}</h4>
           ${item.kelas ? `<div class="mobile-kelas-badge">Kelas: ${escapeHtml(item.kelas)}</div>` : ''}
+          ${isExtraAdded ? `<div style="display:inline-flex; align-items:center; gap:4px; font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); margin-top:4px;"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Kelas Tambahan (Perubahan OL)</div>` : ''}
 
           <div class="mobile-card-meta">
             <div class="mobile-meta-item">
@@ -1927,6 +1995,7 @@ function applyFilters() {
   // Hitung jadwal bentrok pada tanggal aktif
   const daySchedules = allJadwal.filter(item => item.tanggal === ft);
   window._currentScheduleConflicts = detectScheduleConflicts(daySchedules);
+  window._currentExtraAddedClasses = window._currentScheduleConflicts.extraAddedClasses || [];
 
   const conflictBadgeWrap = document.getElementById('conflict-badge-wrap');
   const conflictLabel = document.getElementById('conflict-warning-label');
@@ -2409,7 +2478,10 @@ function calculateClientSideGaps(targetDate) {
   if (!targetDate || !allJadwal || allJadwal.length === 0) return [];
   const roomSchedules = {};
   allJadwal.forEach(item => {
-    if (item.tanggal === targetDate && item.jam && item.nama_ruangan && item.metode_pembelajaran !== 'CC') {
+    const isOnline = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
+    const isCancelled = (item.metode_pembelajaran || '').toUpperCase() === 'CC' || 
+                        (item.status_jadwal && item.status_jadwal.toLowerCase().includes('batal'));
+    if (item.tanggal === targetDate && item.jam && item.nama_ruangan && !isOnline && !isCancelled) {
       const ruang = item.nama_ruangan;
       if (!roomSchedules[ruang]) roomSchedules[ruang] = [];
       const parts = item.jam.split(':');
@@ -2426,7 +2498,31 @@ function calculateClientSideGaps(targetDate) {
 
   const generatedGaps = [];
   for (const [room, scheds] of Object.entries(roomSchedules)) {
+    // Hanya periksa ruangan laboratorium
+    if (!isLab(room)) continue;
+
     scheds.sort((a, b) => a.start - b.start);
+
+    // 1. JEDA PAGI (08:00 s/d kelas pertama)
+    // Jika kelas tatap muka pertama baru mulai jam >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
+    if (scheds.length > 0 && scheds[0].start >= 570) {
+      const gapPagi = scheds[0].start - 480; // 480 = 08:00
+      const hours = Math.floor(gapPagi / 60);
+      const mins = gapPagi % 60;
+      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} menit` : '');
+      const sh = Math.floor(scheds[0].start / 60).toString().padStart(2, '0');
+      const sm = (scheds[0].start % 60).toString().padStart(2, '0');
+      generatedGaps.push({
+        tipe_notif: 'JEDA',
+        ruangan: room,
+        jam: `08:00 - ${sh}:${sm}`,
+        durasi: durStr,
+        pesan: `JEDA PANJANG (${durStr}): Ruang ${room} kosong antara 08:00 s/d ${sh}:${sm} (Persiapan Buka Lab jam ${sh}:${sm}).`,
+        waktu: 'Otomatis'
+      });
+    }
+
+    // 2. JEDA ANTARA KELAS
     for (let i = 0; i < scheds.length - 1; i++) {
       const curr = scheds[i];
       const nxt = scheds[i+1];
@@ -5834,7 +5930,12 @@ function renderRoomFinderResults() {
 
   const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
   const activeDate = ft || new Date().toISOString().slice(0, 10);
-  const activeClasses = allJadwal.filter(j => j.tanggal === activeDate && j.metode_pembelajaran !== 'CC');
+  const activeClasses = allJadwal.filter(j => 
+    j.tanggal === activeDate && 
+    (j.metode_pembelajaran || '').toUpperCase() !== 'CC' && 
+    (j.metode_pembelajaran || '').toUpperCase() !== 'OL' && 
+    (!j.status_jadwal || !j.status_jadwal.toLowerCase().includes('batal'))
+  );
 
   const now = new Date();
   const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -6195,6 +6296,23 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
       kampus: 'Kampus UNAMA',
       desc: n.pesan || '-'
     });
+  });
+
+  const extraClasses1 = window._currentExtraAddedClasses || [];
+  extraClasses1.forEach(j => {
+    const already = items.some(it => it.type === 'tambahan' && it.jam === j.jam && (it.title.includes(j.kelas || '') || (j.id && it.id === j.id)));
+    if (!already) {
+      items.push({
+        type: 'tambahan',
+        tag: 'Kelas Tambahan (Perubahan OL)',
+        jam: j.jam || '-',
+        title: `${j.nama_mk || 'Mata Kuliah'} ${j.kelas ? `(${j.kelas})` : ''}`,
+        dosen: j.nama_dosen || '-',
+        ruangan: j.nama_ruangan || '-',
+        kampus: j.kampus || 'Kampus UNAMA',
+        desc: `Perubahan jadwal dari kelas daring (OL) menjadi tatap muka tambahan di ruangan ${j.nama_ruangan || '-'}. Bukan bentrok.`
+      });
+    }
   });
 
   // Perubahan
@@ -6882,7 +7000,7 @@ function updateInfoLainBadges() {
   if (!ft) return;
 
   // 1. Batal (CC)
-  const batalList = allJadwal.filter(j => j.tanggal === ft && j.metode_pembelajaran === 'CC');
+  const batalList = allJadwal.filter(j => j.tanggal === ft && ((j.metode_pembelajaran || '').toUpperCase() === 'CC' || (j.status_jadwal && j.status_jadwal.toLowerCase().includes('batal'))));
 
   // 2. Tambahan
   const notifItems = window._currentNotifData || [];
@@ -6894,7 +7012,8 @@ function updateInfoLainBadges() {
     j.tanggal === ft && j.status_jadwal && 
     (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))
   );
-  const totalTambahan = tambahanNotifs.length + tambahanJadwal.length;
+  const extraClasses = window._currentExtraAddedClasses || [];
+  const totalTambahan = tambahanNotifs.length + tambahanJadwal.length + extraClasses.length;
 
   // 3. Perubahan
   const perubahanNotifs = notifItems.filter(n => 
@@ -6983,7 +7102,12 @@ function renderFiturRooms() {
     }
   });
 
-  const activeScheds = allJadwal.filter(j => j.tanggal === targetDate && j.metode_pembelajaran !== 'CC');
+  const activeScheds = allJadwal.filter(j => 
+    j.tanggal === targetDate && 
+    (j.metode_pembelajaran || '').toUpperCase() !== 'CC' && 
+    (j.metode_pembelajaran || '').toUpperCase() !== 'OL' && 
+    (!j.status_jadwal || !j.status_jadwal.toLowerCase().includes('batal'))
+  );
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -7245,6 +7369,24 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
       kampus: j.kampus || 'Kampus UNAMA',
       desc: `Status jadwal: ${j.status_jadwal}`
     });
+  });
+
+  // 2b. Kelas Tambahan hasil perubahan jadwal dari daring (OL) menjadi tatap muka
+  const extraClasses2 = window._currentExtraAddedClasses || [];
+  extraClasses2.forEach(j => {
+    const already = items.some(it => it.type === 'tambahan' && it.jam === j.jam && (it.title.includes(j.kelas || '') || (j.id && it.id === j.id)));
+    if (!already) {
+      items.push({
+        type: 'tambahan',
+        tag: 'Kelas Tambahan (Perubahan OL)',
+        jam: j.jam || '-',
+        title: `${j.nama_mk || 'Mata Kuliah'} ${j.kelas ? `(${j.kelas})` : ''}`,
+        dosen: j.nama_dosen || '-',
+        ruangan: j.nama_ruangan || '-',
+        kampus: j.kampus || 'Kampus UNAMA',
+        desc: `Perubahan jadwal tatap muka tambahan (sebelumnya online). Bukan bentrok, diselenggarakan di ${j.nama_ruangan || '-'}.`
+      });
+    }
   });
 
   // 3. Pergeseran Jadwal
