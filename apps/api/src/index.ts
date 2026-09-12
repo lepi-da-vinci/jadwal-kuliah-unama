@@ -13,6 +13,14 @@ export const app = new Elysia()
       credentials: true,
     })
   )
+  .onRequest(({ request }) => {
+    const time = new Date().toLocaleString('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      hour12: false,
+    });
+    const url = new URL(request.url);
+    console.log(`[${time} WIB] ${request.method} ${url.pathname}${url.search}`);
+  })
   .get('/', () => ({
     success: true,
     message: 'Jadwal Kuliah UNAMA API is running',
