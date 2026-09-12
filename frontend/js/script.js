@@ -31,6 +31,7 @@ function escapeHtml(str) {
 // 1. Persingkat sebutan 'labor' jadi 'lab' di mode HP (<= 768px), mode desktop tetap 'labor'.
 // 2. Tidak boleh ada kata 'Kampus', cukup 'Thehok' atau 'Kobar'.
 // 3. Ruang 3.1 dan 3.4 tidak pakai kata 'praktek', cukup 'R. 3.1' dan 'R. 3.4' di semua mode (desktop/HP), dan bukan lab.
+// 4. Gedung Pasca diganti menjadi 'S2' untuk teks yang ditampilkan agar lebih simpel.
 
 function formatCampusName(campus) {
   if (!campus) return 'Thehok';
@@ -59,7 +60,11 @@ function formatRoomName(rawName, isMobile = null) {
   name = name.replace(/\b(?:Labor|Lab)\s*(3\.[14])\b/gi, 'R. $1');
   name = name.replace(/\bPraktek\s*(3\.[14])\b/gi, 'R. $1');
 
-  // 3. Persingkat sebutan labor jadi lab kalau mode HP, desktop tetap labor
+  // 3. Gedung Pasca diganti menjadi 'S2' agar lebih simpel
+  name = name.replace(/\b(?:Gedung|Gd\.?)\s+Pasca(?:sarjana)?\b/gi, 'S2')
+             .replace(/\bPasca(?:sarjana)?\b/gi, 'S2');
+
+  // 4. Persingkat sebutan labor jadi lab kalau mode HP, desktop tetap labor
   if (isMobile) {
     name = name.replace(/\bLaboratorium\b/gi, 'Lab')
                .replace(/\bLabor\b/gi, 'Lab');
@@ -808,7 +813,8 @@ window.applySemesterExplorerFilters = function() {
       if (itemCamp !== targetCamp) return false;
     }
     if (fKeyword) {
-      const combined = `${item.nama_mk || ''} ${item.nama_dosen || ''} ${item.kelas || ''} ${item.nama_ruangan || ''} ${item.jam || ''} ${item.hari || ''}`.toLowerCase();
+      const fmtRoom = formatRoomName(item.nama_ruangan || '', false);
+      const combined = `${item.nama_mk || ''} ${item.nama_dosen || ''} ${item.kelas || ''} ${item.nama_ruangan || ''} ${fmtRoom} ${item.jam || ''} ${item.hari || ''}`.toLowerCase();
       if (!combined.includes(fKeyword)) return false;
     }
     return true;
@@ -1935,7 +1941,7 @@ function getRoomCampus(roomName, defaultCampus = '') {
     }
   }
 
-  if (lower.includes('4.') || lower.includes('pasca') || lower.includes('b2.') || lower.includes('b1.') || lower.includes('b3.') || lower.includes('cisco')) {
+  if (lower.includes('4.') || lower.includes('pasca') || lower.includes('s2') || lower.includes('b2.') || lower.includes('b1.') || lower.includes('b3.') || lower.includes('cisco')) {
     return 'Thehok';
   }
   return formatCampusName(defaultCampus) || 'Thehok';
@@ -3089,7 +3095,7 @@ function renderAslabTable() {
     };
     
     const kampusDisplay = getKampusDisplay(a);
-    const ruangDisplay = a.nama_ruangan || '-';
+    const ruangDisplay = a.nama_ruangan ? formatRoomName(a.nama_ruangan, false) : '-';
 
     html += `
             <tr style="border-bottom: 1px solid var(--border);">
@@ -7697,7 +7703,7 @@ if (btnSubmitCariDosen) {
                 <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
                 <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
                   <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
-                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${escapeHtml(formatRoomName(item.nama_ruangan || '-', false))} (${escapeHtml(formatCampusName(item.kampus))})</span>
                   <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
                 </div>
               </div>`;
@@ -7745,7 +7751,7 @@ if (btnSubmitCariKelas) {
                 <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
                 <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
                   <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
-                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${item.nama_ruangan} (${item.kampus})</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${escapeHtml(formatRoomName(item.nama_ruangan || '-', false))} (${escapeHtml(formatCampusName(item.kampus))})</span>
                   <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
                 </div>
               </div>`;
@@ -8896,7 +8902,8 @@ function renderSpotlightResults(query) {
       const badgeText = r.isLabor ? 'LAB' : 'KELAS';
       const svgIcon = r.isLabor ? svgSearchIcons.lab : svgSearchIcons.ruangan;
 
-      if (!query || r.cleanTitle.toLowerCase().includes(query) || r.kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
+      const fmtTitle = formatRoomName(r.cleanTitle, false);
+      if (!query || r.cleanTitle.toLowerCase().includes(query) || fmtTitle.toLowerCase().includes(query) || r.kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
         roomTemp.push({
           type: 'ruangan',
           rawValue: r.cleanTitle,
@@ -9007,7 +9014,7 @@ function openSpotlightDetailModal(item) {
 
   if (!backdrop || !item) return;
 
-  titleEl.innerText = item.title;
+  titleEl.innerText = item.type === 'ruangan' ? formatRoomName(item.title, false) : item.title;
   badgeEl.className = `spotlight-badge ${item.badgeClass}`;
   badgeEl.innerText = item.badgeText;
   subEl.innerText = item.subtitle;
@@ -9034,7 +9041,7 @@ function openSpotlightDetailModal(item) {
     bodyEl.innerHTML = `
       <div class="spotlight-detail-stat-row">
         <div class="spotlight-detail-stat-box">
-          <div class="spotlight-detail-stat-val">${item.aslabData.ruangan || '-'}</div>
+          <div class="spotlight-detail-stat-val">${escapeHtml(formatRoomName(item.aslabData.ruangan || '-', false))}</div>
           <div class="spotlight-detail-stat-lbl">Labor / Ruangan Jaga</div>
         </div>
         <div class="spotlight-detail-stat-box">
@@ -9396,7 +9403,7 @@ function createTvRowHtml(item, isEnter = false) {
         ${escapeHtml(item.nama_dosen || '-')}
       </div>
       <div class="tv-row-ruangan">
-        ${escapeHtml(item.nama_ruangan || '-')}
+        ${escapeHtml(formatRoomName(item.nama_ruangan || '-', false))}
       </div>
       <div>
         ${statusHtml}

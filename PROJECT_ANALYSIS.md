@@ -6,7 +6,8 @@ Dokumen ini adalah **Buku Panduan Utama (Master Blueprint)** dari keseluruhan si
 
 > [!NOTE]
 > **Catatan Konvensi Penamaan:**
-> Penulisan ruang praktikum di seluruh sistem (antarmuka UI, badge, modal, filter, notifikasi, dan dokumentasi) cukup ditulis **"Labor"** saja (misal: *Ruang Labor*, *Jeda Kosong Labor*, *Asisten Labor*), jangan ditulis panjang sebagai *"Laboratorium"*.
+> 1. Penulisan ruang praktikum di seluruh sistem (antarmuka UI, badge, modal, filter, notifikasi, dan dokumentasi) cukup ditulis **"Labor"** saja (misal: *Ruang Labor*, *Jeda Kosong Labor*, *Asisten Labor*), jangan ditulis panjang sebagai *"Laboratorium"*. Di tampilan mobile dipersingkat menjadi *"Lab"*.
+> 2. Penamaan ruangan di Gedung Pasca ditampilkan secara lebih simpel dan ringkas sebagai **"S2"** (misal: *S2, Lab. B2.3*, *S2, R. B1.3*, *S2, R. B3.4*).
 
 ---
 
