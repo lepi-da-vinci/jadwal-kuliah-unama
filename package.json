@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev:web": "bun run --cwd apps/web dev",
     "scrape:test": "bun run --cwd apps/scrapper test",
     "scrape:sync": "bun run --cwd apps/scrapper sync",
     "db:push": "bun run --cwd packages/db db:push",
