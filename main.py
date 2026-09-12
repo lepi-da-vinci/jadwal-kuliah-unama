@@ -1398,10 +1398,16 @@ def sync_html_data(req: SyncHtmlRequest):
 def sync_complete(req: SyncCompleteRequest):
     """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
     try:
-        tgl_key = req.tanggal or ""
-        sem_to_use = req.semester or sync_status.get(tgl_key, {}).get("semester") or scraper.get_active_semester()
-        scraper.compare_and_finalize_sync(req.tanggal, sem_to_use)
+        tgl_key = (req.tanggal or "").strip()
         prev_count = sync_status.get(tgl_key, {}).get("count", 0)
+        
+        # Guard: Jika data baru yang dikirim oleh ekstensi 0, tidak perlu finalisasi penghapusan
+        if prev_count == 0:
+            return {"status": "warning", "message": "Tidak ada data baru yang disinkronisasi. Data jadwal yang sudah ada tetap aman.", "count": 0}
+
+        sem_to_use = req.semester or sync_status.get(tgl_key, {}).get("semester") or scraper.get_active_semester()
+        target_tgl = tgl_key if tgl_key else None
+        scraper.compare_and_finalize_sync(target_tgl, sem_to_use)
         sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
         return {"status": "success", "message": f"Proses perbandingan dan finalisasi selesai ({sem_to_use}).", "count": prev_count, "semester": sem_to_use}
     except Exception as e:

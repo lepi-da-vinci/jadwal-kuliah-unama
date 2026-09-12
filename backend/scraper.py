@@ -27,11 +27,13 @@ load_dotenv()
 def get_db():
     pwd = os.getenv("DB_PASSWORD", "")
     host = os.getenv("DB_HOST", "127.0.0.1")
+    port = int(os.getenv("DB_PORT", 3306))
     user = os.getenv("DB_USER", "root")
     db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
     try:
         return mysql.connector.connect(
             host=host,
+            port=port,
             user=user,
             password=pwd,
             database=db_name
@@ -40,6 +42,7 @@ def get_db():
         if err.errno == 1045 and pwd != "":
             return mysql.connector.connect(
                 host=host,
+                port=port,
                 user=user,
                 password="",
                 database=db_name
@@ -50,7 +53,7 @@ def init_db_schema():
     """Memastikan seluruh tabel dan master data dasar tersedia saat startup (terutama di Docker)"""
     try:
         conn = get_db()
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS dosen (
@@ -214,15 +217,18 @@ def get_active_semester(conn=None, cursor=None):
     should_close = False
     if not conn or not cursor:
         conn = get_db()
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         should_close = True
     try:
         cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
         row = cursor.fetchone()
-        if row and row[0]:
+        if row:
+            if isinstance(row, dict):
+                return str(row.get('nama_semester', 'Genap 2025')).strip()
             return str(row[0]).strip()
         return "Genap 2025"
-    except Exception:
+    except Exception as e:
+        print(f"[Semester] Error get active semester: {e}")
         return "Genap 2025"
     finally:
         if should_close:
@@ -238,7 +244,7 @@ def ensure_semester_exists(nama_semester, set_active=False, conn=None, cursor=No
     should_close = False
     if not conn or not cursor:
         conn = get_db()
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         should_close = True
     try:
         cursor.execute("INSERT IGNORE INTO semester (nama_semester, is_active) VALUES (%s, 0)", (nama_semester,))
@@ -544,7 +550,7 @@ def create_temp_table(cursor):
 def save_to_db(data, target_date=None, page="1", target_semester=None):
     try:
         conn = get_db()
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         create_temp_table(cursor)
         
         sem_default = target_semester or (data[0].get('semester') if data else None) or get_active_semester(conn, cursor)
@@ -619,7 +625,7 @@ def save_to_db(data, target_date=None, page="1", target_semester=None):
 
 def compare_and_finalize_sync(target_date=None, target_semester=None):
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(buffered=True)
     
     try:
         sem_final = target_semester
@@ -633,10 +639,13 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
         if target_date:
             target_dates = [target_date]
         else:
-            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE semester = %s", (sem_final,))
+            cursor.execute("SELECT DISTINCT tanggal FROM jadwal_temp WHERE semester = %s AND tanggal IS NOT NULL", (sem_final,))
             target_dates = [row[0].strftime('%Y-%m-%d') if hasattr(row[0], 'strftime') else str(row[0]) for row in cursor.fetchall()]
             
         for t_date in target_dates:
+            if not t_date:
+                continue
+
             # 1. Ambil data lama dari jadwal untuk semester ini
             cursor.execute("""
                 SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
@@ -651,7 +660,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             old_lab_cache = {}
             for jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen in old_schedules:
                 if not jam: continue
-                total_seconds = int(jam.total_seconds())
+                total_seconds = int(jam.total_seconds()) if hasattr(jam, 'total_seconds') else 0
                 h = total_seconds // 3600
                 m = (total_seconds % 3600) // 60
                 jam_str = f"{h:02d}:{m:02d}"
@@ -671,11 +680,16 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             """, (t_date, sem_final))
             new_schedules = cursor.fetchall()
             
+            # GUARD SAFETY CRITICAL: Jika jadwal_temp kosong untuk tanggal ini, JANGAN PERNAH hapus jadwal yang sudah ada!
+            if not new_schedules:
+                print(f"[Sync Guard] Tidak ada data di jadwal_temp untuk tanggal {t_date} ({sem_final}). Data jadwal lama TIDAK dihapus (Aman).")
+                continue
+            
             # 3. Bandingkan dan buat notifikasi
             for row in new_schedules:
                 jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
                 if not nama_ruangan or not jam: continue
-                total_seconds = int(jam.total_seconds())
+                total_seconds = int(jam.total_seconds()) if hasattr(jam, 'total_seconds') else 0
                 h = total_seconds // 3600
                 m = (total_seconds % 3600) // 60
                 start_time = f"{h:02d}:{m:02d}"
@@ -694,7 +708,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                         pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
                         cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan, sem_final))
             
-            # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA semester bersangkutan)
+            # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA dieksekusi jika data baru valid dan ada)
             cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             cursor.execute("""
                 INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
@@ -705,8 +719,8 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             calculate_and_save_gaps(conn, cursor, t_date, sem_final)
 
-        # Bersihkan sisa data temp tanpa tanggal jika ada
-        cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s AND (tanggal IS NULL OR tanggal = '')", (sem_final,))
+        # Bersihkan sisa data temp tanpa tanggal jika ada (menggunakan IS NULL yang aman untuk tipe DATE)
+        cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s AND tanggal IS NULL", (sem_final,))
                 
         conn.commit()
     except mysql.connector.Error as err:
@@ -788,13 +802,14 @@ def scrape_baak_direct(target_date=None, target_semester=None):
             else:
                 break
                 
-        if total_scraped > 0 or target_date:
+        if total_scraped > 0:
             final_sem = sem_to_use or (all_data[0].get('semester') if all_data else None) or get_active_semester()
             compare_and_finalize_sync(target_date, final_sem)
             print(f"[Direct Scraper] Berhasil finalisasi {total_scraped} jadwal ({final_sem}) untuk tanggal {target_date}.")
             return True, total_scraped, f"Berhasil sinkronisasi {total_scraped} jadwal ({final_sem}) dari BAAK."
         else:
-            return False, 0, "Tidak ada data jadwal ditemukan di BAAK."
+            print(f"[Direct Scraper] Tidak ada data ditemukan untuk tanggal {target_date}. Jadwal yang ada tetap aman dan tidak dihapus.")
+            return False, 0, "Tidak ada data jadwal ditemukan di BAAK untuk kriteria ini."
             
     except Exception as e:
         print(f"[Direct Scraper Error] {e}")
