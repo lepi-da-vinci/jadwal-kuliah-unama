@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: jadwal-kuliah-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: PORT
+        value: 3001
+      - key: HOST
+        value: 0.0.0.0

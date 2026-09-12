@@ -1,0 +1,19 @@
+{
+  "name": "@jadwal/api",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.2.0",
+    "@jadwal/db": "workspace:*",
+    "dotenv": "^16.4.7",
+    "elysia": "^1.2.25"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2"
+  }
+}

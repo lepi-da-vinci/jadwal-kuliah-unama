@@ -7,6 +7,8 @@
     "packages/*"
   ],
   "scripts": {
+    "dev:api": "bun run --cwd apps/api dev",
+    "start:api": "bun run --cwd apps/api start",
     "dev:web": "bun run --cwd apps/web dev",
     "scrape:test": "bun run --cwd apps/scrapper test",
     "scrape:sync": "bun run --cwd apps/scrapper sync",
