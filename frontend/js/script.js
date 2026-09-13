@@ -9884,54 +9884,28 @@ if (typeof MutationObserver !== 'undefined') {
 // Mencegah scroll pada backdrop atau background saat modal aktif di layar sentuh
 document.addEventListener('touchmove', (e) => {
   if (document.body.classList.contains('modal-open')) {
-    let target = e.target;
-    let canScroll = false;
-    while (target && target !== document.body && target !== document.documentElement) {
-      if (
-        target.classList.contains('modal-body') ||
-        target.classList.contains('spotlight-results') ||
-        target.classList.contains('fs-modal-body') ||
-        target.classList.contains('spotlight-modal') ||
-        target.id === 'lab-modal-body' ||
-        target.id === 'wa-modal-body' ||
-        target.classList.contains('sem-modal-body')
-      ) {
-        if (target.scrollHeight > target.clientHeight) {
-          canScroll = true;
-          break;
-        }
-      }
-      target = target.parentElement;
+    // Jika sentuhan berada di dalam kotak/konten modal apapun, biarkan scroll alami browser (vertikal maupun horizontal)
+    const insideModal = e.target.closest(
+      '.modal-box, .spotlight-modal, .fitur-modal-box, .db-clear-modal-box, .custom-confirm-box, .modal-sheet, .spotlight-detail-modal, [role="dialog"] > div, .spotlight-container'
+    );
+    if (insideModal) {
+      return; // Izinkan semua touch scroll (vertikal & horizontal) di dalam modal
     }
-    if (!canScroll) {
-      e.preventDefault();
-    }
+    // Hanya cegah scroll jika sentuhan tepat di backdrop atau background di luar modal
+    e.preventDefault();
   }
 }, { passive: false });
 
 // Mencegah scroll roda mouse desktop tembus ke background saat modal aktif
 document.addEventListener('wheel', (e) => {
   if (document.body.classList.contains('modal-open')) {
-    let target = e.target;
-    let canScroll = false;
-    while (target && target !== document.body && target !== document.documentElement) {
-      if (
-        target.classList.contains('modal-body') ||
-        target.classList.contains('spotlight-results') ||
-        target.classList.contains('fs-modal-body') ||
-        target.id === 'lab-modal-body' ||
-        target.id === 'wa-modal-body'
-      ) {
-        if (target.scrollHeight > target.clientHeight) {
-          canScroll = true;
-          break;
-        }
-      }
-      target = target.parentElement;
+    const insideModal = e.target.closest(
+      '.modal-box, .spotlight-modal, .fitur-modal-box, .db-clear-modal-box, .custom-confirm-box, .modal-sheet, .spotlight-detail-modal, [role="dialog"] > div, .spotlight-container'
+    );
+    if (insideModal) {
+      return; // Izinkan wheel scroll di dalam modal
     }
-    if (!canScroll) {
-      e.preventDefault();
-    }
+    e.preventDefault();
   }
 }, { passive: false });
 

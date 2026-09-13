@@ -1348,6 +1348,27 @@ body.modal-open {
   box-shadow: var(--clay-inner-sm);
 }
 
+.modal-table-scroll-wrap {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 58vh;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior: contain !important;
+  border-radius: var(--radius-sm);
+  scrollbar-width: thin;
+}
+.modal-table-scroll-wrap table {
+  margin-top: 4px;
+}
+.modal-table-scroll-wrap th,
+.modal-table-scroll-wrap td {
+  white-space: nowrap !important;
+}
+
 .aslab-list-container {
   max-height: 280px;
   overflow-y: auto;
@@ -1751,10 +1772,17 @@ body.dark-theme .spotlight-btn-close-wrap {
   padding: 12px 24px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-x !important;
+  overscroll-behavior-x: contain !important;
   flex-shrink: 0;
   min-height: 56px;
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+.spotlight-tabs::-webkit-scrollbar {
+  display: none;
 }
 .spotlight-tab-btn {
   background: transparent;
@@ -5748,6 +5776,27 @@ body.semester-explorer-active #semester-explorer-container {
     padding: 8px 12px !important;
     gap: 6px !important;
     min-height: 48px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-x !important;
+    overscroll-behavior-x: contain !important;
+    scrollbar-width: none !important;
+  }
+  .spotlight-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .modal-table-scroll-wrap {
+    max-height: calc(88vh - 190px) !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-x pan-y !important;
+  }
+  .setting-modal-box .modal-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: calc(88vh - 160px) !important;
   }
 
   .spotlight-tab-btn {

@@ -295,11 +295,11 @@
 
     <!-- Tampilan Data Aslab -->
     <div id="wa-modal-data" class="modal-body"
-      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-      <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      style="display: none; text-align: left; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 0;">
+      <div class="modal-table-scroll-wrap">
+        <table style="width: 100%; min-width: 560px; border-collapse: collapse; margin-top: 5px;">
           <thead>
-            <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
+            <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03); white-space: nowrap;">
               <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
               <th style="padding: 12px 14px; text-align: left;">Nama Aslab</th>
               <th style="padding: 12px 14px; text-align: left;">Kampus</th>
@@ -313,7 +313,7 @@
           </tbody>
         </table>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: auto; margin-bottom: 12px; padding-bottom: 16px; width: 100%; flex-shrink: 0;">
         <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="data-wa-back-btn">Kembali</button>
       </div>
     </div>
@@ -346,11 +346,11 @@
 
     <!-- Tampilan Data Ruangan -->
     <div id="wa-modal-data-ruangan" class="modal-body"
-      style="display: none; text-align: left; flex-direction: column; gap: 15px;">
-      <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      style="display: none; text-align: left; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 0;">
+      <div class="modal-table-scroll-wrap">
+        <table style="width: 100%; min-width: 380px; border-collapse: collapse; margin-top: 5px;">
           <thead>
-            <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03);">
+            <tr style="border-bottom: 2px solid var(--border); background: rgba(0,0,0,0.03); white-space: nowrap;">
               <th style="padding: 12px 14px; text-align: center; width: 45px;">No</th>
               <th style="padding: 12px 14px; text-align: left;">Kampus</th>
               <th style="padding: 12px 14px; text-align: left;">Nama Ruangan</th>
@@ -362,7 +362,7 @@
           </tbody>
         </table>
       </div>
-      <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 12px; padding-bottom: 16px; width: 100%;">
+      <div style="display: flex; gap: 10px; justify-content: center; margin-top: auto; margin-bottom: 12px; padding-bottom: 16px; width: 100%; flex-shrink: 0;">
         <button class="modal-btn" style="background: var(--text-muted); width: 100%; min-height: 48px; font-weight: 600;" id="data-ruangan-back-btn">Kembali</button>
       </div>
     </div>
@@ -446,13 +446,13 @@
           <div style="font-size: 0.82em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Riwayat Notifikasi WA Terakhir:</div>
           <span style="font-size: 0.78em; color: var(--text-muted);">Peringatan 30 Menit & Notifikasi Lab</span>
         </div>
-        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md);">
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.86em;">
+        <div class="modal-table-scroll-wrap" style="max-height: 380px; border: 1.5px solid var(--border); border-radius: var(--radius-md);">
+          <table style="width: 100%; min-width: 480px; border-collapse: collapse; font-size: 0.86em;">
             <thead>
-              <tr style="border-bottom: 2px solid var(--border); background: var(--bg-elevated); color: var(--text-muted);">
+              <tr style="border-bottom: 2px solid var(--border); background: var(--bg-elevated); color: var(--text-muted); white-space: nowrap;">
                 <th style="padding: 10px 12px; text-align: left; width: 140px;">Waktu Kirim</th>
                 <th style="padding: 10px 12px; text-align: left; width: 110px;">Kategori</th>
-                <th style="padding: 10px 12px; text-align: left;">Ringkasan Pesan</th>
+                <th style="padding: 12px 14px; text-align: left;">Ringkasan Pesan</th>
               </tr>
             </thead>
             <tbody id="wa-monitor-log-tbody">
