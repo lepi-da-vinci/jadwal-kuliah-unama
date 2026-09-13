@@ -458,9 +458,10 @@ def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
     # Ruang 3.1 dan 3.4 bukan lab (cukup ruangan biasa, tidak ada praktek)
+    # Kecuali Gedung Pasca B3.4 dan B2.3 yang memang lab
     if ('3.1' in name or '3.4' in name) and not ('b3.4' in name or 'b2.3' in name):
         return False
-    return 'lab' in name or 'cisco' in name
+    return 'lab' in name or 'cisco' in name or 'praktek' in name
 
 def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
     sem_final = target_semester or get_active_semester(conn, cursor)
@@ -546,6 +547,64 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
                 
                 pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara {end_str} s/d {nxt['jam']}."
                 cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+
+    # BUG-13 FIX: Deteksi lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu notif jeda)
+    cursor.execute("""
+        SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
+        FROM jadwal j
+        JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+        WHERE j.tanggal = %s AND j.semester = %s
+          AND j.metode_pembelajaran = 'OL'
+          AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+        ORDER BY r.nama_ruangan, j.jam
+    """, (target_date, sem_final))
+    ol_schedules = cursor.fetchall()
+
+    ol_lab_rooms = {}
+    for row in ol_schedules:
+        if isinstance(row, dict):
+            jam = row.get('jam')
+            nama_ruangan = row.get('nama_ruangan')
+            lokasi = row.get('kampus')
+            nama_mk = row.get('nama_mk')
+        else:
+            jam, nama_ruangan, lokasi, nama_mk = row
+
+        if not nama_ruangan or not jam or not is_lab(nama_ruangan): continue
+        ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
+        # Hanya proses lab yang tidak punya kelas fisik (tidak ada di room_schedules)
+        if ruang_lengkap in room_schedules: continue
+
+        if ruang_lengkap not in ol_lab_rooms:
+            ol_lab_rooms[ruang_lengkap] = []
+
+        if hasattr(jam, 'total_seconds'):
+            start_min = int(jam.total_seconds()) // 60
+        elif hasattr(jam, 'hour'):
+            start_min = jam.hour * 60 + jam.minute
+        elif isinstance(jam, str) and ':' in jam:
+            parts = jam.split(':')
+            start_min = int(parts[0]) * 60 + int(parts[1])
+        else:
+            continue
+
+        end_min = start_min + get_class_duration(nama_mk)
+        ol_lab_rooms[ruang_lengkap].append({'start': start_min, 'end': end_min, 'nama_mk': nama_mk})
+
+    for room, ol_scheds in ol_lab_rooms.items():
+        ol_scheds = sorted(ol_scheds, key=lambda x: x['start'])
+        ol_start = ol_scheds[0]['start']
+        ol_end = ol_scheds[-1]['end']
+        gap_min = ol_end - ol_start
+        if gap_min >= 90:
+            hours = gap_min // 60
+            mins = gap_min % 60
+            dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
+            sh = f"{ol_start // 60:02d}:{ol_start % 60:02d}"
+            eh = f"{ol_end // 60:02d}:{ol_end % 60:02d}"
+            pesan = f"JEDA ({dur_str}): Ruang {room} kosong {sh} - {eh} (Kelas dijadwalkan OL, Lab tidak terpakai — perlu dibuka)."
+            cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+
     conn.commit()
 
 def create_temp_table(cursor):

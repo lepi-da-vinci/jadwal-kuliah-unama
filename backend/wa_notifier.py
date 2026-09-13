@@ -594,13 +594,16 @@ def check_lab_schedules():
         
         if not aslab_data: return
             
-        cursor.execute("SELECT j.jam, r.id_ruangan, j.nama_mk FROM jadwal j JOIN ruangan r ON j.id_ruangan = r.id_ruangan WHERE j.tanggal = %s AND j.metode_pembelajaran NOT IN ('CC', 'OL') ORDER BY r.id_ruangan, j.jam", (current_date,))
+        cursor.execute("SELECT j.jam, r.id_ruangan, j.nama_mk FROM jadwal j JOIN ruangan r ON j.id_ruangan = r.id_ruangan WHERE j.tanggal = %s AND j.metode_pembelajaran NOT IN ('CC', 'OL') AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL) ORDER BY r.id_ruangan, j.jam", (current_date,))
         schedules = cursor.fetchall()
         
         lab_schedules = {}
         for row in schedules:
             id_ruangan = row['id_ruangan']
             if id_ruangan in aslab_data:
+                # BUG-01 FIX: inisialisasi list terlebih dahulu sebelum append
+                if id_ruangan not in lab_schedules:
+                    lab_schedules[id_ruangan] = []
                 start_min = int(row['jam'].total_seconds()) // 60
                 dur = scraper.get_class_duration(row['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
                 lab_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + dur})
@@ -699,5 +702,9 @@ async def wa_notifier_loop():
     while True:
         check_lab_schedules() # fitur ini DIAKTIFKAN kembali secara permanen.
         now = datetime.datetime.now()
+        # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak
+        today_prefix = now.strftime("%Y-%m-%d")
+        stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix)}
+        sent_notifications.difference_update(stale_keys)
         sleep_seconds = 60 - now.second
         await asyncio.sleep(sleep_seconds)

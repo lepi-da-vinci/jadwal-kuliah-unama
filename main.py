@@ -352,9 +352,6 @@ def get_semesters():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # Pastikan skema tabel master semester terinisialisasi
-        scraper.init_db_schema()
-        
         cursor.execute("""
             SELECT 
                 s.id_semester, 
@@ -387,8 +384,8 @@ def get_semesters():
             conn.close()
 
 @app.post("/api/semesters/active")
-def set_active_semester(req: SemesterActiveRequest):
-    """Mengubah semester aktif sistem"""
+def set_active_semester(req: SemesterActiveRequest, admin: str = Depends(verify_admin_token)):
+    """Mengubah semester aktif sistem (memerlukan token Admin)"""
     try:
         nama_sem = req.nama_semester.strip()
         if not nama_sem:
@@ -418,8 +415,8 @@ def set_active_semester(req: SemesterActiveRequest):
             conn.close()
 
 @app.post("/api/semesters/add")
-def add_new_semester(req: SemesterAddRequest):
-    """Menambahkan nama semester baru ke dalam sistem"""
+def add_new_semester(req: SemesterAddRequest, admin: str = Depends(verify_admin_token)):
+    """Menambahkan nama semester baru ke dalam sistem (memerlukan token Admin)"""
     try:
         nama_sem = req.nama_semester.strip()
         if not nama_sem:
@@ -953,9 +950,18 @@ def backup_selective_db(req: BackupDbRequest = BackupDbRequest(), admin: str = D
         if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_temp" in targets:
             sql_parts.append(generate_table_sql_dump(cursor, "jadwal_temp", "SELECT * FROM jadwal_temp"))
 
-        # 6. Tabel Jeda Lab
+        # 6. Tabel Jeda Lab (opsional, tabel legacy — skip jika tidak ada)
         if is_all or "jadwal" in targets or "jadwal_all" in targets or "notif_all" in targets or "notif_jeda" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "jeda_lab", "SELECT * FROM jeda_lab"))
+            try:
+                conn_check = get_db()
+                cur_check = conn_check.cursor()
+                cur_check.execute("SHOW TABLES LIKE 'jeda_lab'")
+                if cur_check.fetchone():
+                    sql_parts.append(generate_table_sql_dump(cursor, "jeda_lab", "SELECT * FROM jeda_lab"))
+                cur_check.close()
+                conn_check.close()
+            except Exception:
+                pass
 
         # 7. Tabel Notifikasi Lab
         if is_all or "notif_all" in targets:
@@ -1369,11 +1375,14 @@ def get_pending_sync():
             pending_sync_queue.pop(tgl, None)
     return {"status": "empty"}
 
+class ClearPendingRequest(BaseModel):
+    tanggal: str | None = None
+
 @app.post("/api/sync/pending/clear")
-def clear_pending_sync(req: dict = None):
+def clear_pending_sync(req: ClearPendingRequest = None):
     """Menghapus tugas sinkronisasi setelah diambil oleh ekstensi"""
-    if req and isinstance(req, dict) and "tanggal" in req:
-        tgl_key = req.get("tanggal") or ""
+    if req and req.tanggal:
+        tgl_key = req.tanggal or ""
         pending_sync_queue.pop(tgl_key, None)
     else:
         pending_sync_queue.clear()
@@ -1414,8 +1423,8 @@ def sync_complete(req: SyncCompleteRequest):
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/finalize-temp")
-def finalize_temp():
-    """Memindahkan seluruh data yang ada di jadwal_temp ke tabel jadwal utama"""
+def finalize_temp(admin: str = Depends(verify_admin_token)):
+    """Memindahkan seluruh data yang ada di jadwal_temp ke tabel jadwal utama (memerlukan token Admin)"""
     try:
         scraper.compare_and_finalize_sync(None)
         return {"status": "success", "message": "Seluruh data dari jadwal_temp berhasil dipindahkan ke tabel jadwal."}
@@ -1683,7 +1692,7 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
         if jenis == "Kelas":
             filter_kondisi = "AND r.nama_ruangan NOT LIKE '%lab%' AND r.nama_ruangan NOT LIKE '%praktek%'"
         elif jenis == "Lab":
-            filter_kondisi = "AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')"
+            filter_kondisi = "AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%' OR LOWER(r.nama_ruangan) LIKE '%cisco%')"
         else:
             filter_kondisi = ""
 
@@ -1692,7 +1701,8 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
             FROM ruangan r
             LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
                                AND j.tanggal = %s 
-                               AND j.metode_pembelajaran = 'TM'
+                               AND j.metode_pembelajaran NOT IN ('CC', 'OL')
+                               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
             WHERE r.kampus LIKE %s 
               {filter_kondisi}
             ORDER BY r.nama_ruangan, j.jam

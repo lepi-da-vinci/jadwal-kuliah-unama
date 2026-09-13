@@ -1897,8 +1897,9 @@ function isLab(namaRuangan) {
   if (!namaRuangan) return false;
   const name = namaRuangan.toLowerCase();
   // Ruang 3.1 dan 3.4 bukan lab (ruang kelas biasa tanpa kata praktek)
-  if (name.includes('3.1') || name.includes('3.4')) return false;
-  return name.includes('lab') || name.includes('praktek');
+  // Kecuali Gedung Pasca B3.4 dan B2.3 yang memang lab
+  if ((name.includes('3.1') || name.includes('3.4')) && !name.includes('b3.4') && !name.includes('b2.3')) return false;
+  return name.includes('lab') || name.includes('cisco') || name.includes('praktek');
 }
 
 // ─── Aturan Kampus & Kelas Malam (Thehok vs Kobar) ───
@@ -2506,7 +2507,55 @@ function calculateClientSideGaps(targetDate) {
     }
   });
 
+  // Lacak lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu dibuka)
+  // Jika lab punya kelas OL tapi tidak ada kelas fisik, lab tetap kosong secara fisik
+  // dan perlu ada notifikasi jeda agar aslab tahu lab bisa/perlu dibuka.
+  const olOnlyLabRooms = {};
+  allJadwal.forEach(item => {
+    const isOnline = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
+    const isCancelled = (item.metode_pembelajaran || '').toUpperCase() === 'CC' ||
+                        (item.status_jadwal && item.status_jadwal.toLowerCase().includes('batal'));
+    if (item.tanggal === targetDate && item.jam && item.nama_ruangan && isLab(item.nama_ruangan) && isOnline && !isCancelled) {
+      const ruang = item.nama_ruangan;
+      // Hanya proses lab yang tidak punya kelas fisik (tidak ada di roomSchedules)
+      if (!roomSchedules[ruang]) {
+        if (!olOnlyLabRooms[ruang]) olOnlyLabRooms[ruang] = [];
+        const parts = item.jam.split(':');
+        const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        const dur = getClassDuration(item);
+        olOnlyLabRooms[ruang].push({ start: startMin, end: startMin + dur, jam: item.jam });
+      }
+    }
+  });
+
   const generatedGaps = [];
+
+  // Proses lab dengan kelas OL-only: lab fisik kosong selama jam OL berlangsung
+  for (const [room, olScheds] of Object.entries(olOnlyLabRooms)) {
+    olScheds.sort((a, b) => a.start - b.start);
+    // Hitung rentang waktu total sesi OL (dari mulai sesi pertama sampai selesai sesi terakhir)
+    const olStart = olScheds[0].start;
+    const olEnd = olScheds[olScheds.length - 1].end;
+    const gapMin = olEnd - olStart;
+    if (gapMin >= 90) {
+      const hours = Math.floor(gapMin / 60);
+      const mins = gapMin % 60;
+      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} menit` : '');
+      const sh = Math.floor(olStart / 60).toString().padStart(2, '0');
+      const sm = (olStart % 60).toString().padStart(2, '0');
+      const eh = Math.floor(olEnd / 60).toString().padStart(2, '0');
+      const em = (olEnd % 60).toString().padStart(2, '0');
+      generatedGaps.push({
+        tipe_notif: 'JEDA',
+        ruangan: room,
+        jam: `${sh}:${sm} - ${eh}:${em}`,
+        durasi: durStr,
+        pesan: `JEDA (${durStr}): Ruang ${room} kosong ${sh}:${sm} - ${eh}:${em} (Kelas dijadwalkan OL, Lab tidak terpakai — perlu dibuka).`,
+        waktu: 'Otomatis'
+      });
+    }
+  }
+
   for (const [room, scheds] of Object.entries(roomSchedules)) {
     // Hanya periksa ruangan laboratorium
     if (!isLab(room)) continue;
