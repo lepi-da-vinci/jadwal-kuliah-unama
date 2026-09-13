@@ -45,7 +45,7 @@ export function StatsOverview({
       title: "Total Sesi Jadwal",
       count: isLoading ? "..." : totalJadwal.toLocaleString("id-ID"),
       suffix: "Sesi",
-      desc: isDateActive ? `Sesi perkuliahan pada ${formattedDate}${filterContext}` : `Jadwal kelas aktif semester ini${filterContext}`,
+      desc: isDateActive ? `Sesi pada ${formattedDate}${filterContext}` : `Jadwal aktif semester ini${filterContext}`,
       icon: CalendarCheck,
       iconClass: "bg-muted text-foreground/80 border-border/60 dark:border-transparent dark:text-muted-foreground",
       titleClass: "text-foreground",
@@ -75,7 +75,7 @@ export function StatsOverview({
       title: "Tatap Muka",
       count: isLoading ? "..." : totalTatapMuka.toLocaleString("id-ID"),
       suffix: "Sesi",
-      desc: isDateActive ? `Tatap muka (TM) pada ${formattedDate}${filterContext}` : `Sesi tatap muka di kampus (TM)${filterContext}`,
+      desc: isDateActive ? `Tatap muka pada ${formattedDate}${filterContext}` : `Sesi tatap muka di kampus${filterContext}`,
       icon: Users,
       iconClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
       titleClass: "text-emerald-600 dark:text-emerald-400",
@@ -97,9 +97,9 @@ export function StatsOverview({
         return (
           <div
             key={index}
-            className={`flex flex-col justify-between p-3 sm:px-4 sm:py-3 hover:bg-muted/30 transition-colors ${itemBorderClasses[index] || ""}`}
+            className={`flex flex-col justify-between p-2.5 sm:px-4 sm:py-3 hover:bg-muted/30 transition-colors ${itemBorderClasses[index] || ""}`}
           >
-            <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center justify-between gap-1.5 mb-1">
               <span className={`text-xs sm:text-sm font-bold tracking-tight ${item.titleClass}`}>
                 {item.title}
               </span>
@@ -111,15 +111,15 @@ export function StatsOverview({
             </div>
 
             <div className="flex items-baseline gap-1 my-0.5">
-              <span className={`text-xl sm:text-2xl font-bold tracking-tight font-mono ${item.valueClass}`}>
+              <span className={`text-lg sm:text-2xl font-bold tracking-tight font-mono ${item.valueClass}`}>
                 {item.count}
               </span>
-              <span className={`text-xs font-semibold ${item.valueClass} opacity-80`}>
+              <span className={`text-[11px] sm:text-xs font-semibold ${item.valueClass} opacity-80`}>
                 {item.suffix}
               </span>
             </div>
 
-            <p className="text-[11px] text-muted-foreground font-medium truncate">
+            <p className="text-[10.5px] sm:text-[11px] text-muted-foreground font-medium line-clamp-2 leading-tight min-h-[26px]">
               {item.desc}
             </p>
           </div>

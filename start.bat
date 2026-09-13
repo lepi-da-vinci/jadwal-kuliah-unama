@@ -1,2 +1,3 @@
-start bun run dev:api
-start bun run dev:web
+@echo off
+start "" bun run dev
+exit

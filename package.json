@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "bun --filter '*' dev",
     "dev:api": "bun --filter '@jadwal/api' dev",
     "dev:web": "bun --filter '@jadwal/web' dev",
     "start:api": "bun --filter '@jadwal/api' start",
@@ -14,6 +15,8 @@
     "scrape:sync": "bun run --cwd apps/scrapper sync",
     "scrape:fresh": "bun run --cwd apps/scrapper sync:fresh",
     "db:push": "bun run --cwd packages/db db:push",
-    "db:studio": "bun run --cwd packages/db db:studio"
+    "db:studio": "bun run --cwd packages/db db:studio",
+    "tsc": "bun --cwd apps/web tsc --noEmit",
+    "tsc:all": "bun --filter '*' tsc --noEmit"
   }
 }

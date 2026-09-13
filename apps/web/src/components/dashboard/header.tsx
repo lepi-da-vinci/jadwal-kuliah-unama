@@ -56,38 +56,45 @@ export function Header({ onRefresh, isRefreshing }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur-md supports-backdrop-filter:bg-background/80">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between px-3 sm:px-6 lg:px-8 gap-2">
         {/* Brand & Identity */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex size-10 shrink-0 items-center justify-center">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="relative flex size-8 sm:size-10 shrink-0 items-center justify-center">
             <Image
               src="/unama.png"
               alt="Logo UNAMA"
               width={40}
               height={40}
-              className="h-10 w-auto object-contain"
+              style={{ width: "auto" }}
+              className="h-8 sm:h-10 w-auto object-contain"
               priority
             />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold tracking-tight sm:text-lg">
+          <div className="flex flex-col justify-center min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-sm font-bold tracking-tight sm:text-base md:text-lg whitespace-nowrap">
                 Jadwal Kuliah UNAMA
               </h1>
-              <Badge variant="outline" className="hidden sm:inline-flex text-[11px] font-normal">
+              <Badge variant="outline" className="hidden sm:inline-flex text-[11px] font-normal shrink-0">
                 Genap 2025/2026
               </Badge>
               {isAslab && (
-                <Badge variant="default" className="text-[10px] font-normal bg-emerald-600 text-white">
+                <Badge variant="default" className="hidden sm:inline-flex text-[10px] font-normal bg-emerald-600 text-white shrink-0">
                   Mode Aslab
                 </Badge>
               )}
             </div>
+            {isAslab && (
+              <div className="sm:hidden flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 -mt-0.5">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Mode Aslab</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Status Indicators & Action Tools */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {currentTime && (
             <div className="hidden md:flex items-center gap-1.5 border border-border px-2.5 py-1 text-xs text-muted-foreground">
               <Clock className="size-3.5 text-muted-foreground" />
@@ -106,7 +113,7 @@ export function Header({ onRefresh, isRefreshing }: HeaderProps) {
               size="sm"
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="h-9 px-3 gap-1.5"
+              className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3 sm:gap-1.5"
               aria-label="Muat ulang data jadwal"
             >
               <RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -119,8 +126,9 @@ export function Header({ onRefresh, isRefreshing }: HeaderProps) {
               variant="outline"
               size="sm"
               onClick={handleLogout}
-              className="h-9 px-2.5 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 cursor-pointer"
+              className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-2.5 sm:gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 cursor-pointer"
               aria-label="Keluar dari sesi Aslab"
+              title="Keluar Aslab"
             >
               <LogOut className="size-3.5" />
               <span className="hidden sm:inline">Keluar Aslab</span>
@@ -130,8 +138,9 @@ export function Header({ onRefresh, isRefreshing }: HeaderProps) {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 px-2.5 gap-1.5 cursor-pointer"
+                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-2.5 sm:gap-1.5 cursor-pointer"
                 aria-label="Masuk sebagai Asisten Lab"
+                title="Login Aslab"
               >
                 <Lock className="size-3.5" />
                 <span className="hidden sm:inline">Login Aslab</span>
@@ -143,10 +152,10 @@ export function Header({ onRefresh, isRefreshing }: HeaderProps) {
             variant="outline"
             size="icon"
             onClick={toggleTheme}
-            className="h-9 w-9"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             aria-label={isDark ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
           >
-            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            {isDark ? <Sun className="size-3.5 sm:size-4" /> : <Moon className="size-3.5 sm:size-4" />}
           </Button>
         </div>
       </div>

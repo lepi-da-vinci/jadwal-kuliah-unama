@@ -8,6 +8,7 @@ import { ScheduleGrid } from "@/components/dashboard/schedule-grid";
 import { ScheduleTable } from "@/components/dashboard/schedule-table";
 import { ScheduleDetailDialog } from "@/components/dashboard/schedule-detail-dialog";
 import { PaginationControls } from "@/components/dashboard/pagination-controls";
+import { AslabRoomMonitor } from "@/components/dashboard/aslab-room-monitor";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchJadwalList, fetchJadwalSummary } from "@/lib/api";
@@ -55,6 +56,35 @@ export default function HomePage() {
 
   const [viewMode, setViewMode] = React.useState<"grid" | "table">("grid");
   const [selectedItem, setSelectedItem] = React.useState<JadwalItem | null>(null);
+
+  // Status sesi Aslab
+  const [isAslab, setIsAslab] = React.useState<boolean>(false);
+  const [allDayItems, setAllDayItems] = React.useState<JadwalItem[]>([]);
+
+  React.useEffect(() => {
+    setIsAslab(localStorage.getItem("aslab_logged_in") === "true");
+  }, []);
+
+  // Muat seluruh jadwal hari terkait untuk analisis lab jika aslab aktif
+  React.useEffect(() => {
+    if (!isAslab) return;
+
+    const loadAllDayData = async () => {
+      try {
+        const res = await fetchJadwalList({
+          tanggal: filters.tanggal,
+          limit: 150,
+        });
+        if (res.success && res.data) {
+          setAllDayItems(res.data);
+        }
+      } catch {
+        // Fallback handled
+      }
+    };
+
+    loadAllDayData();
+  }, [isAslab, filters.tanggal]);
 
   // Muat ringkasan data saat filter berubah (tanggal, kampus, ruangan, pencarian)
   // Catatan: filter status sengaja dikecualikan agar breakdown di StatsOverview tetap akurat
@@ -143,7 +173,7 @@ export default function HomePage() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
+    const promises: Promise<unknown>[] = [
       loadSummaryData({
         tanggal: filters.tanggal,
         kampus: filters.kampus,
@@ -151,7 +181,20 @@ export default function HomePage() {
         search: filters.search,
       }),
       loadJadwalData(filters),
-    ]);
+    ];
+
+    if (isAslab) {
+      promises.push(
+        fetchJadwalList({
+          tanggal: filters.tanggal,
+          limit: 150,
+        }).then((res) => {
+          if (res.success && res.data) setAllDayItems(res.data);
+        })
+      );
+    }
+
+    await Promise.all(promises);
     setIsRefreshing(false);
   };
 
@@ -209,6 +252,15 @@ export default function HomePage() {
             onDateChange={handleDateChange}
           />
         </section>
+
+        {/* Panel Monitoring Khusus Aslab (Setelah FilterBar) */}
+        {isAslab && (
+          <AslabRoomMonitor
+            items={allDayItems.length > 0 ? allDayItems : items}
+            selectedDate={selectedDate}
+            onSelectItem={setSelectedItem}
+          />
+        )}
 
         {/* Error Alert State (Antislop R-27 Compliant) */}
         {error && (

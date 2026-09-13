@@ -14,12 +14,15 @@ const FALLBACK_SUMMARY: JadwalSummaryData = {
     "Labor 1.3",
     "Labor 1.4",
     "Labor 1.5",
+    "Labor 1.6",
+    "Labor 1.7",
+    "Labor 1.8",
+    "Labor 1.9",
     "Labor 2.1",
     "Labor 2.2",
     "Labor 2.3",
     "Labor 3.1",
     "Labor 3.2",
-    "Labor Multimedia",
   ],
 };
 
@@ -57,7 +60,7 @@ const FALLBACK_ITEMS: JadwalItem[] = [
     kodeKelas: "03TI1",
     mataKuliah: "Desain Antarmuka Pengguna (UI/UX)",
     kampus: "Kampus Kobar",
-    ruangan: "Labor Multimedia",
+    ruangan: "Labor 1.8",
     status: "OnSchedule (OL)",
   },
   {
@@ -178,7 +181,7 @@ export async function fetchJadwalSummary(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const url = new URL(`${API_BASE_URL}/api/jadwal/summary`);
     if (filters.tanggal && filters.tanggal.trim() !== "" && filters.tanggal !== "Semua") {
@@ -273,7 +276,7 @@ export async function fetchJadwalList(filters: JadwalFilters): Promise<JadwalApi
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const params = new URLSearchParams();
     params.set("limit", limit.toString());
