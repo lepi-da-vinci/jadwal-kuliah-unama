@@ -1,10 +1,12 @@
 import { scrapeLabSchedulePage } from './scraper';
 import { syncScheduleToDatabase } from './sync';
+import { db, jadwalLab } from '@jadwal/db';
 
 async function main() {
   const args = process.argv.slice(2);
   const isTest = args.includes('--test') || args.length === 0;
   const isSync = args.includes('--sync');
+  const isClean = args.includes('--clean') || args.includes('--fresh');
   const ruangFilter = args.includes('--labor') ? 'labor' : '';
 
   // Cek parameter limit jika ingin membatasi jumlah halaman yang di-sync (contoh: --limit 2)
@@ -35,7 +37,7 @@ async function main() {
         Kelas: item.kodeKelas,
         MataKuliah: item.mataKuliah,
         Kampus: item.kampus,
-        Ruang: item.ruangLabor,
+        Ruang: item.ruangan,
         Status: item.status,
       }))
     );
@@ -47,6 +49,12 @@ async function main() {
 
   if (isSync) {
     console.log(`📥 [SYNC MODE] Mengambil jadwal (${ruangFilter ? 'Khusus Lab' : 'Semua Kelas Teori & Lab'}) dan menyinkronkan ke Supabase...\n`);
+
+    if (isClean) {
+      console.log('🗑️  Menghapus seluruh data jadwal lama dari database Supabase...');
+      await db.delete(jadwalLab);
+      console.log('✅ Data lama berhasil dikosongkan!\n');
+    }
 
     // Ambil halaman pertama untuk mengetahui total halaman
     console.log('⏳ Memeriksa total halaman...');

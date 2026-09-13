@@ -14,7 +14,7 @@ export async function syncScheduleToDatabase(items: ScrapedScheduleItem[]): Prom
   const deduplicatedMap = new Map<string, typeof jadwalLab.$inferInsert>();
 
   for (const item of items) {
-    const key = `${item.tanggal}__${item.waktuMulai}__${item.kodeKelas}__${item.mataKuliah}__${item.ruangLabor}`;
+    const key = `${item.tanggal}__${item.waktuMulai}__${item.kodeKelas}__${item.mataKuliah}__${item.ruangan}`;
 
     if (deduplicatedMap.has(key)) {
       const existing = deduplicatedMap.get(key)!;
@@ -35,7 +35,7 @@ export async function syncScheduleToDatabase(items: ScrapedScheduleItem[]): Prom
         kodeKelas: item.kodeKelas,
         mataKuliah: item.mataKuliah,
         kampus: item.kampus,
-        ruangLabor: item.ruangLabor,
+        ruangan: item.ruangan,
         status: item.status,
         updatedAt: new Date(),
       });
@@ -55,7 +55,7 @@ export async function syncScheduleToDatabase(items: ScrapedScheduleItem[]): Prom
           jadwalLab.waktuMulai,
           jadwalLab.kodeKelas,
           jadwalLab.mataKuliah,
-          jadwalLab.ruangLabor,
+          jadwalLab.ruangan
         ],
         set: {
           status: sql`EXCLUDED.status`,
@@ -83,7 +83,7 @@ export async function syncScheduleToDatabase(items: ScrapedScheduleItem[]): Prom
               jadwalLab.waktuMulai,
               jadwalLab.kodeKelas,
               jadwalLab.mataKuliah,
-              jadwalLab.ruangLabor,
+              jadwalLab.ruangan,
             ],
             set: {
               status: sql`EXCLUDED.status`,

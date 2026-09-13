@@ -7,11 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "bun run --cwd apps/api dev",
-    "start:api": "bun run --cwd apps/api start",
-    "dev:web": "bun run --cwd apps/web dev",
+    "dev:api": "bun --filter '@jadwal/api' dev",
+    "dev:web": "bun --filter '@jadwal/web' dev",
+    "start:api": "bun --filter '@jadwal/api' start",
     "scrape:test": "bun run --cwd apps/scrapper test",
     "scrape:sync": "bun run --cwd apps/scrapper sync",
+    "scrape:fresh": "bun run --cwd apps/scrapper sync:fresh",
     "db:push": "bun run --cwd packages/db db:push",
     "db:studio": "bun run --cwd packages/db db:studio"
   }

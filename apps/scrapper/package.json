@@ -4,7 +4,8 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "bun run src/index.ts --test",
-    "sync": "bun run src/index.ts --sync"
+    "sync": "bun run src/index.ts --sync",
+    "sync:fresh": "bun run src/index.ts --sync --clean"
   },
   "dependencies": {
     "@jadwal/db": "workspace:*",

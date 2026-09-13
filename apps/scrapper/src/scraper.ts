@@ -11,7 +11,7 @@ const BASE_URL = 'https://baak.unama.ac.id/jadwal-kuliah';
 export async function scrapeLabSchedulePage(page = 1, ruang = ''): Promise<ScrapePageResult> {
   const ruangParam = ruang ? `&ruang=${encodeURIComponent(ruang)}` : '';
   const url = `${BASE_URL}?search=1${ruangParam}&page=${page}`;
-  
+
   let res: Response | null = null;
   let lastError: any = null;
 
@@ -90,9 +90,14 @@ export async function scrapeLabSchedulePage(page = 1, ruang = ''): Promise<Scrap
       tanggal = rawDateTime;
     }
 
-    // Dosen & Matakuliah
+    // Dosen & Matakuliah (Tangani jika ada team teaching / multiple dosen)
     const tdDosenMatkul = $(tds[2]);
-    const dosen = tdDosenMatkul.find('span.font-weight-bold').text().trim();
+    const dosenList: string[] = [];
+    tdDosenMatkul.find('span.font-weight-bold').each((_, s) => {
+      const text = $(s).text().trim();
+      if (text) dosenList.push(text);
+    });
+    const dosen = dosenList.length > 0 ? dosenList.join(' / ') : tdDosenMatkul.find('span.font-weight-bold').text().trim();
 
     // Text kelas & matkul: "01PS2 :: Pemrograman Berorientasi Objek"
     const rawMatkulDiv = tdDosenMatkul.children('div').last().text().trim();
@@ -110,15 +115,15 @@ export async function scrapeLabSchedulePage(page = 1, ruang = ''): Promise<Scrap
     // Ruang: "Kampus Thehok, Labor 1.5"
     const rawRuang = $(tds[3]).text().trim();
     let kampus = '';
-    let ruangLabor = '';
+    let ruangan = '';
 
     if (rawRuang.includes(',')) {
       const parts = rawRuang.split(',').map((s) => s.trim());
       kampus = parts[0] || '';
-      ruangLabor = parts.slice(1).join(', ').trim();
+      ruangan = parts.slice(1).join(', ').trim();
     } else {
       kampus = 'Kampus Thehok';
-      ruangLabor = rawRuang;
+      ruangan = rawRuang;
     }
 
     // Status: ambil hanya teks status (buang <sup> "Updated By: ..." dsb.)
@@ -139,7 +144,7 @@ export async function scrapeLabSchedulePage(page = 1, ruang = ''): Promise<Scrap
       kodeKelas,
       mataKuliah,
       kampus,
-      ruangLabor,
+      ruangan,
       status,
     });
   });

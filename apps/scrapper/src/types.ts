@@ -7,7 +7,7 @@ export interface ScrapedScheduleItem {
   kodeKelas: string;
   mataKuliah: string;
   kampus: string;
-  ruangLabor: string;
+  ruangan: string;
   status: string;
 }
 
