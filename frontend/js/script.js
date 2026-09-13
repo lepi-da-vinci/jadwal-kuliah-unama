@@ -210,7 +210,9 @@ async function fetchAllRuangan() {
     const response = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
     const result = await response.json();
     if (result.status === 'success') {
-      allRuanganData = result.data;
+      allRuanganData = (result.data || []).sort((a, b) => 
+        (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
+      );
       updateActiveLabPanel();
     }
   } catch (e) { console.error("Gagal load ruangan", e); }
@@ -641,7 +643,7 @@ function populateExplorerDynamicFilters() {
 
   const sortedDosen = Array.from(dosenSet).sort((a, b) => a.localeCompare(b));
   const sortedMk = Array.from(mkSet).sort((a, b) => a.localeCompare(b));
-  const sortedRuang = Array.from(ruangSet).sort((a, b) => a.localeCompare(b));
+  const sortedRuang = Array.from(ruangSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
   // 1. Dosen
   const itemsDosen = document.getElementById('items-sem-dosen');
@@ -2353,7 +2355,9 @@ function updateActiveLabPanel() {
   if (fsWarnings) fsWarnings.innerHTML = warningsHTML;
 
   const renderBlocks = (dict, kampusStr) => {
-    const sortedRooms = Object.keys(dict).sort();
+    const sortedRooms = Object.keys(dict).sort((a, b) => 
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
     let html = '<div class="lab-grid">';
     for (const room of sortedRooms) {
       const data = dict[room];
@@ -3699,7 +3703,9 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
           const dataRuangan = await resRuangan.json();
           if (dataRuangan.status === 'success') {
-            allRuanganData = dataRuangan.data;
+            allRuanganData = (dataRuangan.data || []).sort((a, b) => 
+              (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
+            );
           }
         } catch (err) { console.error(err); }
         
@@ -3798,7 +3804,9 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
         const dataRuangan = await resRuangan.json();
         if (dataRuangan.status === 'success') {
-          allRuanganData = dataRuangan.data;
+          allRuanganData = (dataRuangan.data || []).sort((a, b) => 
+            (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
+          );
         }
       } catch (err) {}
 
@@ -8377,7 +8385,9 @@ setInterval(async () => {
     const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
     const dataRuangan = await resRuangan.json();
     if (dataRuangan.status === 'success') {
-      allRuanganData = dataRuangan.data;
+      allRuanganData = (dataRuangan.data || []).sort((a, b) => 
+        (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
+      );
     }
 
     // 3. Refresh Data Aslab 

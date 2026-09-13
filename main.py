@@ -1468,6 +1468,7 @@ def get_ruangan():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan")
         results = cursor.fetchall()
+        results.sort(key=lambda x: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', x.get('nama_ruangan') or '')])
         return {"status": "success", "data": results}
     except Exception as e:
         return {"status": "error", "message": str(e)}
