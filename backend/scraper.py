@@ -739,7 +739,9 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             """, (t_date, sem_final))
             old_schedules = cursor.fetchall()
             
-            is_update = len(old_schedules) > 0
+            # Baseline guard:
+            # Hanya anggap update komparasi jika data lama sudah merupakan baseline memadai (>= 15 kelas)
+            is_baseline_valid = len(old_schedules) >= 15
             old_lab_cache = {}
             for jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen in old_schedules:
                 if not jam: continue
@@ -748,7 +750,11 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 m = (total_seconds % 3600) // 60
                 jam_str = f"{h:02d}:{m:02d}"
                 
-                key = f"{jam_str}_{nama_ruangan}_{kelas}"
+                # Normalisasi kunci komparasi
+                clean_room = re.sub(r'\s+', ' ', (nama_ruangan or "").strip().lower())
+                clean_room = re.sub(r'\bkampus\s+(thehok|kobar)\b', '', clean_room).replace('(thehok)', '').replace('(kobar)', '').strip()
+                clean_kelas = re.sub(r'[^a-zA-Z0-9]', '', (kelas or kode_mk or "").strip()).lower()
+                key = f"{jam_str}_{clean_room}_{clean_kelas}"
                 old_lab_cache[key] = {
                     'status': status, 'metode': metode, 'nama_mk': nama_mk, 'dosen': dosen
                 }
@@ -768,7 +774,9 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 print(f"[Sync Guard] Tidak ada data di jadwal_temp untuk tanggal {t_date} ({sem_final}). Data jadwal lama TIDAK dihapus (Aman).")
                 continue
             
-            # 3. Bandingkan dan buat notifikasi
+            # 3. Pisahkan kelas baru vs kelas yang sudah cocok
+            unmatched_new = []
+            matched_pairs = []
             for row in new_schedules:
                 jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
                 if not nama_ruangan or not jam: continue
@@ -776,19 +784,47 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 h = total_seconds // 3600
                 m = (total_seconds % 3600) // 60
                 start_time = f"{h:02d}:{m:02d}"
-                key = f"{start_time}_{nama_ruangan}_{kelas}"
-                
-                dosen_str = dosen or '-'
-                ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
+                clean_room = re.sub(r'\s+', ' ', (nama_ruangan or "").strip().lower())
+                clean_room = re.sub(r'\bkampus\s+(thehok|kobar)\b', '', clean_room).replace('(thehok)', '').replace('(kobar)', '').strip()
+                clean_kelas = re.sub(r'[^a-zA-Z0-9]', '', (kelas or kode_mk or "").strip()).lower()
+                key = f"{start_time}_{clean_room}_{clean_kelas}"
                 
                 if key not in old_lab_cache:
-                    if is_update:
-                        pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
-                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'TAMBAHAN', pesan, sem_final))
+                    unmatched_new.append((row, start_time))
                 else:
-                    old_data = old_lab_cache[key]
-                    if old_data['status'] != status or old_data['metode'] != metode:
-                        pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
+                    matched_pairs.append((row, start_time, old_lab_cache[key]))
+
+            # Logika deteksi TAMBAHAN:
+            # Hanya catat TAMBAHAN jika ada baseline valid dan perubahan tidak masif (> 20 kelas tak cocok = re-sync/pergantian dataset, bukan kelas tambahan)
+            if is_baseline_valid and len(unmatched_new) <= 20:
+                for row, start_time in unmatched_new:
+                    jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
+                    dosen_str = dosen or '-'
+                    ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
+                    pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
+                    
+                    # Deduplikasi: cek apakah notifikasi yang sama persis sudah tercatat
+                    cursor.execute("""
+                        SELECT 1 FROM notifikasi_lab 
+                        WHERE tanggal = %s AND semester = %s AND tipe_notif = 'TAMBAHAN' AND pesan = %s
+                        LIMIT 1
+                    """, (t_date, sem_final, pesan))
+                    if not cursor.fetchone():
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'TAMBAHAN', pesan, sem_final))
+
+            # Logika deteksi PERUBAHAN STATUS:
+            for row, start_time, old_data in matched_pairs:
+                jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
+                if old_data['status'] != status or old_data['metode'] != metode:
+                    ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
+                    pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
+                    
+                    cursor.execute("""
+                        SELECT 1 FROM notifikasi_lab 
+                        WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s
+                        LIMIT 1
+                    """, (t_date, sem_final, pesan))
+                    if not cursor.fetchone():
                         cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan, sem_final))
             
             # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA dieksekusi jika data baru valid dan ada)
