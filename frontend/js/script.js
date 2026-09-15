@@ -4019,15 +4019,28 @@ window.showRoomDetail = function (roomName, kampusStr) {
   const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
   let activeDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr;
 
+  const getCleanRoom = (str) => {
+    if (!str) return '';
+    return formatRoomName(str, false)
+      .replace(/\s*\(Kampus\s+(?:Thehok|Kobar)\)/gi, '')
+      .replace(/\s*\((?:Thehok|Kobar)\)/gi, '')
+      .replace(/\s*\(.*?\)/gi, '')
+      .trim().toLowerCase();
+  };
+
+  const cleanTargetRoom = getCleanRoom(roomName);
+  const targetCamp = formatCampusName(kampusStr || getRoomCampus(roomName));
+
   let schedules = allJadwal.filter(item => {
     if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
     if (item.tanggal !== activeDate) return false;
 
-    if (item.nama_ruangan.split(" (Kampus")[0] !== roomName) return false;
+    const itemClean = getCleanRoom(item.nama_ruangan);
+    if (itemClean !== cleanTargetRoom) return false;
 
-    if (kampusStr) {
-      if (kampusStr === 'Thehok' && item.nama_ruangan.includes('Kampus Kobar')) return false;
-      if (kampusStr === 'Kobar' && item.nama_ruangan.includes('Kampus Thehok')) return false;
+    if (targetCamp) {
+      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+      if (itemCamp && itemCamp !== targetCamp) return false;
     }
     return true;
   });
@@ -4036,10 +4049,11 @@ window.showRoomDetail = function (roomName, kampusStr) {
   if (schedules.length === 0 && (!filterTanggal || !filterTanggal.value)) {
     const roomAllDates = allJadwal.filter(item => {
       if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
-      if (item.nama_ruangan.split(" (Kampus")[0] !== roomName) return false;
-      if (kampusStr) {
-        if (kampusStr === 'Thehok' && item.nama_ruangan.includes('Kampus Kobar')) return false;
-        if (kampusStr === 'Kobar' && item.nama_ruangan.includes('Kampus Thehok')) return false;
+      const itemClean = getCleanRoom(item.nama_ruangan);
+      if (itemClean !== cleanTargetRoom) return false;
+      if (targetCamp) {
+        const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+        if (itemCamp && itemCamp !== targetCamp) return false;
       }
       return true;
     });
@@ -4061,9 +4075,7 @@ window.showRoomDetail = function (roomName, kampusStr) {
   if (Array.isArray(globalAslabData)) {
     matchedAslab = globalAslabData.find(a => {
       if (!a.nama_ruangan) return false;
-      const cleanAslabRoom = a.nama_ruangan.split(" (Kampus")[0].trim().toLowerCase();
-      const cleanCurrentRoom = roomName.trim().toLowerCase();
-      return cleanAslabRoom === cleanCurrentRoom;
+      return getCleanRoom(a.nama_ruangan) === cleanTargetRoom;
     });
   }
 
