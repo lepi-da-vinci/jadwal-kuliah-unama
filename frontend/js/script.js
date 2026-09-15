@@ -2080,12 +2080,15 @@ function applyFilters() {
   }
 
   filtered.sort((a, b) => {
-    const aIsLab = isLab(a.nama_ruangan);
-    const bIsLab = isLab(b.nama_ruangan);
-    if (aIsLab && !bIsLab) return -1;
-    if (!aIsLab && bIsLab) return 1;
-    if (a.jam && b.jam) { if (a.jam < b.jam) return -1; if (a.jam > b.jam) return 1; }
-    return 0;
+    if (a.tanggal && b.tanggal && a.tanggal !== b.tanggal) {
+      return a.tanggal.localeCompare(b.tanggal);
+    }
+    const jamA = (a.jam || '').split(/[-–—:]/).map(Number);
+    const jamB = (b.jam || '').split(/[-–—:]/).map(Number);
+    const minA = (jamA[0] || 0) * 60 + (jamA[1] || 0);
+    const minB = (jamB[0] || 0) * 60 + (jamB[1] || 0);
+    if (minA !== minB) return minA - minB;
+    return (a.nama_mk || '').localeCompare(b.nama_mk || '');
   });
 
   updateStats(filtered);
@@ -9094,6 +9097,18 @@ function openSpotlightDetailModal(item) {
         return jRoomLower.includes(rawLower);
       });
     }
+
+    matchingSchedules.sort((a, b) => {
+      if (a.tanggal && b.tanggal && a.tanggal !== b.tanggal) {
+        return a.tanggal.localeCompare(b.tanggal);
+      }
+      const jamA = (a.jam || '').split(/[-–—:]/).map(Number);
+      const jamB = (b.jam || '').split(/[-–—:]/).map(Number);
+      const minA = (jamA[0] || 0) * 60 + (jamA[1] || 0);
+      const minB = (jamB[0] || 0) * 60 + (jamB[1] || 0);
+      if (minA !== minB) return minA - minB;
+      return (a.nama_mk || '').localeCompare(b.nama_mk || '');
+    });
   }
 
   if (item.type === 'aslab') {
@@ -9210,6 +9225,18 @@ function applySpotlightFilterToMainTable(type, val, schedules) {
     if (type === 'mk') return j.nama_mk === val;
     if (type === 'ruangan') return j.nama_ruangan === val;
     return true;
+  });
+
+  filtered.sort((a, b) => {
+    if (a.tanggal && b.tanggal && a.tanggal !== b.tanggal) {
+      return a.tanggal.localeCompare(b.tanggal);
+    }
+    const jamA = (a.jam || '').split(/[-–—:]/).map(Number);
+    const jamB = (b.jam || '').split(/[-–—:]/).map(Number);
+    const minA = (jamA[0] || 0) * 60 + (jamA[1] || 0);
+    const minB = (jamB[0] || 0) * 60 + (jamB[1] || 0);
+    if (minA !== minB) return minA - minB;
+    return (a.nama_mk || '').localeCompare(b.nama_mk || '');
   });
 
   renderTable(filtered);
