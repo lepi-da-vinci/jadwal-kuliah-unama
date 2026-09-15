@@ -25,11 +25,14 @@
   --badge-cc-bg: #fee2e2;
   --badge-wa: #f59e0b;
   --badge-wa-bg: #fef3c7;
+  --badge-finished: #8b5cf6;
+  --badge-finished-bg: #ede9fe;
 
   --lab-occupied-bg: #d3f7e6;
   --lab-empty-bg: #fddedd;
   --lab-waiting-bg: #fdecd1;
   --lab-scheduled-bg: #dbe9fe;
+  --lab-finished-bg: #8b5cf6;
 
   --panel-lab-bg: #eef2ff;
   --panel-lab-border: rgba(199, 210, 254, 0.6);
@@ -94,11 +97,14 @@
   --badge-ol-bg: #223f6e;
   --badge-cc-bg: #632d2b;
   --badge-wa-bg: #664319;
+  --badge-finished: #a78bfa;
+  --badge-finished-bg: #4c1d95;
 
   --lab-occupied-bg: #1c4b37;
   --lab-empty-bg: #632d2b;
   --lab-waiting-bg: #664319;
   --lab-scheduled-bg: #223f6e;
+  --lab-finished-bg: #7c3aed;
 
   --panel-lab-bg: #25283f;
   --panel-lab-border: rgba(139, 124, 246, 0.2);
@@ -602,7 +608,7 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 .legend-dot.wa { background-color: var(--badge-wa); }
 .legend-dot.cc { background-color: var(--badge-cc); }
 .legend-dot.scheduled { background-color: var(--badge-ol); }
-.legend-dot.finished { background-color: #64748b; }
+.legend-dot.finished { background-color: var(--badge-finished, #8b5cf6); }
 
 /* Fullscreen Mode Overrides */
 .status-ruangan-section:fullscreen,
@@ -1091,8 +1097,8 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 .lab-card.empty { background: var(--badge-cc); }
 .lab-card.waiting { background: var(--badge-wa); }
 .lab-card.scheduled { background: var(--badge-ol); }
-.lab-card.finished { background: #64748b; color: #fff; }
-[data-theme="dark"] .lab-card.finished { background: #334155; color: #cbd5e1; }
+.lab-card.finished { background: var(--lab-finished-bg, #8b5cf6); color: #fff; }
+[data-theme="dark"] .lab-card.finished { background: var(--lab-finished-bg, #7c3aed); color: #fff; }
 
 /* --- Notification Items Redesign --- */
 /* --- Notification Items Redesign --- */
