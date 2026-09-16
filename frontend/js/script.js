@@ -7791,49 +7791,137 @@ if (btnSubmitCariDosen) {
 }
 
 const btnSubmitCariKelas = document.getElementById('btn-submit-cari-kelas');
+const inputFiturKodeKelas = document.getElementById('fitur-kode-kelas');
+
+if (inputFiturKodeKelas && btnSubmitCariKelas) {
+  inputFiturKodeKelas.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btnSubmitCariKelas.click();
+    }
+  });
+}
+
 if (btnSubmitCariKelas) {
   btnSubmitCariKelas.addEventListener('click', async () => {
-    const kode = document.getElementById('fitur-kode-kelas').value;
+    const rawKode = document.getElementById('fitur-kode-kelas')?.value || '';
+    const kode = rawKode.trim();
     const resContainer = document.getElementById('result-cari-kelas');
 
     if (!kode) {
-      alert("Masukkan kode kelas dulu!");
+      if (typeof showCustomAlert === 'function') {
+        showCustomAlert("Perhatian", "Masukkan kode kelas terlebih dahulu!", "warning");
+      } else {
+        alert("Masukkan kode kelas dulu!");
+      }
       return;
     }
 
-    resContainer.innerHTML = '<p style="text-align:center;">Mencari data...</p>';
+    resContainer.innerHTML = '<p style="text-align:center; padding: 20px; color: var(--text-muted);">Mencari daftar mata kuliah kelas...</p>';
 
     try {
-      const tanggalFilter = document.getElementById('filter-tanggal') ? document.getElementById('filter-tanggal').value : '';
-      const url = tanggalFilter
-        ? `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}&tanggal=${encodeURIComponent(tanggalFilter)}`
-        : `${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}`;
-      const response = await fetch(url);
-      const result = await response.json();
+      let mkList = [];
+      const cleanUpper = kode.toUpperCase();
+      const parsed = typeof parseKodeKelasUnama === 'function' ? parseKodeKelasUnama(cleanUpper) : null;
 
-      if (result.status === 'success') {
-        if (result.data.length === 0) {
-          resContainer.innerHTML = '<p style="text-align:center; color: var(--text-muted);">Tidak ada jadwal kelas tersebut hari ini.</p>';
-          return;
+      // 1. Cek dari allJadwal lokal terlebih dahulu jika sudah tersedia
+      if (Array.isArray(allJadwal) && allJadwal.length > 0) {
+        const matching = allJadwal.filter(j => j.kelas && j.kelas.toUpperCase() === cleanUpper);
+        if (matching.length > 0) {
+          const mkMap = new Map();
+          matching.forEach(item => {
+            const mkName = (item.nama_mk || '').trim();
+            if (!mkName) return;
+            if (!mkMap.has(mkName)) {
+              mkMap.set(mkName, {
+                nama_mk: mkName,
+                kelas: item.kelas || cleanUpper,
+                dosenSet: new Set()
+              });
+            }
+            if (item.nama_dosen && item.nama_dosen !== '-') {
+              item.nama_dosen.split(/[,/&]/).forEach(d => {
+                const dt = d.trim();
+                if (dt && dt !== '-') mkMap.get(mkName).dosenSet.add(dt);
+              });
+            }
+          });
+
+          mkList = Array.from(mkMap.values())
+            .sort((a, b) => a.nama_mk.localeCompare(b.nama_mk))
+            .map(m => ({
+              nama_mk: m.nama_mk,
+              kelas: m.kelas,
+              nama_dosen: Array.from(m.dosenSet).join(', ') || 'Dosen Pengampu Belum Ditentukan'
+            }));
         }
-
-        let html = '';
-        result.data.forEach(item => {
-          html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: left;">
-                <div style="font-weight: 600; margin-bottom: 4px;">${item.nama_mk} (${item.kelas})</div>
-                <div style="font-size: 0.9em; color: var(--text-muted); display:flex; flex-direction:column; gap:4px;">
-                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${item.waktu}</span>
-                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${escapeHtml(formatRoomName(item.nama_ruangan || '-', false))} (${escapeHtml(formatCampusName(item.kampus))})</span>
-                  <span style="display:flex; align-items:center; gap:6px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> ${item.nama_dosen}</span>
-                </div>
-              </div>`;
-        });
-        resContainer.innerHTML = html;
-      } else {
-        resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Error: ${result.message}</p>`;
       }
+
+      // 2. Jika belum ditemukan di lokal, query ke API backend /api/cari_kelas
+      if (mkList.length === 0) {
+        const response = await fetch(`${API_BASE_URL}/api/cari_kelas?kode=${encodeURIComponent(kode)}`);
+        const result = await response.json();
+        if (result.status === 'success' && Array.isArray(result.data)) {
+          mkList = result.data;
+        }
+      }
+
+      if (mkList.length === 0) {
+        resContainer.innerHTML = `
+          <div style="text-align:center; color: var(--text-muted); padding: 24px 12px;">
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div style="font-weight: 600; color: var(--text);">Tidak ditemukan data mata kuliah untuk kelas "${escapeHtml(kode)}"</div>
+            <div style="font-size: 0.85em; margin-top: 4px;">Pastikan penulisan kode kelas sudah benar (contoh: 04PT2, 04PT4).</div>
+          </div>`;
+        return;
+      }
+
+      let headerInfo = '';
+      if (parsed) {
+        headerInfo = `
+          <div style="margin-bottom: 14px; padding: 12px 14px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <div style="font-weight: 700; color: var(--text); font-size: 0.95em;">
+                Kelas ${escapeHtml(parsed.raw)} &bull; ${escapeHtml(parsed.namaProdi)}
+              </div>
+              <div style="font-size: 0.82em; color: var(--text-muted); margin-top: 2px;">
+                ${escapeHtml(parsed.semesterLabel)} &bull; Daftar Mata Kuliah yang Dipelajari
+              </div>
+            </div>
+            <span class="badge badge-type-kelas" style="font-size: 0.78em; font-weight: 700; padding: 4px 10px;">
+              ${mkList.length} Mata Kuliah
+            </span>
+          </div>
+        `;
+      } else {
+        headerInfo = `
+          <div style="margin-bottom: 12px; font-weight: 700; color: var(--text); font-size: 0.95em; display: flex; justify-content: space-between; align-items: center;">
+            <span>Daftar Mata Kuliah Kelas ${escapeHtml(cleanUpper)}:</span>
+            <span class="badge badge-type-kelas" style="font-size: 0.78em; padding: 4px 8px;">${mkList.length} MK</span>
+          </div>
+        `;
+      }
+
+      let html = headerInfo + '<div style="display: flex; flex-direction: column; gap: 8px;">';
+      mkList.forEach((item, idx) => {
+        html += `
+          <div style="padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; text-align: left;">
+            <div style="font-weight: 700; color: var(--text); font-size: 0.95em; line-height: 1.35;">
+              <span style="color: var(--primary); font-weight: 800; margin-right: 6px;">${idx + 1}.</span>
+              ${escapeHtml(item.nama_mk)}
+            </div>
+            ${item.nama_dosen ? `
+              <div style="font-size: 0.83em; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <span>Dosen: ${escapeHtml(item.nama_dosen)}</span>
+              </div>
+            ` : ''}
+          </div>`;
+      });
+      html += '</div>';
+      resContainer.innerHTML = html;
     } catch (err) {
-      resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Koneksi gagal.</p>`;
+      resContainer.innerHTML = `<p style="color:var(--badge-cc); text-align:center;">Gagal memuat data kelas: ${escapeHtml(err.message)}</p>`;
     }
   });
 }

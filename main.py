@@ -1801,48 +1801,52 @@ def cari_dosen(nama: str, tanggal: str | None = None):
             conn.close()
 
 @app.get("/api/cari_kelas")
-def cari_kelas(kode: str, tanggal: str | None = None):
-    """Mencari jadwal kelas"""
+def cari_kelas(kode: str):
+    """Mencari daftar mata kuliah yang dipelajari suatu kelas pada semester aktif (tanpa jadwal jam belajar)"""
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        if tanggal:
-            cursor.execute('''
-                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
-                FROM jadwal j
-                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE UPPER(j.kelas) LIKE %s AND j.tanggal = %s
-                ORDER BY j.jam ASC
-            ''', (f"%{kode.upper()}%", tanggal))
-        else:
-            cursor.execute('''
-                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
-                FROM jadwal j
-                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE UPPER(j.kelas) LIKE %s
-                ORDER BY j.tanggal DESC, j.jam ASC
-            ''', (f"%{kode.upper()}%",))
-            
-        results = cursor.fetchall()
+        clean_kode = kode.strip().upper()
         
-        for row in results:
-            if row['jam']:
-                ts = int(row['jam'].total_seconds())
-                h = ts // 3600
-                m = (ts % 3600) // 60
-                dur = scraper.get_class_duration(row.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
-                eh = (ts // 60 + dur) // 60
-                em = (ts // 60 + dur) % 60
-                row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
-            else:
-                row['waktu'] = "-"
-            row['tanggal'] = str(row['tanggal'])
-            del row['jam']
+        cursor.execute('''
+            SELECT DISTINCT j.nama_mk, j.kelas, d.nama_dosen
+            FROM jadwal j
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE UPPER(j.kelas) = %s OR UPPER(j.kelas) LIKE %s
+            ORDER BY j.nama_mk ASC
+        ''', (clean_kode, f"%{clean_kode}%"))
             
-        return {"status": "success", "data": results}
+        raw_results = cursor.fetchall()
+        
+        # Kelompokkan per mata kuliah agar jika ada tim dosen tidak duplikat baris
+        mk_dict = {}
+        for row in raw_results:
+            mk = (row.get('nama_mk') or '').strip()
+            if not mk:
+                continue
+            if mk not in mk_dict:
+                mk_dict[mk] = {
+                    'nama_mk': mk,
+                    'kelas': row.get('kelas', clean_kode),
+                    'dosens': set()
+                }
+            if row.get('nama_dosen') and row.get('nama_dosen') != '-':
+                # Split jika multiple dosen
+                for d in str(row['nama_dosen']).split(','):
+                    dt = d.strip()
+                    if dt and dt != '-':
+                        mk_dict[mk]['dosens'].add(dt)
+                
+        results = []
+        for mk, data in sorted(mk_dict.items(), key=lambda x: x[0]):
+            results.append({
+                'nama_mk': data['nama_mk'],
+                'kelas': data['kelas'],
+                'nama_dosen': ", ".join(sorted(data['dosens'])) if data['dosens'] else "Dosen Belum Ditentukan"
+            })
+            
+        return {"status": "success", "total_mk": len(results), "data": results}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
