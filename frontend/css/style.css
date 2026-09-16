@@ -2076,6 +2076,39 @@ body.dark-theme #btn-setting-spotlight .kbd-badge {
   color: var(--text);
 }
 
+.spotlight-class-breakdown-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  background: rgba(236, 72, 153, 0.06);
+  border: 1px solid rgba(236, 72, 153, 0.2);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+[data-theme="dark"] .spotlight-class-breakdown-card,
+body.dark-theme .spotlight-class-breakdown-card {
+  background: rgba(244, 114, 182, 0.08);
+  border-color: rgba(244, 114, 182, 0.25);
+}
+.spotlight-class-pill {
+  display: flex;
+  flex-direction: column;
+}
+.spotlight-class-pill .pill-label {
+  font-size: 0.72em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.spotlight-class-pill .pill-value {
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 2px;
+}
+
 /* ==================== TV / KIOSK DISPLAY MODE (THEME-ADAPTIVE & ANIMATED) ==================== */
 @keyframes pulseDot {
   0% { transform: scale(0.9); opacity: 0.7; }

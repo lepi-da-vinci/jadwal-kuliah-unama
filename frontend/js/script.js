@@ -8793,6 +8793,72 @@ if (spotlightInput) {
   });
 }
 
+function parseKodeKelasUnama(rawCode) {
+  if (!rawCode) return null;
+  const clean = String(rawCode).trim().toUpperCase();
+  const match = clean.match(/^(\d{2})([A-Z]{2})([0-9A-Z])?$/);
+  if (!match) return null;
+
+  const urutan = parseInt(match[1], 10);
+  const prodiCode = match[2];
+  const semRaw = match[3] || '';
+
+  const prodiNames = {
+    'PT': 'Teknik Informatika (Reguler)',
+    'MT': 'Teknik Informatika (Malam)',
+    'PS': 'Sistem Informasi (Reguler)',
+    'MS': 'Sistem Informasi (Malam)',
+    'PK': 'Sistem Komputer (Reguler)',
+    'MK': 'Sistem Komputer (Malam)',
+    'PM': 'Manajemen Informatika (Reguler)',
+    'MM': 'Manajemen (Malam)',
+    'PW': 'Rekayasa Web / RPL (Reguler)',
+    'MW': 'Rekayasa Web / RPL (Malam)',
+    'PB': 'Bisnis Digital (Reguler)',
+    'MB': 'Bisnis Digital (Malam)'
+  };
+
+  const prodiSingkat = {
+    'PT': 'Teknik Informatika',
+    'MT': 'Teknik Informatika (Malam)',
+    'PS': 'Sistem Informasi',
+    'MS': 'Sistem Informasi (Malam)',
+    'PK': 'Sistem Komputer',
+    'MK': 'Sistem Komputer (Malam)',
+    'PM': 'Manajemen Informatika',
+    'MM': 'Manajemen (Malam)',
+    'PW': 'Rekayasa Web / RPL',
+    'MW': 'Rekayasa Web / RPL (Malam)',
+    'PB': 'Bisnis Digital',
+    'MB': 'Bisnis Digital (Malam)'
+  };
+
+  const namaProdi = prodiNames[prodiCode] || `Program Studi ${prodiCode}`;
+  const namaProdiSingkat = prodiSingkat[prodiCode] || prodiCode;
+
+  let semesterLabel = '';
+  if (/^\d+$/.test(semRaw)) {
+    semesterLabel = `Semester ${semRaw}`;
+  } else if (semRaw === 'P') {
+    semesterLabel = 'Semester Praktik / Pendek';
+  } else if (semRaw === 'T') {
+    semesterLabel = 'Semester Tugas Akhir';
+  } else if (semRaw) {
+    semesterLabel = `Semester ${semRaw}`;
+  }
+
+  return {
+    raw: clean,
+    urutanStr: `Kelas ${match[1]}`,
+    urutanNum: urutan,
+    prodiCode,
+    namaProdi,
+    namaProdiSingkat,
+    semesterLabel,
+    semesterRaw: semRaw
+  };
+}
+
 function renderSpotlightResults(query) {
   const container = document.getElementById('spotlight-results');
   if (!container) return;
@@ -8819,6 +8885,7 @@ function renderSpotlightResults(query) {
       if (!kelasMap.has(kUpper)) {
         kelasMap.set(kUpper, {
           name: kUpper,
+          parsed: parseKodeKelasUnama(kUpper),
           schedules: [],
           mkMap: new Map(),
           dosenSet: new Set()
@@ -8852,6 +8919,12 @@ function renderSpotlightResults(query) {
         const qClean = query.replace(/\s+/g, '');
         const kClean = k.name.toLowerCase().replace(/\s+/g, '');
         if (kClean.includes(qClean)) return true;
+        if (k.parsed) {
+          if (k.parsed.namaProdi.toLowerCase().includes(query)) return true;
+          if (k.parsed.namaProdiSingkat.toLowerCase().includes(query)) return true;
+          if (k.parsed.semesterLabel.toLowerCase().includes(query)) return true;
+          if (k.parsed.urutanStr.toLowerCase().includes(query)) return true;
+        }
         if (Array.from(k.mkMap.keys()).some(m => m.toLowerCase().includes(query))) return true;
         if (Array.from(k.dosenSet).some(d => d.toLowerCase().includes(query))) return true;
         return false;
@@ -8868,7 +8941,15 @@ function renderSpotlightResults(query) {
       })
       .forEach(k => {
         const mkList = Array.from(k.mkMap.keys());
-        const mkText = mkList.slice(0, 2).join(', ') + (mkList.length > 2 ? ` (+${mkList.length - 2} MK)` : '');
+        const mkCount = mkList.length;
+        const p = k.parsed;
+        let subtitle = '';
+        if (p && p.namaProdiSingkat && p.semesterLabel) {
+          subtitle = `${p.namaProdiSingkat} • ${p.semesterLabel} • Mempelajari ${mkCount} Mata Kuliah`;
+        } else {
+          subtitle = `${mkCount} Mata Kuliah Dipelajari di Semester Ini`;
+        }
+
         kelasResults.push({
           type: 'kelas',
           rawValue: k.name,
@@ -8876,7 +8957,8 @@ function renderSpotlightResults(query) {
           badgeText: 'KELAS',
           svgIcon: svgSearchIcons.kelas,
           title: `Kelas ${k.name}`,
-          subtitle: `${mkList.length} Mata Kuliah • ${mkText || 'Jadwal Kuliah Semester Ini'}`
+          subtitle: subtitle,
+          parsedKelas: p
         });
       });
   }
@@ -9237,9 +9319,12 @@ function openSpotlightDetailModal(item) {
     `;
     applyBtn.style.display = 'none';
   } else if (item.type === 'kelas') {
-    // Kelompokkan jadwal per Mata Kuliah yang dipelajari
+    const parsed = item.parsedKelas || parseKodeKelasUnama(item.rawValue);
+
+    // Kelompokkan jadwal per Mata Kuliah yang dipelajari & deduplikasi sesi mingguan
     const mkMap = new Map();
     const allDosenSet = new Set();
+    const uniqueWeeklySlots = new Set();
 
     matchingSchedules.forEach(s => {
       const mkName = s.nama_mk || 'Tanpa Nama Mata Kuliah';
@@ -9248,7 +9333,7 @@ function openSpotlightDetailModal(item) {
           nama_mk: mkName,
           kode_mk: s.kode_mk || '',
           dosenSet: new Set(),
-          sessions: []
+          sessionMap: new Map()
         });
       }
       const entry = mkMap.get(mkName);
@@ -9262,18 +9347,54 @@ function openSpotlightDetailModal(item) {
           }
         });
       }
-      entry.sessions.push(s);
+
+      // Slot waktu mingguan unik (hari + jam + ruangan + metode)
+      const slotKey = `${(s.hari || '').toUpperCase()}|${s.jam || ''}|${s.nama_ruangan || ''}|${s.metode_pembelajaran || ''}`;
+      uniqueWeeklySlots.add(slotKey);
+
+      if (!entry.sessionMap.has(slotKey)) {
+        entry.sessionMap.set(slotKey, {
+          hari: s.hari || '-',
+          jam: s.jam || '-',
+          nama_ruangan: s.nama_ruangan || '-',
+          metode_pembelajaran: s.metode_pembelajaran || '-'
+        });
+      }
     });
 
     const mkList = Array.from(mkMap.values()).sort((a, b) => a.nama_mk.localeCompare(b.nama_mk));
     const totalMk = mkList.length;
-    const totalSesi = matchingSchedules.length;
+    const totalSesiMingguan = uniqueWeeklySlots.size;
     const totalDosen = allDosenSet.size;
+
+    let classBreakdownHtml = '';
+    if (parsed) {
+      classBreakdownHtml = `
+        <div class="spotlight-class-breakdown-card">
+          <div class="spotlight-class-pill">
+            <span class="pill-label">Kode Kelas Mahasiswa</span>
+            <span class="pill-value" style="color:var(--primary); font-family:var(--font-mono, monospace);">${escapeHtml(parsed.raw)}</span>
+          </div>
+          <div class="spotlight-class-pill">
+            <span class="pill-label">Nomor Urut Kelas</span>
+            <span class="pill-value">${escapeHtml(parsed.urutanStr)}</span>
+          </div>
+          <div class="spotlight-class-pill">
+            <span class="pill-label">Jurusan / Program Studi</span>
+            <span class="pill-value">${escapeHtml(parsed.namaProdi)}</span>
+          </div>
+          <div class="spotlight-class-pill">
+            <span class="pill-label">Tingkat Semester</span>
+            <span class="pill-value">${escapeHtml(parsed.semesterLabel || '-')}</span>
+          </div>
+        </div>
+      `;
+    }
 
     let coursesHtml = mkList.map((m, idx) => {
       const dosens = Array.from(m.dosenSet).join(', ') || 'Dosen Pengampu Belum Ditentukan';
       const dayOrder = { 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'MINGGU': 7 };
-      const sortedSessions = [...m.sessions].sort((a, b) => {
+      const sortedSessions = Array.from(m.sessionMap.values()).sort((a, b) => {
         const orderA = dayOrder[(a.hari || '').toUpperCase()] || 99;
         const orderB = dayOrder[(b.hari || '').toUpperCase()] || 99;
         if (orderA !== orderB) return orderA - orderB;
@@ -9320,22 +9441,23 @@ function openSpotlightDetailModal(item) {
     }
 
     bodyEl.innerHTML = `
-      <div class="spotlight-detail-stat-row">
+      ${classBreakdownHtml}
+      <div class="spotlight-detail-stat-row" style="margin-top: 10px;">
         <div class="spotlight-detail-stat-box">
           <div class="spotlight-detail-stat-val">${totalMk}</div>
           <div class="spotlight-detail-stat-lbl">Total Mata Kuliah</div>
         </div>
         <div class="spotlight-detail-stat-box">
-          <div class="spotlight-detail-stat-val">${totalSesi}</div>
-          <div class="spotlight-detail-stat-lbl">Sesi Perkuliahan / Minggu</div>
+          <div class="spotlight-detail-stat-val">${totalSesiMingguan}</div>
+          <div class="spotlight-detail-stat-lbl">Sesi Jadwal / Minggu</div>
         </div>
         <div class="spotlight-detail-stat-box">
           <div class="spotlight-detail-stat-val">${totalDosen}</div>
           <div class="spotlight-detail-stat-lbl">Dosen Pengampu</div>
         </div>
       </div>
-      <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 8px; color: var(--text);">Daftar Mata Kuliah yang Dipelajari (${totalMk} MK):</div>
-      <div style="max-height: 380px; overflow-y: auto; padding-right: 4px;">
+      <div style="font-weight: 600; font-size: 0.9em; margin: 12px 0 8px 0; color: var(--text);">Daftar Mata Kuliah yang Dipelajari (${totalMk} MK):</div>
+      <div style="max-height: 340px; overflow-y: auto; padding-right: 4px;">
         ${coursesHtml}
       </div>
     `;
