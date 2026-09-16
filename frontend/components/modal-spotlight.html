@@ -8,7 +8,7 @@
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
         <input type="text" id="spotlight-input" class="spotlight-input"
-          placeholder="Cari dosen, mata kuliah, ruangan, atau aslab..." autocomplete="off"
+          placeholder="Cari kelas (04PT4), dosen, mata kuliah, ruangan..." autocomplete="off"
           oninput="handleSpotlightInput(this.value)">
         <button id="spotlight-clear-btn" class="spotlight-btn-clear"
           onclick="clearSpotlightInput(); event.stopPropagation();" style="display:none;" title="Hapus teks">
@@ -39,6 +39,16 @@
             <rect x="3" y="14" width="7" height="7"></rect>
           </svg>
           Semua
+        </button>
+        <button class="spotlight-tab-btn" data-type="kelas" onclick="filterSpotlightCategory('kelas')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          Kelas
         </button>
         <button class="spotlight-tab-btn" data-type="dosen" onclick="filterSpotlightCategory('dosen')">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
@@ -76,7 +86,7 @@
 
       <div id="spotlight-results" class="spotlight-results">
         <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.9em;">
-          Ketik nama dosen, mata kuliah, ruangan, atau aslab untuk pencarian cepat...
+          Ketik kode kelas (contoh: 04PT4), nama dosen, mata kuliah, atau ruangan...
         </div>
       </div>
       <div class="spotlight-footer">

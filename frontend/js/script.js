@@ -8650,6 +8650,7 @@ let spotlightActiveIndex = 0;
 window._spotlightCurrentResults = [];
 
 const svgSearchIcons = {
+  kelas: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
   dosen: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
   mk: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>',
   ruangan: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 7v14M21 7v14M6 3h12a2 2 0 0 1 2 2v2H4V5a2 2 0 0 1 2-2zM9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2"></path></svg>',
@@ -8797,10 +8798,88 @@ function renderSpotlightResults(query) {
   if (!container) return;
 
   const cat = spotlightActiveCategory;
+  const kelasResults = [];
   const dosenResults = [];
   const mkResults = [];
   const roomResults = [];
   const aslabResults = [];
+
+  // ==========================================
+  // 0. KELAS INDEXING (KODE KELAS MAHASISWA, MISAL 04PT4)
+  // ==========================================
+  if ((cat === 'all' || cat === 'kelas') && Array.isArray(allJadwal)) {
+    const kelasMap = new Map();
+
+    allJadwal.forEach(item => {
+      if (!item.kelas) return;
+      const rawK = String(item.kelas).trim();
+      const kUpper = rawK.toUpperCase();
+      if (!kUpper || kUpper === '-' || kUpper === 'NULL') return;
+
+      if (!kelasMap.has(kUpper)) {
+        kelasMap.set(kUpper, {
+          name: kUpper,
+          schedules: [],
+          mkMap: new Map(),
+          dosenSet: new Set()
+        });
+      }
+      const k = kelasMap.get(kUpper);
+      k.schedules.push(item);
+      if (item.nama_dosen && item.nama_dosen !== '-') {
+        item.nama_dosen.split(/[,/&]/).forEach(d => {
+          const dt = d.trim();
+          if (dt && dt !== '-') k.dosenSet.add(dt);
+        });
+      }
+      if (item.nama_mk && item.nama_mk.trim()) {
+        const mkTrim = item.nama_mk.trim();
+        if (!k.mkMap.has(mkTrim)) {
+          k.mkMap.set(mkTrim, {
+            nama_mk: mkTrim,
+            kode_mk: item.kode_mk || '',
+            dosens: new Set()
+          });
+        }
+        const m = k.mkMap.get(mkTrim);
+        if (item.nama_dosen) m.dosens.add(item.nama_dosen);
+      }
+    });
+
+    Array.from(kelasMap.values())
+      .filter(k => {
+        if (!query) return true;
+        const qClean = query.replace(/\s+/g, '');
+        const kClean = k.name.toLowerCase().replace(/\s+/g, '');
+        if (kClean.includes(qClean)) return true;
+        if (Array.from(k.mkMap.keys()).some(m => m.toLowerCase().includes(query))) return true;
+        if (Array.from(k.dosenSet).some(d => d.toLowerCase().includes(query))) return true;
+        return false;
+      })
+      .sort((a, b) => {
+        if (query) {
+          const qClean = query.replace(/\s+/g, '');
+          const aExact = a.name.toLowerCase().replace(/\s+/g, '') === qClean;
+          const bExact = b.name.toLowerCase().replace(/\s+/g, '') === qClean;
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+        }
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      })
+      .forEach(k => {
+        const mkList = Array.from(k.mkMap.keys());
+        const mkText = mkList.slice(0, 2).join(', ') + (mkList.length > 2 ? ` (+${mkList.length - 2} MK)` : '');
+        kelasResults.push({
+          type: 'kelas',
+          rawValue: k.name,
+          badgeClass: 'badge-type-kelas',
+          badgeText: 'KELAS',
+          svgIcon: svgSearchIcons.kelas,
+          title: `Kelas ${k.name}`,
+          subtitle: `${mkList.length} Mata Kuliah • ${mkText || 'Jadwal Kuliah Semester Ini'}`
+        });
+      });
+  }
 
   // ==========================================
   // 1. DOSEN INDEXING (SEMUA DOSEN & TIM TEACHING)
@@ -9026,12 +9105,20 @@ function renderSpotlightResults(query) {
 
   // Gabungkan hasil pencarian sesuai tab aktif
   let finalResults = [];
-  if (cat === 'dosen') finalResults = dosenResults;
+  if (cat === 'kelas') finalResults = kelasResults;
+  else if (cat === 'dosen') finalResults = dosenResults;
   else if (cat === 'mk') finalResults = mkResults;
   else if (cat === 'ruangan') finalResults = roomResults;
   else if (cat === 'aslab') finalResults = aslabResults;
   else {
-    finalResults = [...dosenResults, ...mkResults, ...roomResults, ...aslabResults];
+    // Pada tab 'Semua': Jika kata kunci mirip kode kelas (misal '04pt4', '01ms2', dsb), taruh hasil kelas paling atas
+    const cleanQ = (query || '').replace(/\s+/g, '');
+    const looksLikeClassCode = cleanQ && (/\d+[a-z]+/i.test(cleanQ) || /^[a-z]+\d+$/i.test(cleanQ) || (kelasResults.length > 0 && kelasResults.some(kr => kr.rawValue.toLowerCase() === cleanQ.toLowerCase())));
+    if (looksLikeClassCode) {
+      finalResults = [...kelasResults, ...dosenResults, ...mkResults, ...roomResults, ...aslabResults];
+    } else {
+      finalResults = [...dosenResults, ...kelasResults, ...mkResults, ...roomResults, ...aslabResults];
+    }
   }
 
   if (finalResults.length === 0) {
@@ -9108,6 +9195,8 @@ function openSpotlightDetailModal(item) {
         if (Array.isArray(item.rawNames) && item.rawNames.some(rn => jRoomLower.includes(rn.toLowerCase()))) return true;
         return jRoomLower.includes(rawLower);
       });
+    } else if (item.type === 'kelas') {
+      matchingSchedules = allJadwal.filter(j => j.kelas && j.kelas.toUpperCase() === item.rawValue.toUpperCase());
     }
 
     matchingSchedules.sort((a, b) => {
@@ -9147,6 +9236,118 @@ function openSpotlightDetailModal(item) {
       </div>
     `;
     applyBtn.style.display = 'none';
+  } else if (item.type === 'kelas') {
+    // Kelompokkan jadwal per Mata Kuliah yang dipelajari
+    const mkMap = new Map();
+    const allDosenSet = new Set();
+
+    matchingSchedules.forEach(s => {
+      const mkName = s.nama_mk || 'Tanpa Nama Mata Kuliah';
+      if (!mkMap.has(mkName)) {
+        mkMap.set(mkName, {
+          nama_mk: mkName,
+          kode_mk: s.kode_mk || '',
+          dosenSet: new Set(),
+          sessions: []
+        });
+      }
+      const entry = mkMap.get(mkName);
+      if (!entry.kode_mk && s.kode_mk) entry.kode_mk = s.kode_mk;
+      if (s.nama_dosen && s.nama_dosen !== '-') {
+        s.nama_dosen.split(/[,/&]/).forEach(d => {
+          const dt = d.trim();
+          if (dt && dt !== '-') {
+            entry.dosenSet.add(dt);
+            allDosenSet.add(dt);
+          }
+        });
+      }
+      entry.sessions.push(s);
+    });
+
+    const mkList = Array.from(mkMap.values()).sort((a, b) => a.nama_mk.localeCompare(b.nama_mk));
+    const totalMk = mkList.length;
+    const totalSesi = matchingSchedules.length;
+    const totalDosen = allDosenSet.size;
+
+    let coursesHtml = mkList.map((m, idx) => {
+      const dosens = Array.from(m.dosenSet).join(', ') || 'Dosen Pengampu Belum Ditentukan';
+      const dayOrder = { 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'MINGGU': 7 };
+      const sortedSessions = [...m.sessions].sort((a, b) => {
+        const orderA = dayOrder[(a.hari || '').toUpperCase()] || 99;
+        const orderB = dayOrder[(b.hari || '').toUpperCase()] || 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.jam || '').localeCompare(b.jam || '');
+      });
+
+      const sessionChips = sortedSessions.map(sess => {
+        const isTm = sess.metode_pembelajaran === 'TM';
+        const isOl = sess.metode_pembelajaran === 'OL';
+        const badgeCls = isTm ? 'tm' : (isOl ? 'ol' : 'cc');
+        return `
+          <div class="spotlight-session-chip">
+            <span style="color:var(--primary); font-weight:700;">${escapeHtml(sess.hari || '-')}:</span>
+            <span>Pukul ${escapeHtml(sess.jam || '-')}</span>
+            <span style="color:var(--text-muted);">&bull;</span>
+            <span>${escapeHtml(formatRoomName(sess.nama_ruangan || '-', false))}</span>
+            <span class="badge ${badgeCls}" style="font-size:0.68em; padding:2px 6px;">${escapeHtml(sess.metode_pembelajaran || '-')}</span>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="spotlight-course-box">
+          <div class="spotlight-course-header">
+            <div class="spotlight-course-title">
+              <span style="color:var(--primary); margin-right:6px;">${idx + 1}.</span>
+              ${escapeHtml(m.nama_mk)}
+            </div>
+            ${m.kode_mk ? `<span class="badge badge-type-mk" style="font-size:0.7em; font-weight:700; white-space:nowrap;">${escapeHtml(m.kode_mk)}</span>` : ''}
+          </div>
+          <div class="spotlight-course-lecturer">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <span>${escapeHtml(dosens)}</span>
+          </div>
+          <div class="spotlight-course-sessions">
+            ${sessionChips}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (mkList.length === 0) {
+      coursesHtml = `<div style="text-align:center; color:var(--text-muted); padding:20px;">Tidak ditemukan data mata kuliah untuk kelas ini di semester aktif.</div>`;
+    }
+
+    bodyEl.innerHTML = `
+      <div class="spotlight-detail-stat-row">
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${totalMk}</div>
+          <div class="spotlight-detail-stat-lbl">Total Mata Kuliah</div>
+        </div>
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${totalSesi}</div>
+          <div class="spotlight-detail-stat-lbl">Sesi Perkuliahan / Minggu</div>
+        </div>
+        <div class="spotlight-detail-stat-box">
+          <div class="spotlight-detail-stat-val">${totalDosen}</div>
+          <div class="spotlight-detail-stat-lbl">Dosen Pengampu</div>
+        </div>
+      </div>
+      <div style="font-weight: 600; font-size: 0.9em; margin-bottom: 8px; color: var(--text);">Daftar Mata Kuliah yang Dipelajari (${totalMk} MK):</div>
+      <div style="max-height: 380px; overflow-y: auto; padding-right: 4px;">
+        ${coursesHtml}
+      </div>
+    `;
+
+    applyBtn.style.display = 'inline-flex';
+    applyBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      Tampilkan Jadwal Kelas di Tabel
+    `;
+    applyBtn.onclick = () => {
+      applySpotlightFilterToMainTable(item.type, item.rawValue, matchingSchedules);
+    };
   } else {
     const totalKelas = matchingSchedules.length;
     const uniqueRuangan = [...new Set(matchingSchedules.map(j => j.nama_ruangan).filter(Boolean))].length;
@@ -9193,6 +9394,10 @@ function openSpotlightDetailModal(item) {
     `;
 
     applyBtn.style.display = 'inline-flex';
+    applyBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      Filter di Tabel Utama
+    `;
     applyBtn.onclick = () => {
       applySpotlightFilterToMainTable(item.type, item.rawValue, matchingSchedules);
     };
@@ -9233,6 +9438,7 @@ function applySpotlightFilterToMainTable(type, val, schedules) {
   closeSpotlightDetailModal();
 
   const filtered = (schedules && schedules.length > 0) ? schedules : allJadwal.filter(j => {
+    if (type === 'kelas') return j.kelas && j.kelas.toUpperCase() === val.toUpperCase();
     if (type === 'dosen') return j.nama_dosen === val;
     if (type === 'mk') return j.nama_mk === val;
     if (type === 'ruangan') return j.nama_ruangan === val;
@@ -9256,7 +9462,8 @@ function applySpotlightFilterToMainTable(type, val, schedules) {
   const banner = document.getElementById('spotlight-active-banner');
   const bannerText = document.getElementById('spotlight-banner-text');
   if (banner && bannerText) {
-    bannerText.innerHTML = `Menampilkan jadwal untuk: <strong>${escapeHtml(val)}</strong> (${filtered.length} jadwal ditemukan)`;
+    const label = type === 'kelas' ? `Kelas ${val}` : val;
+    bannerText.innerHTML = `Menampilkan jadwal untuk: <strong>${escapeHtml(label)}</strong> (${filtered.length} jadwal ditemukan)`;
     banner.style.display = 'flex';
   }
 

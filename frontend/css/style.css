@@ -1896,6 +1896,8 @@ body.dark-theme .spotlight-icon {
   letter-spacing: 0.06em;
 }
 .badge-type-dosen { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.3); }
+.badge-type-kelas { background: rgba(236, 72, 153, 0.15); color: #db2777; border: 1px solid rgba(236, 72, 153, 0.3); }
+[data-theme="dark"] .badge-type-kelas { background: rgba(244, 114, 182, 0.2); color: #f472b6; border-color: rgba(244, 114, 182, 0.35); }
 .badge-type-mk { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
 .badge-type-lab { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
 .badge-type-ruang { background: rgba(14, 165, 233, 0.15); color: #0284c7; border: 1px solid rgba(14, 165, 233, 0.3); }
@@ -2020,6 +2022,58 @@ body.dark-theme #btn-setting-spotlight .kbd-badge {
 .spotlight-detail-card-item:hover {
   transform: translateY(-1px);
   border-color: var(--primary-light);
+}
+
+.spotlight-course-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
+}
+.spotlight-course-box:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary-light);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+.spotlight-course-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  gap: 10px;
+}
+.spotlight-course-title {
+  font-weight: 700;
+  font-size: 0.98em;
+  color: var(--text);
+  line-height: 1.35;
+}
+.spotlight-course-lecturer {
+  font-size: 0.83em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.spotlight-course-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.spotlight-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--text);
 }
 
 /* ==================== TV / KIOSK DISPLAY MODE (THEME-ADAPTIVE & ANIMATED) ==================== */
