@@ -7878,13 +7878,15 @@ if (btnSubmitCariKelas) {
 
       let headerInfo = '';
       if (parsed) {
+        const modeColor = parsed.shiftChar === 'P' ? '#0284c7' : (parsed.shiftChar === 'M' ? '#8b5cf6' : 'var(--primary)');
         headerInfo = `
           <div style="margin-bottom: 14px; padding: 12px 14px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div>
-              <div style="font-weight: 700; color: var(--text); font-size: 0.95em;">
-                Kelas ${escapeHtml(parsed.raw)} &bull; ${escapeHtml(parsed.namaProdi)}
+              <div style="font-weight: 700; color: var(--text); font-size: 0.98em;">
+                Kelas ${escapeHtml(parsed.raw)} &bull; ${escapeHtml(parsed.namaProdiSingkat)} 
+                <span style="color:${modeColor}; font-weight:700;">(${escapeHtml(parsed.modeWaktuSingkat)})</span>
               </div>
-              <div style="font-size: 0.82em; color: var(--text-muted); margin-top: 2px;">
+              <div style="font-size: 0.83em; color: var(--text-muted); margin-top: 2px;">
                 ${escapeHtml(parsed.semesterLabel)} &bull; Daftar Mata Kuliah yang Dipelajari
               </div>
             </div>
@@ -8884,66 +8886,78 @@ if (spotlightInput) {
 function parseKodeKelasUnama(rawCode) {
   if (!rawCode) return null;
   const clean = String(rawCode).trim().toUpperCase();
-  const match = clean.match(/^(\d{2})([A-Z]{2})([0-9A-Z])?$/);
-  if (!match) return null;
+  // Format UNAMA: 2 digit urutan (01, 02, ...) + 1 huruf Mode (P=Pagi, M=Malam) + 1 huruf Jurusan (T=TI, S=SI, W=Kewirausahaan, dll) + 1 karakter Semester / Jenis (P=MK Pilihan, T=Tugas Akhir, atau Angka Semester)
+  const match = clean.match(/^(\d{2})([PM])([A-Z])([0-9A-Z])?$/);
+
+  const prodiMap = {
+    'T': 'Teknik Informatika',
+    'S': 'Sistem Informasi',
+    'K': 'Sistem Komputer',
+    'M': 'Manajemen',
+    'W': 'Kewirausahaan',
+    'B': 'Bisnis Digital',
+    'Q': 'Sistem Komputer'
+  };
+
+  if (!match) {
+    const fallback = clean.match(/^(\d+)([A-Z]+)(\d|[A-Z])?$/);
+    if (!fallback) return null;
+    const urut = fallback[1];
+    const pCode = fallback[2];
+    const sem = fallback[3] || '';
+    return {
+      raw: clean,
+      urutanStr: `Kelas ${urut}`,
+      urutanNum: parseInt(urut, 10),
+      shiftChar: '',
+      modeWaktu: 'Reguler',
+      modeWaktuSingkat: 'Reguler',
+      prodiChar: pCode,
+      namaProdi: `Program Studi ${pCode}`,
+      namaProdiSingkat: pCode,
+      semesterLabel: sem === 'P' ? 'MK Pilihan' : (sem ? `Semester ${sem}` : 'Semester Aktif'),
+      semesterRaw: sem,
+      isMkPilihan: sem === 'P'
+    };
+  }
 
   const urutan = parseInt(match[1], 10);
-  const prodiCode = match[2];
-  const semRaw = match[3] || '';
+  const shiftChar = match[2]; // P = Pagi, M = Malam
+  const prodiChar = match[3]; // T, S, K, M, W (Kewirausahaan), B
+  const semChar = match[4] || '';
 
-  const prodiNames = {
-    'PT': 'Teknik Informatika (Reguler)',
-    'MT': 'Teknik Informatika (Malam)',
-    'PS': 'Sistem Informasi (Reguler)',
-    'MS': 'Sistem Informasi (Malam)',
-    'PK': 'Sistem Komputer (Reguler)',
-    'MK': 'Sistem Komputer (Malam)',
-    'PM': 'Manajemen Informatika (Reguler)',
-    'MM': 'Manajemen (Malam)',
-    'PW': 'Rekayasa Web / RPL (Reguler)',
-    'MW': 'Rekayasa Web / RPL (Malam)',
-    'PB': 'Bisnis Digital (Reguler)',
-    'MB': 'Bisnis Digital (Malam)'
-  };
+  const modeWaktu = shiftChar === 'P' ? 'Mode Pagi (Kelas Pagi)' : (shiftChar === 'M' ? 'Mode Malam (Kelas Malam)' : shiftChar);
+  const modeWaktuSingkat = shiftChar === 'P' ? 'Pagi' : (shiftChar === 'M' ? 'Malam' : shiftChar);
 
-  const prodiSingkat = {
-    'PT': 'Teknik Informatika',
-    'MT': 'Teknik Informatika (Malam)',
-    'PS': 'Sistem Informasi',
-    'MS': 'Sistem Informasi (Malam)',
-    'PK': 'Sistem Komputer',
-    'MK': 'Sistem Komputer (Malam)',
-    'PM': 'Manajemen Informatika',
-    'MM': 'Manajemen (Malam)',
-    'PW': 'Rekayasa Web / RPL',
-    'MW': 'Rekayasa Web / RPL (Malam)',
-    'PB': 'Bisnis Digital',
-    'MB': 'Bisnis Digital (Malam)'
-  };
-
-  const namaProdi = prodiNames[prodiCode] || `Program Studi ${prodiCode}`;
-  const namaProdiSingkat = prodiSingkat[prodiCode] || prodiCode;
+  const namaProdiSingkat = prodiMap[prodiChar] || `Program Studi ${prodiChar}`;
+  const namaProdi = `${namaProdiSingkat} (${modeWaktuSingkat})`;
 
   let semesterLabel = '';
-  if (/^\d+$/.test(semRaw)) {
-    semesterLabel = `Semester ${semRaw}`;
-  } else if (semRaw === 'P') {
-    semesterLabel = 'Semester Praktik / Pendek';
-  } else if (semRaw === 'T') {
-    semesterLabel = 'Semester Tugas Akhir';
-  } else if (semRaw) {
-    semesterLabel = `Semester ${semRaw}`;
+  if (semChar === 'P') {
+    semesterLabel = 'Mata Kuliah Pilihan (MK Pilihan)';
+  } else if (semChar === 'T') {
+    semesterLabel = 'Tugas Akhir / Skripsi';
+  } else if (/^\d+$/.test(semChar)) {
+    semesterLabel = `Semester ${semChar}`;
+  } else if (semChar) {
+    semesterLabel = `Semester ${semChar}`;
+  } else {
+    semesterLabel = 'Semester Aktif';
   }
 
   return {
     raw: clean,
     urutanStr: `Kelas ${match[1]}`,
     urutanNum: urutan,
-    prodiCode,
+    shiftChar,
+    modeWaktu,
+    modeWaktuSingkat,
+    prodiChar,
     namaProdi,
     namaProdiSingkat,
     semesterLabel,
-    semesterRaw: semRaw
+    semesterRaw: semChar,
+    isMkPilihan: semChar === 'P'
   };
 }
 
@@ -8952,6 +8966,12 @@ function renderSpotlightResults(query) {
   if (!container) return;
 
   const cat = spotlightActiveCategory;
+  const cleanQ = (query || '').replace(/\s+/g, '').toLowerCase();
+  const looksLikeClassCode = cleanQ && (
+    /^\d{2}[a-z]{2}[0-9a-z]?$/i.test(cleanQ) || 
+    (cleanQ.length >= 3 && /^\d+[a-z]+/i.test(cleanQ))
+  );
+
   const kelasResults = [];
   const dosenResults = [];
   const mkResults = [];
@@ -8959,9 +8979,10 @@ function renderSpotlightResults(query) {
   const aslabResults = [];
 
   // ==========================================
-  // 0. KELAS INDEXING (KODE KELAS MAHASISWA, MISAL 04PT4)
+  // 0. KELAS INDEXING (KODE KELAS MAHASISWA, MISAL 04PT4, 02PS2)
+  // Index selalu aktif di tab 'all', 'kelas', atau jika query menyerupai kode kelas
   // ==========================================
-  if ((cat === 'all' || cat === 'kelas') && Array.isArray(allJadwal)) {
+  if ((cat === 'all' || cat === 'kelas' || looksLikeClassCode) && Array.isArray(allJadwal)) {
     const kelasMap = new Map();
 
     allJadwal.forEach(item => {
@@ -9004,12 +9025,13 @@ function renderSpotlightResults(query) {
     Array.from(kelasMap.values())
       .filter(k => {
         if (!query) return true;
-        const qClean = query.replace(/\s+/g, '');
+        const qClean = query.replace(/\s+/g, '').toLowerCase();
         const kClean = k.name.toLowerCase().replace(/\s+/g, '');
         if (kClean.includes(qClean)) return true;
         if (k.parsed) {
           if (k.parsed.namaProdi.toLowerCase().includes(query)) return true;
           if (k.parsed.namaProdiSingkat.toLowerCase().includes(query)) return true;
+          if (k.parsed.modeWaktu.toLowerCase().includes(query)) return true;
           if (k.parsed.semesterLabel.toLowerCase().includes(query)) return true;
           if (k.parsed.urutanStr.toLowerCase().includes(query)) return true;
         }
@@ -9019,7 +9041,7 @@ function renderSpotlightResults(query) {
       })
       .sort((a, b) => {
         if (query) {
-          const qClean = query.replace(/\s+/g, '');
+          const qClean = query.replace(/\s+/g, '').toLowerCase();
           const aExact = a.name.toLowerCase().replace(/\s+/g, '') === qClean;
           const bExact = b.name.toLowerCase().replace(/\s+/g, '') === qClean;
           if (aExact && !bExact) return -1;
@@ -9033,7 +9055,7 @@ function renderSpotlightResults(query) {
         const p = k.parsed;
         let subtitle = '';
         if (p && p.namaProdiSingkat && p.semesterLabel) {
-          subtitle = `${p.namaProdiSingkat} • ${p.semesterLabel} • Mempelajari ${mkCount} Mata Kuliah`;
+          subtitle = `${p.namaProdiSingkat} (${p.modeWaktuSingkat}) • ${p.semesterLabel} • Mempelajari ${mkCount} Mata Kuliah`;
         } else {
           subtitle = `${mkCount} Mata Kuliah Dipelajari di Semester Ini`;
         }
@@ -9274,16 +9296,24 @@ function renderSpotlightResults(query) {
   }
 
   // Gabungkan hasil pencarian sesuai tab aktif
+  const cleanQ = (query || '').replace(/\s+/g, '');
+  const looksLikeClassCode = cleanQ && (/\d+[a-z]+/i.test(cleanQ) || /^[a-z]+\d+$/i.test(cleanQ) || (kelasResults.length > 0 && kelasResults.some(kr => kr.rawValue.toLowerCase() === cleanQ.toLowerCase())));
+
   let finalResults = [];
   if (cat === 'kelas') finalResults = kelasResults;
   else if (cat === 'dosen') finalResults = dosenResults;
-  else if (cat === 'mk') finalResults = mkResults;
+  else if (cat === 'mk') {
+    // Jika kata kunci mirip kode kelas (misal 02ps2, 04pt4), sertakan kartu kelas di urutan paling atas agar tidak hilang
+    if (looksLikeClassCode && kelasResults.length > 0) {
+      finalResults = [...kelasResults, ...mkResults];
+    } else {
+      finalResults = mkResults;
+    }
+  }
   else if (cat === 'ruangan') finalResults = roomResults;
   else if (cat === 'aslab') finalResults = aslabResults;
   else {
-    // Pada tab 'Semua': Jika kata kunci mirip kode kelas (misal '04pt4', '01ms2', dsb), taruh hasil kelas paling atas
-    const cleanQ = (query || '').replace(/\s+/g, '');
-    const looksLikeClassCode = cleanQ && (/\d+[a-z]+/i.test(cleanQ) || /^[a-z]+\d+$/i.test(cleanQ) || (kelasResults.length > 0 && kelasResults.some(kr => kr.rawValue.toLowerCase() === cleanQ.toLowerCase())));
+    // Pada tab 'Semua': Jika kata kunci mirip kode kelas, prioritaskan hasil kelas paling atas
     if (looksLikeClassCode) {
       finalResults = [...kelasResults, ...dosenResults, ...mkResults, ...roomResults, ...aslabResults];
     } else {
@@ -9298,8 +9328,8 @@ function renderSpotlightResults(query) {
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
-        <div style="font-weight:600; color:var(--text);">Tidak ada hasil ditemukan</div>
-        <div style="font-size:0.85em; margin-top:3px;">Coba gunakan kata kunci nama dosen, mata kuliah, atau ruangan lainnya.</div>
+        <div>Tidak ada hasil untuk "<strong>${escapeHtml(query)}</strong>"</div>
+        <div style="font-size:0.85em; margin-top:4px;">Coba gunakan kata kunci kode kelas (04PT4), nama dosen, atau ruangan lain.</div>
       </div>
     `;
     window._spotlightCurrentResults = [];
@@ -9308,21 +9338,29 @@ function renderSpotlightResults(query) {
 
   window._spotlightCurrentResults = finalResults;
 
-  container.innerHTML = finalResults.map((r, i) => `
-    <div class="spotlight-item ${i === spotlightActiveIndex ? 'selected' : ''}" onclick="executeSpotlightAction(${i})">
-      <div class="spotlight-item-left">
-        <div class="spotlight-icon">${r.svgIcon}</div>
-        <div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="spotlight-title">${r.type === 'ruangan' ? formatRoomNameHtml(r.title) : escapeHtml(r.title)}</span>
-            <span class="spotlight-badge ${r.badgeClass}">${r.badgeText}</span>
+  let html = '';
+  finalResults.forEach((item, idx) => {
+    const isSelected = idx === spotlightActiveIndex;
+    html += `
+      <div class="spotlight-item ${isSelected ? 'selected' : ''}" data-index="${idx}" onclick="executeSpotlightAction(${idx})">
+        <div class="spotlight-item-left">
+          <div class="spotlight-icon">${item.svgIcon}</div>
+          <div class="spotlight-item-info">
+            <div class="spotlight-item-title-wrap">
+              <span class="spotlight-item-title">${item.type === 'ruangan' ? formatRoomNameHtml(item.title) : escapeHtml(item.title)}</span>
+              <span class="spotlight-badge ${item.badgeClass}">${escapeHtml(item.badgeText)}</span>
+            </div>
+            <div class="spotlight-item-sub">${escapeHtml(item.subtitle)}</div>
           </div>
-          <div class="spotlight-subtitle">${escapeHtml(r.subtitle)}</div>
+        </div>
+        <div class="spotlight-item-right">
+          <span class="spotlight-action-hint">Lihat Detail</span>
         </div>
       </div>
-      <span style="font-size:0.82em; color:var(--primary); font-weight:700; white-space:nowrap;">Lihat Detail</span>
-    </div>
-  `).join('');
+    `;
+  });
+
+  container.innerHTML = html;
 }
 
 function executeSpotlightAction(idx) {
@@ -9457,22 +9495,27 @@ function openSpotlightDetailModal(item) {
 
     let classBreakdownHtml = '';
     if (parsed) {
+      const modeColor = parsed.shiftChar === 'P' ? '#0284c7' : (parsed.shiftChar === 'M' ? '#8b5cf6' : 'var(--primary)');
       classBreakdownHtml = `
         <div class="spotlight-class-breakdown-card">
           <div class="spotlight-class-pill">
-            <span class="pill-label">Kode Kelas Mahasiswa</span>
+            <span class="pill-label">Kode Kelas</span>
             <span class="pill-value" style="color:var(--primary); font-family:var(--font-mono, monospace);">${escapeHtml(parsed.raw)}</span>
           </div>
           <div class="spotlight-class-pill">
-            <span class="pill-label">Nomor Urut Kelas</span>
+            <span class="pill-label">Nomor Urut</span>
             <span class="pill-value">${escapeHtml(parsed.urutanStr)}</span>
           </div>
           <div class="spotlight-class-pill">
-            <span class="pill-label">Jurusan / Program Studi</span>
-            <span class="pill-value">${escapeHtml(parsed.namaProdi)}</span>
+            <span class="pill-label">Mode / Waktu Kuliah</span>
+            <span class="pill-value" style="color:${modeColor}; font-weight:800;">${escapeHtml(parsed.modeWaktu)}</span>
           </div>
           <div class="spotlight-class-pill">
-            <span class="pill-label">Tingkat Semester</span>
+            <span class="pill-label">Program Studi / Jurusan</span>
+            <span class="pill-value">${escapeHtml(parsed.namaProdiSingkat)}</span>
+          </div>
+          <div class="spotlight-class-pill">
+            <span class="pill-label">Tingkat / Jenis</span>
             <span class="pill-value">${escapeHtml(parsed.semesterLabel || '-')}</span>
           </div>
         </div>
