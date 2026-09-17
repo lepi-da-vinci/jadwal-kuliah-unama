@@ -9296,15 +9296,14 @@ function renderSpotlightResults(query) {
   }
 
   // Gabungkan hasil pencarian sesuai tab aktif
-  const cleanQ = (query || '').replace(/\s+/g, '');
-  const looksLikeClassCode = cleanQ && (/\d+[a-z]+/i.test(cleanQ) || /^[a-z]+\d+$/i.test(cleanQ) || (kelasResults.length > 0 && kelasResults.some(kr => kr.rawValue.toLowerCase() === cleanQ.toLowerCase())));
+  const isClassMatch = looksLikeClassCode || (kelasResults.length > 0 && kelasResults.some(kr => kr.rawValue.toLowerCase() === cleanQ));
 
   let finalResults = [];
   if (cat === 'kelas') finalResults = kelasResults;
   else if (cat === 'dosen') finalResults = dosenResults;
   else if (cat === 'mk') {
     // Jika kata kunci mirip kode kelas (misal 02ps2, 04pt4), sertakan kartu kelas di urutan paling atas agar tidak hilang
-    if (looksLikeClassCode && kelasResults.length > 0) {
+    if (isClassMatch && kelasResults.length > 0) {
       finalResults = [...kelasResults, ...mkResults];
     } else {
       finalResults = mkResults;
@@ -9314,7 +9313,7 @@ function renderSpotlightResults(query) {
   else if (cat === 'aslab') finalResults = aslabResults;
   else {
     // Pada tab 'Semua': Jika kata kunci mirip kode kelas, prioritaskan hasil kelas paling atas
-    if (looksLikeClassCode) {
+    if (isClassMatch) {
       finalResults = [...kelasResults, ...dosenResults, ...mkResults, ...roomResults, ...aslabResults];
     } else {
       finalResults = [...dosenResults, ...kelasResults, ...mkResults, ...roomResults, ...aslabResults];
