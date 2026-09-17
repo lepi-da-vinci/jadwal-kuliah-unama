@@ -91,3 +91,29 @@ CREATE TABLE IF NOT EXISTS semester (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO semester (nama_semester, is_active) VALUES ('Genap 2025', 1);
+
+-- 9. Tabel Cadangan Permanen Jadwal (Kebal Reset & Penjaga Keutuhan Data)
+CREATE TABLE IF NOT EXISTS jadwal_permanent (
+    id_jadwal_permanent INT AUTO_INCREMENT PRIMARY KEY,
+    tanggal DATE NOT NULL,
+    hari VARCHAR(20) NOT NULL,
+    jam TIME NOT NULL,
+    id_dosen INT,
+    kode_mk VARCHAR(50),
+    nama_mk VARCHAR(150),
+    kelas VARCHAR(50),
+    id_ruangan INT,
+    status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
+    metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM',
+    semester VARCHAR(50) DEFAULT 'Genap 2025',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    fingerprint VARCHAR(64) GENERATED ALWAYS AS (
+        MD5(CONCAT_WS('#', tanggal, jam, COALESCE(id_ruangan, 0), COALESCE(kelas, ''), COALESCE(kode_mk, ''), COALESCE(nama_mk, ''), COALESCE(semester, '')))
+    ) STORED UNIQUE,
+    KEY idx_perm_dosen (id_dosen),
+    KEY idx_perm_mk (kode_mk),
+    KEY idx_perm_ruangan (id_ruangan),
+    KEY idx_perm_semester (semester),
+    KEY idx_perm_tgl_sem (tanggal, semester)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

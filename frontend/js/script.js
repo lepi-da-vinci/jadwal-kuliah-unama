@@ -1412,6 +1412,9 @@ async function fetchAllJadwal() {
       if (data.active_semester) {
         updateSemesterDisplay(data.active_semester);
       }
+      if (data.is_enriched && data.missing_recovered > 0) {
+        console.info(`[Permanent Vault] Menampilkan jadwal lengkap: ${data.missing_recovered} data otomatis dipulihkan/dilengkapi dari arsip permanen.`);
+      }
       allJadwal = data.data.map(item => {
         if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
         return item;
@@ -3324,6 +3327,9 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         adminToggle.style.background = 'var(--primary)';
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
         document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'table-cell');
+        if (typeof fetchPermanentComparison === 'function') {
+          fetchPermanentComparison();
+        }
       } else {
         adminToggle.innerText = 'Admin: OFF';
         adminToggle.style.color = 'var(--text-muted)';
@@ -4359,6 +4365,14 @@ async function fetchDbStats() {
       setVal(['cnt-clear-jadwal-utama', 'cnt-backup-jadwal-utama'], c.jadwal || 0);
       setVal(['cnt-clear-jadwal-temp', 'cnt-backup-jadwal-temp'], c.jadwal_temp || 0);
       setVal(['cnt-clear-mk', 'cnt-backup-mk'], c.mata_kuliah || 0);
+
+      if (c.jadwal_permanent !== undefined) {
+        const pCountEl = document.getElementById('permanent-total-count');
+        if (pCountEl) pCountEl.textContent = `${(c.jadwal_permanent || 0).toLocaleString('id-ID')} Sesi`;
+      }
+      if (typeof fetchPermanentComparison === 'function') {
+        fetchPermanentComparison();
+      }
 
       // Grup 2: Master Ruangan & Labor
       setVal(['cnt-clear-ruangan-total', 'cnt-backup-ruangan-total'], c.ruangan || 0);
@@ -5950,6 +5964,125 @@ document.getElementById('restore-db-btn')?.addEventListener('click', async (e) =
 
   openDbRestoreModal();
 });
+
+// ─── Arsip Jadwal Permanen (Kebal Reset) & Pembanding Data ───
+async function fetchPermanentComparison() {
+  const countEl = document.getElementById('permanent-total-count');
+  const badgeEl = document.getElementById('permanent-status-badge');
+  const descEl = document.getElementById('permanent-vault-desc');
+
+  if (!countEl && !badgeEl) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/jadwal/comparison?_t=${Date.now()}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json.status === 'success' && json.data) {
+      const d = json.data;
+      if (countEl) {
+        countEl.textContent = `${(d.total_permanent || 0).toLocaleString('id-ID')} Sesi`;
+      }
+      const diff = (d.diff_count !== undefined) ? d.diff_count : (d.difference || 0);
+      if (badgeEl) {
+        if (d.is_synchronized) {
+          badgeEl.style.background = 'rgba(16, 185, 129, 0.15)';
+          badgeEl.style.color = '#10b981';
+          badgeEl.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+          badgeEl.textContent = '100% Sinkron';
+        } else {
+          badgeEl.style.background = 'rgba(245, 158, 11, 0.15)';
+          badgeEl.style.color = '#f59e0b';
+          badgeEl.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+          badgeEl.textContent = `${diff.toLocaleString('id-ID')} Perlu Sinkron`;
+        }
+      }
+      if (descEl && (d.message || d.recommendation)) {
+        descEl.textContent = d.message || d.recommendation;
+      }
+    }
+  } catch (err) {
+    console.warn("fetchPermanentComparison error:", err);
+  }
+}
+window.fetchPermanentComparison = fetchPermanentComparison;
+
+async function triggerRestoreFromPermanent() {
+  let token = getAdminToken();
+  if (!token) {
+    token = await requestAdminLogin();
+    if (!token) return;
+  }
+
+  const confirmed = await showModernConfirm({
+    title: "Pulihkan Jadwal dari Arsip Permanen?",
+    message: "Data jadwal dari arsip permanen (jadwal_permanent) akan disinkronkan kembali ke tabel jadwal aktif tanpa menghapus data yang sudah ada.",
+    confirmText: "Ya, Sinkronkan",
+    cancelText: "Batal"
+  });
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btn-restore-permanent');
+  const origText = btn ? btn.innerText : 'Sinkronkan ke Aktif';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Menyinkronkan...';
+  }
+
+  try {
+    let res = await fetch(`${API_BASE_URL}/api/jadwal/restore-from-permanent`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' })
+    });
+
+    if (res.status === 401) {
+      setAdminToken(null);
+      const newToken = await requestAdminLogin();
+      if (!newToken) return;
+      res = await fetch(`${API_BASE_URL}/api/jadwal/restore-from-permanent`, {
+        method: 'POST',
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' })
+      });
+    }
+
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      await showModernAlert({
+        title: "Sinkronisasi Berhasil!",
+        message: data.message || "Data jadwal berhasil dipulihkan dari arsip permanen.",
+        type: "success",
+        buttonText: "Selesai"
+      });
+      await fetchPermanentComparison();
+      if (typeof fetchDbStats === 'function') {
+        await fetchDbStats();
+      }
+      if (typeof fetchAllJadwal === 'function') {
+        await fetchAllJadwal();
+      }
+    } else {
+      await showModernAlert({
+        title: "Gagal Sinkronisasi",
+        message: data.detail || data.message || "Terjadi kesalahan saat memulihkan arsip.",
+        type: "error",
+        buttonText: "Tutup"
+      });
+    }
+  } catch (err) {
+    console.error("Error restoring from permanent:", err);
+    await showModernAlert({
+      title: "Gagal Sinkronisasi",
+      message: err.message || "Gagal menghubungi server saat sinkronisasi.",
+      type: "error",
+      buttonText: "Tutup"
+    });
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = origText;
+    }
+  }
+}
+window.triggerRestoreFromPermanent = triggerRestoreFromPermanent;
 
 // ─── Detektor Bentrok: Buka Tab Bentrok di Info Lain ───
 document.getElementById('btn-toggle-conflict-filter')?.addEventListener('click', () => {

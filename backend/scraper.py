@@ -204,6 +204,26 @@ def init_db_schema():
             cursor.executemany("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", default_rooms)
             conn.commit()
             
+        # ─── TABEL CADANGAN PERMANEN (KEBAL RESET & PERSISTEN) ──────
+        ensure_permanent_table_exists(cursor)
+        try:
+            cursor.execute("SELECT COUNT(*) FROM jadwal_permanent")
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("""
+                    INSERT IGNORE INTO jadwal_permanent (
+                        tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                    )
+                    SELECT 
+                        tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                    FROM jadwal
+                    WHERE tanggal IS NOT NULL;
+                """)
+                conn.commit()
+                print("[Database] Initial seeding jadwal_permanent dari tabel jadwal selesai!")
+        except Exception as e_seed:
+            print(f"[Database] Info seeding permanent: {e_seed}")
+        # ─────────────────────────────────────────────────────────────
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -607,6 +627,82 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
 
     conn.commit()
 
+def ensure_permanent_table_exists(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jadwal_permanent (
+            id_jadwal_permanent INT AUTO_INCREMENT PRIMARY KEY,
+            tanggal DATE NOT NULL,
+            hari VARCHAR(20) NOT NULL,
+            jam TIME NOT NULL,
+            id_dosen INT,
+            kode_mk VARCHAR(50),
+            nama_mk VARCHAR(150),
+            kelas VARCHAR(50),
+            id_ruangan INT,
+            status_jadwal VARCHAR(50) DEFAULT 'OnSchedule',
+            metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM',
+            semester VARCHAR(50) DEFAULT 'Genap 2025',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            fingerprint VARCHAR(64) GENERATED ALWAYS AS (
+                MD5(CONCAT_WS('#', tanggal, jam, COALESCE(id_ruangan, 0), COALESCE(kelas, ''), COALESCE(kode_mk, ''), COALESCE(nama_mk, ''), COALESCE(semester, '')))
+            ) STORED UNIQUE,
+            KEY idx_perm_dosen (id_dosen),
+            KEY idx_perm_mk (kode_mk),
+            KEY idx_perm_ruangan (id_ruangan),
+            KEY idx_perm_semester (semester),
+            KEY idx_perm_tgl_sem (tanggal, semester)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+    """)
+
+def sync_temp_to_permanent(conn, cursor, target_semester=None):
+    """
+    Menyinkronkan dan mengarsipkan seluruh data dari jadwal_temp ke jadwal_permanent.
+    Tabel jadwal_permanent kebal terhadap penghapusan dan menjaga keutuhan riwayat data.
+    Menggunakan stored unique fingerprint untuk mencegah duplikasi sekaligus memperbarui status jika ada revisi.
+    """
+    try:
+        ensure_permanent_table_exists(cursor)
+        if target_semester:
+            query = """
+                INSERT INTO jadwal_permanent (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT DISTINCT
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_temp
+                WHERE semester = %s AND tanggal IS NOT NULL
+                ON DUPLICATE KEY UPDATE
+                    status_jadwal = VALUES(status_jadwal),
+                    metode_pembelajaran = VALUES(metode_pembelajaran),
+                    id_dosen = VALUES(id_dosen),
+                    id_ruangan = VALUES(id_ruangan),
+                    nama_mk = VALUES(nama_mk),
+                    updated_at = CURRENT_TIMESTAMP;
+            """
+            cursor.execute(query, (target_semester,))
+        else:
+            query = """
+                INSERT INTO jadwal_permanent (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT DISTINCT
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_temp
+                WHERE tanggal IS NOT NULL
+                ON DUPLICATE KEY UPDATE
+                    status_jadwal = VALUES(status_jadwal),
+                    metode_pembelajaran = VALUES(metode_pembelajaran),
+                    id_dosen = VALUES(id_dosen),
+                    id_ruangan = VALUES(id_ruangan),
+                    nama_mk = VALUES(nama_mk),
+                    updated_at = CURRENT_TIMESTAMP;
+            """
+            cursor.execute(query)
+        conn.commit()
+    except Exception as e:
+        print(f"[Permanent Sync Warning] Gagal arsip ke jadwal_permanent: {e}")
+
 def create_temp_table(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jadwal_temp (
@@ -697,7 +793,9 @@ def save_to_db(data, target_date=None, page="1", target_semester=None):
                 ))
 
         conn.commit()
-        print(f"Berhasil menyimpan {len(data)} jadwal ke database temporary (Semester: {sem_default}).")
+        # Otomatis arsipkan data ke tabel permanen (kebal reset)
+        sync_temp_to_permanent(conn, cursor, sem_default)
+        print(f"Berhasil menyimpan {len(data)} jadwal ke database temporary & arsip permanen (Semester: {sem_default}).")
         
     except mysql.connector.Error as err:
         print(f"Error Database: {err}")
@@ -827,6 +925,9 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                     if not cursor.fetchone():
                         cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan, sem_final))
             
+            # Pastikan seluruh data temp terarsip permanen sebelum dipindahkan ke jadwal aktif
+            sync_temp_to_permanent(conn, cursor, sem_final)
+
             # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA dieksekusi jika data baru valid dan ada)
             cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             cursor.execute("""

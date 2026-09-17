@@ -502,6 +502,40 @@ def get_semua_jadwal(semester: str = None):
         if not target_sem:
             target_sem = scraper.get_active_semester(conn, cursor)
             
+        # ─── KOMPARASI & AUTO-ENRICHMENT DENGAN JADWAL_PERMANENT ───
+        scraper.ensure_permanent_table_exists(cursor)
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
+        cnt_active = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
+        cnt_perm = cursor.fetchone()['cnt']
+        
+        is_enriched = False
+        missing_count = 0
+        if cnt_active < cnt_perm:
+            # Pulihkan data yang hilang dari jadwal_permanent ke jadwal aktif secara otomatis
+            heal_query = '''
+                INSERT IGNORE INTO jadwal (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT 
+                    jp.tanggal, jp.hari, jp.jam, jp.id_dosen, jp.kode_mk, jp.nama_mk, jp.kelas, jp.id_ruangan, jp.status_jadwal, jp.metode_pembelajaran, jp.semester
+                FROM jadwal_permanent jp
+                LEFT JOIN jadwal j ON (
+                    j.tanggal = jp.tanggal AND j.jam = jp.jam 
+                    AND COALESCE(j.id_ruangan, 0) = COALESCE(jp.id_ruangan, 0)
+                    AND COALESCE(j.kelas, '') = COALESCE(jp.kelas, '')
+                    AND COALESCE(j.kode_mk, '') = COALESCE(jp.kode_mk, '')
+                    AND j.semester = jp.semester
+                )
+                WHERE jp.semester = %s AND j.id_jadwal IS NULL
+            '''
+            cursor.execute(heal_query, (target_sem,))
+            conn.commit()
+            missing_count = cursor.rowcount
+            if missing_count > 0:
+                is_enriched = True
+                print(f"[Auto-Enrichment] Berhasil melengkapi {missing_count} jadwal dari arsip permanen untuk semester {target_sem}.")
+
         query = '''
             SELECT 
                 j.hari, 
@@ -557,10 +591,99 @@ def get_semua_jadwal(semester: str = None):
             "status": "success", 
             "active_semester": target_sem,
             "total": len(hasil),
+            "total_permanent": cnt_perm,
+            "is_enriched": is_enriched,
+            "missing_recovered": missing_count,
             "data": hasil
         }
     except mysql.connector.Error as err:
         return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/jadwal/comparison")
+def get_jadwal_comparison(semester: str = None):
+    """Membandingkan jumlah dan status kelengkapan data jadwal aktif vs cadangan permanen"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        target_sem = semester or scraper.get_active_semester(conn, cursor)
+        scraper.ensure_permanent_table_exists(cursor)
+        
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
+        cnt_active = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
+        cnt_perm = cursor.fetchone()['cnt']
+        
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal")
+        cnt_active_all = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent")
+        cnt_perm_all = cursor.fetchone()['cnt']
+        
+        diff = cnt_perm - cnt_active
+        is_synced = (diff <= 0)
+        
+        return {
+            "status": "success",
+            "semester": target_sem,
+            "total_active": cnt_active,
+            "total_permanent": cnt_perm,
+            "total_active_all_semesters": cnt_active_all,
+            "total_permanent_all_semesters": cnt_perm_all,
+            "is_synchronized": is_synced,
+            "difference": max(0, diff),
+            "message": "Data jadwal aktif 100% lengkap dan selaras dengan arsip permanen." if is_synced else f"Terdapat selisih {diff} jadwal pada arsip permanen yang dapat dipulihkan."
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/jadwal/restore-from-permanent")
+def restore_from_permanent(semester: str = None, admin: str = Depends(verify_admin_token)):
+    """Memulihkan seluruh jadwal dari arsip permanen ke tabel jadwal aktif (memerlukan token Admin)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        scraper.ensure_permanent_table_exists(cursor)
+        
+        if semester and semester.strip().lower() != 'all':
+            sem = semester.strip()
+            query = """
+                INSERT IGNORE INTO jadwal (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT 
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_permanent
+                WHERE semester = %s AND tanggal IS NOT NULL;
+            """
+            cursor.execute(query, (sem,))
+        else:
+            query = """
+                INSERT IGNORE INTO jadwal (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT 
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_permanent
+                WHERE tanggal IS NOT NULL;
+            """
+            cursor.execute(query)
+            
+        conn.commit()
+        restored_cnt = cursor.rowcount
+        return {
+            "status": "success",
+            "message": f"Berhasil memulihkan {restored_cnt} jadwal dari arsip permanen.",
+            "restored_count": restored_cnt
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
@@ -579,6 +702,7 @@ def get_db_stats():
         counts = {
             "jadwal": 0,
             "jadwal_temp": 0,
+            "jadwal_permanent": 0,
             "mata_kuliah": 0,
             "ruangan": 0,
             "ruangan_lab": 0,
@@ -600,6 +724,7 @@ def get_db_stats():
         queries = {
             "jadwal": "SELECT COUNT(*) FROM jadwal",
             "jadwal_temp": "SELECT COUNT(*) FROM jadwal_temp",
+            "jadwal_permanent": "SELECT COUNT(*) FROM jadwal_permanent",
             "mata_kuliah": "SELECT COUNT(*) FROM mata_kuliah",
             "ruangan": "SELECT COUNT(*) FROM ruangan",
             "ruangan_lab": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'",
@@ -650,6 +775,11 @@ def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depe
         deleted_summary = {}
         targets = set(req.targets or [])
         is_all = "all" in targets or "semua" in targets
+        
+        # GUARD KEBAL: Tabel jadwal_permanent dilindungi secara mutlak dan tidak boleh dihapus
+        if "jadwal_permanent" in targets:
+            targets.remove("jadwal_permanent")
+        print("[Security Guard] Tabel jadwal_permanent kebal dan tetap aman dari penghapusan.")
         
         # 1. Jadwal Perkuliahan & Temp & Master MK & Jeda Lab
         if is_all or "jadwal" in targets or "jadwal_all" in targets:
@@ -949,6 +1079,10 @@ def backup_selective_db(req: BackupDbRequest = BackupDbRequest(), admin: str = D
         # 5. Tabel Jadwal Temp
         if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_temp" in targets:
             sql_parts.append(generate_table_sql_dump(cursor, "jadwal_temp", "SELECT * FROM jadwal_temp"))
+
+        # 5b. Tabel Cadangan Permanen Jadwal (Master Arsip Anti-Hilang)
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_permanent" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jadwal_permanent", "SELECT * FROM jadwal_permanent"))
 
         # 6. Tabel Jeda Lab (opsional, tabel legacy — skip jika tidak ada)
         if is_all or "jadwal" in targets or "jadwal_all" in targets or "notif_all" in targets or "notif_jeda" in targets:
