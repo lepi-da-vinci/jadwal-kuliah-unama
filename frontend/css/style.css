@@ -2944,6 +2944,28 @@ body.dark-theme .db-code {
 
 
 /* ─── Custom Aesthetic Confirmation & Alert Modals ─── */
+#custom-confirm-modal,
+#password-modal,
+#danger-modal,
+#final-danger-modal {
+  z-index: 100150 !important;
+}
+
+#custom-alert-modal {
+  z-index: 100200 !important;
+}
+
+#custom-confirm-modal .modal-box,
+#password-modal .modal-box,
+#danger-modal .modal-box,
+#final-danger-modal .modal-box {
+  z-index: 100151 !important;
+}
+
+#custom-alert-modal .modal-box {
+  z-index: 100201 !important;
+}
+
 .custom-confirm-box {
   animation: confirmPop 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: center center;
