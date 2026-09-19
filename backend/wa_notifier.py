@@ -328,7 +328,7 @@ def update_profil_aslab(nama_panggilan_baru: str = None, ruangan_baru: str = Non
         
         no_wa = re.sub(r'\D', '', sender)
         if no_wa.startswith('0'): no_wa = '62' + no_wa[1:]
-        cursor.execute("SELECT id_aslab, id_ruangan, nama_aslab FROM asisten_lab WHERE no_wa = %s OR no_wa = %s", (sender, no_wa))
+        cursor.execute("SELECT id_aslab, id_ruangan, nama_aslab FROM asisten_lab WHERE no_wa = %s OR no_wa = %s OR wa_lid = %s", (sender, no_wa, sender))
         aslab = cursor.fetchone()
         if not aslab:
             return "Nomor Anda belum terdaftar sebagai aslab."
@@ -431,8 +431,8 @@ def handle_incoming_message(sender, text):
             SELECT a.id_aslab, a.nama_aslab, r.id_ruangan, r.nama_ruangan, r.kampus 
             FROM asisten_lab a
             JOIN ruangan r ON a.id_ruangan = r.id_ruangan
-            WHERE a.no_wa = %s OR a.no_wa = %s
-        ''', (no_wa, sender))
+            WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
+        ''', (no_wa, sender, sender))
         aslab = cursor.fetchone()
     except Exception as e:
         print(e)
@@ -444,10 +444,246 @@ def handle_incoming_message(sender, text):
 
     # Jika TIDAK terdaftar
     if not aslab:
+        # 1. Perintah GLOBAL (bisa dipanggil kapan saja saat proses registrasi)
+        if sender in registration_states:
+            state = registration_states[sender]
+            step = state.get("step", 1)
+            
+            # 1a. BATAL REGISTRASI
+            if any(kw in text_clean for kw in ["batal", "cancel", "dak lanjut", "dak jadi", "gak jadi", "stop"]):
+                del registration_states[sender]
+                return "Pendaftaran dibatalkan mase. Kalau mau daftar lagi, tinggal ketik *daftar* atau *inpo* ya! 👍"
+            
+            # 1b. DAFTAR ULANG / RESET KE AWAL
+            if any(kw in text_clean for kw in ["daftar ulang", "daftar lagi", "ulang", "ulang mas", "ulang mase", "mulai lagi", "reset", "tcih daftar"]):
+                registration_states[sender] = {"step": 1, "failures": 0}
+                return "Sesi pendaftaran telah direset! Kita mulai dari awal ya mase. 👍\n\nSebutkan *nama panggilan* mase:"
+                
+            # 1c. MINTA / KIRIM TOKEN LAGI
+            if any(kw in text_clean for kw in ["minta token lagi", "kirim token lagi", "kirim ulang token", "token lagi", "minta token", "resend token", "resend", "ulang token", "kirim lagi", "minta kode lagi"]):
+                if step != 3:
+                    return "Mase belum sampai tahap verifikasi token nih. Lengkapi nama dan lab dulu ya mase!\n_(Ketik *daftar ulang* jika mau mulai dari awal)_"
+                
+                new_token = str(random.randint(1000, 9999))
+                state["token"] = new_token
+                state["token_failures"] = 0
+                
+                try:
+                    conn = scraper.get_db()
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute("""
+                        SELECT id_aslab, nama_aslab, no_wa, wa_lid 
+                        FROM asisten_lab 
+                        WHERE no_wa IS NOT NULL AND no_wa != '' 
+                          AND no_wa != %s 
+                          AND (wa_lid IS NULL OR wa_lid != %s) 
+                        ORDER BY RAND() LIMIT 1
+                    """, (state.get("no_wa"), sender))
+                    aslab_lain = cursor.fetchone()
+                    
+                    if aslab_lain:
+                        target_wa = aslab_lain['wa_lid'] or aslab_lain['no_wa']
+                        pesan_token = f"🔒 *PEMBERITAHUAN KEAMANAN ASLAB*\n\nAda Aslab (*{state['nama_aslab']}* - {state['nama_ruangan']}) meminta token baru.\nJika benar itu dia, berikan 4 digit token ini:\n\n👉 *{new_token}*"
+                        send_wa_message(target_wa, pesan_token)
+                        return f"Sip mase! Token baru (*4 digit*) sudah dikirimkan ke Aslab kita (*{aslab_lain['nama_aslab']}*).\n\nSilakan tanyakan token barunya ke beliau dan balas 4 digit token ke sini ya!\n\n_💡 Pilihan:_\n- Balas *4 digit token* untuk verifikasi\n- Ketik *daftar ulang* jika ada salah data lab/nama\n- Ketik *batal* untuk membatalkan"
+                    else:
+                        cursor.execute("""
+                            INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid) 
+                            VALUES (%s, %s, %s, %s)
+                        """, (state['nama_aslab'], state['no_wa'], state['id_ruangan'], sender if '@lid' in sender else None))
+                        conn.commit()
+                        del registration_states[sender]
+                        return f"🎉 *Pendaftaran Berhasil!*\n\nSelamat datang mas *{state['nama_aslab']}* ({state['nama_ruangan']})! Silakan ketik *info* untuk mulai ngobrol dengan bot!"
+                except Exception as e:
+                    print(f"Error resend token: {e}")
+                    return "Terjadi kendala saat mengirim ulang token. Coba ketik *kirim token lagi* sesaat lagi ya."
+                finally:
+                    if 'conn' in locals() and conn.is_connected():
+                        cursor.close()
+                        conn.close()
+
+            # 2. LANGKAH-LANGKAH REGISTRASI BERTAHAP
+            if step == 1:
+                nama_aslab = text.strip()
+                if len(nama_aslab) < 2 or len(nama_aslab) > 50:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Sesi dibatalkan karena nama tidak valid. Ketik *daftar* untuk mulai lagi."
+                    return "Namanya terlalu pendek atau kurang jelas mase. Sebutin nama panggilan yang bener dong!"
+                
+                state["nama_aslab"] = nama_aslab
+                state["failures"] = 0
+                
+                is_lid = '@lid' in sender or not no_wa or len(no_wa) < 9
+                if is_lid:
+                    state["step"] = 1.2
+                    return f"Oke mas *{nama_aslab}*! Karena WhatsApp mase memakai format multi-device, tolong sebutkan nomor WhatsApp asli mase ya (Contoh: 081234567890):"
+                else:
+                    state["no_wa"] = no_wa
+                    state["step"] = 1.5
+                    return f"Oke mas *{nama_aslab}*, pegang lab apa dan di kampus mana (kobar/thehok)?\n(Contoh: *lab 1.8 kobar*)"
+                    
+            elif step == 1.2:
+                clean_phone = re.sub(r'\D', '', text)
+                if clean_phone.startswith('0'):
+                    clean_phone = '62' + clean_phone[1:]
+                elif clean_phone.startswith('8'):
+                    clean_phone = '62' + clean_phone
+                    
+                if len(clean_phone) < 10 or len(clean_phone) > 15:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Sesi dibatalkan karena format nomor WA tidak valid. Ketik *daftar* untuk mengulang."
+                    return "Nomor WhatsApp kurang valid mase. Masukkan nomor HP aktif (Contoh: 081234567890):"
+                
+                state["no_wa"] = clean_phone
+                state["step"] = 1.5
+                state["failures"] = 0
+                return f"Sip! Sekarang mas *{state['nama_aslab']}* pegang lab apa dan di kampus mana (kobar/thehok)?\n(Contoh: *lab 1.8 kobar*)"
+                
+            elif step == 1.5:
+                match_ruang = re.search(r'\b\d+\.\d+\b', text_clean)
+                kampus_kunci = "kobar" if "kobar" in text_clean else ("thehok" if "thehok" in text_clean else "")
+                if match_ruang:
+                    no_ruang = match_ruang.group(0)
+                    try:
+                        conn = scraper.get_db()
+                        cursor = conn.cursor(dictionary=True, buffered=True)
+                        if kampus_kunci:
+                            cursor.execute("SELECT id_ruangan, nama_ruangan FROM ruangan WHERE nama_ruangan LIKE %s AND kampus LIKE %s", (f"%{no_ruang}%", f"%{kampus_kunci}%"))
+                        else:
+                            cursor.execute("SELECT id_ruangan, nama_ruangan FROM ruangan WHERE nama_ruangan LIKE %s", (f"%{no_ruang}%",))
+                        ruang_list = cursor.fetchall()
+                        if ruang_list:
+                            ruang = ruang_list[0]
+                            state["id_ruangan"] = ruang['id_ruangan']
+                            state["nama_ruangan"] = ruang['nama_ruangan']
+                            token = str(random.randint(1000, 9999))
+                            state["token"] = token
+                            state["step"] = 3
+                            state["failures"] = 0
+                            state["token_failures"] = 0
+                            
+                            cursor.execute("""
+                                SELECT id_aslab, nama_aslab, no_wa, wa_lid 
+                                FROM asisten_lab 
+                                WHERE no_wa IS NOT NULL AND no_wa != '' 
+                                  AND no_wa != %s 
+                                  AND (wa_lid IS NULL OR wa_lid != %s) 
+                                ORDER BY RAND() LIMIT 1
+                            """, (state.get("no_wa"), sender))
+                            aslab_lain = cursor.fetchone()
+                            
+                            if aslab_lain:
+                                target_wa = aslab_lain['wa_lid'] or aslab_lain['no_wa']
+                                pesan_token = f"🔒 *PEMBERITAHUAN KEAMANAN ASLAB*\n\nAda Aslab yang mau daftar (*{state['nama_aslab']}* - {state['nama_ruangan']}). Jika benar itu dia, beritahu dia token pendaftaran ini:\n\n👉 *{token}*"
+                                send_wa_message(target_wa, pesan_token)
+                                return f"Sip mas *{state['nama_aslab']}*! Untuk keamanan, saya sudah mengirimkan 4 digit token ke Aslab kita (*{aslab_lain['nama_aslab']}*).\n\nSilakan japri {aslab_lain['nama_aslab']} untuk minta tokennya dan balas 4 digit token tersebut ke sini ya mase!\n\n_💡 Pilihan bantuan:_\n- Balas *4 digit token* untuk verifikasi\n- Ketik *minta token lagi* jika token belum diterima\n- Ketik *daftar ulang* jika ada salah nama/lab\n- Ketik *batal* untuk batalkan"
+                            else:
+                                cursor.execute("""
+                                    INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid) 
+                                    VALUES (%s, %s, %s, %s)
+                                """, (state['nama_aslab'], state['no_wa'], state['id_ruangan'], sender if '@lid' in sender else None))
+                                conn.commit()
+                                del registration_states[sender]
+                                return f"🎉 *Pendaftaran Berhasil!*\n\nSelamat bergabung mas *{state['nama_aslab']}* ({state['nama_ruangan']})! Silakan ketik *info* untuk ngobrol!"
+                        else:
+                            state["failures"] = state.get("failures", 0) + 1
+                            if state["failures"] >= 4:
+                                del registration_states[sender]
+                                return "Gagal menemukan ruangan lab berkali-kali mase. Pendaftaran direset. Ketik *daftar* untuk mengulang."
+                            return "Waduh nama lab-nya belum ketemu mase. Coba sebutkan nama lab dan kampusnya yang benar ya. (Contoh: *lab 1.8 kobar*)"
+                    except Exception as e:
+                        print(f"Error mencari lab: {e}")
+                        return "Terjadi kendala sistem saat mencari data lab. Coba ulangi lagi."
+                    finally:
+                        if 'conn' in locals() and conn.is_connected():
+                            cursor.close()
+                            conn.close()
+                else:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Pendaftaran dibatalkan karena data ruangan tidak sesuai. Ketik *daftar* untuk mulai lagi."
+                    return "Waduh format lab belum pas mase. Sebutin nama lab (misal 1.8) dan kampusnya (kobar/thehok) ya. (Contoh: *lab 1.8 kobar*)"
+                    
+            elif step == 3:
+                clean_input = re.sub(r'\D', '', text_clean)
+                if clean_input == state.get("token"):
+                    try:
+                        conn = scraper.get_db()
+                        cursor = conn.cursor(dictionary=True)
+                        no_wa_final = state.get("no_wa") or no_wa
+                        wa_lid_final = sender if '@lid' in sender else None
+                        
+                        cursor.execute("SELECT id_aslab FROM asisten_lab WHERE no_wa = %s", (no_wa_final,))
+                        existing = cursor.fetchone()
+                        if existing:
+                            cursor.execute("""
+                                UPDATE asisten_lab 
+                                SET nama_aslab = %s, id_ruangan = %s, wa_lid = %s 
+                                WHERE id_aslab = %s
+                            """, (state['nama_aslab'], state['id_ruangan'], wa_lid_final, existing['id_aslab']))
+                        else:
+                            cursor.execute("""
+                                INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid) 
+                                VALUES (%s, %s, %s, %s)
+                            """, (state['nama_aslab'], no_wa_final, state['id_ruangan'], wa_lid_final))
+                            
+                        conn.commit()
+                        del registration_states[sender]
+                        return f"🎉 *Pendaftaran Berhasil!*\n\nSelamat mas *{state['nama_aslab']}*, nomor mase sudah terdaftar resmi sebagai Asisten Lab untuk *{state['nama_ruangan']}*! 🚀\n\nSilakan ketik *info* atau panggil saya kapan saja untuk cek jadwal lab dan ngobrol!"
+                    except Exception as e:
+                        print(f"Error insert aslab: {e}")
+                        return "Terjadi kesalahan saat menyimpan pendaftaran nomor. Coba ketik *daftar ulang* ya mase."
+                    finally:
+                        if 'conn' in locals() and conn.is_connected():
+                            cursor.close()
+                            conn.close()
+                else:
+                    state["token_failures"] = state.get("token_failures", 0) + 1
+                    if state["token_failures"] >= 4:
+                        new_token = str(random.randint(1000, 9999))
+                        state["token"] = new_token
+                        state["token_failures"] = 0
+                        
+                        try:
+                            conn = scraper.get_db()
+                            cursor = conn.cursor(dictionary=True)
+                            cursor.execute("""
+                                SELECT id_aslab, nama_aslab, no_wa, wa_lid 
+                                FROM asisten_lab 
+                                WHERE no_wa IS NOT NULL AND no_wa != '' 
+                                  AND no_wa != %s 
+                                  AND (wa_lid IS NULL OR wa_lid != %s) 
+                                ORDER BY RAND() LIMIT 1
+                            """, (state.get("no_wa"), sender))
+                            aslab_lain = cursor.fetchone()
+                            if aslab_lain:
+                                target_wa = aslab_lain['wa_lid'] or aslab_lain['no_wa']
+                                send_wa_message(target_wa, f"🔒 *PEMBERITAHUAN KEAMANAN ASLAB*\n\nToken baru untuk (*{state['nama_aslab']}* - {state['nama_ruangan']}): 👉 *{new_token}*")
+                                return f"⚠️ *Token salah beberapa kali mase!*\n\nSaya sudah membuatkan dan mengirimkan *token baru* ke Aslab kita (*{aslab_lain['nama_aslab']}*). Silakan tanyakan token barunya ke beliau ya!\n\n_💡 Atau ketik *daftar ulang* jika ingin mengulang dari awal, atau *batal* untuk batalkan._"
+                        except Exception:
+                            pass
+                        finally:
+                            if 'conn' in locals() and conn.is_connected():
+                                cursor.close()
+                                conn.close()
+                                
+                        return "Token salah berkali-kali mase. Ketik *minta token lagi* untuk token baru, atau *daftar ulang* untuk mulai dari awal."
+                    else:
+                        sisa = 4 - state["token_failures"]
+                        return f"❌ *Token salah mase!* (Sisa percobaan: {sisa})\n\nSilakan masukkan 4 digit token yang benar.\n\n_💡 Pilihan bantuan:_\n- Ketik *minta token lagi* untuk dikirimkan token baru\n- Ketik *daftar ulang* jika ingin mereset data nama/lab\n- Ketik *batal* untuk membatalkan"
+
+        # Jika sender BELUM ada di registration_states
         print(f"[WA INCOMING] Nomor tidak terdaftar sebagai asisten lab: {sender} ({no_wa})")
-        if text_clean in ["info", "inpo", "daftar", "halo", "hai", "bantuan", "menu"]:
-            return "Halo! Nomor Anda belum terdaftar sebagai Asisten Lab resmi. Pendaftaran nomor aslab hanya dapat dilakukan oleh Admin melalui Website Jadwal Kuliah."
-        return None
+        if any(kw in text_clean for kw in ["daftar", "inpo", "info", "halo", "hai", "registrasi", "ulang", "mulai", "menu", "bantuan", "asem", "baiqlah", "ya"]):
+            registration_states[sender] = {"step": 1, "failures": 0}
+            return "Halo! Mau daftar sebagai Asisten Lab resmi ya? 🤖\n\nSebutkan *nama panggilan* mase dulu yuk:\n_(Ketik *batal* jika tidak jadi)_"
+            
+        return "Halo! Nomor Anda belum terdaftar sebagai Asisten Lab resmi.\nKetik *daftar* atau *inpo* untuk mulai pendaftaran Aslab ya mase! 🚀"
 
     # Jika TERDAFTAR
     print(f"[WA INCOMING] Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})")
