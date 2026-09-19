@@ -286,7 +286,7 @@ def get_ngrok_link():
     # 1. Cek apakah ada URL Publik di .env (misal domain custom Cloudflare)
     env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
     if env_url and env_url.startswith("http"):
-        return f"Link Server Web Jadwal: {env_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+        return f"Link Server Web Jadwal: {env_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
 
     # 2. Cek live tunnel_logs/tunnel.log
     for lp in ["tunnel_logs/tunnel.log", "/var/log/cloudflared/tunnel.log", "/app/tunnel_logs/tunnel.log", "tunnel.log"]:
@@ -295,7 +295,7 @@ def get_ngrok_link():
                 with open(lp, "r", encoding="utf-8", errors="ignore") as f:
                     matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', f.read())
                     if matches:
-                        return f"Link Server Cloudflare: {matches[-1]}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+                        return f"Link Server Cloudflare: {matches[-1]}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
             except Exception:
                 pass
 
@@ -305,7 +305,7 @@ def get_ngrok_link():
             with open("last_tunnel.txt", "r") as f:
                 saved_url = f.read().strip()
                 if saved_url.startswith("http"):
-                    return f"Link Server Cloudflare: {saved_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+                    return f"Link Server Cloudflare: {saved_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
         except Exception:
             pass
 
@@ -316,7 +316,7 @@ def get_ngrok_link():
             tunnels = response.json().get('tunnels', [])
             for tunnel in tunnels:
                 if tunnel['public_url'].startswith("https"):
-                    return f"Link Server Ngrok: {tunnel['public_url']}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+                    return f"Link Server Ngrok: {tunnel['public_url']}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
     except Exception:
         pass
 
@@ -325,7 +325,7 @@ def get_ngrok_link():
             with open("last_ngrok.txt", "r") as f:
                 saved_url = f.read().strip()
                 if saved_url.startswith("http"):
-                    return f"Link Server Ngrok: {saved_url}\n\n💡 *Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+                    return f"Link Server Ngrok: {saved_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
         except Exception:
             pass
 
@@ -420,6 +420,148 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
         assigned_key = random.choice(AVAILABLE_API_KEYS) if AVAILABLE_API_KEYS else None
         chat_sessions[sender] = {'chat': chat, 'api_key': assigned_key}
     return chat_sessions[sender]
+
+
+# =================== PYTHON FALLBACK ENGINE ===================
+aslab_session_states = {}
+gemini_cooldown_until = 0
+
+def is_gemini_available():
+    global gemini_cooldown_until
+    if not AVAILABLE_API_KEYS:
+        return False
+    if time.time() < gemini_cooldown_until:
+        return False
+    return True
+
+def mark_gemini_exhausted(duration_seconds=180):
+    global gemini_cooldown_until
+    gemini_cooldown_until = time.time() + duration_seconds
+    print(f"[GEMINI EXHAUSTED] Token/kuota habis atau API limit. Cooldown {duration_seconds} detik, beralih ke Python engine.")
+
+def extract_date_or_today(text_clean):
+    now = datetime.datetime.now()
+    if 'besok' in text_clean:
+        return (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    if 'kemarin' in text_clean:
+        return (now - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    if 'lusa' in text_clean:
+        return (now + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+    m = re.search(r'\b\d{4}-\d{2}-\d{2}\b', text_clean)
+    if m:
+        return m.group(0)
+    m2 = re.search(r'\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b', text_clean)
+    if m2:
+        d, m_val, y = m2.groups()
+        return f"{y}-{int(m_val):02d}-{int(d):02d}"
+    return now.strftime("%Y-%m-%d")
+
+def fallback_python_handler(sender, text, aslab):
+    global aslab_session_states
+    text_clean = text.strip().lower()
+    nama = aslab.get('nama_aslab', 'mas')
+    ruang = f"{aslab.get('nama_ruangan', '')} ({aslab.get('kampus', '')})"
+    kampus_default = aslab.get('kampus') or 'Kobar'
+    label_ruang = ruang if any(ruang.lower().startswith(p) for p in ["lab", "labor", "ruang"]) else f"Lab {ruang}"
+    
+    # 1. Cek State Interaktif Aslab sebelumnya
+    if sender in aslab_session_states:
+        state = aslab_session_states[sender]
+        step = state.get("step")
+        
+        # Pembatalan
+        if any(w in text_clean for w in ["batal", "cancel", "stop", "dak jadi", "gak jadi"]):
+            del aslab_session_states[sender]
+            return "Perintah dibatalkan mas."
+            
+        if step == "cari_dosen":
+            del aslab_session_states[sender]
+            return cari_posisi_dosen(text.strip())
+
+    # 2. Cek Request Ganti Profil Aslab
+    if text_clean.startswith("ganti nama ") or text_clean.startswith("ubah nama "):
+        new_name = text[11:].strip()
+        current_sender_context.sender = sender
+        return update_profil_aslab(nama_panggilan_baru=new_name)
+        
+    if text_clean.startswith("ganti lab ") or text_clean.startswith("ubah lab "):
+        new_room = text[10:].strip()
+        current_sender_context.sender = sender
+        return update_profil_aslab(ruangan_baru=new_room)
+
+    # 3. Cek Menu / Sapaan Umum
+    if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
+        re.search(r'\b(menu|inpo|infoo|inpoo)\b', text_clean)):
+        return (
+            f"naon mas {nama},\n"
+            f"ni inpo yang ada:\n\n"
+            f"1. Jadwal {label_ruang}\n"
+            f"2. Jadwal Semua Lab ({kampus_default})\n"
+            f"3. Cek Lab Kosong\n"
+            f"4. Info Mase\n"
+            f"5. Cari Posisi Dosen\n"
+            f"6. Link Server Web\n\n"
+            f"Balas dengan angka 1 s/d 6 atau ketik langsung nama lab / dosen."
+        )
+
+    # 4. Opsi 1: Jadwal Lab Sendiri
+    if text_clean == "1" or any(text_clean.startswith(k) for k in ["jadwal saya", "jadwal sendiri", "lab saya", "ruang saya"]):
+        target_date = extract_date_or_today(text_clean)
+        return cek_jadwal_lab_tertentu(aslab['nama_ruangan'], target_date)
+
+    # 5. Opsi 2: Jadwal Semua Lab
+    if text_clean == "2" or any(text_clean.startswith(k) for k in ["jadwal semua", "semua lab", "jadwal kobar", "jadwal thehok"]):
+        target_date = extract_date_or_today(text_clean)
+        k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else kampus_default)
+        return cek_semua_lab_kampus(k, target_date)
+
+    # 6. Opsi 3: Cek Lab Kosong
+    if text_clean == "3" or any(text_clean.startswith(k) for k in ["lab kosong", "cek lab kosong", "kosong"]):
+        target_date = extract_date_or_today(text_clean)
+        k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else kampus_default)
+        return cek_lab_kosong(k, target_date)
+
+    # 7. Opsi 4: Info Mase
+    if text_clean == "4" or any(text_clean.startswith(k) for k in ["info mase", "inpo mase", "pengumuman", "info hari ini", "inpo hari ini"]):
+        return get_info_mase()
+
+    # 8. Opsi 5: Cari Posisi Dosen
+    if text_clean == "5" or text_clean in ["cari dosen", "posisi dosen", "dosen"]:
+        aslab_session_states[sender] = {"step": "cari_dosen"}
+        return "Siapa nama dosennya mas?"
+
+    # Cari Dosen langsung (misal: "dosen andi", "posisi dosen budi", "pak andi", "bu lia", "5 budi")
+    match_dosen = re.search(r'\b(?:posisi\s+)?(?:dosen|pak|bu|ibu)\s+([a-zA-Z\s\.\,]+)', text_clean)
+    if match_dosen:
+        dosen_name = match_dosen.group(1).strip()
+        if len(dosen_name) >= 2:
+            return cari_posisi_dosen(dosen_name)
+    if text_clean.startswith("5 ") and len(text_clean) > 2:
+        return cari_posisi_dosen(text[2:].strip())
+
+    # 9. Opsi 6: Link Server / Ngrok / Web / Barcode
+    if text_clean == "6" or any(k in text_clean for k in ["link", "ngrok", "server", "web", "barcode", "qr", "tunnel", "cloudflare"]):
+        return get_ngrok_link()
+
+    # 10. Cek Ruangan Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11")
+    match_room = re.search(r'\b(?:lab\s*)?(\d+\.\d+)\b', text_clean)
+    if match_room:
+        room_no = match_room.group(1)
+        target_date = extract_date_or_today(text_clean)
+        return cek_jadwal_lab_tertentu(room_no, target_date)
+
+    # 11. Default Fallback: Menu Angka
+    return (
+        f"naon mas {nama},\n"
+        f"ni inpo yang ada:\n\n"
+        f"1. Jadwal {label_ruang}\n"
+        f"2. Jadwal Semua Lab ({kampus_default})\n"
+        f"3. Cek Lab Kosong\n"
+        f"4. Info Mase\n"
+        f"5. Cari Posisi Dosen\n"
+        f"6. Link Server Web\n\n"
+        f"Balas dengan angka 1 s/d 6 atau ketik langsung nama lab / dosen."
+    )
 
 
 # =================== MESSAGE HANDLER ===================
@@ -715,7 +857,10 @@ def handle_incoming_message(sender, text):
     print(f"[WA INCOMING] Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})")
     send_wa_typing(sender, 'composing')
     
-    if AVAILABLE_API_KEYS:
+    if sender in aslab_session_states:
+        return fallback_python_handler(sender, text, aslab)
+
+    if is_gemini_available():
         try:
             current_sender_context.sender = sender
             session_data = get_or_create_chat_session(sender, aslab['nama_aslab'], aslab['nama_ruangan'], aslab['kampus'])
@@ -727,14 +872,21 @@ def handle_incoming_message(sender, text):
                     genai.configure(api_key=api_key)
                 response = chat.send_message(text)
                 
-            return response.text
+            if response and response.text:
+                return response.text
+            else:
+                print("[GEMINI] Respon kosong atau terfilter, beralih ke Python engine.")
+                return fallback_python_handler(sender, text, aslab)
         except Exception as e:
-            print(f"Gemini AI Error: {e}")
-            return "Waduh, sistem AI lagi error nih mas. Coba lagi nanti ya."
+            err_str = str(e).lower()
+            print(f"[GEMINI AI ERROR]: {e}")
+            if any(term in err_str for term in ["429", "quota", "resourceexhausted", "resource_exhausted", "ratelimit", "rate limit", "token"]):
+                mark_gemini_exhausted(180) # Cooldown 3 menit sebelum mencoba AI lagi
+            print("[DYNAMIC SWITCH] Beralih otomatis ke engine Python.")
+            return fallback_python_handler(sender, text, aslab)
     else:
-        if re.search(r'\b(info|inpo|infoo|inpoo|oi)\b', text_clean):
-            return "Mas belum pasang API Key Gemini nih, jadi saya pake mode lama kaku wkwk.\n\n1. Jadwal Sendiri\n2. Jadwal Semua\n3. Lab Kosong"
-        return "Sistem AI tidak aktif, mohon pasang GEMINI_API_KEYS di file .env."
+        print(f"[WA ENGINE] Mode fallback Python aktif untuk {aslab['nama_aslab']}.")
+        return fallback_python_handler(sender, text, aslab)
 
 
 # =========================================================================================
