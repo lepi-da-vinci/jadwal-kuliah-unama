@@ -1214,7 +1214,7 @@ window.openSemesterModal = function() {
   if (!testModal) return;
 
   // Sembunyikan view lainnya
-  const viewIds = ['wa-modal-menu', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-edit', 'wa-modal-qr', 'wa-modal-data-ruangan', 'wa-modal-add-ruangan', 'wa-modal-monitor'];
+  const viewIds = ['wa-modal-menu', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-edit', 'wa-modal-qr', 'wa-modal-data-ruangan', 'wa-modal-add-ruangan'];
   viewIds.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
@@ -3396,7 +3396,6 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       if (qrView) qrView.style.display = 'none';
       if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
-      if (document.getElementById('wa-modal-monitor')) document.getElementById('wa-modal-monitor').style.display = 'none';
       if (document.getElementById('wa-modal-semester')) document.getElementById('wa-modal-semester').style.display = 'none';
       modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
@@ -3787,27 +3786,6 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     // Kembali dari Ruangan
     document.getElementById('data-ruangan-back-btn')?.addEventListener('click', showMenu);
     document.getElementById('add-ruangan-back-btn')?.addEventListener('click', showMenu);
-
-    // Navigasi ke Live Monitor & Log Bot WA
-    const btnShowWaMonitor = document.getElementById('btn-show-wa-monitor');
-    const monitorView = document.getElementById('wa-modal-monitor');
-    if (btnShowWaMonitor) {
-      btnShowWaMonitor.onclick = async () => {
-        menuView.style.display = 'none';
-        dataView.style.display = 'none';
-        addView.style.display = 'none';
-        editView.style.display = 'none';
-        if (qrView) qrView.style.display = 'none';
-        if (dataRuanganView) dataRuanganView.style.display = 'none';
-        if (addRuanganView) addRuanganView.style.display = 'none';
-        if (monitorView) monitorView.style.display = 'flex';
-        modalTitle.innerText = "Live Monitor & Log Bot WA";
-        modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>`;
-        await fetchWaBotStatus();
-      };
-    }
-    document.getElementById('wa-monitor-back-btn')?.addEventListener('click', showMenu);
-    document.getElementById('btn-refresh-wa-monitor')?.addEventListener('click', () => fetchWaBotStatus());
 
     // Submit Tambah Ruangan
     const btnAddRuanganSubmit = document.getElementById('add-ruangan-submit-btn');
@@ -5590,75 +5568,6 @@ document.getElementById('backup-db-btn')?.addEventListener('click', async (e) =>
 
   openDbBackupModal();
 });
-
-// ─── WA Monitor: Fetch Status & Riwayat Notifikasi ───
-async function fetchWaBotStatus() {
-  const badge = document.getElementById('wa-monitor-status-badge');
-  const label = document.getElementById('wa-monitor-status-label');
-  const urlEl = document.getElementById('wa-monitor-url');
-  const tbody = document.getElementById('wa-monitor-log-tbody');
-  
-  if (label) label.textContent = 'Memeriksa bot...';
-  if (badge) {
-    badge.style.background = 'rgba(59, 130, 246, 0.12)';
-    badge.style.color = '#3b82f6';
-  }
-
-  try {
-    const res = await fetch('/api/wa/status?_t=' + Date.now());
-    const data = await res.json();
-    if (urlEl) urlEl.textContent = data.bot_url || 'http://localhost:3000';
-
-    if (data.bot_online) {
-      if (badge) {
-        badge.style.background = 'rgba(16, 185, 129, 0.12)';
-        badge.style.color = '#10b981';
-      }
-      if (label) label.innerHTML = '<span class="wa-pulse-online" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:4px;"></span> Bot Online & Terhubung';
-    } else {
-      if (badge) {
-        badge.style.background = 'rgba(239, 68, 68, 0.12)';
-        badge.style.color = '#ef4444';
-      }
-      if (label) label.innerHTML = '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:4px;"></span> Bot Offline / Disconnect';
-    }
-
-    if (tbody) {
-      const logs = data.recent_notifications || [];
-      if (logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-muted);">Belum ada riwayat pengiriman notifikasi tersimpan.</td></tr>';
-      } else {
-        tbody.innerHTML = logs.map(log => {
-          let badgeColor = 'background: rgba(99, 102, 241, 0.12); color: #6366f1;';
-          if (log.kategori === 'tambahan') badgeColor = 'background: rgba(16, 185, 129, 0.12); color: #10b981;';
-          else if (log.kategori === 'batal') badgeColor = 'background: rgba(239, 68, 68, 0.12); color: #ef4444;';
-          else if (log.kategori === 'perubahan') badgeColor = 'background: rgba(245, 158, 11, 0.12); color: #d97706;';
-
-          const timeStr = log.created_at ? log.created_at.slice(0, 16).replace('T', ' ') : '-';
-          return `
-            <tr style="border-bottom: 1px solid var(--border);">
-              <td style="padding: 8px 12px; font-family: monospace; font-size: 0.85em; color: var(--text-muted);">${escapeHtml(timeStr)}</td>
-              <td style="padding: 8px 12px;">
-                <span class="wa-log-badge" style="${badgeColor}">${escapeHtml(log.kategori || 'Info')}</span>
-              </td>
-              <td style="padding: 8px 12px; color: var(--text); font-size: 0.85em;">${escapeHtml(log.pesan || '-')}</td>
-            </tr>
-          `;
-        }).join('');
-      }
-    }
-  } catch (err) {
-    console.error("Gagal memeriksa status WA:", err);
-    if (label) label.textContent = 'Gagal menghubungi server';
-    if (badge) {
-      badge.style.background = 'rgba(239, 68, 68, 0.12)';
-      badge.style.color = '#ef4444';
-    }
-    if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #ef4444;">Gagal memuat riwayat pengiriman notifikasi.</td></tr>';
-    }
-  }
-}
 
 // ─── Pusat Restore Database (.SQL) Modular ───
 let _restoreSelectedFile = null;

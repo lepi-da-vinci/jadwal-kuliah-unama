@@ -3745,26 +3745,6 @@ tr.table-row-conflict td:first-child {
   transition: all 0.15s ease;
 }
 
-/* 5. WhatsApp Gateway Monitor */
-.wa-log-badge {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 9999px;
-  font-size: 0.75em;
-  font-weight: 600;
-}
-
-.wa-pulse-online {
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-  animation: waPulse 1.8s infinite;
-}
-
-@keyframes waPulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
 /* ==================== 6. DATABASE SEMESTER SWITCHER ==================== */
 .header-semester-pill {
   display: inline-flex;

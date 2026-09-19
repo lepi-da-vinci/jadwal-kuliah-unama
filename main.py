@@ -1342,67 +1342,6 @@ def execute_restore_db(req: RestoreExecuteRequest, admin: str = Depends(verify_a
             cursor.close()
             conn.close()
 
-# ==================== LIVE WHATSAPP GATEWAY MONITOR ====================
-@app.get("/api/wa/status")
-def get_wa_gateway_status():
-    """Memeriksa status online/offline bot WhatsApp dan riwayat pengiriman pesan notifikasi terakhir"""
-    bot_url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
-    base_bot_url = bot_url.rsplit('/', 1)[0] if '/' in bot_url else "http://localhost:3000"
-    
-    is_online = False
-    bot_info = None
-    try:
-        resp = requests.get(f"{base_bot_url}/status", timeout=1.5)
-        if resp.status_code == 200:
-            is_online = True
-            try:
-                bot_info = resp.json()
-            except Exception:
-                pass
-    except Exception:
-        try:
-            resp = requests.get(base_bot_url, timeout=1.5)
-            if resp.status_code in (200, 404):
-                is_online = True
-        except Exception:
-            is_online = False
-            
-    recent_logs = []
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT id, tanggal, tipe_notif, pesan, created_at 
-            FROM notifikasi_lab 
-            ORDER BY id DESC 
-            LIMIT 15
-        """)
-        rows = cursor.fetchall()
-        for r in rows:
-            created_str = r['created_at'].strftime("%H:%M:%S (%d/%m/%Y)") if r.get('created_at') else "-"
-            tgl_str = str(r['tanggal']) if r.get('tanggal') else "-"
-            recent_logs.append({
-                "id": r['id'],
-                "tanggal": tgl_str,
-                "tipe_notif": r['tipe_notif'],
-                "pesan": r['pesan'],
-                "waktu": created_str
-            })
-    except Exception as e:
-        print(f"Error fetching WA logs: {e}")
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-            
-    return {
-        "status": "success",
-        "bot_online": is_online,
-        "gateway_url": base_bot_url,
-        "bot_info": bot_info,
-        "recent_logs": recent_logs
-    }
-
 @app.delete("/api/jadwal")
 def clear_jadwal(admin: str = Depends(verify_admin_token)):
     """Menghapus seluruh jadwal dari database (memerlukan token Admin) - Legacy Wrapper"""
