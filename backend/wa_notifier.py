@@ -444,113 +444,10 @@ def handle_incoming_message(sender, text):
 
     # Jika TIDAK terdaftar
     if not aslab:
-        if text_clean in ["info", "inpo", "daftar"]:
-            if sender not in registration_states:
-                registration_states[sender] = {"step": 1, "failures": 0}
-                return "Halo! siapa nih? (sebutin nama panggilan mase)"
-            else:
-                return None
-        elif sender in registration_states:
-            state = registration_states[sender]
-            step = state.get("step")
-            
-            if text_clean in ["batal", "batal mas", "batal mase"]:
-                del registration_states[sender]
-                return "Pendaftaran dibatalkan mase. Ketik 'info' jika ingin mencoba lagi."
-                
-            if step == 1:
-                nama_aslab = text.strip()
-                if len(nama_aslab) < 2:
-                    state["failures"] = state.get("failures", 0) + 1
-                    if state["failures"] > 3:
-                        del registration_states[sender]
-                        return "Gagal daftar karena input tidak valid berkali-kali. Ketik 'info' untuk mengulang."
-                    return "Namanya terlalu pendek mase, yang bener dong."
-                    
-                state["nama_aslab"] = nama_aslab
-                state["step"] = 1.5
-                state["failures"] = 0
-                return f"Oke mas {nama_aslab}, pegang lab apa dan di kampus mana (kobar/thehok)? (Contoh: lab 1.8 kobar)"
-                
-            elif step == 1.5:
-                match_ruang = re.search(r'\b\d+\.\d+\b', text_clean)
-                kampus_kunci = "kobar" if "kobar" in text_clean else ("thehok" if "thehok" in text_clean else "")
-                if match_ruang:
-                    no_ruang = match_ruang.group(0)
-                    try:
-                        conn = scraper.get_db()
-                        cursor = conn.cursor(dictionary=True, buffered=True)
-                        if kampus_kunci:
-                            cursor.execute("SELECT id_ruangan, nama_ruangan FROM ruangan WHERE nama_ruangan LIKE %s AND kampus LIKE %s", (f"%{no_ruang}%", f"%{kampus_kunci}%"))
-                        else:
-                            cursor.execute("SELECT id_ruangan, nama_ruangan FROM ruangan WHERE nama_ruangan LIKE %s", (f"%{no_ruang}%",))
-                        ruang_list = cursor.fetchall()
-                        if ruang_list:
-                            ruang = ruang_list[0]
-                            state["id_ruangan"] = ruang['id_ruangan']
-                            state["nama_ruangan"] = ruang['nama_ruangan']
-                            token = str(random.randint(1000, 9999))
-                            state["token"] = token
-                            state["step"] = 3
-                            state["failures"] = 0
-                            
-                            cursor.execute("SELECT id_aslab, nama_aslab, no_wa FROM asisten_lab WHERE no_wa IS NOT NULL AND no_wa != '' AND no_wa != %s AND no_wa != %s ORDER BY RAND() LIMIT 1", (sender, no_wa))
-                            aslab_lain = cursor.fetchone()
-                            
-                            if aslab_lain:
-                                pesan_token = f"PEMBERITAHUAN KEAMANAN 🔒\nAda Aslab yang mau daftar ({state['nama_aslab']} - {state['nama_ruangan']}). Jika benar itu dia, beritahu dia token pendaftaran ini: *{token}*"
-                                send_wa_message(aslab_lain['no_wa'], pesan_token)
-                                return f"Sip mas {state['nama_aslab']}! Untuk keamanan, saya sudah mengirimkan 4 digit token ke Aslab kita ({aslab_lain['nama_aslab']}). Silakan japri {aslab_lain['nama_aslab']} untuk minta tokennya dan balas ke sini ya mase!"
-                            else:
-                                cursor.execute("INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan) VALUES (%s, %s, %s)", (state['nama_aslab'], sender, state['id_ruangan']))
-                                conn.commit()
-                                del registration_states[sender]
-                                return "Pendaftaran berhasil mase! (Bypass verifikasi karena belum ada aslab lain). Silakan ketik 'info' lagi."
-                        else:
-                            state["failures"] = state.get("failures", 0) + 1
-                            if state["failures"] > 3:
-                                del registration_states[sender]
-                                return "Gagal mencari lab, sesi daftar dibatalkan. Ketik 'info' untuk mengulang."
-                            return "Waduh gak ketemu mase, coba sebutin nama lab dan kampusnya yang benar. (Contoh: lab 1.8 kobar)"
-                    except Exception as e:
-                        print(e)
-                        return "Terjadi kesalahan sistem saat mencari lab."
-                    finally:
-                        if 'conn' in locals() and conn.is_connected():
-                            cursor.close()
-                            conn.close()
-                else:
-                    state["failures"] = state.get("failures", 0) + 1
-                    if state["failures"] > 3:
-                        del registration_states[sender]
-                        return "Sesi daftar dibatalkan. Ketik 'info' untuk mengulang."
-                    return "Waduh gak ketemu mase, coba sebutin nama lab (contoh 1.8) dan kampusnya (kobar/thehok)."
-                    
-            elif step == 3:
-                if text_clean == state.get("token"):
-                    try:
-                        conn = scraper.get_db()
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan) VALUES (%s, %s, %s)", (state['nama_aslab'], sender, state['id_ruangan']))
-                        conn.commit()
-                        del registration_states[sender]
-                        return "Pendaftaran berhasil mase! Ketik 'info' atau panggil saya untuk ngobrol!"
-                    except Exception as e:
-                        print(e)
-                        return "Terjadi kesalahan saat mendaftarkan nomor."
-                    finally:
-                        if 'conn' in locals() and conn.is_connected():
-                            cursor.close()
-                            conn.close()
-                else:
-                    state["failures"] = state.get("failures", 0) + 1
-                    if state["failures"] > 3:
-                        del registration_states[sender]
-                        return "Token salah berkali-kali. Pendaftaran dibatalkan."
-                    return "Token salah mase! Coba minta lagi, atau jawab 'batal' untuk membatalkan."
-        else:
-            print(f"[WA INCOMING] Diabaikan: Nomor tidak terdaftar ({no_wa}).")
-            return None
+        print(f"[WA INCOMING] Nomor tidak terdaftar sebagai asisten lab: {sender} ({no_wa})")
+        if text_clean in ["info", "inpo", "daftar", "halo", "hai", "bantuan", "menu"]:
+            return "Halo! Nomor Anda belum terdaftar sebagai Asisten Lab resmi. Pendaftaran nomor aslab hanya dapat dilakukan oleh Admin melalui Website Jadwal Kuliah."
+        return None
 
     # Jika TERDAFTAR
     print(f"[WA INCOMING] Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})")
@@ -589,7 +486,15 @@ def check_lab_schedules():
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT a.no_wa, r.id_ruangan, r.nama_ruangan, r.kampus AS lokasi_kampus FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan")
+        cursor.execute("""
+            SELECT a.no_wa, r.id_ruangan, r.nama_ruangan, r.kampus AS lokasi_kampus 
+            FROM asisten_lab a 
+            JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE a.no_wa IS NOT NULL 
+              AND a.no_wa != '' 
+              AND a.no_wa NOT LIKE '%@lid%' 
+              AND a.no_wa NOT LIKE '%lid%'
+        """)
         aslab_data = {row['id_ruangan']: {'no_wa': row['no_wa'], 'nama_ruangan': row['nama_ruangan'], 'lokasi_kampus': row['lokasi_kampus']} for row in cursor.fetchall()}
         
         if not aslab_data: return
@@ -675,7 +580,15 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
             query += " WHERE a.id_aslab = %s"
             params = (id_aslab,)
             
-        cursor.execute(query, params)
+        cursor.execute("""
+            SELECT a.id_aslab, a.no_wa, a.nama_aslab, r.nama_ruangan 
+            FROM asisten_lab a 
+            JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE a.no_wa IS NOT NULL 
+              AND a.no_wa != '' 
+              AND a.no_wa NOT LIKE '%@lid%' 
+              AND a.no_wa NOT LIKE '%lid%'
+        """ + (" AND a.id_aslab = %s" if id_aslab else ""), (id_aslab,) if id_aslab else ())
         aslab_data = cursor.fetchall()
         
         results = []

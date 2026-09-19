@@ -3120,18 +3120,20 @@ function renderAslabTable() {
     });
   }
 
-  if (sortedAslab.length === 0) {
+  // Filter out any entries containing @lid or lid unconditionally (baik admin maupun non-admin)
+  const filteredAslab = sortedAslab.filter(a => {
+    const wa = (a.no_wa || '').toLowerCase();
+    return wa && !wa.includes('lid');
+  });
+
+  if (filteredAslab.length === 0) {
     tbody.innerHTML = `<tr><td colspan="${isAslabAdmin ? 6 : 5}" style="padding: 15px; text-align: center; color: var(--text-muted);">Tidak ada data asisten lab.</td></tr>`;
     return;
   }
   
   let html = '';
-  sortedAslab.forEach((a, idx) => {
+  filteredAslab.forEach((a, idx) => {
     let displayWa = a.no_wa || '-';
-
-    if (!isAslabAdmin && displayWa.includes('@lid')) {
-      return;
-    }
 
     if (!isAslabAdmin && displayWa.length > 7) {
       displayWa = displayWa.substring(0, 5) + '****' + displayWa.substring(displayWa.length - 3);
@@ -3644,7 +3646,11 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       document.getElementById('aslab-select').value = "";
 
       let listHtml = `<div class="aslab-list-item active" onclick="selectAslabItem(this, '')">-- Semua Aslab --</div>`;
-      globalAslabData.forEach(a => {
+      const validAslab = (globalAslabData || []).filter(a => {
+        const wa = (a.no_wa || '').toLowerCase();
+        return wa && !wa.includes('lid');
+      });
+      validAslab.forEach(a => {
         listHtml += `<div class="aslab-list-item" onclick="selectAslabItem(this, '${a.id_aslab}')">${a.nama_ruangan} - ${a.nama_aslab}</div>`;
       });
       listContainer.innerHTML = listHtml;

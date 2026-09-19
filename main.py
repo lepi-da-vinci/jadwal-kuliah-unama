@@ -1570,6 +1570,11 @@ def get_aslab(authorization: str = Header(None)):
             SELECT a.id_aslab, a.nama_aslab, a.no_wa, r.nama_ruangan, r.kampus, a.id_ruangan 
             FROM asisten_lab a
             LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE a.no_wa IS NOT NULL 
+              AND a.no_wa != '' 
+              AND a.no_wa NOT LIKE '%@lid%' 
+              AND a.no_wa NOT LIKE '%lid%'
+            ORDER BY a.id_aslab ASC
         """)
         results = cursor.fetchall()
         
@@ -1670,8 +1675,12 @@ def add_aslab(req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
         conn = scraper.get_db()
         cursor = conn.cursor()
         
-        # Format No WA (pastikan diawali 62)
+        # Format No WA (pastikan diawali 62 dan valid nomor HP)
+        if not req.no_wa or 'lid' in str(req.no_wa).lower():
+            return {"status": "error", "message": "Nomor WhatsApp tidak valid (masukkan nomor HP asli)."}
         no_wa = re.sub(r'\D', '', req.no_wa)
+        if len(no_wa) < 9:
+            return {"status": "error", "message": "Nomor WhatsApp terlalu pendek."}
         if no_wa.startswith('0'):
             no_wa = '62' + no_wa[1:]
         elif no_wa.startswith('8'):
@@ -1697,8 +1706,12 @@ def edit_aslab(id_aslab: int, req: AddAslabRequest, admin: str = Depends(verify_
         conn = scraper.get_db()
         cursor = conn.cursor()
         
-        # Format No WA (pastikan diawali 62)
+        # Format No WA (pastikan diawali 62 dan valid nomor HP)
+        if not req.no_wa or 'lid' in str(req.no_wa).lower():
+            return {"status": "error", "message": "Nomor WhatsApp tidak valid (masukkan nomor HP asli)."}
         no_wa = re.sub(r'\D', '', req.no_wa)
+        if len(no_wa) < 9:
+            return {"status": "error", "message": "Nomor WhatsApp terlalu pendek."}
         if no_wa.startswith('0'):
             no_wa = '62' + no_wa[1:]
         elif no_wa.startswith('8'):
