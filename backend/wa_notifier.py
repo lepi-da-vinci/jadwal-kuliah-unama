@@ -63,6 +63,22 @@ def send_wa_message(no_wa, pesan):
         print(f"[WA ERROR] {e!s}")
         return False
 
+def send_wa_typing(target, state='composing'):
+    """Mengirim sinyal animasi 'sedang mengetik' (composing) ke WhatsApp penerima"""
+    try:
+        import os
+        base_send_url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
+        url = os.getenv("WA_BOT_TYPING_URL", base_send_url.replace('/send', '/typing'))
+        secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
+        headers = {
+            'Content-Type': 'application/json',
+            'x-bot-secret': secret
+        }
+        data = {'target': target, 'state': state}
+        requests.post(url, headers=headers, json=data, timeout=3)
+    except Exception:
+        pass
+
 # =================== GEMINI AI TOOLS ===================
 def get_db_connection():
     return scraper.get_db()
@@ -446,6 +462,7 @@ def handle_incoming_message(sender, text):
     if not aslab:
         # 1. Perintah GLOBAL (bisa dipanggil kapan saja saat proses registrasi)
         if sender in registration_states:
+            send_wa_typing(sender, 'composing')
             state = registration_states[sender]
             step = state.get("step", 1)
             
@@ -677,16 +694,26 @@ def handle_incoming_message(sender, text):
                         sisa = 4 - state["token_failures"]
                         return f"❌ *Token salah mase!* (Sisa percobaan: {sisa})\n\nSilakan masukkan 4 digit token yang benar.\n\n_💡 Pilihan bantuan:_\n- Ketik *minta token lagi* untuk dikirimkan token baru\n- Ketik *daftar ulang* jika ingin mereset data nama/lab\n- Ketik *batal* untuk membatalkan"
 
-        # Jika sender BELUM ada di registration_states
-        print(f"[WA INCOMING] Nomor tidak terdaftar sebagai asisten lab: {sender} ({no_wa})")
-        if any(kw in text_clean for kw in ["daftar", "inpo", "info", "halo", "hai", "registrasi", "ulang", "mulai", "menu", "bantuan", "asem", "baiqlah", "ya"]):
+        # Jika sender BELUM ada di registration_states:
+        # Syarat wajib: Chat pertama dari nomor tidak terdaftar HARUS diawali '!inpo' atau '!info'
+        is_secret_cmd = (
+            text_clean == "!inpo" or 
+            text_clean == "!info" or 
+            text_clean.startswith("!inpo") or 
+            text_clean.startswith("!info")
+        )
+        if is_secret_cmd:
+            send_wa_typing(sender, 'composing')
             registration_states[sender] = {"step": 1, "failures": 0}
-            return "Halo! Mau daftar sebagai Asisten Lab resmi ya? 🤖\n\nSebutkan *nama panggilan* mase dulu yuk:\n_(Ketik *batal* jika tidak jadi)_"
-            
-        return "Halo! Nomor Anda belum terdaftar sebagai Asisten Lab resmi.\nKetik *daftar* atau *inpo* untuk mulai pendaftaran Aslab ya mase! 🚀"
+            return "Halo Aslab! 👋\nKode rahasia dikenali. Mau daftar sebagai Asisten Lab resmi ya? 🤖\n\nSebutkan *nama panggilan* mase dulu yuk:\n_(Ketik *batal* jika tidak jadi)_"
+
+        # Jika tanpa tanda '!' atau pesan acak dari orang asing -> abaikan (bot tidak bersuara)
+        print(f"[WA INCOMING] Diabaikan: Nomor belum terdaftar dan tidak memakai kode '!inpo' / '!info': {sender} ({text})")
+        return None
 
     # Jika TERDAFTAR
     print(f"[WA INCOMING] Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})")
+    send_wa_typing(sender, 'composing')
     
     if AVAILABLE_API_KEYS:
         try:

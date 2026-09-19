@@ -100,6 +100,37 @@ async function connectToWhatsApp () {
     });
 }
 
+// Endpoint untuk menampilkan status sedang mengetik (typing indicator)
+app.post('/typing', async (req, res) => {
+    const reqSecret = req.headers['x-bot-secret'] || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (!reqSecret || reqSecret !== BOT_SECRET) {
+        return res.status(401).json({ status: 'error', message: 'Akses ditolak: Bot secret token tidak valid.' });
+    }
+
+    let { target, state } = req.body;
+    if (!target) {
+        return res.status(400).json({ status: 'error', message: 'Target diperlukan' });
+    }
+
+    let jid = target;
+    if (!target.includes('@')) {
+        target = target.replace(/\D/g, '');
+        if (target.startsWith('0')) {
+            target = '62' + target.substring(1);
+        }
+        jid = target + '@s.whatsapp.net';
+    }
+
+    try {
+        if (sock && sock.sendPresenceUpdate) {
+            await sock.sendPresenceUpdate(state || 'composing', jid);
+        }
+        res.json({ status: 'success', message: 'Status mengetik berhasil diperbarui' });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: 'Gagal update status mengetik', error: error.toString() });
+    }
+});
+
 // Endpoint untuk mengirim pesan (Diproteksi dengan Secret Token)
 app.post('/send', async (req, res) => {
     const reqSecret = req.headers['x-bot-secret'] || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
@@ -107,7 +138,7 @@ app.post('/send', async (req, res) => {
         return res.status(401).json({ status: 'error', message: 'Akses ditolak: Bot secret token tidak valid.' });
     }
 
-    let { target, message } = req.body;
+    let { target, message, typing } = req.body;
     
     if (!target || !message) {
         return res.status(400).json({ status: 'error', message: 'Target dan message diperlukan' });
@@ -125,6 +156,14 @@ app.post('/send', async (req, res) => {
     }
     
     try {
+        // Animasi status sedang mengetik (composing) sebelum pesan terkirim
+        if (typing !== false && sock && sock.sendPresenceUpdate) {
+            await sock.sendPresenceUpdate('composing', jid);
+            // Durasi jeda mengetik yang natural (1.2 detik sampai 2.8 detik)
+            const typingDuration = Math.min(Math.max(1200, message.length * 20), 2800);
+            await new Promise(resolve => setTimeout(resolve, typingDuration));
+            await sock.sendPresenceUpdate('paused', jid);
+        }
         await sock.sendMessage(jid, { text: message });
         res.json({ status: 'success', message: 'Pesan berhasil dikirim' });
     } catch (error) {
