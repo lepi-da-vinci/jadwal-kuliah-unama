@@ -1518,7 +1518,7 @@ def get_notifikasi_lab(tanggal: str, semester: str = None):
             print(f"Error calculating gaps on fetch: {e_gap}")
 
         cursor.execute("""
-            SELECT tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu
+            SELECT tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu, DATE_FORMAT(tanggal, '%Y-%m-%d') as tanggal
             FROM notifikasi_lab 
             WHERE tanggal = %s AND (semester = %s OR semester IS NULL)
             ORDER BY created_at DESC

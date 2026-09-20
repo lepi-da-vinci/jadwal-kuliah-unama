@@ -2502,6 +2502,39 @@ function getRoomFromNotification(pesan = '') {
   return '';
 }
 
+function parseRoomAndCampus(raw = '') {
+  if (!raw) return { room: '', campus: '' };
+  let s = String(raw).trim();
+  let campus = '';
+  const campMatch = s.match(/\((Thehok|Kobar)\)/i);
+  if (campMatch) {
+    campus = campMatch[1];
+    s = s.replace(/\s*\((Thehok|Kobar)\)/i, '').trim();
+  }
+  // Bersihkan prefix "Ruang " sebelum "R.", "Labor", "Lab", atau "Ruang"
+  s = s.replace(/^(?:Ruang\s+)+(?=R\b|R\.|Labor|Lab|Ruang)/i, '')
+       .replace(/^Ruang\s+(\d)/i, 'R. $1');
+  return { room: s, campus: campus };
+}
+
+window.handleNotifCardClick = function (roomName, kampusStr, targetDate) {
+  if (!roomName) return;
+
+  // 1. Tutup modal Info Mase jika terbuka (fullscreen maupun inline popup)
+  if (typeof window.closeFullscreenInfoModal === 'function') {
+    window.closeFullscreenInfoModal();
+  }
+  const labModal = document.getElementById('lab-modal');
+  if (labModal && (labModal.classList.contains('open') || labModal.style.display === 'flex' || labModal.style.display === 'block')) {
+    if (typeof closeModal === 'function') closeModal();
+  }
+
+  // 2. Buka modal detail ruangan untuk ruangan dan tanggal terkait
+  if (typeof window.showRoomDetail === 'function') {
+    window.showRoomDetail(roomName, kampusStr, targetDate);
+  }
+};
+
 function isLabNotification(itemOrPesan = '') {
   let pesan = '';
   if (typeof itemOrPesan === 'object' && itemOrPesan !== null) {
@@ -2829,21 +2862,37 @@ function renderInfoMaseNotifications(showPopup = false) {
 
     const cleanPesan = formatRoomNameHtml(msgText);
 
+    // Dapatkan info ruangan dan kampus untuk aksi klik detail kelas
+    const rawRoomInfo = n.ruangan || getRoomFromNotification(n.pesan);
+    const { room: parsedRoom, campus: parsedCampus } = parseRoomAndCampus(rawRoomInfo);
+    const notifDate = n.tanggal || (document.getElementById('filter-tanggal')?.value || '');
+
+    const clickAttr = parsedRoom 
+      ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date);}" role="button" tabindex="0"`
+      : '';
+
+    const actionBadge = parsedRoom ? `
+      <span class="notif-item-action" title="Lihat jadwal ruangan ${escapeHtml(parsedRoom)}">
+        <span>Detail</span>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </span>
+    ` : '';
+
     // Fix Bug Visual: Semua tipe notif dimasukkan ke popupContent, bukan cuma TAMBAHAN
     if (showPopup) {
-      popupContent += `<div class="notif-item ${cls}"><strong>${n.tipe_notif}</strong><br>${cleanPesan}</div>`;
+      popupContent += `<div class="notif-item ${cls}" ${clickAttr}><strong>${n.tipe_notif}</strong><br>${cleanPesan}</div>`;
     }
 
-    const timeHtml = (n.tipe_notif !== 'JEDA' && n.waktu) ? `<span class="notif-time">${escapeHtml(n.waktu)}</span>` : '';
-
     html += `
-      <div class="notif-item ${cls}">
+      <div class="notif-item ${cls}" ${clickAttr} title="${parsedRoom ? `Klik untuk melihat detail ruangan ${escapeHtml(parsedRoom)}` : ''}">
         <div class="notif-header">
           <div style="display:flex; align-items:center;">
             <span>${n.tipe_notif}</span>
             ${categoryBadge}
           </div>
-          ${timeHtml}
+          ${actionBadge}
         </div>
         <div>${cleanPesan}</div>
       </div>
@@ -2874,6 +2923,9 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
     const data = await response.json();
 
     let notifData = (data.status === 'success' && data.data) ? data.data : [];
+    notifData.forEach(item => {
+      if (!item.tanggal) item.tanggal = tanggal;
+    });
     
     // Jika dari server belum ada notif jeda tapi jadwal ada, hitung otomatis dari client-side
     const clientGaps = calculateClientSideGaps(tanggal);
@@ -4062,11 +4114,15 @@ document.getElementById('toggle-notif-btn').addEventListener('click', () => {
 });
 
 // Handle Modal Detail Ruangan (Spacious & Rich Cards)
-window.showRoomDetail = function (roomName, kampusStr) {
+window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   const filterTanggal = document.getElementById('filter-tanggal');
   const today = new Date();
   const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-  let activeDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr;
+  let activeDate = customDate || ((filterTanggal && filterTanggal.value) ? filterTanggal.value : currentDayStr);
+
+  if (customDate && filterTanggal && filterTanggal.value !== customDate) {
+    filterTanggal.value = customDate;
+  }
 
   const getCleanRoom = (str) => {
     if (!str) return '';
