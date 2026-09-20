@@ -2834,6 +2834,8 @@ function renderInfoMaseNotifications(showPopup = false) {
       popupContent += `<div class="notif-item ${cls}"><strong>${n.tipe_notif}</strong><br>${cleanPesan}</div>`;
     }
 
+    const timeHtml = (n.tipe_notif !== 'JEDA' && n.waktu) ? `<span class="notif-time">${escapeHtml(n.waktu)}</span>` : '';
+
     html += `
       <div class="notif-item ${cls}">
         <div class="notif-header">
@@ -2841,7 +2843,7 @@ function renderInfoMaseNotifications(showPopup = false) {
             <span>${n.tipe_notif}</span>
             ${categoryBadge}
           </div>
-          <span class="notif-time">${n.waktu}</span>
+          ${timeHtml}
         </div>
         <div>${cleanPesan}</div>
       </div>
