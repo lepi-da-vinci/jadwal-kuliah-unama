@@ -2582,50 +2582,90 @@ function calculateClientSideGaps(targetDate) {
     }
   });
 
-  // Lacak lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu dibuka)
-  const olOnlyLabRooms = {};
+  // Lacak kelas non-fisik (OL dan CC) di tanggal ini
+  const nonPhysRooms = {};
   allJadwal.forEach(item => {
     const isOnline = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
     const isCancelled = (item.metode_pembelajaran || '').toUpperCase() === 'CC' ||
-                        (item.status_jadwal && item.status_jadwal.toLowerCase().includes('batal'));
-    if (item.tanggal === targetDate && item.jam && item.nama_ruangan && isLab(item.nama_ruangan) && isOnline && !isCancelled) {
+                        (item.status_jadwal && (item.status_jadwal.toLowerCase().includes('batal') || item.status_jadwal.toLowerCase().includes('cancel')));
+    if (item.tanggal === targetDate && item.jam && item.nama_ruangan && (isOnline || isCancelled)) {
       const ruang = item.nama_ruangan;
-      if (!roomSchedules[ruang]) {
-        if (!olOnlyLabRooms[ruang]) olOnlyLabRooms[ruang] = [];
-        const parts = item.jam.split(':');
-        const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-        const dur = getClassDuration(item);
-        olOnlyLabRooms[ruang].push({ start: startMin, end: startMin + dur, jam: item.jam });
-      }
+      if (!nonPhysRooms[ruang]) nonPhysRooms[ruang] = [];
+      const parts = item.jam.split(':');
+      const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      const dur = getClassDuration(item);
+      nonPhysRooms[ruang].push({
+        start: startMin,
+        end: startMin + dur,
+        jam: item.jam,
+        nama_mk: item.nama_mk,
+        kelas: item.kelas,
+        type: isCancelled ? 'CC' : 'OL'
+      });
     }
   });
 
   const generatedGaps = [];
 
-  // Proses lab dengan kelas OL-only: lab fisik kosong selama jam OL berlangsung
-  for (const [room, olScheds] of Object.entries(olOnlyLabRooms)) {
-    olScheds.sort((a, b) => a.start - b.start);
-    const olStart = olScheds[0].start;
-    const olEnd = olScheds[olScheds.length - 1].end;
-    const gapMin = olEnd - olStart;
-    if (gapMin >= 90) {
-      const hours = Math.floor(gapMin / 60);
-      const mins = gapMin % 60;
-      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} mnt` : '');
-      const tipeJeda = gapMin <= 120 ? 'JEDA SINGKAT' : 'JEDA PANJANG';
-      const sh = Math.floor(olStart / 60).toString().padStart(2, '0');
-      const sm = (olStart % 60).toString().padStart(2, '0');
-      const eh = Math.floor(olEnd / 60).toString().padStart(2, '0');
-      const em = (olEnd % 60).toString().padStart(2, '0');
-      const cleanRoom = formatRoomName(room, false);
-      generatedGaps.push({
-        tipe_notif: 'JEDA',
-        ruangan: cleanRoom,
-        jam: `${sh}:${sm} - ${eh}:${em}`,
-        durasi: durStr,
-        pesan: `${tipeJeda} (${durStr}): ${cleanRoom} kosong ${sh}:${sm} - ${eh}:${em} (Kuliah OL, lab siap digunakan).`,
-        waktu: 'Otomatis'
-      });
+  // Proses kelas non-fisik (OL & CC) menjadi blok jeda jika durasi >= 90 menit
+  for (const [room, schedList] of Object.entries(nonPhysRooms)) {
+    schedList.sort((a, b) => a.start - b.start);
+    const cleanRoom = formatRoomName(room, false);
+    const isLabRoom = isLab(cleanRoom);
+    const physScheds = roomSchedules[room] || [];
+
+    // Kelompokkan kelas non-fisik yang berurutan (jeda <= 30 menit antar kelas)
+    const blocks = [];
+    let currBlock = [schedList[0]];
+    for (let i = 1; i < schedList.length; i++) {
+      const prev = currBlock[currBlock.length - 1];
+      const curr = schedList[i];
+      if (curr.start <= prev.end + 30) {
+        currBlock.push(curr);
+      } else {
+        blocks.push(currBlock);
+        currBlock = [curr];
+      }
+    }
+    if (currBlock.length > 0) blocks.push(currBlock);
+
+    for (const b of blocks) {
+      const bStart = b[0].start;
+      const bEnd = b[b.length - 1].end;
+
+      // Cek apakah blok bertabrakan dengan kelas fisik
+      const overlapsPhysical = physScheds.some(ps => !(bEnd <= ps.start || bStart >= ps.end));
+      if (overlapsPhysical) continue;
+
+      const gapMin = bEnd - bStart;
+      if (gapMin >= 90) {
+        const hours = Math.floor(gapMin / 60);
+        const mins = gapMin % 60;
+        const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} mnt` : '');
+        const tipeJeda = gapMin <= 120 ? 'JEDA SINGKAT' : 'JEDA PANJANG';
+        const sh = Math.floor(bStart / 60).toString().padStart(2, '0');
+        const sm = (bStart % 60).toString().padStart(2, '0');
+        const eh = Math.floor(bEnd / 60).toString().padStart(2, '0');
+        const em = (bEnd % 60).toString().padStart(2, '0');
+
+        const hasOL = b.some(x => x.type === 'OL');
+        const hasCC = b.some(x => x.type === 'CC');
+        let label = 'Kuliah OL';
+        if (hasCC && !hasOL) label = 'Kuliah CC';
+        else if (hasCC && hasOL) label = 'Kuliah OL/CC';
+
+        const note = isLabRoom ? ` (${label}, lab siap digunakan)` : ` (${label})`;
+
+        generatedGaps.push({
+          tipe_notif: 'JEDA',
+          ruangan: cleanRoom,
+          jam: `${sh}:${sm} - ${eh}:${em}`,
+          durasi: durStr,
+          tanggal: targetDate,
+          pesan: `${tipeJeda} (${durStr}): ${cleanRoom} kosong ${sh}:${sm} - ${eh}:${em}${note}.`,
+          waktu: 'Otomatis'
+        });
+      }
     }
   }
 

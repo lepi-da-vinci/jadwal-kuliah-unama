@@ -588,35 +588,35 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
                 pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {end_str} - {nxt['jam']}."
                 cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
 
-    # Deteksi lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu notif jeda)
+    # Deteksi ruangan/lab yang memiliki kelas non-fisik (OL dan CC) di tanggal ini
     cursor.execute("""
-        SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
+        SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, j.metode_pembelajaran, j.status_jadwal
         FROM jadwal j
         JOIN ruangan r ON j.id_ruangan = r.id_ruangan
         WHERE j.tanggal = %s AND j.semester = %s
-          AND j.metode_pembelajaran = 'OL'
-          AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+          AND (
+            j.metode_pembelajaran IN ('OL', 'CC') 
+            OR j.status_jadwal IN ('CC', 'Cancel', 'Batal')
+          )
         ORDER BY r.nama_ruangan, j.jam
     """, (target_date, sem_final))
-    ol_schedules = cursor.fetchall()
+    non_phys_rows = cursor.fetchall()
 
-    ol_lab_rooms = {}
-    for row in ol_schedules:
+    non_phys_by_room = {}
+    for row in non_phys_rows:
         if isinstance(row, dict):
             jam = row.get('jam')
             nama_ruangan = row.get('nama_ruangan')
             lokasi = row.get('kampus')
             nama_mk = row.get('nama_mk')
+            kelas = row.get('kelas', '')
+            metode = row.get('metode_pembelajaran', '')
+            status = row.get('status_jadwal', '')
         else:
-            jam, nama_ruangan, lokasi, nama_mk = row
+            jam, nama_ruangan, lokasi, nama_mk, kelas, metode, status = row
 
-        if not nama_ruangan or not jam or not is_lab(nama_ruangan): continue
+        if not nama_ruangan or not jam: continue
         ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
-        # Hanya proses lab yang tidak punya kelas fisik (tidak ada di room_schedules)
-        if ruang_lengkap in room_schedules: continue
-
-        if ruang_lengkap not in ol_lab_rooms:
-            ol_lab_rooms[ruang_lengkap] = []
 
         if hasattr(jam, 'total_seconds'):
             start_min = int(jam.total_seconds()) // 60
@@ -629,23 +629,110 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             continue
 
         end_min = start_min + get_class_duration(nama_mk)
-        ol_lab_rooms[ruang_lengkap].append({'start': start_min, 'end': end_min, 'nama_mk': nama_mk})
+        is_cc = (metode == 'CC' or str(status).lower() in ('cc', 'cancel', 'batal'))
+        item_type = 'CC' if is_cc else 'OL'
 
-    for room, ol_scheds in ol_lab_rooms.items():
-        ol_scheds = sorted(ol_scheds, key=lambda x: x['start'])
-        ol_start = ol_scheds[0]['start']
-        ol_end = ol_scheds[-1]['end']
-        gap_min = ol_end - ol_start
-        if gap_min >= 90:
-            hours = gap_min // 60
-            mins = gap_min % 60
-            dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
-            tipe_jeda = "JEDA SINGKAT" if gap_min <= 120 else "JEDA PANJANG"
-            sh = f"{ol_start // 60:02d}:{ol_start % 60:02d}"
-            eh = f"{ol_end // 60:02d}:{ol_end % 60:02d}"
-            clean_room = format_room_clean(room)
-            pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {sh} - {eh} (Kuliah OL, lab siap digunakan)."
-            cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+        if ruang_lengkap not in non_phys_by_room:
+            non_phys_by_room[ruang_lengkap] = []
+
+        h = start_min // 60
+        m = start_min % 60
+        jam_str = f"{h:02d}:{m:02d}"
+
+        non_phys_by_room[ruang_lengkap].append({
+            'start': start_min,
+            'end': end_min,
+            'jam': jam_str,
+            'nama_mk': nama_mk,
+            'kelas': kelas,
+            'type': item_type,
+            'nama_ruangan': nama_ruangan,
+            'lokasi': lokasi
+        })
+
+    # 1. Generate JEDA untuk blok kelas OL / CC yang durasinya >= 90 menit
+    for room, item_list in non_phys_by_room.items():
+        item_list = sorted(item_list, key=lambda x: x['start'])
+        
+        # Kelompokkan kelas non-fisik yang berurutan (jeda <= 30 menit antar kelas)
+        blocks = []
+        curr_block = [item_list[0]]
+        for i in range(1, len(item_list)):
+            prev = curr_block[-1]
+            curr = item_list[i]
+            if curr['start'] <= prev['end'] + 30:
+                curr_block.append(curr)
+            else:
+                blocks.append(curr_block)
+                curr_block = [curr]
+        if curr_block:
+            blocks.append(curr_block)
+
+        clean_room = format_room_clean(room)
+        is_lab_room = is_lab(clean_room)
+        phys_scheds = room_schedules.get(room, [])
+
+        for b in blocks:
+            b_start = b[0]['start']
+            b_end = b[-1]['end']
+            
+            # Cek apakah blok ini tumpang tindih dengan kelas tatap muka fisik
+            overlaps_tm = False
+            for ps in phys_scheds:
+                if not (b_end <= ps['start'] or b_start >= ps['end']):
+                    overlaps_tm = True
+                    break
+            if overlaps_tm:
+                continue
+
+            gap_min = b_end - b_start
+            if gap_min >= 90:
+                hours = gap_min // 60
+                mins = gap_min % 60
+                dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+                tipe_jeda = "JEDA SINGKAT" if gap_min <= 120 else "JEDA PANJANG"
+                sh = f"{b_start // 60:02d}:{b_start % 60:02d}"
+                eh = f"{b_end // 60:02d}:{b_end % 60:02d}"
+
+                has_ol = any(x['type'] == 'OL' for x in b)
+                has_cc = any(x['type'] == 'CC' for x in b)
+                if has_cc and not has_ol:
+                    label = "Kuliah CC"
+                elif has_cc and has_ol:
+                    label = "Kuliah OL/CC"
+                else:
+                    label = "Kuliah OL"
+
+                note = f" ({label}, lab siap digunakan)" if is_lab_room else f" ({label})"
+                pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {sh} - {eh}{note}."
+                
+                cursor.execute("""
+                    SELECT 1 FROM notifikasi_lab 
+                    WHERE tanggal = %s AND semester = %s AND tipe_notif = 'JEDA' AND pesan = %s
+                    LIMIT 1
+                """, (target_date, sem_final, pesan))
+                if not cursor.fetchone():
+                    cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+
+    # 2. Catat juga notifikasi PERUBAHAN untuk kelas CC / OL jika belum ada
+    for room, item_list in non_phys_by_room.items():
+        clean_room = format_room_clean(room)
+        is_lab_room = is_lab(clean_room)
+        for item in item_list:
+            if item['type'] == 'CC':
+                note = "Lab kosong." if is_lab_room else "Ruangan kosong."
+                pesan = f"PERUBAHAN STATUS: Kelas {item['nama_mk']} ({item['kelas']}) jam {item['jam']} di {clean_room} DIBATALKAN (CC). {note}"
+            else:
+                note = "Lab tidak digunakan." if is_lab_room else "Ruangan kosong."
+                pesan = f"PERUBAHAN STATUS: Kelas {item['nama_mk']} ({item['kelas']}) jam {item['jam']} di {clean_room} dialihkan ke ONLINE (OL). {note}"
+            
+            cursor.execute("""
+                SELECT 1 FROM notifikasi_lab 
+                WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s
+                LIMIT 1
+            """, (target_date, sem_final, pesan))
+            if not cursor.fetchone():
+                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'PERUBAHAN', pesan, sem_final))
 
     conn.commit()
 
