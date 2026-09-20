@@ -400,9 +400,8 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
 
         # Normalisasi kampus: hapus kata 'Kampus ' (cukup 'Thehok' atau 'Kobar')
         kampus = re.sub(r'\bKampus\s+', '', kampus, flags=re.I).strip()
-        # Normalisasi ruang: 3.1 dan 3.4 tidak pakai 'Praktek', cukup 'R. 3.1' / 'R. 3.4'
-        nama_ruangan = re.sub(r'\b(R\.|Ruang|Ruangan)?\s*Praktek\s*(3\.[14])\b', r'R. \2', nama_ruangan, flags=re.I)
-        nama_ruangan = re.sub(r'Praktek\s*(3\.[14])', r'R. \1', nama_ruangan, flags=re.I)
+        # Normalisasi ruang: 3.1 dan 3.4 adalah Laboratorium SK
+        nama_ruangan = re.sub(r'\b(?:R\.|Ruang|Ruangan|Praktek)\s*(3\.[14])\b', r'Labor \1', nama_ruangan, flags=re.I)
             
         # 4. Parsing Kolom STATUS (TM, OL, CC)
         status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
@@ -480,16 +479,19 @@ def get_class_duration(nama_mk: str) -> int:
 def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
-    # Ruang 3.1 dan 3.4 bukan lab (cukup ruangan biasa, tidak ada praktek)
-    # Kecuali Gedung Pasca B3.4 dan B2.3 yang memang lab
-    if ('3.1' in name or '3.4' in name) and not ('b3.4' in name or 'b2.3' in name):
-        return False
+    # Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
+    if re.search(r'\b3\.[14]\b', name) and '3.10' not in name:
+        return True
+    if 'b3.4' in name or 'b2.3' in name:
+        return True
     return 'lab' in name or 'cisco' in name or 'praktek' in name
 
 def format_room_clean(room_name: str) -> str:
     if not room_name:
         return ""
     r = str(room_name).strip()
+    # 3.1 dan 3.4 adalah Laboratorium SK
+    r = re.sub(r'\b(?:R\.|Ruang|Praktek)\s*(3\.[14])\b', r'Labor \1', r, flags=re.IGNORECASE)
     # Bersihkan prefix "Ruang " sebelum "R.", "Labor", "Lab", atau "Ruang"
     r = re.sub(r'^(?:Ruang\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', r, flags=re.IGNORECASE)
     # Jika "Ruang 4.9" -> "R. 4.9"
@@ -855,7 +857,8 @@ def save_to_db(data, target_date=None, page="1", target_semester=None):
 
             # Insert atau ignore ruangan
             if item.get('ruangan'):
-                cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s AND kampus = %s", (item['ruangan'], item.get('kampus', '')))
+                alt_ruangan = item['ruangan'].replace('Labor ', 'R. ') if 'Labor ' in item['ruangan'] else item['ruangan'].replace('R. ', 'Labor ')
+                cursor.execute("SELECT id_ruangan FROM ruangan WHERE (nama_ruangan = %s OR nama_ruangan = %s) AND kampus = %s", (item['ruangan'], alt_ruangan, item.get('kampus', '')))
                 res = cursor.fetchone()
                 if not res:
                     cursor.execute("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", (item.get('kampus', ''), item['ruangan']))
