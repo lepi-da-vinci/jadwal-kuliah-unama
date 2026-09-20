@@ -2968,14 +2968,12 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
     });
     
     // Jika dari server belum ada notif jeda tapi jadwal ada, hitung otomatis dari client-side
-    const clientGaps = calculateClientSideGaps(tanggal);
-    if (clientGaps.length > 0) {
-      const existingMessages = new Set(notifData.map(n => n.pesan));
-      clientGaps.forEach(g => {
-        if (!existingMessages.has(g.pesan)) {
-          notifData.push(g);
-        }
-      });
+    const hasServerGaps = notifData.some(n => n.tipe_notif === 'JEDA');
+    if (!hasServerGaps) {
+      const clientGaps = calculateClientSideGaps(tanggal);
+      if (clientGaps.length > 0) {
+        notifData.push(...clientGaps);
+      }
     }
 
     if (notifData.length > 0) {
@@ -4334,9 +4332,12 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>` 
         : '';
 
-      // 4. Status Perubahan BAAK (Tambahan, Perubahan, Jeda)
+      // 4. Status Perubahan BAAK (Tambahan, Perubahan, dll.)
       let changeBadgeHtml = '';
-      if (s.status_jadwal && s.status_jadwal.trim() !== '' && s.status_jadwal.trim() !== '-' && s.status_jadwal.toLowerCase() !== 'onschedule') {
+      const stLower = (s.status_jadwal || '').trim().toLowerCase();
+      const isRedundantStatus = ['onschedule', 'online', 'ol', 'cancel', 'cc', 'batal', 'ditiadakan', '-', ''].includes(stLower);
+
+      if (s.status_jadwal && !isRedundantStatus) {
         const st = s.status_jadwal.toUpperCase();
         let bg = 'rgba(107, 114, 128, 0.15)', c = '#9ca3af';
         if (st.includes('TAMBAHAN')) { bg = 'rgba(34, 197, 94, 0.15)'; c = '#10b981'; }

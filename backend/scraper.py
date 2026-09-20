@@ -714,26 +714,6 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
                 if not cursor.fetchone():
                     cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
 
-    # 2. Catat juga notifikasi PERUBAHAN untuk kelas CC / OL jika belum ada
-    for room, item_list in non_phys_by_room.items():
-        clean_room = format_room_clean(room)
-        is_lab_room = is_lab(clean_room)
-        for item in item_list:
-            if item['type'] == 'CC':
-                note = "Lab kosong." if is_lab_room else "Ruangan kosong."
-                pesan = f"PERUBAHAN STATUS: Kelas {item['nama_mk']} ({item['kelas']}) jam {item['jam']} di {clean_room} DIBATALKAN (CC). {note}"
-            else:
-                note = "Lab tidak digunakan." if is_lab_room else "Ruangan kosong."
-                pesan = f"PERUBAHAN STATUS: Kelas {item['nama_mk']} ({item['kelas']}) jam {item['jam']} di {clean_room} dialihkan ke ONLINE (OL). {note}"
-            
-            cursor.execute("""
-                SELECT 1 FROM notifikasi_lab 
-                WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s
-                LIMIT 1
-            """, (target_date, sem_final, pesan))
-            if not cursor.fetchone():
-                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'PERUBAHAN', pesan, sem_final))
-
     conn.commit()
 
 def ensure_permanent_table_exists(cursor):
