@@ -577,8 +577,10 @@ def get_semua_jadwal(semester: str = None):
                 item['kampus'] = re.sub(r'\bKampus\s+', '', item['kampus']).strip()
 
             if item.get('nama_ruangan'):
-                # Ruang 3.1 dan 3.4 adalah Laboratorium SK
-                item['nama_ruangan'] = re.sub(r'\b(R\.|Ruang|Ruangan|Praktek)\s*(3\.[14])\b', r'Labor \2', item['nama_ruangan'], flags=re.I)
+                # Ruang 3.1 dan 3.4 adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
+                if 'b3.4' not in item['nama_ruangan'].lower():
+                    item['nama_ruangan'] = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', item['nama_ruangan'], flags=re.I)
+                item['nama_ruangan'] = re.sub(r'^(?:(?:Ruang|R\.)\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', item['nama_ruangan'], flags=re.I)
                 # Bersihkan kata 'Kampus ' berulang
                 item['nama_ruangan'] = re.sub(r'\(Kampus\s+(Thehok|Kobar)\)', r'(\1)', item['nama_ruangan'], flags=re.I)
                 item['nama_ruangan'] = re.sub(r'\bKampus\s+(Thehok|Kobar)\b', r'\1', item['nama_ruangan'], flags=re.I)

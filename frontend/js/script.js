@@ -55,12 +55,14 @@ function formatRoomName(rawName, isMobile = null) {
              .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
              .replace(/\bKampus\s+UNAMA\b/gi, 'UNAMA');
 
-  // Bersihkan prefix 'Ruang' berlebih agar tidak terjadi "Ruang R." atau "Ruang Labor"
-  name = name.replace(/\bRuang\s+(?=R\b|R\.|Labor|Lab|Ruang)/gi, '')
+  // Bersihkan prefix 'Ruang' atau 'R.' berlebih agar tidak terjadi "Ruang R." atau "R. Labor"
+  name = name.replace(/\b(?:Ruang|R\.)\s+(?=R\b|R\.|Labor|Lab|Ruang)/gi, '')
              .replace(/\bRuang\s+(\d)/gi, 'R. $1');
 
-  // 2. Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
-  name = name.replace(/\b(?:R\.|Ruang|Praktek)\s*(3\.[14])\b/gi, 'Labor $1');
+  // 2. Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
+  if (!name.toLowerCase().includes('b3.4')) {
+    name = name.replace(/\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b/gi, 'Labor $1');
+  }
 
   // 3. Gedung Pasca diganti menjadi 'S2' agar lebih simpel
   name = name.replace(/\b(?:Gedung|Gd\.?)\s+Pasca(?:sarjana)?\b/gi, 'S2')
@@ -1901,9 +1903,11 @@ function handleSingleCalClick(btn) {
 function isLab(namaRuangan) {
   if (!namaRuangan) return false;
   const name = namaRuangan.toLowerCase();
+  // Ruang S2 / Gedung Pasca B3.4 adalah ruang kelas biasa, bukan labor
+  if (name.includes('b3.4')) return false;
   // Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
   if (/\b3\.[14]\b/.test(name) && !name.includes('3.10')) return true;
-  if (name.includes('b3.4') || name.includes('b2.3')) return true;
+  if (name.includes('b2.3')) return true;
   return name.includes('lab') || name.includes('cisco') || name.includes('praktek');
 }
 
@@ -1930,7 +1934,10 @@ const OPERATIONAL_RULES = {
 window.OPERATIONAL_RULES = OPERATIONAL_RULES;
 
 function getRoomCampus(roomName, defaultCampus = '') {
-  if (!roomName) return formatCampusName(defaultCampus) || 'Thehok';
+  if (defaultCampus && String(defaultCampus).trim() !== '') {
+    return formatCampusName(defaultCampus);
+  }
+  if (!roomName) return 'Thehok';
   const lower = String(roomName).toLowerCase();
   if (lower.includes('kobar')) return 'Kobar';
   if (lower.includes('thehok')) return 'Thehok';
@@ -1952,7 +1959,7 @@ function getRoomCampus(roomName, defaultCampus = '') {
   if (lower.includes('4.') || lower.includes('pasca') || lower.includes('s2') || lower.includes('b2.') || lower.includes('b1.') || lower.includes('b3.') || lower.includes('cisco')) {
     return 'Thehok';
   }
-  return formatCampusName(defaultCampus) || 'Thehok';
+  return 'Thehok';
 }
 window.getRoomCampus = getRoomCampus;
 
@@ -2167,7 +2174,7 @@ function updateActiveLabPanel() {
     if (filterRuangan !== 'semua' && r.nama_ruangan !== filterRuangan) return;
 
     let rawName = r.nama_ruangan;
-    let kampus = getRoomCampus(rawName, r.kampus || '');
+    let kampus = formatCampusName(r.kampus) || getRoomCampus(rawName);
     let isThehok = !kampus.includes('Kobar');
     let isKobar = !isThehok;
     let cleanName = formatRoomName(rawName, false).replace(/ \((?:Kampus )?.*?\)/, "").trim();
@@ -2179,7 +2186,11 @@ function updateActiveLabPanel() {
     let text = 'Kosong';
     let jamText = '';
 
-    let schedules = roomSchedules[rawName] || [];
+    // Ambil jadwal yang cocok dengan nama ruangan dan kampus
+    let schedules = (roomSchedules[rawName] || []).concat(
+      roomSchedules[`${rawName} (${kampus})`] || [],
+      roomSchedules[`${cleanName} (${kampus})`] || []
+    );
 
     // Sort schedules by start time
     schedules.sort((a, b) => a.start - b.start);
@@ -2240,9 +2251,6 @@ function updateActiveLabPanel() {
 
   // Handle rooms that are in schedule but not in allRuanganData (e.g., specific regular rooms)
   Object.keys(roomSchedules).forEach(rawName => {
-    // Check if already processed in allRuanganData
-    if (allRuanganData.some(r => r.nama_ruangan === rawName)) return;
-
     let kampus = getRoomCampus(rawName);
     let isThehok = !kampus.includes('Kobar');
     let isKobar = !isThehok;
@@ -2251,6 +2259,9 @@ function updateActiveLabPanel() {
     let isRoomLab = isLab(cleanName);
 
     let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
+
+    // Jika ruangan sudah diproses dan sudah memiliki status jadwal aktif, lewati agar tidak tertimpa
+    if (targetDict[cleanName] && targetDict[cleanName].state !== 'empty') return;
 
     let state = 'empty';
     let text = 'Kosong';
@@ -2550,6 +2561,8 @@ function isLabNotification(itemOrPesan = '') {
   }
 
   const p = pesan.toLowerCase();
+  // Ruang S2 / Gedung Pasca B3.4 adalah ruang kelas biasa, bukan labor
+  if (p.includes('b3.4')) return false;
   // Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
   if (/\b3\.[14]\b/.test(p) && !p.includes('3.10')) return true;
 

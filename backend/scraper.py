@@ -401,7 +401,7 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
         # Normalisasi kampus: hapus kata 'Kampus ' (cukup 'Thehok' atau 'Kobar')
         kampus = re.sub(r'\bKampus\s+', '', kampus, flags=re.I).strip()
         # Normalisasi ruang: 3.1 dan 3.4 adalah Laboratorium SK
-        nama_ruangan = re.sub(r'\b(?:R\.|Ruang|Ruangan|Praktek)\s*(3\.[14])\b', r'Labor \1', nama_ruangan, flags=re.I)
+        nama_ruangan = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', nama_ruangan, flags=re.I)
             
         # 4. Parsing Kolom STATUS (TM, OL, CC)
         status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
@@ -479,10 +479,13 @@ def get_class_duration(nama_mk: str) -> int:
 def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
+    # Ruang S2 / Gedung Pasca B3.4 adalah ruang kelas biasa, bukan labor
+    if 'b3.4' in name:
+        return False
     # Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
     if re.search(r'\b3\.[14]\b', name) and '3.10' not in name:
         return True
-    if 'b3.4' in name or 'b2.3' in name:
+    if 'b2.3' in name:
         return True
     return 'lab' in name or 'cisco' in name or 'praktek' in name
 
@@ -490,10 +493,11 @@ def format_room_clean(room_name: str) -> str:
     if not room_name:
         return ""
     r = str(room_name).strip()
-    # 3.1 dan 3.4 adalah Laboratorium SK
-    r = re.sub(r'\b(?:R\.|Ruang|Praktek)\s*(3\.[14])\b', r'Labor \1', r, flags=re.IGNORECASE)
-    # Bersihkan prefix "Ruang " sebelum "R.", "Labor", "Lab", atau "Ruang"
-    r = re.sub(r'^(?:Ruang\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', r, flags=re.IGNORECASE)
+    # 3.1 dan 3.4 adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
+    if 'b3.4' not in r.lower():
+        r = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', r, flags=re.IGNORECASE)
+    # Bersihkan prefix "Ruang " atau "R. " sebelum "R.", "Labor", "Lab", atau "Ruang"
+    r = re.sub(r'^(?:(?:Ruang|R\.)\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', r, flags=re.IGNORECASE)
     # Jika "Ruang 4.9" -> "R. 4.9"
     r = re.sub(r'^Ruang\s+(\d)', r'R. \1', r, flags=re.IGNORECASE)
     # Hapus kata "Kampus " di dalam kurung: misal (Kampus Thehok) -> (Thehok)
