@@ -1578,13 +1578,6 @@ def get_aslab(authorization: str = Header(None)):
         """)
         results = cursor.fetchall()
         
-        # PII Protection: Sensor nomor WA di level backend jika bukan admin terotentikasi
-        for item in results:
-            if not is_admin:
-                wa = item.get('no_wa', '')
-                if wa and len(wa) > 6:
-                    item['no_wa'] = wa[:4] + '****' + wa[-3:]
-                    
         return {"status": "success", "data": results, "is_admin": is_admin}
     except Exception as e:
         return {"status": "error", "message": str(e)}

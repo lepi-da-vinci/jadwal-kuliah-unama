@@ -4350,16 +4350,22 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       let aslabRowHtml = '';
       if (matchedAslab) {
         let waLinkBtn = '';
-        if (matchedAslab.no_wa && matchedAslab.no_wa !== '-' && matchedAslab.no_wa.trim() !== '') {
+        if (matchedAslab.no_wa && matchedAslab.no_wa !== '-' && matchedAslab.no_wa.trim() !== '' && !matchedAslab.no_wa.includes('*')) {
           let cleanPhone = matchedAslab.no_wa.replace(/\D/g, '');
-          if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
-          const msgText = encodeURIComponent(`Halo kak ${matchedAslab.nama_aslab}, saya ingin menanyakan terkait ruang ${roomName} untuk perkuliahan ${s.nama_mk} (Kelas: ${s.kelas}).`);
-          waLinkBtn = `
-            <a href="https://api.whatsapp.com/send?phone=${cleanPhone}&text=${msgText}" target="_blank" class="room-card-wa-btn" title="Kirim Pesan WhatsApp">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-              <span>Chat WA</span>
-            </a>
-          `;
+          if (cleanPhone.startsWith('0')) {
+            cleanPhone = '62' + cleanPhone.slice(1);
+          } else if (cleanPhone.startsWith('8')) {
+            cleanPhone = '62' + cleanPhone;
+          }
+          if (cleanPhone.length >= 10) {
+            const msgText = encodeURIComponent(`Halo kak ${matchedAslab.nama_aslab}, saya ingin menanyakan terkait ruang ${roomName} untuk perkuliahan ${s.nama_mk} (Kelas: ${s.kelas}).`);
+            waLinkBtn = `
+              <a href="https://api.whatsapp.com/send?phone=${cleanPhone}&text=${msgText}" target="_blank" class="room-card-wa-btn" title="Kirim Pesan WhatsApp">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                <span>Chat WA</span>
+              </a>
+            `;
+          }
         }
         aslabRowHtml = `
           <div class="room-card-aslab">
@@ -8749,7 +8755,9 @@ setInterval(async () => {
     }
 
     // 3. Refresh Data Aslab 
-    const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+    const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`, {
+      headers: typeof getAdminHeaders === 'function' ? getAdminHeaders() : {}
+    });
     const dataAslab = await resAslab.json();
     if (dataAslab.status === 'success') {
       globalAslabData = dataAslab.data;
