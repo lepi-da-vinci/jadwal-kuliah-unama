@@ -404,16 +404,19 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
         nama_ruangan = re.sub(r'\b(R\.|Ruang|Ruangan)?\s*Praktek\s*(3\.[14])\b', r'R. \2', nama_ruangan, flags=re.I)
         nama_ruangan = re.sub(r'Praktek\s*(3\.[14])', r'R. \1', nama_ruangan, flags=re.I)
             
-        # 4. Parsing Kolom STATUS (OnSchedule (TM))
+        # 4. Parsing Kolom STATUS (TM, OL, CC)
         status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
-        status_jadwal, metode = status_raw, "TM"
-        match_status = re.match(r"(.*?)\s*\((TM|OL|CC)\)", status_raw)
-        if match_status:
-            status_jadwal = match_status.group(1).strip()
-            metode = match_status.group(2).strip()
-        elif "cancel" in status_raw.lower():
+        status_lower = status_raw.lower()
+        if "cc" in status_lower or "cancel" in status_lower or "batal" in status_lower:
             status_jadwal = "Cancel"
             metode = "CC"
+        elif "ol" in status_lower or "online" in status_lower or "daring" in status_lower:
+            status_jadwal = "Online"
+            metode = "OL"
+        else:
+            # Default perkuliahan adalah Tatap Muka (TM) / OnSchedule
+            status_jadwal = "OnSchedule"
+            metode = "TM"
 
         hasil_scraping.append({
             "hari": hari,
@@ -483,6 +486,18 @@ def is_lab(nama_ruangan):
         return False
     return 'lab' in name or 'cisco' in name or 'praktek' in name
 
+def format_room_clean(room_name: str) -> str:
+    if not room_name:
+        return ""
+    r = str(room_name).strip()
+    # Bersihkan prefix "Ruang " sebelum "R.", "Labor", "Lab", atau "Ruang"
+    r = re.sub(r'^(?:Ruang\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', r, flags=re.IGNORECASE)
+    # Jika "Ruang 4.9" -> "R. 4.9"
+    r = re.sub(r'^Ruang\s+(\d)', r'R. \1', r, flags=re.IGNORECASE)
+    # Hapus kata "Kampus " di dalam kurung: misal (Kampus Thehok) -> (Thehok)
+    r = re.sub(r'\(Kampus\s+(Thehok|Kobar)\)', r'(\1)', r, flags=re.IGNORECASE)
+    return r
+
 def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
     sem_final = target_semester or get_active_semester(conn, cursor)
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA' AND semester = %s", (target_date, sem_final))
@@ -539,6 +554,8 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         if not scheds:
             continue
         scheds = sorted(scheds, key=lambda x: x['start'])
+        clean_room = format_room_clean(room)
+        is_lab_room = is_lab(clean_room)
         
         # 1. Jeda Pagi: Jika kelas tatap muka pertama mulai >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
         first_cls = scheds[0]
@@ -546,8 +563,10 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             gap = first_cls['start'] - 480
             hours = gap // 60
             mins = gap % 60
-            dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
-            pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara 08:00 s/d {first_cls['jam']} (Persiapan Buka Lab jam {first_cls['jam']})."
+            dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+            tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
+            lab_note = f" (Buka Lab {first_cls['jam']})" if is_lab_room else ""
+            pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong 08:00 - {first_cls['jam']}{lab_note}."
             cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
 
         # 2. Jeda Antar Kelas
@@ -558,17 +577,18 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             if gap >= 90:
                 hours = gap // 60
                 mins = gap % 60
-                dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
+                dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+                tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
                 
                 # Format end time of current class
                 eh = curr['end'] // 60
                 em = curr['end'] % 60
                 end_str = f"{eh:02d}:{em:02d}"
                 
-                pesan = f"JEDA PANJANG ({dur_str}): Ruang {room} kosong antara {end_str} s/d {nxt['jam']}."
+                pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {end_str} - {nxt['jam']}."
                 cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
 
-    # BUG-13 FIX: Deteksi lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu notif jeda)
+    # Deteksi lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu notif jeda)
     cursor.execute("""
         SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
         FROM jadwal j
@@ -619,10 +639,12 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         if gap_min >= 90:
             hours = gap_min // 60
             mins = gap_min % 60
-            dur_str = f"{hours} jam" + (f" {mins} menit" if mins > 0 else "")
+            dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+            tipe_jeda = "JEDA SINGKAT" if gap_min <= 120 else "JEDA PANJANG"
             sh = f"{ol_start // 60:02d}:{ol_start % 60:02d}"
             eh = f"{ol_end // 60:02d}:{ol_end % 60:02d}"
-            pesan = f"JEDA ({dur_str}): Ruang {room} kosong {sh} - {eh} (Kelas dijadwalkan OL, Lab tidak terpakai — perlu dibuka)."
+            clean_room = format_room_clean(room)
+            pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {sh} - {eh} (Kuliah OL, lab siap digunakan)."
             cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
 
     conn.commit()
@@ -898,7 +920,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 for row, start_time in unmatched_new:
                     jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
                     dosen_str = dosen or '-'
-                    ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
+                    ruang_lengkap = format_room_clean(f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan)
                     pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
                     
                     # Deduplikasi: cek apakah notifikasi yang sama persis sudah tercatat
@@ -913,9 +935,27 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             # Logika deteksi PERUBAHAN STATUS:
             for row, start_time, old_data in matched_pairs:
                 jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
-                if old_data['status'] != status or old_data['metode'] != metode:
-                    ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
-                    pesan = f"PERUBAHAN STATUS: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_data['status']} -> {status}, Metode: {old_data['metode']} -> {metode}."
+                old_metode = old_data.get('metode')
+                old_status = old_data.get('status')
+                
+                if old_metode != metode or old_status != status:
+                    ruang_lengkap = format_room_clean(f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan)
+                    is_lab_target = is_lab(nama_ruangan)
+                    
+                    if old_metode != metode:
+                        if metode == 'OL':
+                            note = "Lab tidak digunakan." if is_lab_target else "Ruangan kosong."
+                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) jam {start_time} di {ruang_lengkap} dialihkan ke ONLINE (OL). {note}"
+                        elif metode == 'CC':
+                            note = "Lab kosong." if is_lab_target else "Ruangan kosong."
+                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) jam {start_time} di {ruang_lengkap} DIBATALKAN (CC). {note}"
+                        elif metode == 'TM':
+                            note = "Tolong persiapkan dan buka lab sesuai jadwal." if is_lab_target else "Ruangan digunakan sesuai jadwal."
+                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) jam {start_time} di {ruang_lengkap} kembali TATAP MUKA (TM). {note}"
+                        else:
+                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Metode: {old_metode} -> {metode}."
+                    else:
+                        pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_status} -> {status}."
                     
                     cursor.execute("""
                         SELECT 1 FROM notifikasi_lab 

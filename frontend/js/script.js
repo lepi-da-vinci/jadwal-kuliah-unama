@@ -55,6 +55,10 @@ function formatRoomName(rawName, isMobile = null) {
              .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
              .replace(/\bKampus\s+UNAMA\b/gi, 'UNAMA');
 
+  // Bersihkan prefix 'Ruang' berlebih agar tidak terjadi "Ruang R." atau "Ruang Labor"
+  name = name.replace(/\bRuang\s+(?=R\b|R\.|Labor|Lab|Ruang)/gi, '')
+             .replace(/\bRuang\s+(\d)/gi, 'R. $1');
+
   // 2. Ruang 3.1 dan 3.4 tidak pakai 'praktek', cukup ruangan biasa (R. 3.1 / R. 3.4)
   name = name.replace(/(?:R\.|Ruang|Labor)?\s*Praktek\s*(3\.[14])\b/gi, 'R. $1');
   name = name.replace(/\b(?:Labor|Lab)\s*(3\.[14])\b/gi, 'R. $1');
@@ -2484,11 +2488,43 @@ let activeInfoMaseTab = 'lab'; // 'lab' | 'ruang'
 let currentLabWarnings = [];
 let currentRuangWarnings = [];
 
-function isLabNotification(pesan = '') {
-  const p = String(pesan).toLowerCase();
+function getRoomFromNotification(pesan = '') {
+  if (!pesan) return '';
+  const p = String(pesan).trim();
+  // 1. Format JEDA: "JEDA ...: R. 4.9 (Thehok) kosong ..." atau "JEDA ...: Ruang R. 4.9 (Thehok) kosong ..."
+  const jedaMatch = p.match(/JEDA(?:\s+[A-Z]+)?(?:\s*\([^)]*\))?:\s*(?:Ruang\s+)?([^\n\r:]+?)\s+kosong/i);
+  if (jedaMatch) return jedaMatch[1].trim();
+
+  // 2. Format TAMBAHAN / PERUBAHAN: "... di R. 4.9 (Thehok) pada ..." atau "... di Labor 1.3 (Thehok) dialihkan ..."
+  const diMatch = p.match(/\bdi\s+([^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.)/i);
+  if (diMatch) return diMatch[1].trim();
+
+  return '';
+}
+
+function isLabNotification(itemOrPesan = '') {
+  let pesan = '';
+  if (typeof itemOrPesan === 'object' && itemOrPesan !== null) {
+    if (itemOrPesan.ruangan) {
+      return isLab(itemOrPesan.ruangan);
+    }
+    pesan = itemOrPesan.pesan || '';
+  } else {
+    pesan = String(itemOrPesan || '');
+  }
+
+  const extractedRoom = getRoomFromNotification(pesan);
+  if (extractedRoom) {
+    return isLab(extractedRoom);
+  }
+
+  const p = pesan.toLowerCase();
   // Ruang 3.1 dan 3.4 bukan lab
-  if (p.includes('3.1') || p.includes('3.4')) return false;
-  return p.includes('labor') || p.includes('lab ') || p.includes('lab.') || p.includes('praktek') || p.includes('cisco');
+  if ((p.includes('3.1') || p.includes('3.4')) && !p.includes('b3.4') && !p.includes('b2.3')) return false;
+
+  // Hapus teks catatan dalam kurung agar tidak tertipu oleh "(buka lab ...)" atau "persiapan buka lab"
+  const pWithoutNotes = p.replace(/\([^)]*lab[^)]*\)/gi, '');
+  return /\b(?:labor|laboratorium|cisco|praktek)\b/i.test(pWithoutNotes) || /\blab\s+\d/i.test(pWithoutNotes);
 }
 
 function calculateClientSideGaps(targetDate) {
@@ -2514,8 +2550,6 @@ function calculateClientSideGaps(targetDate) {
   });
 
   // Lacak lab yang HANYA punya kelas OL di tanggal ini (fisik kosong, perlu dibuka)
-  // Jika lab punya kelas OL tapi tidak ada kelas fisik, lab tetap kosong secara fisik
-  // dan perlu ada notifikasi jeda agar aslab tahu lab bisa/perlu dibuka.
   const olOnlyLabRooms = {};
   allJadwal.forEach(item => {
     const isOnline = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
@@ -2523,7 +2557,6 @@ function calculateClientSideGaps(targetDate) {
                         (item.status_jadwal && item.status_jadwal.toLowerCase().includes('batal'));
     if (item.tanggal === targetDate && item.jam && item.nama_ruangan && isLab(item.nama_ruangan) && isOnline && !isCancelled) {
       const ruang = item.nama_ruangan;
-      // Hanya proses lab yang tidak punya kelas fisik (tidak ada di roomSchedules)
       if (!roomSchedules[ruang]) {
         if (!olOnlyLabRooms[ruang]) olOnlyLabRooms[ruang] = [];
         const parts = item.jam.split(':');
@@ -2539,50 +2572,51 @@ function calculateClientSideGaps(targetDate) {
   // Proses lab dengan kelas OL-only: lab fisik kosong selama jam OL berlangsung
   for (const [room, olScheds] of Object.entries(olOnlyLabRooms)) {
     olScheds.sort((a, b) => a.start - b.start);
-    // Hitung rentang waktu total sesi OL (dari mulai sesi pertama sampai selesai sesi terakhir)
     const olStart = olScheds[0].start;
     const olEnd = olScheds[olScheds.length - 1].end;
     const gapMin = olEnd - olStart;
     if (gapMin >= 90) {
       const hours = Math.floor(gapMin / 60);
       const mins = gapMin % 60;
-      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} menit` : '');
+      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} mnt` : '');
+      const tipeJeda = gapMin <= 120 ? 'JEDA SINGKAT' : 'JEDA PANJANG';
       const sh = Math.floor(olStart / 60).toString().padStart(2, '0');
       const sm = (olStart % 60).toString().padStart(2, '0');
       const eh = Math.floor(olEnd / 60).toString().padStart(2, '0');
       const em = (olEnd % 60).toString().padStart(2, '0');
+      const cleanRoom = formatRoomName(room, false);
       generatedGaps.push({
         tipe_notif: 'JEDA',
-        ruangan: room,
+        ruangan: cleanRoom,
         jam: `${sh}:${sm} - ${eh}:${em}`,
         durasi: durStr,
-        pesan: `JEDA (${durStr}): Ruang ${room} kosong ${sh}:${sm} - ${eh}:${em} (Kelas dijadwalkan OL, Lab tidak terpakai — perlu dibuka).`,
+        pesan: `${tipeJeda} (${durStr}): ${cleanRoom} kosong ${sh}:${sm} - ${eh}:${em} (Kuliah OL, lab siap digunakan).`,
         waktu: 'Otomatis'
       });
     }
   }
 
   for (const [room, scheds] of Object.entries(roomSchedules)) {
-    // Hanya periksa ruangan laboratorium
-    if (!isLab(room)) continue;
-
     scheds.sort((a, b) => a.start - b.start);
+    const cleanRoom = formatRoomName(room, false);
+    const isLabRoom = isLab(cleanRoom);
 
     // 1. JEDA PAGI (08:00 s/d kelas pertama)
-    // Jika kelas tatap muka pertama baru mulai jam >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
     if (scheds.length > 0 && scheds[0].start >= 570) {
       const gapPagi = scheds[0].start - 480; // 480 = 08:00
       const hours = Math.floor(gapPagi / 60);
       const mins = gapPagi % 60;
-      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} menit` : '');
+      const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} mnt` : '');
+      const tipeJeda = gapPagi <= 120 ? 'JEDA SINGKAT' : 'JEDA PANJANG';
       const sh = Math.floor(scheds[0].start / 60).toString().padStart(2, '0');
       const sm = (scheds[0].start % 60).toString().padStart(2, '0');
+      const labNote = isLabRoom ? ` (Buka Lab ${sh}:${sm})` : '';
       generatedGaps.push({
         tipe_notif: 'JEDA',
-        ruangan: room,
+        ruangan: cleanRoom,
         jam: `08:00 - ${sh}:${sm}`,
         durasi: durStr,
-        pesan: `JEDA PANJANG (${durStr}): Ruang ${room} kosong antara 08:00 s/d ${sh}:${sm} (Persiapan Buka Lab jam ${sh}:${sm}).`,
+        pesan: `${tipeJeda} (${durStr}): ${cleanRoom} kosong 08:00 - ${sh}:${sm}${labNote}.`,
         waktu: 'Otomatis'
       });
     }
@@ -2595,15 +2629,16 @@ function calculateClientSideGaps(targetDate) {
       if (gap >= 90) {
         const hours = Math.floor(gap / 60);
         const mins = gap % 60;
-        const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} menit` : '');
+        const durStr = `${hours} jam` + (mins > 0 ? ` ${mins} mnt` : '');
+        const tipeJeda = gap <= 120 ? 'JEDA SINGKAT' : 'JEDA PANJANG';
         const eh = Math.floor(curr.end / 60).toString().padStart(2, '0');
         const em = (curr.end % 60).toString().padStart(2, '0');
         generatedGaps.push({
           tipe_notif: 'JEDA',
-          ruangan: room,
+          ruangan: cleanRoom,
           jam: `${eh}:${em} - ${nxt.jam}`,
           durasi: durStr,
-          pesan: `JEDA PANJANG (${durStr}): Ruang ${room} kosong antara ${eh}:${em} s/d ${nxt.jam}.`,
+          pesan: `${tipeJeda} (${durStr}): ${cleanRoom} kosong ${eh}:${em} - ${nxt.jam}.`,
           waktu: 'Otomatis'
         });
       }
@@ -2705,8 +2740,8 @@ function renderInfoMaseNotifications(showPopup = false) {
     return true; // if no campus identifier, show it
   });
 
-  const labCount = filteredByKampus.filter(n => isLabNotification(n.pesan)).length;
-  const ruangCount = filteredByKampus.filter(n => !isLabNotification(n.pesan)).length;
+  const labCount = filteredByKampus.filter(n => isLabNotification(n)).length;
+  const ruangCount = filteredByKampus.filter(n => !isLabNotification(n)).length;
 
   // Update badges on buttons
   const badges = [
@@ -2741,7 +2776,7 @@ function renderInfoMaseNotifications(showPopup = false) {
 
   // Filter list based on selected active tab (default 'lab', or 'ruang')
   let filtered = filteredByKampus.filter(n => {
-    return activeInfoMaseTab === 'ruang' ? !isLabNotification(n.pesan) : isLabNotification(n.pesan);
+    return activeInfoMaseTab === 'ruang' ? !isLabNotification(n) : isLabNotification(n);
   });
 
   if (filtered.length === 0) {
@@ -2757,7 +2792,7 @@ function renderInfoMaseNotifications(showPopup = false) {
   let html = '', popupContent = '';
   filtered.forEach(n => {
     let cls = '';
-    const isLab = isLabNotification(n.pesan);
+    const isLab = isLabNotification(n);
     const categoryBadge = isLab 
       ? '<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>' 
       : '<span class="notif-cat-badge kelas">Kelas</span>';
@@ -2770,7 +2805,29 @@ function renderInfoMaseNotifications(showPopup = false) {
       cls = 'jeda';
     }
     
-    const cleanPesan = formatRoomNameHtml(n.pesan.replace(/\(Kampus\s+(Thehok|Kobar)\)/gi, '($1)').replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1'));
+    let msgText = (n.pesan || '')
+      .replace(/\(Kampus\s+(Thehok|Kobar)\)/gi, '($1)')
+      .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
+      .replace(/\bRuang\s+(?=R\b|R\.|Labor|Lab|Ruang)/gi, '')
+      .replace(/\bRuang\s+(\d)/gi, 'R. $1')
+      .replace(/\s*antara\s+/gi, ' ')
+      .replace(/\s+s\/d\s+/gi, ' - ');
+
+    if (!isLab) {
+      // Pastikan ruang kelas tidak ada embel-embel buka lab
+      msgText = msgText.replace(/\s*\(Persiapan\s+Buka\s+Lab[^)]*\)/gi, '');
+      msgText = msgText.replace(/\s*\(Buka\s+Lab[^)]*\)/gi, '');
+    } else {
+      // Simpelkan jika masih format lama
+      msgText = msgText.replace(/\(Persiapan\s+Buka\s+Lab\s+jam\s+([^)]+)\)/gi, '(Buka Lab $1)');
+    }
+
+    // Jika durasi <= 2 jam tapi tertulis JEDA PANJANG, ubah jadi JEDA SINGKAT
+    if (/^JEDA PANJANG \((?:[01] jam|2 jam(?! \d)|[0-9]{1,2} m)/i.test(msgText)) {
+      msgText = msgText.replace(/^JEDA PANJANG/i, 'JEDA SINGKAT');
+    }
+
+    const cleanPesan = formatRoomNameHtml(msgText);
 
     // Fix Bug Visual: Semua tipe notif dimasukkan ke popupContent, bukan cuma TAMBAHAN
     if (showPopup) {
