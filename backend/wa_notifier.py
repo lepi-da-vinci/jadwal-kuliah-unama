@@ -409,9 +409,121 @@ def update_profil_aslab(nama_panggilan_baru: str = None, ruangan_baru: str = Non
             cursor.close()
             conn.close()
 
+def list_aslab_lain():
+    """Melihat daftar asisten lab (aslab) lain yang terdaftar di sistem untuk tujuan pengiriman/titip pesan."""
+    sender = getattr(current_sender_context, 'sender', None)
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        no_wa = re.sub(r'\D', '', sender or '')
+        if no_wa.startswith('0'): no_wa = '62' + no_wa[1:]
+
+        # Ambil semua aslab kecuali pengirim saat ini
+        cursor.execute('''
+            SELECT a.id_aslab, a.nama_aslab, r.nama_ruangan, r.kampus
+            FROM asisten_lab a
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE (a.no_wa != %s AND a.no_wa != %s AND (a.wa_lid IS NULL OR a.wa_lid != %s))
+            ORDER BY a.nama_aslab ASC
+        ''', (no_wa, sender or '', sender or ''))
+        aslabs = cursor.fetchall()
+        
+        if not aslabs:
+            return "Belum ada aslab lain yang terdaftar di sistem."
+            
+        msg = "Daftar Aslab Lain:\n"
+        for i, a in enumerate(aslabs, 1):
+            ruang_info = f"{a['nama_ruangan']} ({a['kampus']})" if a['nama_ruangan'] else "Belum set ruangan"
+            msg += f"{i}. {a['nama_aslab']} - {ruang_info}\n"
+        return msg
+    except Exception as e:
+        return f"Error mengambil daftar aslab: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def kirim_pesan_ke_aslab(nama_atau_ruangan_target: str, isi_pesan: str):
+    """Mengirim pesan WhatsApp ke aslab lain yang dituju. Gunakan tool ini setelah aslab tujuan dan isi pesan sudah jelas.
+    Parameter:
+    - nama_atau_ruangan_target: nama aslab tujuan atau nomor ruangan lab (misal 'Yanto', 'Reza', atau '1.7')
+    - isi_pesan: isi pesan teks yang ingin disampaikan ke aslab tersebut
+    """
+    sender = getattr(current_sender_context, 'sender', None)
+    if not sender:
+        return "Gagal, konteks nomor pengirim tidak ditemukan."
+        
+    isi_clean = str(isi_pesan or "").strip()
+    if not isi_clean:
+        return "Isi pesan tidak boleh kosong."
+
+    target_query = str(nama_atau_ruangan_target or "").strip()
+    if not target_query:
+        return "Nama atau ruangan aslab tujuan tidak boleh kosong."
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 1. Cari data pengirim
+        no_wa_sender = re.sub(r'\D', '', sender)
+        if no_wa_sender.startswith('0'): no_wa_sender = '62' + no_wa_sender[1:]
+        cursor.execute('''
+            SELECT a.nama_aslab, r.nama_ruangan, r.kampus
+            FROM asisten_lab a
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
+        ''', (no_wa_sender, sender, sender))
+        sender_info = cursor.fetchone()
+        sender_nama = sender_info['nama_aslab'] if sender_info else "Aslab"
+        sender_ruang = f"{sender_info['nama_ruangan']} ({sender_info['kampus']})" if (sender_info and sender_info.get('nama_ruangan')) else "Lab UNAMA"
+
+        # 2. Cari data aslab tujuan
+        cursor.execute('''
+            SELECT a.id_aslab, a.nama_aslab, a.no_wa, a.wa_lid, r.nama_ruangan, r.kampus
+            FROM asisten_lab a
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE (LOWER(a.nama_aslab) LIKE %s OR LOWER(COALESCE(r.nama_ruangan, '')) LIKE %s)
+              AND (a.no_wa != %s AND a.no_wa != %s AND (a.wa_lid IS NULL OR a.wa_lid != %s))
+            ORDER BY a.id_aslab ASC
+        ''', (f"%{target_query.lower()}%", f"%{target_query.lower()}%", no_wa_sender, sender, sender))
+        targets = cursor.fetchall()
+        
+        if not targets:
+            return f"Aslab dengan nama atau lab '{target_query}' tidak ditemukan di daftar aslab lain."
+        
+        target = targets[0]
+        target_nama = target['nama_aslab']
+        target_ruang = f"{target['nama_ruangan']} ({target['kampus']})" if target.get('nama_ruangan') else ""
+        target_destination = target['no_wa'] or target['wa_lid']
+        
+        if not target_destination:
+            return f"Nomor WhatsApp untuk aslab {target_nama} tidak tersedia."
+
+        # 3. Format pesan WhatsApp yang dikirimkan ke target
+        wa_text = (
+            f"*Pesan dari Aslab {sender_nama}* ({sender_ruang}):\n\n"
+            f"\"{isi_clean}\"\n\n"
+            f"_Balas lewat bot ini jika mau titip pesan balik._"
+        )
+        
+        success = send_wa_message(target_destination, wa_text)
+        if success:
+            return f"Pesan berhasil terkirim ke {target_nama}" + (f" ({target_ruang})" if target_ruang else "") + "."
+        else:
+            return f"Gagal mengirim pesan WhatsApp ke {target_nama}. Silakan coba beberapa saat lagi."
+            
+    except Exception as e:
+        return f"Error saat mengirim pesan ke aslab: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 ai_tools = [
     cek_jadwal_lab_tertentu, cek_semua_lab_kampus, cek_lab_kosong,
-    cari_posisi_dosen, get_info_mase, get_ngrok_link, update_profil_aslab
+    cari_posisi_dosen, get_info_mase, get_ngrok_link, update_profil_aslab,
+    list_aslab_lain, kirim_pesan_ke_aslab
 ]
 
 chat_sessions = {}
@@ -432,7 +544,16 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
    • 08:00-10:15: Algoritma dan Struktur Data I (05PT2) [TM] - Irawan
    • 10:15-12:30: Pemrograman Web I (04PT4) [OL] - Hendri
    • 13:15-15:30: Machine Learning II (06PT6) [CC] - Jasmir
-   Keterangan status: TM = Tatap Muka, OL = Online, CC = Cancel/Batal."""
+   Keterangan status: TM = Tatap Muka, OL = Online, CC = Cancel/Batal.
+
+FITUR RAHASIA (TITIP / SAMPAIKAN PESAN KE ASLAB LAIN):
+- Fitur ini adalah fitur rahasia AI (TIDAK DITAMPILKAN di daftar menu 1 s/d 6).
+- Jika pengguna ingin mengirim, menyampaikan, atau menitipkan pesan ke aslab lain (misal: "titip pesan", "kirim pesan ke aslab lain", "sampaikan pesan ke aslab", "chat aslab", dll):
+  1. Panggil tool `list_aslab_lain()` terlebih dahulu untuk mengambil daftar aslab lain yang terdaftar.
+  2. Tampilkan daftar aslab tersebut ke pengguna (nomor/nama dan lab/kampusnya), lalu tanyakan mau kirim pesan ke siapa. Jangan langsung bertanya isi pesan jika pengguna belum memilih nama target.
+  3. Setelah pengguna memilih nama aslab tujuan, baru tanyakan apa isi pesannya.
+  4. Setelah pengguna memberikan isi pesan, panggil tool `kirim_pesan_ke_aslab(nama_atau_ruangan_target, isi_pesan)`.
+  5. Konfirmasikan ke pengguna bahwa pesan telah berhasil terkirim."""
 
         model = genai.GenerativeModel(
             model_name='gemini-flash-lite-latest',
