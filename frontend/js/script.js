@@ -2222,28 +2222,14 @@ function updateActiveLabPanel() {
       text = 'Jeda';
       const isNight = nextClass.start >= 17 * 60;
       jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    } else if (isToday && schedules.length > 0) {
-      // Kelas terjadwal hari ini sudah selesai
-      const lastClass = schedules[schedules.length - 1];
-      if (currentTime > lastClass.end) {
-        state = 'finished';
-        text = 'Selesai';
-        jamText = isKobar ? '(Kelas Terakhir)' : (lastClass.start >= 17 * 60 ? '(Malam Selesai)' : '(Operasional Selesai)');
-      }
-    } else if (isToday && isKobar && currentTime >= 17 * 60) {
-      // Kobar tutup jam 17:00 (tidak ada kelas malam)
-      state = 'finished';
-      text = 'Selesai';
-      jamText = '(Tutup 17:00)';
-    } else if (isToday && !isKobar && currentTime >= 21 * 60) {
-      // Thehok tutup jam 21:00
-      state = 'finished';
-      text = 'Selesai';
-      jamText = '(Tutup 21:00)';
     } else if (!isToday && schedules.length > 0) {
       state = 'scheduled';
       text = 'Terjadwal';
       jamText = `(${schedules.length} Kelas)`;
+    } else {
+      state = 'empty';
+      text = 'Kosong';
+      jamText = '';
     }
 
     targetDict[cleanName] = { state, text, jamText };
@@ -2297,25 +2283,14 @@ function updateActiveLabPanel() {
       text = 'Jeda';
       const isNight = nextClass.start >= 17 * 60;
       jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    } else if (isToday && schedules.length > 0) {
-      const lastClass = schedules[schedules.length - 1];
-      if (currentTime > lastClass.end) {
-        state = 'finished';
-        text = 'Selesai';
-        jamText = isKobar ? '(Kelas Terakhir)' : (lastClass.start >= 17 * 60 ? '(Malam Selesai)' : '(Operasional Selesai)');
-      }
-    } else if (isToday && isKobar && currentTime >= 17 * 60) {
-      state = 'finished';
-      text = 'Selesai';
-      jamText = '(Tutup 17:00)';
-    } else if (isToday && !isKobar && currentTime >= 21 * 60) {
-      state = 'finished';
-      text = 'Selesai';
-      jamText = '(Tutup 21:00)';
     } else if (!isToday && schedules.length > 0) {
       state = 'scheduled';
       text = 'Terjadwal';
       jamText = `(${schedules.length} Kelas)`;
+    } else {
+      state = 'empty';
+      text = 'Kosong';
+      jamText = '';
     }
 
     targetDict[cleanName] = { state, text, jamText };
