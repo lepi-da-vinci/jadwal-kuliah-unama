@@ -39,14 +39,19 @@ def get_db():
             database=db_name
         )
     except mysql.connector.Error as err:
-        if err.errno == 1045 and pwd != "":
-            return mysql.connector.connect(
-                host=host,
-                port=port,
-                user=user,
-                password="",
-                database=db_name
-            )
+        if err.errno == 1045:
+            for fallback_pwd in ["", "123456", "root"]:
+                if fallback_pwd != pwd:
+                    try:
+                        return mysql.connector.connect(
+                            host=host,
+                            port=port,
+                            user=user,
+                            password=fallback_pwd,
+                            database=db_name
+                        )
+                    except mysql.connector.Error:
+                        continue
         raise err
 
 def init_db_schema():
