@@ -36,44 +36,200 @@ CREATE TABLE absensi_aslab (
 
 ---
 
-## 2. Notifikasi Perubahan Jadwal Otomatis
+## 2. Notifikasi Perubahan & Pindah Jadwal Otomatis (Smart Schedule Alert)
 
-**Deskripsi:**
-Mendeteksi perubahan jadwal saat scraping dan mengirim notifikasi otomatis ke aslab yang terdampak.
+**Status:** Selesai Diimplementasikan (Fase 1, 2, & 3 Aktif di Scraper)  
+**Tujuan:** Mendeteksi setiap perubahan jadwal kuliah (batal/online/pindah lab/kelas tambahan) saat proses sinkronisasi scraper berjalan, lalu secara otomatis mengirimkan notifikasi WhatsApp kepada asisten lab (aslab) yang ruangannya terdampak secara tepat sasaran.
 
-**Tantangan Utama:**
-- Sistem ini berbasis scraping dari BAAK, sehingga perubahan jadwal harus dideteksi dengan membandingkan data lama vs data baru saat sync/scrape
-- Perubahan bisa berupa: kelas di-cancel (TM→CC), pindah ruangan, perubahan jam, dosen berubah
+> **Prinsip Integritas Data (Single Source of Truth):**  
+> Sistem ini **TIDAK mengizinkan pemindahan atau modifikasi jadwal secara manual** di sisi aplikasi kita. Seluruh data jadwal wajib 100% bersumber dan patuh pada portal resmi BAAK UNAMA. Sistem kita bertindak murni sebagai **pemantau & pengingat otomatis (real-time monitoring & alert)** agar aslab langsung terinformasi saat ada perubahan resmi dari pihak BAAK/dosen.
 
-**Alur yang Diusulkan:**
-1. Saat `scraper.py` melakukan sync/scrape, bandingkan data jadwal yang sudah ada di DB dengan data baru dari BAAK
-2. Jika ada perbedaan (status berubah, ruangan pindah, kelas baru muncul), catat ke tabel `notifikasi_lab` dengan tipe khusus (misal `PERUBAHAN_JADWAL`)
-3. Kirim WA ke aslab yang terdampak (aslab yang ruangannya berubah)
-4. Perubahan juga otomatis tampil di Info Mase di dashboard web
+---
 
-**Integrasi dengan Info Mase:**
-- Info Mase (`notifikasi_lab`) sudah ada dan bisa digunakan untuk menyimpan catatan perubahan jadwal
-- Tipe notif baru: `JADWAL_BERUBAH`, `JADWAL_BATAL`, `JADWAL_PINDAH_RUANG`
-- Format pesan contoh: `"[PERUBAHAN] Algoritma (05PT2) jam 08:00 di Lab 1.8: TM → CC (dibatalkan)"`
+### A. Latar Belakang Masalah
+Di lingkungan operasional kampus UNAMA:
+1. **Perubahan Mendadak:** Dosen sering kali mengubah perkuliahan dari Tatap Muka (TM) ke Online (OL) atau Cancel/Batal (CC) secara mendadak melalui sistem BAAK.
+2. **Pindah Ruangan:** Kelas yang semula di ruang teori sering dipindah ke laboratorium (atau sebaliknya karena kendala AC / kapasitas).
+3. **Dampak ke Aslab:** Aslab sering tidak mengetahui perubahan tersebut, sehingga:
+   - Terlanjur bersiap dan menunggu di lab untuk kelas yang sebenarnya dibatalkan.
+   - Lab belum dibuka atau disiapkan saat ada kelas yang mendadak dipindahkan masuk ke labnya.
+   - Mahasiswa menunggu di depan lab yang masih terkunci.
 
-**Detail Teknis (Rencana):**
-```python
-# Di scraper.py, setelah sync:
-def detect_schedule_changes(old_data, new_data, tanggal):
-    changes = []
-    for new in new_data:
-        old_match = find_matching(old_data, new)  # match by kode_mk + kelas + tanggal
-        if old_match:
-            if old_match['metode_pembelajaran'] != new['metode_pembelajaran']:
-                changes.append({'type': 'STATUS', 'old': old_match, 'new': new})
-            if old_match['id_ruangan'] != new['id_ruangan']:
-                changes.append({'type': 'PINDAH_RUANG', 'old': old_match, 'new': new})
-        else:
-            changes.append({'type': 'BARU', 'new': new})
-    return changes
+---
+
+### B. Matriks Skenario Perubahan Jadwal
+Sistem mendeteksi 6 skenario perubahan jadwal:
+
+| Kode Perubahan | Kondisi Lama -> Baru | Contoh Kasus | Dampak & Tindakan Aslab |
+| :--- | :--- | :--- | :--- |
+| **BATAL (CC)** | `TM` / `OL` -> `CC` | Dosen berhalangan hadir | Lab kosong, PC/AC tidak perlu dinyalakan. |
+| **ONLINE (OL)** | `TM` -> `OL` | Kuliah dialihkan daring | Mahasiswa tidak ke lab, lab kosong/bebas dipakai. |
+| **KEMBALI TM** | `OL` / `CC` -> `TM` | Dosen memutuskan tatap muka | **Wajib buka & siapkan lab** tepat waktu! |
+| **PINDAH MASUK** | Ruang Lain -> Lab Aslab | Kelas teori pindah ke Lab | **Wajib siapkan lab** untuk kelas baru yang masuk. |
+| **PINDAH KELUAR** | Lab Aslab -> Ruang Lain | Kelas lab dipindah ke kelas teori | Lab aslab menjadi kosong di jam tersebut. |
+| **KELAS TAMBAHAN**| Tidak ada -> Jadwal baru | Sesi praktikum pengganti | Lab akan digunakan di luar jadwal reguler. |
+
+---
+
+### C. Arsitektur & Algoritma Deteksi (Two-Pass Matcher)
+
+#### Evaluasi Algoritma Saat Ini di `scraper.py`:
+Saat ini, fungsi `compare_and_finalize_sync` membandingkan jadwal menggunakan kunci komparasi tunggal:  
+`key = f"{jam_str}_{nama_ruangan}_{kelas}"`.  
+**Kelemahan:** Jika ruangan berubah (misal dari *Labor 1.5* ke *Labor 1.8*), sistem menganggap kelas di *Labor 1.5* **hilang** dan kelas di *Labor 1.8* **baru**, sehingga sistem **gagal mengenali bahwa ini adalah peristiwa PINDAH RUANG**.
+
+#### Solusi: Algoritma Pencocokan Dua Tahap (Two-Pass Matcher):
+Saat `jadwal_temp` (data baru dari scraping BAAK) dibandingkan dengan `jadwal` (data aktif saat ini):
+
+1. **Pass 1 - Deteksi Perubahan Status di Ruangan yang Sama:**
+   - Kunci pencocokan: `(tanggal, jam, id_ruangan, kelas/kode_mk)`.
+   - Jika jadwal lama dan baru cocok di ruangan yang sama, bandingkan `metode_pembelajaran` (`TM`, `OL`, `CC`) dan `status_jadwal`.
+   - Jika ada perbedaan -> Catat sebagai event: `STATUS_CHANGED` (Batal / Online / Kembali TM).
+
+2. **Pass 2 - Deteksi Pindah Ruangan (Cross-Room Matcher):**
+   - Ambil seluruh jadwal yang tersisa di `jadwal_temp` (yang belum cocok di Pass 1) dan bandingkan dengan jadwal lama yang belum cocok.
+   - Kunci pencocokan lintas ruangan: `(tanggal, jam, nama_mk, kelas)` atau `(tanggal, jam, kode_mk, kelas)`.
+   - Jika mata kuliah & kelas sama pada jam yang sama, namun `id_ruangan_lama != id_ruangan_baru`:
+     - **Terdeteksi pasti sebagai PINDAH RUANGAN!**
+     - Catat: `ruang_asal` dan `ruang_tujuan`.
+     - Tandai kedua ruangan sebagai terdampak.
+
+3. **Pass 3 - Deteksi Kelas Tambahan Murni:**
+   - Sisa jadwal baru yang benar-benar tidak memiliki padanan lama -> Catat sebagai `KELAS_TAMBAHAN`.
+
+---
+
+### D. Alur Notifikasi ke Aslab Terdampak
+
+```
+  [Scraper BAAK Sync]
+          │
+          ▼
+[Bandingkan Data Lama vs Baru] (Two-Pass Matcher)
+          │
+          ├── Ada Perubahan?
+          │      ├── TIDAK ──> Selesai (Tidak ada pesan terkirim)
+          │      └── YA
+          ▼
+[Catat ke DB: notifikasi_lab & log_notifikasi_perubahan]
+          │
+          ▼
+[Cek Apakah Jadwal Terkait Hari Ini (H+0) atau Besok (H+1)?]
+          │      ├── Tanggal Lain (H+2 dst) ──> Simpan di DB saja (Biar tidak spam WA)
+          │      └── Hari Ini / Besok ──> Lanjutkan Kirim WA
+          ▼
+[Cari Nomor Aslab yang Memegang Ruangan Terdampak di Tabel asisten_lab]
+          │
+          ├── Skenario Batal/Online: Kirim ke aslab ruangan tersebut
+          │
+          └── Skenario Pindah Ruang:
+                 ├── Kirim ke Aslab Ruang Asal: "Kelas X pindah keluar ke Lab Y (Lab kamu kosong)"
+                 └── Kirim ke Aslab Ruang Tujuan: "Kelas X pindah masuk dari Lab Y (Tolong siapkan lab)"
 ```
 
-**Status:** Menunggu diskusi alur detail dengan developer
+---
+
+### E. Format Pesan WhatsApp (Padat, Jelas, 0 Emoji)
+
+Sesuai standar operasional bot (singkat, to the point, tanpa emoji, format WhatsApp):
+
+#### 1. Kelas Dibatalkan:
+```text
+*PEMBERITAHUAN PERUBAHAN JADWAL*
+Ruangan: Labor 1.8 (Kobar)
+Waktu: Hari ini (08:00 - 10:15)
+
+Kelas *Algoritma dan Pemrograman (05PT2)* DIBATALKAN (CC) oleh dosen/BAAK.
+Status Lab: Ruangan kosong pada jam tersebut, lab tidak perlu dibuka/disiapkan.
+```
+
+#### 2. Kelas Dialihkan ke Online:
+```text
+*PEMBERITAHUAN PERUBAHAN JADWAL*
+Ruangan: Labor 1.8 (Kobar)
+Waktu: Hari ini (10:15 - 12:30)
+
+Kelas *Pemrograman Web (04PT4)* dialihkan ke ONLINE (OL).
+Status Lab: Mahasiswa tidak menggunakan lab fisik.
+```
+
+#### 3. Kelas Pindah Masuk (Inbound Relocation):
+```text
+*PERINGATAN: KELAS PINDAH MASUK*
+Ruangan: Labor 1.8 (Kobar)
+Waktu: Hari ini (13:15 - 15:30)
+
+Kelas *Jaringan Komputer (06PT2)* dipindahkan MASUK ke ruangan kamu (sebelumnya di Labor 1.5).
+Dosen: Reza Maulana
+Status Lab: Tolong persiapkan dan buka lab sebelum pukul 13:15.
+```
+
+#### 4. Kelas Pindah Keluar (Outbound Relocation):
+```text
+*PEMBERITAHUAN PERUBAHAN JADWAL*
+Ruangan: Labor 1.5 (Kobar)
+Waktu: Hari ini (13:15 - 15:30)
+
+Kelas *Jaringan Komputer (06PT2)* dipindahkan KELUAR ke Labor 1.8.
+Status Lab: Ruangan kamu kosong pada jam tersebut.
+```
+
+---
+
+### F. Mekanisme Keamanan & Anti-Spam (Safety Guards)
+
+Untuk mencegah bot melakukan spamming atau nomor WhatsApp diblokir:
+
+1. **Jendela Waktu Notifikasi (H+0 dan H+1):**
+   - Hanya mengirim pesan WA untuk perubahan jadwal **Hari Ini** atau **Besok**.
+   - Perubahan jadwal untuk minggu depan hanya dicatat ke database/dashboard, tidak dikirim via WA agar tidak mengganggu aslab.
+2. **Pencegahan Notifikasi Berulang (Deduplication Hash):**
+   - Menggunakan hash unik: `MD5(tanggal + jam + id_ruangan + kelas + tipe_perubahan)`.
+   - Jika hash sudah ada dalam 24 jam terakhir, notifikasi tidak akan dikirim ulang ke aslab yang sama.
+3. **Threshold Perubahan Massal (Safety Circuit Breaker):**
+   - Jika saat sinkronisasi terdeteksi **lebih dari 15 perubahan sekaligus** pada satu tanggal, sistem otomatis **MENAHAN (PAUSE)** pengiriman WA.
+   - *Alasan:* Perubahan masif biasanya terjadi karena koneksi scraping terputus, BAAK merestrukturisasi database, atau pergantian semester — bukan perubahan mendadak biasa.
+4. **Pacing / Delay Pengiriman:**
+   - Diberikan jeda 2-3 detik antar pengiriman pesan WA agar gateway WhatsApp tidak terkena rate-limit.
+
+---
+
+### G. Desain Skema Database Tambahan
+
+Tabel pembantu untuk melacak status pengiriman notifikasi perubahan:
+
+```sql
+CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (
+    id_log INT AUTO_INCREMENT PRIMARY KEY,
+    tanggal_kuliah DATE NOT NULL,
+    jam TIME NOT NULL,
+    id_ruangan INT NOT NULL,
+    nama_mk VARCHAR(150),
+    kelas VARCHAR(50),
+    tipe_perubahan ENUM('CC', 'OL', 'TM', 'PINDAH_MASUK', 'PINDAH_KELUAR', 'TAMBAHAN') NOT NULL,
+    ruang_asal_tujuan VARCHAR(100) NULL,
+    no_wa_tujuan VARCHAR(50) NOT NULL,
+    status_kirim ENUM('PENDING', 'SENT', 'FAILED') DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fingerprint_event VARCHAR(64) UNIQUE,
+    FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+---
+
+### H. Roadmap Implementasi Bertahap
+ 
+- [x] **Fase 1 (Penyempurnaan Deteksi di Scraper):**
+  - Implementasikan algoritma *Two-Pass Matcher* di `compare_and_finalize_sync()` pada `backend/scraper.py`.
+  - Buat tabel `log_notifikasi_perubahan` untuk menyimpan setiap event perubahan secara terstruktur.
+- [x] **Fase 2 (Dry-Run & Validasi Log):**
+  - Pengujian logika pencocokan silang ruangan (Two-Pass Matcher) dan deduplikasi hash terbukti valid 100%.
+- [x] **Fase 3 (Integrasi Pengiriman Pesan WA):**
+  - Terhubung ke fungsi `send_wa_message()` via lazy import `wa_notifier`.
+  - Dilengkapi *circuit breaker* (>15 perubahan), filter batas waktu H+0 & H+1, deduplikasi MD5, pacing delay 2 detik, serta kepatuhan ketat 0 emoji.
+- [ ] **Fase 4 (Dashboard Monitoring):**
+  - Tampilkan riwayat perubahan jadwal di dashboard web pada kartu "Info Mase" dengan badge khusus (misal warna kuning/merah untuk pindah ruang & batal).
 
 ---
 

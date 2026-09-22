@@ -19,7 +19,10 @@ HARI_DICT = {
 }
 
 import os
-from datetime import datetime
+import time
+import hashlib
+import collections
+from datetime import datetime, timedelta, date
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -186,6 +189,30 @@ def init_db_schema():
                 id_ruangan INT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        try:
+            cursor.execute("ALTER TABLE asisten_lab ADD COLUMN wa_lid VARCHAR(100) NULL")
+        except Exception:
+            pass
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (
+                id_log INT AUTO_INCREMENT PRIMARY KEY,
+                tanggal_kuliah DATE NOT NULL,
+                jam TIME NOT NULL,
+                id_ruangan INT NOT NULL,
+                nama_mk VARCHAR(150),
+                kelas VARCHAR(50),
+                tipe_perubahan ENUM('CC', 'OL', 'TM', 'PINDAH_MASUK', 'PINDAH_KELUAR', 'TAMBAHAN') NOT NULL,
+                ruang_asal_tujuan VARCHAR(100) NULL,
+                no_wa_tujuan VARCHAR(50) NOT NULL,
+                status_kirim ENUM('PENDING', 'SENT', 'FAILED', 'CIRCUIT_BREAK', 'SKIPPED_FUTURE') DEFAULT 'PENDING',
+                pesan_terkirim TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fingerprint_event VARCHAR(64) UNIQUE,
+                FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
         
@@ -905,6 +932,215 @@ def save_to_db(data, target_date=None, page="1", target_semester=None):
             cursor.close()
             conn.close()
 
+NAMA_HARI_SCRAPER = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+NAMA_BULAN_SCRAPER = [
+    "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+]
+
+def format_tanggal_indo_scraper(tgl_val):
+    """Format tanggal ke bahasa Indonesia manusiawi (contoh: Senin, 21 September 2026)."""
+    try:
+        if isinstance(tgl_val, (date, datetime)):
+            d = tgl_val if isinstance(tgl_val, date) else tgl_val.date()
+        else:
+            d = datetime.strptime(str(tgl_val).strip(), "%Y-%m-%d").date()
+        hari = NAMA_HARI_SCRAPER[d.weekday()]
+        bulan = NAMA_BULAN_SCRAPER[d.month]
+        return f"{hari}, {d.day} {bulan} {d.year}"
+    except Exception:
+        return str(tgl_val)
+
+def dispatch_schedule_change_alerts(conn, cursor, detected_events):
+    """
+    Mengirimkan notifikasi WhatsApp otomatis kepada aslab yang ruangannya terdampak perubahan jadwal.
+    Fitur & Proteksi:
+    1. Safety Circuit Breaker: Jika >15 perubahan dalam 1 tanggal, hold WA blast (status CIRCUIT_BREAK).
+    2. Jendela Waktu: Hanya kirim WA untuk Hari Ini (H+0) dan Besok (H+1). Tanggal lain: SKIPPED_FUTURE.
+    3. Deduplikasi: Berdasarkan fingerprint MD5 unik agar aslab tidak di-spam berulang kali.
+    4. Anti-Spam Pacing: Delay 2 detik antar pesan WA.
+    5. Strict 0 emoji format.
+    """
+    if not detected_events:
+        return
+
+    events_by_date = collections.defaultdict(list)
+    for ev in detected_events:
+        events_by_date[ev['tanggal']].append(ev)
+
+    today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
+
+    for t_date, ev_list in events_by_date.items():
+        try:
+            if isinstance(t_date, (date, datetime)):
+                d_obj = t_date if isinstance(t_date, date) else t_date.date()
+            else:
+                d_obj = datetime.strptime(str(t_date).strip(), "%Y-%m-%d").date()
+        except Exception:
+            d_obj = None
+
+        # 1. Circuit breaker guard (> 15 perubahan massal)
+        is_circuit_break = len(ev_list) > 15
+        if is_circuit_break:
+            print(f"[Alert Circuit Breaker] Terdeteksi {len(ev_list)} perubahan pada tanggal {t_date}. Pengiriman WA ditahan demi keamanan.")
+
+        # 2. Jendela waktu guard: hanya H+0 dan H+1
+        is_active_window = (d_obj == today or d_obj == tomorrow) if d_obj else False
+
+        for ev in ev_list:
+            id_ruangan = ev.get('id_ruangan')
+            if not id_ruangan:
+                continue
+
+            cursor.execute("""
+                SELECT id_aslab, nama_aslab, no_wa, wa_lid
+                FROM asisten_lab
+                WHERE id_ruangan = %s 
+                  AND no_wa IS NOT NULL 
+                  AND no_wa != '' 
+                  AND no_wa NOT LIKE '%@lid%' 
+                  AND no_wa NOT LIKE '%lid%'
+            """, (id_ruangan,))
+            aslab_rows = cursor.fetchall()
+
+            if not aslab_rows:
+                aslab_targets = [(None, 'Sistem (Tanpa Aslab)', '-')]
+            else:
+                aslab_targets = [(row[0], row[1], row[2]) for row in aslab_rows]
+
+            for id_aslab, nama_aslab, no_wa in aslab_targets:
+                clean_no_wa = str(no_wa).strip()
+                raw_fp = f"{t_date}_{ev['jam_str']}_{id_ruangan}_{ev.get('clean_kelas', '')}_{ev['tipe_perubahan']}_{ev.get('ruang_asal_tujuan') or ''}_{clean_no_wa}"
+                fingerprint = hashlib.md5(raw_fp.encode('utf-8')).hexdigest()
+
+                cursor.execute("SELECT id_log FROM log_notifikasi_perubahan WHERE fingerprint_event = %s LIMIT 1", (fingerprint,))
+                if cursor.fetchone():
+                    continue
+
+                if d_obj == today:
+                    hari_label = "Hari ini"
+                elif d_obj == tomorrow:
+                    hari_label = "Besok"
+                else:
+                    hari_label = format_tanggal_indo_scraper(d_obj or t_date)
+
+                ruang_lengkap = format_room_clean(f"{ev['nama_ruangan']} ({ev['kampus']})" if ev.get('kampus') else ev['nama_ruangan'])
+                dosen_str = ev.get('dosen') or '-'
+                nama_mk = ev.get('nama_mk') or 'Mata Kuliah'
+                kelas = ev.get('kelas') or '-'
+                jam_str = ev.get('jam_str') or '00:00'
+                ruang_asal_tujuan = ev.get('ruang_asal_tujuan') or ''
+
+                tipe = ev['tipe_perubahan']
+                if tipe == 'CC':
+                    wa_text = (
+                        f"*PEMBERITAHUAN PERUBAHAN JADWAL*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas *{nama_mk} ({kelas})* DIBATALKAN (CC) oleh dosen/BAAK.\n"
+                        f"Status Lab: Ruangan kosong pada jam tersebut, lab tidak perlu dibuka/disiapkan."
+                    )
+                elif tipe == 'OL':
+                    wa_text = (
+                        f"*PEMBERITAHUAN PERUBAHAN JADWAL*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas *{nama_mk} ({kelas})* dialihkan ke ONLINE (OL).\n"
+                        f"Status Lab: Mahasiswa tidak menggunakan lab fisik."
+                    )
+                elif tipe == 'TM':
+                    wa_text = (
+                        f"*PEMBERITAHUAN PERUBAHAN JADWAL*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas *{nama_mk} ({kelas})* kembali TATAP MUKA (TM).\n"
+                        f"Dosen: {dosen_str}\n"
+                        f"Status Lab: Tolong persiapkan dan buka lab sesuai jadwal."
+                    )
+                elif tipe == 'PINDAH_MASUK':
+                    wa_text = (
+                        f"*PERINGATAN: KELAS PINDAH MASUK*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas *{nama_mk} ({kelas})* dipindahkan MASUK ke ruangan kamu (sebelumnya di {ruang_asal_tujuan}).\n"
+                        f"Dosen: {dosen_str}\n"
+                        f"Status Lab: Tolong persiapkan dan buka lab sebelum perkuliahan dimulai."
+                    )
+                elif tipe == 'PINDAH_KELUAR':
+                    wa_text = (
+                        f"*PEMBERITAHUAN PERUBAHAN JADWAL*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas *{nama_mk} ({kelas})* dipindahkan KELUAR ke {ruang_asal_tujuan}.\n"
+                        f"Status Lab: Ruangan kamu kosong pada jam tersebut."
+                    )
+                elif tipe == 'TAMBAHAN':
+                    wa_text = (
+                        f"*PEMBERITAHUAN KELAS TAMBAHAN*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas TAMBAHAN: *{nama_mk} ({kelas})*.\n"
+                        f"Dosen: {dosen_str}\n"
+                        f"Status Lab: Lab akan digunakan, tolong persiapkan lab tepat waktu."
+                    )
+                else:
+                    wa_text = (
+                        f"*PEMBERITAHUAN PERUBAHAN JADWAL*\n"
+                        f"Ruangan: {ruang_lengkap}\n"
+                        f"Waktu: {hari_label} ({jam_str})\n\n"
+                        f"Kelas *{nama_mk} ({kelas})* mengalami perubahan status ({tipe}).\n"
+                        f"Dosen: {dosen_str}"
+                    )
+
+                if is_circuit_break:
+                    status_kirim = 'CIRCUIT_BREAK'
+                elif not is_active_window:
+                    status_kirim = 'SKIPPED_FUTURE'
+                elif clean_no_wa == '-' or not clean_no_wa:
+                    status_kirim = 'FAILED'
+                else:
+                    status_kirim = 'PENDING'
+
+                try:
+                    cursor.execute("""
+                        INSERT INTO log_notifikasi_perubahan 
+                        (tanggal_kuliah, jam, id_ruangan, nama_mk, kelas, tipe_perubahan, ruang_asal_tujuan, no_wa_tujuan, status_kirim, pesan_terkirim, fingerprint_event)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        t_date, f"{jam_str}:00" if len(jam_str) == 5 else jam_str,
+                        id_ruangan, nama_mk, kelas, tipe, ruang_asal_tujuan,
+                        clean_no_wa, status_kirim, wa_text, fingerprint
+                    ))
+                    conn.commit()
+                except Exception as db_err:
+                    print(f"[Log Error] Gagal catat log perubahan jadwal: {db_err}")
+                    continue
+
+                if status_kirim == 'PENDING' and clean_no_wa != '-':
+                    try:
+                        from backend.wa_notifier import send_wa_message
+                    except Exception:
+                        try:
+                            from wa_notifier import send_wa_message
+                        except Exception:
+                            send_wa_message = None
+
+                    if send_wa_message:
+                        try:
+                            is_sent = send_wa_message(clean_no_wa, wa_text)
+                            new_status = 'SENT' if is_sent else 'FAILED'
+                            cursor.execute("""
+                                UPDATE log_notifikasi_perubahan
+                                SET status_kirim = %s
+                                WHERE fingerprint_event = %s
+                            """, (new_status, fingerprint))
+                            conn.commit()
+                            if is_sent:
+                                time.sleep(2)  # Delay 2 detik antar pesan WA
+                        except Exception as send_err:
+                            print(f"[WA Alert Send Error] {send_err}")
+
 def compare_and_finalize_sync(target_date=None, target_semester=None):
     conn = get_db()
     cursor = conn.cursor(buffered=True)
@@ -928,9 +1164,9 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             if not t_date:
                 continue
 
-            # 1. Ambil data lama dari jadwal untuk semester ini
+            # 1. Ambil data lama dari jadwal untuk semester ini (termasuk id_ruangan)
             cursor.execute("""
-                SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+                SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen, j.id_ruangan
                 FROM jadwal j
                 JOIN ruangan r ON j.id_ruangan = r.id_ruangan
                 LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
@@ -941,26 +1177,10 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             # Baseline guard:
             # Hanya anggap update komparasi jika data lama sudah merupakan baseline memadai (>= 15 kelas)
             is_baseline_valid = len(old_schedules) >= 15
-            old_lab_cache = {}
-            for jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen in old_schedules:
-                if not jam: continue
-                total_seconds = int(jam.total_seconds()) if hasattr(jam, 'total_seconds') else 0
-                h = total_seconds // 3600
-                m = (total_seconds % 3600) // 60
-                jam_str = f"{h:02d}:{m:02d}"
-                
-                # Normalisasi kunci komparasi
-                clean_room = re.sub(r'\s+', ' ', (nama_ruangan or "").strip().lower())
-                clean_room = re.sub(r'\bkampus\s+(thehok|kobar)\b', '', clean_room).replace('(thehok)', '').replace('(kobar)', '').strip()
-                clean_kelas = re.sub(r'[^a-zA-Z0-9]', '', (kelas or kode_mk or "").strip()).lower()
-                key = f"{jam_str}_{clean_room}_{clean_kelas}"
-                old_lab_cache[key] = {
-                    'status': status, 'metode': metode, 'nama_mk': nama_mk, 'dosen': dosen
-                }
-                    
-            # 2. Ambil data baru dari jadwal_temp untuk semester ini
+            
+            # 2. Ambil data baru dari jadwal_temp untuk semester ini (termasuk id_ruangan)
             cursor.execute("""
-                SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen
+                SELECT j.jam, j.kode_mk, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, j.status_jadwal, j.metode_pembelajaran, d.nama_dosen, j.id_ruangan
                 FROM jadwal_temp j
                 JOIN ruangan r ON j.id_ruangan = r.id_ruangan
                 LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
@@ -972,37 +1192,188 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             if not new_schedules:
                 print(f"[Sync Guard] Tidak ada data di jadwal_temp untuk tanggal {t_date} ({sem_final}). Data jadwal lama TIDAK dihapus (Aman).")
                 continue
-            
-            # 3. Pisahkan kelas baru vs kelas yang sudah cocok
-            unmatched_new = []
-            matched_pairs = []
-            for row in new_schedules:
-                jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
-                if not nama_ruangan or not jam: continue
-                total_seconds = int(jam.total_seconds()) if hasattr(jam, 'total_seconds') else 0
-                h = total_seconds // 3600
-                m = (total_seconds % 3600) // 60
-                start_time = f"{h:02d}:{m:02d}"
+
+            def make_item_dict(row):
+                jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen, id_ruangan = row
+                if not jam:
+                    jam_str = "00:00"
+                else:
+                    total_seconds = int(jam.total_seconds()) if hasattr(jam, 'total_seconds') else 0
+                    h = total_seconds // 3600
+                    m = (total_seconds % 3600) // 60
+                    jam_str = f"{h:02d}:{m:02d}"
+
                 clean_room = re.sub(r'\s+', ' ', (nama_ruangan or "").strip().lower())
                 clean_room = re.sub(r'\bkampus\s+(thehok|kobar)\b', '', clean_room).replace('(thehok)', '').replace('(kobar)', '').strip()
                 clean_kelas = re.sub(r'[^a-zA-Z0-9]', '', (kelas or kode_mk or "").strip()).lower()
-                key = f"{start_time}_{clean_room}_{clean_kelas}"
-                
-                if key not in old_lab_cache:
-                    unmatched_new.append((row, start_time))
-                else:
-                    matched_pairs.append((row, start_time, old_lab_cache[key]))
+                clean_mk = re.sub(r'[^a-zA-Z0-9]', '', (nama_mk or "").strip()).lower()
 
-            # Logika deteksi TAMBAHAN:
-            # Hanya catat TAMBAHAN jika ada baseline valid dan perubahan tidak masif (> 20 kelas tak cocok = re-sync/pergantian dataset, bukan kelas tambahan)
-            if is_baseline_valid and len(unmatched_new) <= 20:
-                for row, start_time in unmatched_new:
-                    jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
-                    dosen_str = dosen or '-'
-                    ruang_lengkap = format_room_clean(f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan)
-                    pesan = f"Kelas TAMBAHAN: {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Dosen: {dosen_str}."
+                return {
+                    'jam': jam,
+                    'jam_str': jam_str,
+                    'kode_mk': kode_mk,
+                    'nama_mk': nama_mk,
+                    'kelas': kelas,
+                    'clean_kelas': clean_kelas,
+                    'nama_ruangan': nama_ruangan,
+                    'clean_room': clean_room,
+                    'lokasi': lokasi,
+                    'status': status,
+                    'metode': metode,
+                    'dosen': dosen,
+                    'id_ruangan': id_ruangan,
+                    'clean_mk': clean_mk
+                }
+
+            detected_events = []
+
+            # ─── TWO-PASS MATCHER ALGORITHM ───
+            # PASS 1: Same Room Match (Status / Metode Changes)
+            old_by_room_key = collections.defaultdict(list)
+            for r in old_schedules:
+                it = make_item_dict(r)
+                old_by_room_key[(it['jam_str'], it['clean_room'], it['clean_kelas'])].append(it)
+
+            unmatched_new = []
+            for r in new_schedules:
+                new_it = make_item_dict(r)
+                room_key = (new_it['jam_str'], new_it['clean_room'], new_it['clean_kelas'])
+                if old_by_room_key.get(room_key):
+                    old_it = old_by_room_key[room_key].pop(0)
+                    old_m = old_it['metode']
+                    new_m = new_it['metode']
+                    old_s = old_it['status']
+                    new_s = new_it['status']
                     
-                    # Deduplikasi: cek apakah notifikasi yang sama persis sudah tercatat
+                    if old_m != new_m or old_s != new_s:
+                        if new_m == 'CC' or 'cancel' in (new_s or '').lower() or 'batal' in (new_s or '').lower():
+                            tipe = 'CC'
+                        elif new_m == 'OL' or 'online' in (new_s or '').lower() or 'daring' in (new_s or '').lower():
+                            tipe = 'OL'
+                        elif new_m == 'TM':
+                            tipe = 'TM'
+                        else:
+                            tipe = 'TM'
+
+                        ruang_lengkap = format_room_clean(f"{new_it['nama_ruangan']} ({new_it['lokasi']})" if new_it['lokasi'] else new_it['nama_ruangan'])
+                        is_lab_target = is_lab(new_it['nama_ruangan'])
+
+                        if new_m == 'OL':
+                            note = "Lab tidak digunakan." if is_lab_target else "Ruangan kosong."
+                            pesan = f"PERUBAHAN STATUS: Kelas {new_it['nama_mk']} ({new_it['kelas']}) jam {new_it['jam_str']} di {ruang_lengkap} dialihkan ke ONLINE (OL). {note}"
+                        elif new_m == 'CC':
+                            note = "Lab kosong." if is_lab_target else "Ruangan kosong."
+                            pesan = f"PERUBAHAN STATUS: Kelas {new_it['nama_mk']} ({new_it['kelas']}) jam {new_it['jam_str']} di {ruang_lengkap} DIBATALKAN (CC). {note}"
+                        elif new_m == 'TM':
+                            note = "Tolong persiapkan dan buka lab sesuai jadwal." if is_lab_target else "Ruangan digunakan sesuai jadwal."
+                            pesan = f"PERUBAHAN STATUS: Kelas {new_it['nama_mk']} ({new_it['kelas']}) jam {new_it['jam_str']} di {ruang_lengkap} kembali TATAP MUKA (TM). {note}"
+                        else:
+                            pesan = f"PERUBAHAN STATUS: Kelas {new_it['nama_mk']} ({new_it['kelas']}) di {ruang_lengkap} pada {new_it['jam_str']}. Status: {old_s} -> {new_s}."
+
+                        cursor.execute("""
+                            SELECT 1 FROM notifikasi_lab 
+                            WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s
+                            LIMIT 1
+                        """, (t_date, sem_final, pesan))
+                        if not cursor.fetchone():
+                            cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan, sem_final))
+
+                        detected_events.append({
+                            'tanggal': t_date,
+                            'jam_str': new_it['jam_str'],
+                            'id_ruangan': new_it['id_ruangan'],
+                            'nama_ruangan': new_it['nama_ruangan'],
+                            'kampus': new_it['lokasi'],
+                            'nama_mk': new_it['nama_mk'],
+                            'kelas': new_it['kelas'],
+                            'dosen': new_it['dosen'],
+                            'tipe_perubahan': tipe,
+                            'ruang_asal_tujuan': None,
+                            'clean_kelas': new_it['clean_kelas']
+                        })
+                else:
+                    unmatched_new.append(new_it)
+
+            # Kumpulkan sisa old_schedules yang belum cocok di Pass 1
+            unmatched_old = []
+            for k, items in old_by_room_key.items():
+                unmatched_old.extend(items)
+
+            # PASS 2: Cross-Room Match (Pindah Ruangan)
+            old_by_class_key = collections.defaultdict(list)
+            for old_it in unmatched_old:
+                old_by_class_key[(old_it['jam_str'], old_it['clean_kelas'])].append(old_it)
+
+            still_unmatched_new = []
+            for new_it in unmatched_new:
+                class_key = (new_it['jam_str'], new_it['clean_kelas'])
+                candidates = old_by_class_key.get(class_key, [])
+
+                matched_idx = -1
+                for idx, cand in enumerate(candidates):
+                    if cand['clean_room'] != new_it['clean_room']:
+                        if (not cand['clean_mk'] or not new_it['clean_mk'] or 
+                            cand['clean_mk'] in new_it['clean_mk'] or new_it['clean_mk'] in cand['clean_mk'] or 
+                            cand['kode_mk'] == new_it['kode_mk']):
+                            matched_idx = idx
+                            break
+
+                if matched_idx != -1:
+                    old_it = candidates.pop(matched_idx)
+                    ruang_asal_clean = format_room_clean(f"{old_it['nama_ruangan']} ({old_it['lokasi']})" if old_it['lokasi'] else old_it['nama_ruangan'])
+                    ruang_tujuan_clean = format_room_clean(f"{new_it['nama_ruangan']} ({new_it['lokasi']})" if new_it['lokasi'] else new_it['nama_ruangan'])
+
+                    # Event PINDAH_KELUAR (Ruangan Asal)
+                    pesan_keluar = f"PINDAH RUANGAN: Kelas {old_it['nama_mk']} ({old_it['kelas']}) jam {old_it['jam_str']} dipindahkan KELUAR dari {ruang_asal_clean} ke {ruang_tujuan_clean}."
+                    cursor.execute("""
+                        SELECT 1 FROM notifikasi_lab WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s LIMIT 1
+                    """, (t_date, sem_final, pesan_keluar))
+                    if not cursor.fetchone():
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan_keluar, sem_final))
+
+                    detected_events.append({
+                        'tanggal': t_date,
+                        'jam_str': old_it['jam_str'],
+                        'id_ruangan': old_it['id_ruangan'],
+                        'nama_ruangan': old_it['nama_ruangan'],
+                        'kampus': old_it['lokasi'],
+                        'nama_mk': old_it['nama_mk'],
+                        'kelas': old_it['kelas'],
+                        'dosen': old_it['dosen'],
+                        'tipe_perubahan': 'PINDAH_KELUAR',
+                        'ruang_asal_tujuan': ruang_tujuan_clean,
+                        'clean_kelas': old_it['clean_kelas']
+                    })
+
+                    # Event PINDAH_MASUK (Ruangan Tujuan)
+                    pesan_masuk = f"PINDAH RUANGAN: Kelas {new_it['nama_mk']} ({new_it['kelas']}) jam {new_it['jam_str']} dipindahkan MASUK ke {ruang_tujuan_clean} (sebelumnya di {ruang_asal_clean}). Dosen: {new_it['dosen'] or '-'}."
+                    cursor.execute("""
+                        SELECT 1 FROM notifikasi_lab WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s LIMIT 1
+                    """, (t_date, sem_final, pesan_masuk))
+                    if not cursor.fetchone():
+                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan_masuk, sem_final))
+
+                    detected_events.append({
+                        'tanggal': t_date,
+                        'jam_str': new_it['jam_str'],
+                        'id_ruangan': new_it['id_ruangan'],
+                        'nama_ruangan': new_it['nama_ruangan'],
+                        'kampus': new_it['lokasi'],
+                        'nama_mk': new_it['nama_mk'],
+                        'kelas': new_it['kelas'],
+                        'dosen': new_it['dosen'],
+                        'tipe_perubahan': 'PINDAH_MASUK',
+                        'ruang_asal_tujuan': ruang_asal_clean,
+                        'clean_kelas': new_it['clean_kelas']
+                    })
+                else:
+                    still_unmatched_new.append(new_it)
+
+            # PASS 3: Deteksi Kelas Tambahan Murni
+            if is_baseline_valid and len(still_unmatched_new) <= 20:
+                for new_it in still_unmatched_new:
+                    ruang_lengkap = format_room_clean(f"{new_it['nama_ruangan']} ({new_it['lokasi']})" if new_it['lokasi'] else new_it['nama_ruangan'])
+                    pesan = f"Kelas TAMBAHAN: {new_it['nama_mk']} ({new_it['kelas']}) di {ruang_lengkap} pada {new_it['jam_str']}. Dosen: {new_it['dosen'] or '-'}."
                     cursor.execute("""
                         SELECT 1 FROM notifikasi_lab 
                         WHERE tanggal = %s AND semester = %s AND tipe_notif = 'TAMBAHAN' AND pesan = %s
@@ -1011,39 +1382,24 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                     if not cursor.fetchone():
                         cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'TAMBAHAN', pesan, sem_final))
 
-            # Logika deteksi PERUBAHAN STATUS:
-            for row, start_time, old_data in matched_pairs:
-                jam, kode_mk, nama_mk, kelas, nama_ruangan, lokasi, status, metode, dosen = row
-                old_metode = old_data.get('metode')
-                old_status = old_data.get('status')
-                
-                if old_metode != metode or old_status != status:
-                    ruang_lengkap = format_room_clean(f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan)
-                    is_lab_target = is_lab(nama_ruangan)
-                    
-                    if old_metode != metode:
-                        if metode == 'OL':
-                            note = "Lab tidak digunakan." if is_lab_target else "Ruangan kosong."
-                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) jam {start_time} di {ruang_lengkap} dialihkan ke ONLINE (OL). {note}"
-                        elif metode == 'CC':
-                            note = "Lab kosong." if is_lab_target else "Ruangan kosong."
-                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) jam {start_time} di {ruang_lengkap} DIBATALKAN (CC). {note}"
-                        elif metode == 'TM':
-                            note = "Tolong persiapkan dan buka lab sesuai jadwal." if is_lab_target else "Ruangan digunakan sesuai jadwal."
-                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) jam {start_time} di {ruang_lengkap} kembali TATAP MUKA (TM). {note}"
-                        else:
-                            pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Metode: {old_metode} -> {metode}."
-                    else:
-                        pesan = f"PERUBAHAN STATUS: Kelas {nama_mk} ({kelas}) di {ruang_lengkap} pada {start_time}. Status: {old_status} -> {status}."
-                    
-                    cursor.execute("""
-                        SELECT 1 FROM notifikasi_lab 
-                        WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s
-                        LIMIT 1
-                    """, (t_date, sem_final, pesan))
-                    if not cursor.fetchone():
-                        cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (t_date, 'PERUBAHAN', pesan, sem_final))
-            
+                    detected_events.append({
+                        'tanggal': t_date,
+                        'jam_str': new_it['jam_str'],
+                        'id_ruangan': new_it['id_ruangan'],
+                        'nama_ruangan': new_it['nama_ruangan'],
+                        'kampus': new_it['lokasi'],
+                        'nama_mk': new_it['nama_mk'],
+                        'kelas': new_it['kelas'],
+                        'dosen': new_it['dosen'],
+                        'tipe_perubahan': 'TAMBAHAN',
+                        'ruang_asal_tujuan': None,
+                        'clean_kelas': new_it['clean_kelas']
+                    })
+
+            # Otomatis kirim notifikasi WhatsApp cerdas & catat ke log_notifikasi_perubahan
+            if detected_events:
+                dispatch_schedule_change_alerts(conn, cursor, detected_events)
+
             # Pastikan seluruh data temp terarsip permanen sebelum dipindahkan ke jadwal aktif
             sync_temp_to_permanent(conn, cursor, sem_final)
 
