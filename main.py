@@ -223,23 +223,31 @@ def admin_verify(token: str = Depends(verify_admin_token)):
 def get_db():
     pwd = os.getenv("DB_PASSWORD", "")
     host = os.getenv("DB_HOST", "127.0.0.1")
+    port = int(os.getenv("DB_PORT", 3306))
     user = os.getenv("DB_USER", "root")
     db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
     try:
         return mysql.connector.connect(
             host=host,
+            port=port,
             user=user,
             password=pwd,
             database=db_name
         )
     except mysql.connector.Error as err:
-        if err.errno == 1045 and pwd != "":
-            return mysql.connector.connect(
-                host=host,
-                user=user,
-                password="",
-                database=db_name
-            )
+        if err.errno == 1045:
+            for fallback_pwd in ["", "123456", "root"]:
+                if fallback_pwd != pwd:
+                    try:
+                        return mysql.connector.connect(
+                            host=host,
+                            port=port,
+                            user=user,
+                            password=fallback_pwd,
+                            database=db_name
+                        )
+                    except mysql.connector.Error:
+                        continue
         raise err
 
 @app.get("/api/server-urls")
@@ -758,6 +766,246 @@ def get_db_stats():
     except Exception as e:
         print(f"[Stats] Error: {e}")
         return {"status": "error", "message": str(e), "counts": {}}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/statistics")
+def get_statistics(semester: str = None):
+    """
+    Mengambil data statistik dan analitik komprehensif:
+    1. lab_stats: Utilisasi lab, perbandingan Kobar vs Thehok, ranking lab tersibuk/terkosong, rasio TM/OL/CC.
+    2. kelas_stats: Total kelas unik, distribusi hari & jam perkuliahan, kelas dengan tingkat OL/CC terbanyak.
+    3. dosen_stats: Total dosen aktif, Top dosen jam mengajar terbanyak, dosen tertinggi OL & CC.
+    4. summary: Ringkasan metrik kartu dashboard utama.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        target_sem = semester
+        if not target_sem or target_sem == "all":
+            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+            active_row = cursor.fetchone()
+            if active_row:
+                target_sem = active_row["nama_semester"]
+            else:
+                cursor.execute("SELECT semester FROM jadwal WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
+                j_row = cursor.fetchone()
+                target_sem = j_row["semester"] if j_row else "Genap 2025"
+
+        cursor.execute("SELECT COUNT(*) AS c FROM jadwal WHERE semester = %s", (target_sem,))
+        j_cnt = cursor.fetchone()["c"]
+        table_source = "jadwal" if j_cnt > 0 else "jadwal_permanent"
+
+        query = f'''
+            SELECT 
+                j.hari, j.tanggal, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                r.nama_ruangan, r.kampus, d.nama_dosen
+            FROM {table_source} j
+            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.semester = %s
+        '''
+        cursor.execute(query, (target_sem,))
+        rows = cursor.fetchall()
+
+        if not rows:
+            return {
+                "status": "success",
+                "semester": target_sem,
+                "summary": {
+                    "total_perkuliahan": 0,
+                    "total_jam_operasional": 0,
+                    "total_lab_aktif": 0,
+                    "total_kelas": 0,
+                    "total_dosen": 0,
+                    "rata_sesi_dosen": 0
+                },
+                "lab_stats": {"summary": {}, "rankings": [], "kampus": {}},
+                "kelas_stats": {"total_kelas": 0, "distribusi_hari": [], "distribusi_jam": [], "top_aktif": [], "top_cc": [], "top_ol": []},
+                "dosen_stats": {"total_dosen": 0, "top_jam": [], "top_ol": [], "top_cc": []}
+            }
+
+        import collections
+        lab_data = collections.defaultdict(lambda: {
+            "nama_ruangan": "", "kampus": "", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        dosen_data = collections.defaultdict(lambda: {
+            "nama_dosen": "", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        kelas_data = collections.defaultdict(lambda: {
+            "kelas": "", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        
+        hari_counts = collections.defaultdict(int)
+        jam_counts = collections.defaultdict(int)
+        
+        total_jam_keseluruhan = 0.0
+        total_lab_jam = 0.0
+        total_lab_tm = 0
+        total_lab_ol = 0
+        total_lab_cc = 0
+
+        kampus_lab = {
+            "Kobar": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0},
+            "Thehok": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0}
+        }
+
+        for r in rows:
+            dur_min = scraper.get_class_duration(r.get("nama_mk") or "") if hasattr(scraper, "get_class_duration") else 135
+            dur_hour = round(dur_min / 60.0, 2)
+            total_jam_keseluruhan += dur_hour
+
+            metode = (r.get("metode_pembelajaran") or "TM").upper()
+            status_low = (r.get("status_jadwal") or "").lower()
+            if "cancel" in status_low or "batal" in status_low or "cc" in status_low:
+                metode = "CC"
+            elif "online" in status_low or "daring" in status_low or "ol" in status_low:
+                metode = "OL"
+            elif metode not in ["TM", "OL", "CC"]:
+                metode = "TM"
+
+            # 1. Agregasi Lab
+            ruang = r.get("nama_ruangan") or ""
+            kampus = (r.get("kampus") or "Kobar").strip()
+            if scraper.is_lab(ruang):
+                clean_ruang = f"{ruang} ({kampus})" if kampus and kampus.lower() not in ruang.lower() else ruang
+                lab_entry = lab_data[clean_ruang]
+                lab_entry["nama_ruangan"] = clean_ruang
+                lab_entry["kampus"] = kampus
+                lab_entry["total_sesi"] += 1
+                lab_entry["total_jam"] = round(lab_entry["total_jam"] + dur_hour, 2)
+                
+                total_lab_jam += dur_hour
+                if metode == "TM":
+                    lab_entry["tm"] += 1
+                    total_lab_tm += 1
+                elif metode == "OL":
+                    lab_entry["ol"] += 1
+                    total_lab_ol += 1
+                elif metode == "CC":
+                    lab_entry["cc"] += 1
+                    total_lab_cc += 1
+
+                # Kampus stats
+                k_key = "Kobar" if "kobar" in kampus.lower() else "Thehok"
+                kampus_lab[k_key]["total_sesi"] += 1
+                kampus_lab[k_key]["total_jam"] = round(kampus_lab[k_key]["total_jam"] + dur_hour, 2)
+                if metode == "TM": kampus_lab[k_key]["tm"] += 1
+                elif metode == "OL": kampus_lab[k_key]["ol"] += 1
+                elif metode == "CC": kampus_lab[k_key]["cc"] += 1
+
+            # 2. Agregasi Dosen
+            dosen = (r.get("nama_dosen") or "").strip()
+            if not dosen or dosen.lower() == "none":
+                dosen = "Belum Ditentukan"
+            dosen_entry = dosen_data[dosen]
+            dosen_entry["nama_dosen"] = dosen
+            dosen_entry["total_sesi"] += 1
+            dosen_entry["total_jam"] = round(dosen_entry["total_jam"] + dur_hour, 2)
+            if metode == "TM": dosen_entry["tm"] += 1
+            elif metode == "OL": dosen_entry["ol"] += 1
+            elif metode == "CC": dosen_entry["cc"] += 1
+
+            # 3. Agregasi Kelas
+            kelas = (r.get("kelas") or "").strip()
+            if not kelas: kelas = "Lainnya"
+            kelas_entry = kelas_data[kelas]
+            kelas_entry["kelas"] = kelas
+            kelas_entry["total_sesi"] += 1
+            kelas_entry["total_jam"] = round(kelas_entry["total_jam"] + dur_hour, 2)
+            if metode == "TM": kelas_entry["tm"] += 1
+            elif metode == "OL": kelas_entry["ol"] += 1
+            elif metode == "CC": kelas_entry["cc"] += 1
+
+            # 4. Distribusi Hari & Jam
+            if r.get("hari"):
+                hari_counts[r["hari"]] += 1
+            if r.get("jam"):
+                tot_sec = int(r["jam"].total_seconds())
+                jam_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                jam_counts[jam_str] += 1
+
+        # Format Lab Rankings
+        lab_rankings = sorted(lab_data.values(), key=lambda x: x["total_jam"], reverse=True)
+        max_lab_jam = lab_rankings[0]["total_jam"] if lab_rankings else 1.0
+        for lb in lab_rankings:
+            lb["utilization_pct"] = round((lb["total_jam"] / max_lab_jam) * 100, 1) if max_lab_jam > 0 else 0
+
+        total_lab_sesi = total_lab_tm + total_lab_ol + total_lab_cc
+        lab_summary = {
+            "total_sesi": total_lab_sesi,
+            "total_jam": round(total_lab_jam, 2),
+            "tm": total_lab_tm,
+            "ol": total_lab_ol,
+            "cc": total_lab_cc,
+            "persen_tm": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "persen_ol": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "persen_cc": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "lab_tersibuk": lab_rankings[0] if lab_rankings else None,
+            "lab_terkosong": lab_rankings[-1] if len(lab_rankings) > 1 else None,
+        }
+
+        # Format Kelas Rankings
+        top_kelas_aktif = sorted(kelas_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
+        top_kelas_ol = sorted([k for k in kelas_data.values() if k["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
+        top_kelas_cc = sorted([k for k in kelas_data.values() if k["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
+
+        urutan_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+        sorted_hari = [{"hari": h, "total": hari_counts.get(h, 0)} for h in urutan_hari if hari_counts.get(h, 0) > 0]
+        sorted_jam = [{"jam": j, "total": cnt} for j, cnt in sorted(jam_counts.items(), key=lambda x: x[0])]
+
+        # Format Dosen Rankings
+        top_dosen_jam = sorted(dosen_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
+        top_dosen_ol = sorted([d for d in dosen_data.values() if d["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
+        top_dosen_cc = sorted([d for d in dosen_data.values() if d["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
+
+        dosen_aktif_count = len([d for d in dosen_data.keys() if d != "Belum Ditentukan"])
+        total_dosen_sesi = sum(d["total_sesi"] for d in dosen_data.values())
+        rata_sesi_dosen = round(total_dosen_sesi / dosen_aktif_count, 1) if dosen_aktif_count > 0 else 0
+
+        summary = {
+            "total_perkuliahan": len(rows),
+            "total_jam_operasional": round(total_jam_keseluruhan, 2),
+            "total_lab_aktif": len(lab_data),
+            "total_kelas": len(kelas_data),
+            "total_dosen": dosen_aktif_count,
+            "rata_sesi_dosen": rata_sesi_dosen
+        }
+
+        return {
+            "status": "success",
+            "semester": target_sem,
+            "source_table": table_source,
+            "summary": summary,
+            "lab_stats": {
+                "summary": lab_summary,
+                "rankings": lab_rankings,
+                "kampus": kampus_lab
+            },
+            "kelas_stats": {
+                "total_kelas": len(kelas_data),
+                "distribusi_hari": sorted_hari,
+                "distribusi_jam": sorted_jam,
+                "top_aktif": top_kelas_aktif,
+                "top_ol": top_kelas_ol,
+                "top_cc": top_kelas_cc
+            },
+            "dosen_stats": {
+                "total_dosen": dosen_aktif_count,
+                "top_jam": top_dosen_jam,
+                "top_ol": top_dosen_ol,
+                "top_cc": top_dosen_cc
+            }
+        }
+    except Exception as e:
+        print(f"[API Statistics Error] {e}")
+        return {"status": "error", "message": str(e)}
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()

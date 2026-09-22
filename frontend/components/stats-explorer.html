@@ -1,0 +1,380 @@
+<!-- ==================== MODE STATISTIK PENGGUNAAN (LAB, KELAS & DOSEN) ==================== -->
+<div id="stats-explorer-container" class="stats-explorer-wrapper" style="display: none;">
+  <!-- TOP BANNER: STATS EXPLORER HEADER -->
+  <div class="sem-explorer-banner stats-explorer-banner">
+    <div class="sem-banner-left">
+      <div class="sem-banner-icon stats-banner-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M18 20V10"></path>
+          <path d="M12 20V4"></path>
+          <path d="M6 20v-6"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="sem-banner-title-wrap">
+          <h2 class="sem-banner-title">Pusat Statistik & Analitik Akademik</h2>
+          <div class="sem-switcher-box">
+            <div class="custom-select-wrapper sem-switcher-select-wrapper" id="wrapper-stats-sem-switch">
+              <div class="custom-select-trigger sem-switcher-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+                onclick="toggleCustomSelect('stats-sem-switch', event)">
+                <span class="custom-select-label sem-switcher-label" id="stats-sem-label-switch">Memuat Semester...</span>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+              <div class="aslab-list-container custom-select-dropdown sem-custom-dropdown sem-switcher-dropdown" id="dropdown-stats-sem-switch">
+                <div class="sem-dropdown-list-scroll" id="items-stats-sem-switch">
+                  <!-- Semester options injected by JS -->
+                </div>
+              </div>
+              <input type="hidden" id="stats-sem-filter-switch" value="">
+            </div>
+          </div>
+        </div>
+        <p class="sem-banner-subdesc">
+          <span class="sem-offline-dot" style="background: #8b5cf6; box-shadow: 0 0 8px #8b5cf6;"></span>
+          Pusat Analitik Terpadu • Utilisasi Laboratorium, Sebaran Kelas & Beban Dosen Pengajar
+        </p>
+      </div>
+    </div>
+
+    <div class="sem-banner-right">
+      <button type="button" class="btn btn-secondary sem-action-btn" onclick="printOrExportStats()" title="Cetak Ringkasan Statistik">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 6 2 18 2 18 9"></polyline>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+          <rect x="6" y="14" width="12" height="8"></rect>
+        </svg>
+        <span>Cetak / PDF</span>
+      </button>
+      <button type="button" class="btn btn-secondary sem-action-btn" onclick="document.getElementById('theme-toggle')?.click()" title="Ganti Tema (Gelap / Terang)" style="padding: 10px 14px;">
+        <svg class="moon-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      </button>
+      <button type="button" class="btn btn-primary sem-return-btn" onclick="exitStatsMode()" title="Kembali ke Dashboard Utama Real-Time">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        <span>Kembali ke Dashboard Realtime</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- SUMMARY STATS BAR (KPI HERO CARDS) -->
+  <div class="sem-stats-grid stats-kpi-grid">
+    <div class="sem-stat-card card-total">
+      <div class="sem-stat-icon" style="color: #6366f1;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </div>
+      <div>
+        <div class="sem-stat-num" id="stats-kpi-total-jam">-</div>
+        <div class="sem-stat-lbl">Total Jam Operasional</div>
+      </div>
+    </div>
+    <div class="sem-stat-card card-tm">
+      <div class="sem-stat-icon" style="color: #8b5cf6;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      </div>
+      <div>
+        <div class="sem-stat-num" id="stats-kpi-total-lab">-</div>
+        <div class="sem-stat-lbl">Laboratorium Aktif</div>
+      </div>
+    </div>
+    <div class="sem-stat-card card-ol">
+      <div class="sem-stat-icon" style="color: #0284c7;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="sem-stat-num" id="stats-kpi-total-kelas">-</div>
+        <div class="sem-stat-lbl">Total Kelas Terjadwal</div>
+      </div>
+    </div>
+    <div class="sem-stat-card card-dosen">
+      <div class="sem-stat-icon" style="color: #10b981;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </div>
+      <div>
+        <div class="sem-stat-num" id="stats-kpi-total-dosen">-</div>
+        <div class="sem-stat-lbl">Dosen Pengajar Aktif</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS NAVIGATOR: LAB | KELAS | DOSEN -->
+  <div class="stats-tabs-nav">
+    <button type="button" class="stats-tab-btn active" id="tab-btn-stats-lab" onclick="switchStatsTab('lab')">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+      </svg>
+      <span>Statistik Laboratorium</span>
+    </button>
+    <button type="button" class="stats-tab-btn" id="tab-btn-stats-kelas" onclick="switchStatsTab('kelas')">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+      </svg>
+      <span>Statistik Kelas & Waktu</span>
+    </button>
+    <button type="button" class="stats-tab-btn" id="tab-btn-stats-dosen" onclick="switchStatsTab('dosen')">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+      <span>Statistik Dosen Pengajar</span>
+    </button>
+  </div>
+
+  <!-- TAB PANE 1: STATISTIK LABORATORIUM -->
+  <div class="stats-tab-pane active" id="stats-pane-lab">
+    <!-- Lab Highlight Cards (Tersibuk & Terkosong & Kampus) -->
+    <div class="stats-highlights-grid">
+      <div class="stats-highlight-card border-purple">
+        <div class="stats-hl-header">
+          <div class="stats-hl-badge badge-busy">Lab Paling Sibuk</div>
+          <span class="stats-hl-sub" id="lab-hl-busy-pct">-</span>
+        </div>
+        <div class="stats-hl-title" id="lab-hl-busy-name">Memuat...</div>
+        <div class="stats-hl-detail" id="lab-hl-busy-detail">-</div>
+      </div>
+
+      <div class="stats-highlight-card border-cyan">
+        <div class="stats-hl-header">
+          <div class="stats-hl-badge badge-quiet">Lab Paling Lengang</div>
+          <span class="stats-hl-sub" id="lab-hl-quiet-pct">-</span>
+        </div>
+        <div class="stats-hl-title" id="lab-hl-quiet-name">Memuat...</div>
+        <div class="stats-hl-detail" id="lab-hl-quiet-detail">-</div>
+      </div>
+
+      <div class="stats-highlight-card border-green">
+        <div class="stats-hl-header">
+          <div class="stats-hl-badge badge-campus">Perbandingan Kampus</div>
+          <span class="stats-hl-sub">Sesi Praktikum</span>
+        </div>
+        <div class="stats-campus-bars">
+          <div class="campus-bar-item">
+            <div class="campus-bar-label"><span>Kampus Kobar</span><strong id="lab-camp-kobar-val">-</strong></div>
+            <div class="campus-prog-track"><div class="campus-prog-fill bg-indigo" id="lab-camp-kobar-bar" style="width: 0%;"></div></div>
+          </div>
+          <div class="campus-bar-item" style="margin-top: 8px;">
+            <div class="campus-bar-label"><span>Kampus Thehok</span><strong id="lab-camp-thehok-val">-</strong></div>
+            <div class="campus-prog-track"><div class="campus-prog-fill bg-purple" id="lab-camp-thehok-bar" style="width: 0%;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Ratio Pie/Bar Breakdown -->
+    <div class="stats-card-box" style="margin-top: 20px;">
+      <div class="stats-card-header">
+        <h3 class="stats-card-title">Rasio Metode Perkuliahan di Laboratorium</h3>
+        <span class="stats-card-meta" id="lab-method-meta">-</span>
+      </div>
+      <div class="stats-method-progress-wrap">
+        <div class="stats-stacked-bar">
+          <div class="stacked-bar-segment seg-tm" id="lab-seg-tm" style="width: 0%;" title="Tatap Muka"></div>
+          <div class="stacked-bar-segment seg-ol" id="lab-seg-ol" style="width: 0%;" title="Online"></div>
+          <div class="stacked-bar-segment seg-cc" id="lab-seg-cc" style="width: 0%;" title="Batal"></div>
+        </div>
+        <div class="stats-stacked-legend">
+          <div class="legend-item"><span class="legend-dot dot-tm"></span><span id="lab-leg-tm">Tatap Muka (TM): 0 (0%)</span></div>
+          <div class="legend-item"><span class="legend-dot dot-ol"></span><span id="lab-leg-ol">Online (OL): 0 (0%)</span></div>
+          <div class="legend-item"><span class="legend-dot dot-cc"></span><span id="lab-leg-cc">Dibatalkan (CC): 0 (0%)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabel Peringkat Utilisasi Lab -->
+    <div class="stats-card-box" style="margin-top: 20px;">
+      <div class="stats-card-header">
+        <h3 class="stats-card-title">Peringkat Utilisasi Seluruh Laboratorium</h3>
+        <span class="stats-card-meta">Diurutkan berdasarkan total jam terbang penggunaan</span>
+      </div>
+      <div class="stats-table-wrapper">
+        <table class="stats-custom-table" id="table-lab-rankings">
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">No</th>
+              <th>Nama Laboratorium</th>
+              <th>Kampus</th>
+              <th style="text-align: center;">Total Sesi</th>
+              <th style="text-align: center;">Total Jam</th>
+              <th>Tingkat Utilisasi</th>
+              <th style="text-align: center;">Rincian (TM / OL / CC)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-lab-rankings">
+            <tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);">Memuat data analitik lab...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB PANE 2: STATISTIK KELAS & WAKTU -->
+  <div class="stats-tab-pane" id="stats-pane-kelas" style="display: none;">
+    <div class="stats-grid-two-col">
+      <!-- Distribusi Hari -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Distribusi Kepadatan Kuliah per Hari</h3>
+          <span class="stats-card-meta">Frekuensi perkuliahan per hari</span>
+        </div>
+        <div id="chart-hari-distribution" class="stats-bar-chart-container">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+
+      <!-- Jam Perkuliahan Terpadat -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Jam Perkuliahan Paling Sibuk</h3>
+          <span class="stats-card-meta">Jam mulai perkuliahan terpadat</span>
+        </div>
+        <div id="chart-jam-distribution" class="stats-bar-chart-container">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid-two-col" style="margin-top: 20px;">
+      <!-- Top Kelas Paling Aktif -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Top Kelas Paling Aktif (Jam Kuliah Terbanyak)</h3>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Kode Kelas</th>
+                <th style="text-align: center;">Total Sesi</th>
+                <th style="text-align: center;">Total Jam</th>
+                <th style="text-align: center;">Rasio TM / OL</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-top-kelas-aktif">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Kelas dengan Pembatalan & Online Tertinggi -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Kelas dengan Online / Batal Tertinggi</h3>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Kode Kelas</th>
+                <th style="text-align: center;">Online (OL)</th>
+                <th style="text-align: center;">Batal (CC)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-top-kelas-anomali">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB PANE 3: STATISTIK DOSEN PENGAJAR -->
+  <div class="stats-tab-pane" id="stats-pane-dosen" style="display: none;">
+    <div class="stats-card-box">
+      <div class="stats-card-header">
+        <h3 class="stats-card-title">Peringkat 15 Dosen dengan Beban Mengajar Terbanyak</h3>
+        <span class="stats-card-meta">Dosen dengan total jam terbang mengajar tertinggi semester ini</span>
+      </div>
+      <div class="stats-table-wrapper">
+        <table class="stats-custom-table" id="table-dosen-rankings">
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">Peringkat</th>
+              <th>Nama Dosen Pengajar</th>
+              <th style="text-align: center;">Total Sesi</th>
+              <th style="text-align: center;">Total Jam Mengajar</th>
+              <th style="text-align: center;">Tatap Muka (TM)</th>
+              <th style="text-align: center;">Online (OL)</th>
+              <th style="text-align: center;">Dibatalkan (CC)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-dosen-rankings">
+            <!-- Injected by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="stats-grid-two-col" style="margin-top: 20px;">
+      <!-- Dosen Paling Sering Online -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Dosen Paling Sering Perkuliahan Daring (Online / OL)</h3>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Nama Dosen</th>
+                <th style="text-align: center;">Sesi Online</th>
+                <th style="text-align: center;">Total Jam Online</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-dosen-top-ol">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Dosen Paling Sering Cancel -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Dosen dengan Pembatalan Kelas Terbanyak (CC)</h3>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Nama Dosen</th>
+                <th style="text-align: center;">Sesi Batal (CC)</th>
+                <th style="text-align: center;">Total Jam Batal</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-dosen-top-cc">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

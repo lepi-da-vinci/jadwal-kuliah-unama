@@ -1,7 +1,7 @@
 # Ide Fitur Chatbot WhatsApp UNAMA (Backlog)
 
-> Dokumen ini mencatat ide-ide fitur yang belum diimplementasikan.
-> Terakhir diperbarui: 21 September 2026
+> Dokumen ini mencatat ide-ide fitur yang belum dan telah diimplementasikan.
+> Terakhir diperbarui: 22 September 2026
 
 ---
 
@@ -233,38 +233,81 @@ CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (
 
 ---
 
-## 3. Statistik Penggunaan Lab
+## 3. Statistik Penggunaan Lab, Kelas, & Dosen
 
-**Deskripsi:**
-Tool AI yang bisa menghitung dan melaporkan statistik penggunaan lab.
+**Status:** Selesai Diimplementasikan (Fase Produksi Aktif)  
+**Tujuan:** Menyediakan analitik dan statistik perkuliahan yang komprehensif baik di **Web Dashboard** (tampilan mandiri di bawah Mode Layar TV) maupun di **Chatbot WhatsApp**.
 
-**Data yang Bisa Dihasilkan:**
-- Total jam penggunaan lab per minggu/bulan
-- Lab mana yang paling sibuk vs paling kosong
-- Persentase utilisasi lab (jam terpakai / jam operasional)
-- Jumlah kelas yang di-cancel per periode
-- Tren penggunaan: apakah lab makin sibuk atau makin kosong dari waktu ke waktu
-- Perbandingan Kobar vs Thehok
+> **Prinsip Integritas Data (Single Source of Truth):**  
+> Seluruh kalkulasi statistik (jam penggunaan, utilisasi, status perkuliahan) 100% dihitung dari jadwal resmi BAAK UNAMA. Sistem **tidak mengizinkan manipulasi, edit, atau pemindahan jadwal secara manual** di sisi aplikasi kita demi menjaga konsistensi data akademik.
 
-**Contoh Output:**
-```
-Statistik Lab Kobar (September 2026):
+---
 
-Lab Tersibuk: Labor 1.8 (87% utilisasi, 156 jam)
-Lab Terkosong: Labor 1.9 (23% utilisasi, 41 jam)
+### A. Rancang Bangun Web Dashboard (Dedicated Explorer View)
+Diakses melalui menu **Setting** -> kategori **DASHBOARD & FITUR TAMPILAN** -> tombol **"Statistik Lab, Kelas & Dosen"** (tepat di bawah tombol *Mode Layar TV* di `modal-setting.html`).
 
-Total Kelas: 342
-- Tatap Muka (TM): 298 (87%)
-- Online (OL): 31 (9%)
-- Cancel (CC): 13 (4%)
+Tampilannya berupa **Dedicated View / Explorer Mode** mandiri (`frontend/components/stats-explorer.html`):
+- **Header Banner:**
+  - Ikon analitik ungu bergradasi & judul *"Pusat Statistik & Analitik Akademik"*.
+  - **Semester Switcher Dropdown** interaktif untuk berpindah analisis antar semester tanpa reload halaman.
+  - Tombol aksi: **Cetak / PDF** (`window.printOrExportStats()`), toggle Dark/Light Mode, dan **Kembali ke Dashboard Realtime** (`exitStatsMode()`).
+- **4 KPI Hero Cards:**
+  - Total Jam Operasional Perkuliahan.
+  - Laboratorium Aktif Terjadwal.
+  - Total Kelas Terjadwal.
+  - Dosen Pengajar Aktif.
+- **3 Tab Navigasi Statistik:**
+  1. **Tab 1: Statistik Laboratorium:**
+     - Kartu Highlight: Lab Paling Sibuk (jam terbang & utilisasi tertinggi), Lab Paling Lengang, dan Perbandingan Sesi Kampus Kobar vs Thehok.
+     - *Rasio Metode Perkuliahan di Laboratorium*: Visual stacked progress bar multi-segmen (Tatap Muka, Online, Batal).
+     - *Peringkat Utilisasi Seluruh Laboratorium*: Tabel peringkat lengkap dengan medali 1-3 (emas, perak, perunggu), persentase utilisasi visual bar, total sesi, total jam terbang, dan mini pills (TM / OL / CC).
+  2. **Tab 2: Statistik Kelas & Waktu Kuliah:**
+     - Distribusi Kepadatan Kuliah per Hari (visual progress chart interaktif).
+     - Jam Perkuliahan Terpadat (distribusi jam mulai perkuliahan).
+     - Top Kelas Paling Aktif (jam terbang terbanyak).
+     - Kelas dengan Frekuensi Kuliah Online (OL) dan Pembatalan (CC) Tertinggi.
+  3. **Tab 3: Statistik Dosen Pengajar:**
+     - Peringkat 15 Dosen dengan Beban Mengajar Terbanyak (total jam, total sesi, breakdown TM/OL/CC).
+     - Dosen Paling Sering Perkuliahan Daring (OL).
+     - Dosen dengan Pembatalan Kelas (CC) Terbanyak.
 
-Rata-rata kelas/hari: 12.4 kelas
-Hari tersibuk: Senin (rata-rata 18 kelas)
-```
+---
 
-**Catatan:**
-- Bisa dibuat sebagai tool Gemini AI agar bisa ditanya natural language
-- Data sudah tersedia di tabel `jadwal`, tinggal di-aggregate
+### B. Perilaku Chatbot WhatsApp (Aslab Scoped & 0 Emoji)
+Untuk interaksi di WhatsApp Bot (`backend/wa_notifier.py`):
+- **Default Scoping (Jika tidak diminta spesifik):**
+  - Jika aslab bertanya mengenai statistik (misal: *"statistik lab"*, *"seberapa sering lab dipakai"*, *"utilisasi"*, atau memilih Opsi 9 di menu bot), bot **HANYA menampilkan ringkasan statistik lab yang dipegang oleh aslab pengirim** (berdasarkan nomor WA/id ruangan aslab).
+  - Data yang ditampilkan: Total jam terbang, total sesi, persentase TM/OL/CC, hari tersibuk, jam terpadat, dan mata kuliah terbanyak.
+  - **TIDAK menambahkan statistik kelas ataupun dosen** pada jawaban default ini agar ringkas, hemat token, dan fokus pada tugas aslab bersangkutan.
+- **Permintaan Eksplisit:**
+  - Jika aslab secara khusus dan eksplisit meminta data dosen atau kelas (misal: *"siapa dosen paling sibuk?"*, *"statistik dosen"*, *"hari apa kelas paling padat?"*), bot memanggil tool `get_statistik_akademik(kategori='dosen'|'kelas')` untuk menyajikan data akademik global.
+- **Standar Format 0 Emoji:**
+  - Seluruh respons chatbot menggunakan standar bullet ASCII (`-` dan `*`) murni tanpa emoji teks apa pun.
+
+---
+
+### C. Arsitektur API Backend (`main.py`)
+Endpoint:
+- `GET /api/statistics`:
+  - Parameter query: `semester: str = None` (default: semester aktif).
+  - Mengagregasi data dari tabel `jadwal` (dengan fallback otomatis ke `jadwal_permanent` jika tabel utama sedang dibersihkan).
+  - Menghitung durasi jam perkuliahan secara dinamis menggunakan `scraper.get_class_duration(nama_mk)`.
+  - Mengembalikan payload JSON terstruktur:
+    - `summary`: total perkuliahan, jam operasional, lab aktif, total kelas, total dosen aktif, rata-rata sesi.
+    - `lab_stats`: summary, rankings (dengan `utilization_pct`), dan komparasi kampus (Kobar vs Thehok).
+    - `kelas_stats`: total kelas, `distribusi_hari`, `distribusi_jam`, `top_aktif`, `top_ol`, `top_cc`.
+    - `dosen_stats`: total dosen aktif, `top_jam`, `top_ol`, `top_cc`.
+
+---
+
+### D. Roadmap & Status Eksekusi
+- [x] **Backend API:** Implementasi `GET /api/statistics` dengan kalkulasi jam & utilisasi akurat di `main.py`.
+- [x] **Frontend View:** Komponen modular `stats-explorer.html` terpasang di template `index.html` dan dikompilasi via `build_html.py`.
+- [x] **Frontend Interaktivitas:** Controller navigasi mode (`enterStatsMode`, `exitStatsMode`), switcher semester dinamis, dan rendering 3 tab di `script.js`.
+- [x] **Frontend Styling:** Desain responsif, modern, kartu KPI, medali peringkat, dan stacked progress bar di `style.css`.
+- [x] **Chatbot WA Tools:** Fungsi `get_statistik_lab_saya` dan `get_statistik_akademik` di `backend/wa_notifier.py`.
+- [x] **Chatbot Prompt & Fallback:** Aturan Rule #9 AI Gemini dan handler Opsi 9 slang di `fallback_python_handler` dengan 0 emoji.
+- [x] **Integritas Data:** Read-only dari basis data BAAK UNAMA tanpa opsi modifikasi manual.
 
 ---
 

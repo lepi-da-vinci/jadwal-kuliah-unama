@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import datetime
 import random
 import re
@@ -548,6 +549,218 @@ def get_info_mase():
             cursor.close()
             conn.close()
 
+def get_statistik_lab_saya(nama_lab: str = None):
+    """Mengambil data statistik penggunaan laboratorium (total jam, jumlah sesi tatap muka/online/batal, hari & jam tersibuk). Jika nama_lab tidak diisi, otomatis menghitung statistik lab yang dipegang aslab pengirim."""
+    sender_aslab = get_sender_aslab()
+    target_lab = nama_lab
+    if not target_lab and sender_aslab:
+        target_lab = sender_aslab.get('nama_ruangan')
+    if not target_lab:
+        return "Sebutkan nama lab yang ingin dicek statistiknya (misal '1.8' atau 'Cisco 4.3')."
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        sem_row = cursor.fetchone()
+        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+
+        cursor.execute('''
+            SELECT j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                   r.nama_ruangan, r.kampus
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE UPPER(r.nama_ruangan) LIKE %s AND j.semester = %s
+        ''', (f"%{target_lab.upper()}%", sem_target))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            cursor.execute('''
+                SELECT j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                       r.nama_ruangan, r.kampus
+                FROM jadwal_permanent j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                WHERE UPPER(r.nama_ruangan) LIKE %s AND j.semester = %s
+            ''', (f"%{target_lab.upper()}%", sem_target))
+            rows = cursor.fetchall()
+
+        if not rows:
+            return f"Belum ada data jadwal perkuliahan untuk {target_lab} pada semester {sem_target}."
+
+        ruang_full = f"{rows[0]['nama_ruangan']} ({rows[0]['kampus']})"
+        total_sesi = len(rows)
+        total_jam = 0.0
+        tm_cnt = 0
+        ol_cnt = 0
+        cc_cnt = 0
+        hari_map = collections.defaultdict(int)
+        jam_map = collections.defaultdict(int)
+        mk_map = collections.defaultdict(int)
+
+        for r in rows:
+            dur = scraper.get_class_duration(r.get('nama_mk') or '') if hasattr(scraper, 'get_class_duration') else 135
+            total_jam += round(dur / 60.0, 2)
+            
+            st = get_status_label(r)
+            if st == 'TM': tm_cnt += 1
+            elif st == 'OL': ol_cnt += 1
+            elif st == 'CC': cc_cnt += 1
+
+            if r.get('hari'): hari_map[r['hari']] += 1
+            if r.get('jam'):
+                tot_sec = int(r['jam'].total_seconds())
+                j_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                jam_map[j_str] += 1
+            if r.get('nama_mk'): mk_map[r['nama_mk']] += 1
+
+        pct_tm = round((tm_cnt / total_sesi) * 100, 1) if total_sesi > 0 else 0
+        pct_ol = round((ol_cnt / total_sesi) * 100, 1) if total_sesi > 0 else 0
+        pct_cc = round((cc_cnt / total_sesi) * 100, 1) if total_sesi > 0 else 0
+
+        top_hari = sorted(hari_map.items(), key=lambda x: x[1], reverse=True)[0] if hari_map else ('-', 0)
+        top_jam = sorted(jam_map.items(), key=lambda x: x[1], reverse=True)[0] if jam_map else ('-', 0)
+        top_mk = sorted(mk_map.items(), key=lambda x: x[1], reverse=True)[0] if mk_map else ('-', 0)
+
+        msg = (
+            f"*Statistik Penggunaan {ruang_full}*\n"
+            f"_Semester {sem_target}_\n\n"
+            f"- Total Penggunaan: {round(total_jam, 1)} jam ({total_sesi} sesi)\n"
+            f"- Rincian Status Perkuliahan:\n"
+            f"  * Tatap Muka (TM): {tm_cnt} sesi ({pct_tm}%)\n"
+            f"  * Online (OL): {ol_cnt} sesi ({pct_ol}%)\n"
+            f"  * Dibatalkan (CC): {cc_cnt} sesi ({pct_cc}%)\n"
+            f"- Hari Tersibuk: {top_hari[0]} ({top_hari[1]} sesi)\n"
+            f"- Jam Terpadat: {top_jam[0]} ({top_jam[1]} kelas)\n"
+            f"- MK Terbanyak Praktikum: {top_mk[0]} ({top_mk[1]} kelas)"
+        )
+        return msg
+    except Exception as e:
+        return f"Error statistik lab: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_statistik_akademik(kategori: str):
+    """Melihat data statistik akademik secara luas: 'dosen' (dosen teraktif mengajar, paling sering OL/batal) atau 'kelas' (total kelas aktif, hari dan jam paling padat). Gunakan tool ini HANYA JIKA aslab secara khusus meminta data dosen atau kelas."""
+    kategori_clean = (kategori or "").strip().lower()
+    if 'dosen' not in kategori_clean and 'kelas' not in kategori_clean:
+        return "Sebutkan kategori statistik yang ingin dilihat: 'dosen' atau 'kelas'."
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        sem_row = cursor.fetchone()
+        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+
+        if 'dosen' in kategori_clean:
+            cursor.execute('''
+                SELECT d.nama_dosen, j.metode_pembelajaran, j.status_jadwal, j.nama_mk
+                FROM jadwal j
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE j.semester = %s
+            ''', (sem_target,))
+            rows = cursor.fetchall()
+            if not rows:
+                cursor.execute('''
+                    SELECT d.nama_dosen, j.metode_pembelajaran, j.status_jadwal, j.nama_mk
+                    FROM jadwal_permanent j
+                    JOIN dosen d ON j.id_dosen = d.id_dosen
+                    WHERE j.semester = %s
+                ''', (sem_target,))
+                rows = cursor.fetchall()
+
+            if not rows:
+                return f"Belum ada data statistik dosen untuk semester {sem_target}."
+
+            dosen_stats = collections.defaultdict(lambda: {'total': 0, 'ol': 0, 'cc': 0, 'jam': 0.0})
+            for r in rows:
+                d = r['nama_dosen']
+                dur = scraper.get_class_duration(r.get('nama_mk') or '') if hasattr(scraper, 'get_class_duration') else 135
+                dosen_stats[d]['total'] += 1
+                dosen_stats[d]['jam'] += round(dur / 60.0, 2)
+                st = get_status_label(r)
+                if st == 'OL': dosen_stats[d]['ol'] += 1
+                elif st == 'CC': dosen_stats[d]['cc'] += 1
+
+            top_dosen = sorted(dosen_stats.items(), key=lambda x: x[1]['jam'], reverse=True)[:5]
+            dosen_ol = sorted([d for d in dosen_stats.items() if d[1]['ol'] > 0], key=lambda x: x[1]['ol'], reverse=True)
+            dosen_cc = sorted([d for d in dosen_stats.items() if d[1]['cc'] > 0], key=lambda x: x[1]['cc'], reverse=True)
+
+            msg = f"*Statistik Dosen Pengajar*\n_Semester {sem_target}_\n\n"
+            msg += f"- Total Dosen Aktif: {len(dosen_stats)} dosen\n"
+            msg += f"- Top 5 Dosen Paling Padat Mengajar:\n"
+            for i, (d_name, d_val) in enumerate(top_dosen, 1):
+                msg += f"  {i}. {d_name}: {round(d_val['jam'], 1)} jam ({d_val['total']} sesi)\n"
+            
+            if dosen_ol:
+                msg += f"- Dosen Paling Sering Online (OL): {dosen_ol[0][0]} ({dosen_ol[0][1]['ol']} sesi OL)\n"
+            if dosen_cc:
+                msg += f"- Dosen Kelas Dibatalkan (CC) Terbanyak: {dosen_cc[0][0]} ({dosen_cc[0][1]['cc']} sesi batal)\n"
+            return msg.strip()
+
+        else:
+            cursor.execute('''
+                SELECT j.hari, j.jam, j.kelas, j.nama_mk, j.metode_pembelajaran, j.status_jadwal
+                FROM jadwal j
+                WHERE j.semester = %s
+            ''', (sem_target,))
+            rows = cursor.fetchall()
+            if not rows:
+                cursor.execute('''
+                    SELECT j.hari, j.jam, j.kelas, j.nama_mk, j.metode_pembelajaran, j.status_jadwal
+                    FROM jadwal_permanent j
+                    WHERE j.semester = %s
+                ''', (sem_target,))
+                rows = cursor.fetchall()
+
+            if not rows:
+                return f"Belum ada data statistik kelas untuk semester {sem_target}."
+
+            total_sesi = len(rows)
+            hari_map = collections.defaultdict(int)
+            jam_map = collections.defaultdict(int)
+            kelas_map = collections.defaultdict(lambda: {'total': 0, 'jam': 0.0, 'ol': 0, 'cc': 0})
+
+            for r in rows:
+                dur = scraper.get_class_duration(r.get('nama_mk') or '') if hasattr(scraper, 'get_class_duration') else 135
+                kls = r.get('kelas') or 'Lainnya'
+                kelas_map[kls]['total'] += 1
+                kelas_map[kls]['jam'] += round(dur / 60.0, 2)
+                st = get_status_label(r)
+                if st == 'OL': kelas_map[kls]['ol'] += 1
+                elif st == 'CC': kelas_map[kls]['cc'] += 1
+
+                if r.get('hari'): hari_map[r['hari']] += 1
+                if r.get('jam'):
+                    tot_sec = int(r['jam'].total_seconds())
+                    j_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                    jam_map[j_str] += 1
+
+            top_hari = sorted(hari_map.items(), key=lambda x: x[1], reverse=True)[0] if hari_map else ('-', 0)
+            top_jam = sorted(jam_map.items(), key=lambda x: x[1], reverse=True)[0] if jam_map else ('-', 0)
+            top_kelas = sorted(kelas_map.items(), key=lambda x: x[1]['jam'], reverse=True)[:5]
+
+            msg = f"*Statistik Kelas & Perkuliahan*\n_Semester {sem_target}_\n\n"
+            msg += f"- Total Kelas Unik: {len(kelas_map)} kelas\n"
+            msg += f"- Total Sesi Perkuliahan: {total_sesi} sesi\n"
+            msg += f"- Hari Paling Padat: {top_hari[0]} ({top_hari[1]} kelas)\n"
+            msg += f"- Jam Perkuliahan Terpadat: {top_jam[0]} ({top_jam[1]} kelas)\n"
+            msg += f"- Top 5 Kelas Jam Terbang Terbanyak:\n"
+            for i, (k_name, k_val) in enumerate(top_kelas, 1):
+                msg += f"  {i}. {k_name}: {round(k_val['jam'], 1)} jam ({k_val['total']} sesi)\n"
+            return msg.strip()
+
+    except Exception as e:
+        return f"Error statistik akademik: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 def get_ngrok_link():
     """Mendapatkan link server aktif (Cloudflare Tunnel atau Ngrok) saat ini dan info scan QR di monitor."""
     # 1. Cek apakah ada URL Publik di .env (misal domain custom Cloudflare)
@@ -771,7 +984,8 @@ ai_tools = [
     cek_jadwal_lab_tertentu, kelas_berikutnya, status_lab_sekarang,
     cek_semua_lab_kampus, cek_lab_kosong, cari_posisi_dosen,
     get_info_mase, get_ngrok_link, update_profil_aslab,
-    list_aslab_lain, kirim_pesan_ke_aslab
+    list_aslab_lain, kirim_pesan_ke_aslab,
+    get_statistik_lab_saya, get_statistik_akademik
 ]
 
 chat_sessions = {}
@@ -779,7 +993,7 @@ def get_or_create_chat_session(sender, nama_aslab, nama_ruangan, kampus):
     if sender not in chat_sessions:
         system_instruction = f"""Kamu adalah bot operasional jadwal kampus UNAMA untuk WhatsApp.
 Lawan bicaramu: Aslab '{nama_aslab}' ({nama_ruangan} {kampus}).
-Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab.
+Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab, statistik lab.
 Selalu gunakan tools/functions untuk mengambil data, jangan pernah mengarang data.
 Tanggal acuan: {datetime.datetime.now().strftime('%Y-%m-%d')} ({format_tanggal_indo(datetime.datetime.now())}).
 
@@ -799,6 +1013,9 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
 8. KELAS BERIKUTNYA & STATUS LAB REAL-TIME:
    - Jika ditanya "kelas berikutnya", "habis ini kelas apa", "setelah ini ada kelas apa", panggil tool `kelas_berikutnya(nama_ruangan='{nama_ruangan}')`.
    - Jika ditanya status lab ("lagi dipakai dak?", "status lab sekarang", "kondisi lab"), panggil tool `status_lab_sekarang(nama_ruangan='{nama_ruangan}')`.
+9. STATISTIK PENGGUNAAN LAB, KELAS, & DOSEN (SANGAT PENTING):
+   - DEFAULT (JIKA TIDAK DIMINTA SPESIFIK): Jika aslab bertanya tentang statistik (misal: "statistik lab", "statistik penggunaan", "seberapa sering lab dipakai", "data statistik", dll), PANGGIL TOOL `get_statistik_lab_saya()` dan HANYA TAMPILKAN statistik lab aslab itu sendiri ('{nama_ruangan}'). JANGAN PERNAH menambahkan statistik kelas atau dosen pada jawaban default ini.
+   - STATISTIK KELAS / DOSEN: HANYA panggil tool `get_statistik_akademik(kategori='dosen' atau 'kelas')` jika aslab secara spesifik/eksplisit memintanya (misal: "siapa dosen paling sibuk?", "statistik dosen", "statistik kelas terpadat").
 
 FITUR RAHASIA (TITIP / SAMPAIKAN PESAN KE ASLAB LAIN):
 - Fitur ini adalah fitur rahasia AI (TIDAK DITAMPILKAN di daftar menu manapun).
@@ -939,8 +1156,9 @@ def fallback_python_handler(sender, text, aslab):
         f"5. Cek Lab Kosong ({kampus_default})\n"
         f"6. Cari Posisi Dosen (Lagi ngajar di mano?)\n"
         f"7. Info Mase\n"
-        f"8. Link Web & Barcode Server\n\n"
-        f"Ketik nomor 1 s/d 8 atau langsung ketik bae (misal: 'habis ini', 'status', '1.8', 'pak andi')."
+        f"8. Link Web & Barcode Server\n"
+        f"9. Statistik Lab (Total jam & utilisasi semester ini)\n\n"
+        f"Ketik nomor 1 s/d 9 atau langsung ketik bae (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
     )
 
     if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
@@ -973,18 +1191,14 @@ def fallback_python_handler(sender, text, aslab):
         return cek_lab_kosong(k, target_date)
 
     # 9. Opsi 6: Cari Posisi Dosen
-    if text_clean == "6" or text_clean in ["cari dosen", "posisi dosen", "dosen"]:
+    if text_clean == "6" or any(text_clean.startswith(k) for k in ["cari dosen", "posisi dosen", "dosen"]):
+        if any(text_clean.startswith(k) for k in ["cari dosen ", "posisi dosen ", "dosen "]):
+            for pfx in ["cari dosen ", "posisi dosen ", "dosen "]:
+                if text_clean.startswith(pfx):
+                    query_dosen = text[len(pfx):].strip()
+                    return cari_posisi_dosen(query_dosen)
         aslab_session_states[sender] = {"step": "cari_dosen"}
-        return "Siape nama dosen yang dicari mas? Ketik bae namanya ya."
-
-    # Cari Dosen langsung (misal: "dosen andi", "posisi dosen budi", "pak andi", "bu lia", "6 budi")
-    match_dosen = re.search(r'\b(?:posisi\s+)?(?:dosen|pak|bu|ibu)\s+([a-zA-Z\s\.\,]+)', text_clean)
-    if match_dosen:
-        dosen_name = match_dosen.group(1).strip()
-        if len(dosen_name) >= 2:
-            return cari_posisi_dosen(dosen_name)
-    if text_clean.startswith("6 ") and len(text_clean) > 2:
-        return cari_posisi_dosen(text[2:].strip())
+        return "Siap mase! Masukkan nama dosen yang dicari (misal: 'Reza' atau 'Pak Reza'):"
 
     # 10. Opsi 7: Info Mase
     if text_clean == "7" or any(text_clean.startswith(k) for k in ["info mase", "inpo mase", "pengumuman", "info hari ini", "inpo hari ini"]):
@@ -994,14 +1208,20 @@ def fallback_python_handler(sender, text, aslab):
     if text_clean == "8" or any(k in text_clean for k in ["link", "ngrok", "server", "web", "barcode", "qr", "tunnel", "cloudflare"]):
         return get_ngrok_link()
 
-    # 12. Cek Ruangan Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4")
+    # 12. Opsi 9: Statistik Lab Sendiri
+    if text_clean == "9" or any(w in text_clean for w in ["statistik", "stat", "utilisasi", "rekap lab"]):
+        current_sender_context.sender = sender
+        stat_res = get_statistik_lab_saya(aslab['nama_ruangan'])
+        return f"Yo mase {nama}, nih rekap statistik lab kamu:\n\n{stat_res}"
+
+    # 13. Cek Ruangan Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4")
     match_room = re.search(r'\b(?:lab\s*|ruang\s*)?(\d+\.\d+)\b', text_clean)
     if match_room:
         room_no = match_room.group(1)
         target_date = extract_date_or_today(text_clean)
         return cek_jadwal_lab_tertentu(room_no, target_date)
 
-    # 13. Default Fallback: Menu Slang Ramah
+    # 14. Default Fallback: Menu Slang Ramah
     return (
         f"Waduh mase {nama}, bot belum mudeng nih wkwk. "
         f"Pilih nomor menu di bawah atau ketik langsung ya:\n\n"
@@ -1012,8 +1232,9 @@ def fallback_python_handler(sender, text, aslab):
         f"5. Cek Lab Kosong ({kampus_default})\n"
         f"6. Cari Posisi Dosen\n"
         f"7. Info Mase\n"
-        f"8. Link Web Server\n\n"
-        f"Ketik angka 1 s/d 8 atau ketik 'batal' mas."
+        f"8. Link Web & Barcode Server\n"
+        f"9. Statistik Lab {label_ruang}\n\n"
+        f"Ketik nomor 1 s/d 9 atau langsung ketik bae!"
     )
 
 

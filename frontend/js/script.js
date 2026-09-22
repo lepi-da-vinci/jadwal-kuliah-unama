@@ -10440,6 +10440,445 @@ function startTvRollingTicker() {
 }
 
 // =========================================================================
+// MODE STATISTIK PENGGUNAAN (LAB, KELAS & DOSEN)
+// =========================================================================
+let isStatsExplorerMode = false;
+let currentStatsSemester = null;
+let currentStatsData = null;
+
+window.enterStatsMode = async function(namaSemester) {
+  if (!namaSemester) {
+    namaSemester = currentStatsSemester || currentActiveSemester || 'Genap 2025';
+  }
+  currentStatsSemester = namaSemester;
+  isStatsExplorerMode = true;
+
+  // Tutup mode semester explorer jika sedang aktif
+  if (isSemesterExplorerMode && typeof exitSemesterExplorerMode === 'function') {
+    exitSemesterExplorerMode();
+  }
+
+  // Tutup setting modal jika terbuka
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+
+  document.body.classList.add('stats-explorer-active');
+
+  const liveDash = document.getElementById('live-dashboard-view');
+  if (liveDash) liveDash.style.display = 'none';
+
+  const semContainer = document.getElementById('semester-explorer-container');
+  if (semContainer) semContainer.style.display = 'none';
+
+  const statsContainer = document.getElementById('stats-explorer-container');
+  if (statsContainer) statsContainer.style.display = 'flex';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Pastikan master semester terisi
+  if (!allSemestersList || allSemestersList.length === 0) {
+    try {
+      await fetchSemestersData();
+    } catch (e) {}
+  }
+
+  updateStatsSemesterDropdown(namaSemester);
+  await loadStatisticsData(namaSemester);
+};
+
+window.exitStatsMode = function() {
+  isStatsExplorerMode = false;
+  document.body.classList.remove('stats-explorer-active');
+
+  const liveDash = document.getElementById('live-dashboard-view');
+  if (liveDash) liveDash.style.display = 'block';
+
+  const statsContainer = document.getElementById('stats-explorer-container');
+  if (statsContainer) statsContainer.style.display = 'none';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+window.closeSettingAndOpenStatsMode = function() {
+  if (typeof closeSettingModal === 'function') {
+    closeSettingModal(false);
+  } else {
+    const testModal = document.getElementById('test-wa-modal');
+    if (testModal) testModal.classList.remove('open');
+  }
+  enterStatsMode();
+};
+
+window.switchStatsTab = function(tabName) {
+  const tabs = ['lab', 'kelas', 'dosen'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tab-btn-stats-${t}`);
+    const pane = document.getElementById(`stats-pane-${t}`);
+    if (t === tabName) {
+      if (btn) btn.classList.add('active');
+      if (pane) {
+        pane.classList.add('active');
+        pane.style.display = 'block';
+      }
+    } else {
+      if (btn) btn.classList.remove('active');
+      if (pane) {
+        pane.classList.remove('active');
+        pane.style.display = 'none';
+      }
+    }
+  });
+};
+
+function updateStatsSemesterDropdown(currentSem) {
+  const labelEl = document.getElementById('stats-sem-label-switch');
+  const itemsContainer = document.getElementById('items-stats-sem-switch');
+  const inputEl = document.getElementById('stats-sem-filter-switch');
+
+  if (inputEl) inputEl.value = currentSem;
+  if (labelEl) {
+    labelEl.innerText = currentSem;
+    labelEl.title = currentSem;
+  }
+
+  if (!itemsContainer) return;
+
+  if (!allSemestersList || allSemestersList.length === 0) {
+    const safeSem = escapeHtml(currentSem).replace(/'/g, "\\'");
+    itemsContainer.innerHTML = `
+      <div class="aslab-list-item active" data-value="${escapeHtml(currentSem)}" onclick="selectStatsSemesterSwitch('${safeSem}')">
+        <span>${escapeHtml(currentSem)}</span>
+      </div>
+    `;
+    return;
+  }
+
+  itemsContainer.innerHTML = allSemestersList.map(s => {
+    const isActive = (s.nama_semester === currentSem);
+    const safeSem = escapeHtml(s.nama_semester).replace(/'/g, "\\'");
+    return `
+      <div class="aslab-list-item ${isActive ? 'active' : ''}" data-value="${escapeHtml(s.nama_semester)}"
+        onclick="selectStatsSemesterSwitch('${safeSem}')">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px;">
+          <span style="font-weight: 700;">${escapeHtml(s.nama_semester)}</span>
+          <span class="badge-mini-sem" style="font-size: 0.78em; padding: 2px 8px; border-radius: 20px; background: rgba(139, 92, 246, 0.12); color: inherit;">${s.total_jadwal || 0} Jadwal</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.selectStatsSemesterSwitch = function(namaSemester) {
+  const dropdown = document.getElementById('dropdown-stats-sem-switch');
+  if (dropdown) dropdown.classList.remove('open');
+
+  if (!namaSemester || namaSemester === currentStatsSemester) return;
+  enterStatsMode(namaSemester);
+};
+
+window.printOrExportStats = function() {
+  window.print();
+};
+
+async function loadStatisticsData(namaSemester) {
+  // Set loading placeholder di tabel-tabel utama
+  const tbodyLab = document.getElementById('tbody-lab-rankings');
+  if (tbodyLab) tbodyLab.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;"><div class="spinner-mini"></div> Memuat data statistik semester ${escapeHtml(namaSemester)}...</div></td></tr>`;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/statistics?semester=${encodeURIComponent(namaSemester)}&_t=${Date.now()}`);
+    const json = await res.json();
+    if (json.status === 'success') {
+      currentStatsData = json;
+      renderAllStats(json);
+    } else {
+      console.error("Gagal memuat data statistik:", json.message);
+      if (tbodyLab) tbodyLab.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #ef4444;">Gagal memuat data statistik: ${escapeHtml(json.message || 'Error')}</td></tr>`;
+    }
+  } catch (err) {
+    console.error("Fetch statistics error:", err);
+    if (tbodyLab) tbodyLab.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #ef4444;">Terjadi kesalahan jaringan saat memuat statistik.</td></tr>`;
+  }
+}
+
+function renderAllStats(data) {
+  const summary = data.summary || {};
+  const labStats = data.lab_stats || {};
+  const kelasStats = data.kelas_stats || {};
+  const dosenStats = data.dosen_stats || {};
+
+  // 1. KPI Hero Cards
+  const kpiJam = document.getElementById('stats-kpi-total-jam');
+  if (kpiJam) kpiJam.innerText = `${summary.total_jam_operasional || 0} Jam`;
+
+  const kpiLab = document.getElementById('stats-kpi-total-lab');
+  if (kpiLab) kpiLab.innerText = `${summary.total_lab_aktif || 0} Lab`;
+
+  const kpiKelas = document.getElementById('stats-kpi-total-kelas');
+  if (kpiKelas) kpiKelas.innerText = `${summary.total_kelas || 0} Kelas`;
+
+  const kpiDosen = document.getElementById('stats-kpi-total-dosen');
+  if (kpiDosen) kpiDosen.innerText = `${summary.total_dosen || 0} Dosen`;
+
+  // 2. Tab 1: Lab Stats
+  renderLabStatsTab(labStats);
+
+  // 3. Tab 2: Kelas Stats
+  renderKelasStatsTab(kelasStats);
+
+  // 4. Tab 3: Dosen Stats
+  renderDosenStatsTab(dosenStats);
+}
+
+function renderLabStatsTab(labStats) {
+  const summary = labStats.summary || {};
+  const rankings = labStats.rankings || [];
+  const kampus = labStats.kampus || {};
+
+  // Highlights: Lab Paling Sibuk
+  const busy = summary.lab_tersibuk;
+  const busyNameEl = document.getElementById('lab-hl-busy-name');
+  const busyPctEl = document.getElementById('lab-hl-busy-pct');
+  const busyDetailEl = document.getElementById('lab-hl-busy-detail');
+  if (busy && busyNameEl) {
+    busyNameEl.innerText = formatRoomName(busy.nama_ruangan, false);
+    if (busyPctEl) busyPctEl.innerText = `${busy.utilization_pct || 100}% Utilisasi`;
+    if (busyDetailEl) busyDetailEl.innerText = `${busy.total_jam} jam terbang (${busy.total_sesi} sesi: ${busy.tm} TM, ${busy.ol} OL, ${busy.cc} CC)`;
+  } else if (busyNameEl) {
+    busyNameEl.innerText = 'Tidak Ada Data';
+    if (busyPctEl) busyPctEl.innerText = '-';
+    if (busyDetailEl) busyDetailEl.innerText = '-';
+  }
+
+  // Highlights: Lab Paling Lengang
+  const quiet = summary.lab_terkosong;
+  const quietNameEl = document.getElementById('lab-hl-quiet-name');
+  const quietPctEl = document.getElementById('lab-hl-quiet-pct');
+  const quietDetailEl = document.getElementById('lab-hl-quiet-detail');
+  if (quiet && quietNameEl) {
+    quietNameEl.innerText = formatRoomName(quiet.nama_ruangan, false);
+    if (quietPctEl) quietPctEl.innerText = `${quiet.utilization_pct || 0}% Utilisasi`;
+    if (quietDetailEl) quietDetailEl.innerText = `${quiet.total_jam} jam terbang (${quiet.total_sesi} sesi)`;
+  } else if (quietNameEl) {
+    quietNameEl.innerText = 'Tidak Ada Data';
+    if (quietPctEl) quietPctEl.innerText = '-';
+    if (quietDetailEl) quietDetailEl.innerText = '-';
+  }
+
+  // Highlights: Perbandingan Kampus
+  const kobar = kampus.Kobar || { total_sesi: 0, total_jam: 0 };
+  const thehok = kampus.Thehok || { total_sesi: 0, total_jam: 0 };
+  const maxCampusJam = Math.max(kobar.total_jam, thehok.total_jam, 1);
+  const kobarPct = Math.round((kobar.total_jam / maxCampusJam) * 100);
+  const thehokPct = Math.round((thehok.total_jam / maxCampusJam) * 100);
+
+  const kobarVal = document.getElementById('lab-camp-kobar-val');
+  if (kobarVal) kobarVal.innerText = `${kobar.total_jam} Jam (${kobar.total_sesi} Sesi)`;
+  const kobarBar = document.getElementById('lab-camp-kobar-bar');
+  if (kobarBar) kobarBar.style.width = `${kobarPct}%`;
+
+  const thehokVal = document.getElementById('lab-camp-thehok-val');
+  if (thehokVal) thehokVal.innerText = `${thehok.total_jam} Jam (${thehok.total_sesi} Sesi)`;
+  const thehokBar = document.getElementById('lab-camp-thehok-bar');
+  if (thehokBar) thehokBar.style.width = `${thehokPct}%`;
+
+  // Stacked Bar Rasio Metode
+  const segTm = document.getElementById('lab-seg-tm');
+  const segOl = document.getElementById('lab-seg-ol');
+  const segCc = document.getElementById('lab-seg-cc');
+  if (segTm) segTm.style.width = `${summary.persen_tm || 0}%`;
+  if (segOl) segOl.style.width = `${summary.persen_ol || 0}%`;
+  if (segCc) segCc.style.width = `${summary.persen_cc || 0}%`;
+
+  const legTm = document.getElementById('lab-leg-tm');
+  const legOl = document.getElementById('lab-leg-ol');
+  const legCc = document.getElementById('lab-leg-cc');
+  if (legTm) legTm.innerText = `Tatap Muka (TM): ${summary.tm || 0} (${summary.persen_tm || 0}%)`;
+  if (legOl) legOl.innerText = `Online (OL): ${summary.ol || 0} (${summary.persen_ol || 0}%)`;
+  if (legCc) legCc.innerText = `Dibatalkan (CC): ${summary.cc || 0} (${summary.persen_cc || 0}%)`;
+
+  const metaEl = document.getElementById('lab-method-meta');
+  if (metaEl) metaEl.innerText = `Total ${summary.total_sesi || 0} Sesi Praktikum Terjadwal`;
+
+  // Table Lab Rankings
+  const tbody = document.getElementById('tbody-lab-rankings');
+  if (!tbody) return;
+
+  if (rankings.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);">Tidak ada jadwal lab pada semester ini.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rankings.map((lb, idx) => {
+    const rank = idx + 1;
+    let badgeClass = 'rank-other';
+    if (rank === 1) badgeClass = 'rank-1';
+    else if (rank === 2) badgeClass = 'rank-2';
+    else if (rank === 3) badgeClass = 'rank-3';
+
+    return `
+      <tr>
+        <td style="text-align: center;"><span class="rank-badge ${badgeClass}">${rank}</span></td>
+        <td><strong>${formatRoomNameHtml(lb.nama_ruangan)}</strong></td>
+        <td><span class="badge" style="background: var(--bg-hover); color: var(--text);">${escapeHtml(formatCampusName(lb.kampus))}</span></td>
+        <td style="text-align: center;"><b>${lb.total_sesi}</b></td>
+        <td style="text-align: center; font-weight: 700; color: #8b5cf6;">${lb.total_jam} Jam</td>
+        <td>
+          <div class="util-bar-wrap">
+            <div class="util-bar-track">
+              <div class="util-bar-fill" style="width: ${lb.utilization_pct || 0}%;"></div>
+            </div>
+            <span class="util-bar-val">${lb.utilization_pct || 0}%</span>
+          </div>
+        </td>
+        <td style="text-align: center;">
+          <div class="mini-method-pills">
+            <span class="m-pill m-tm" title="Tatap Muka">${lb.tm} TM</span>
+            <span class="m-pill m-ol" title="Online">${lb.ol} OL</span>
+            <span class="m-pill m-cc" title="Dibatalkan">${lb.cc} CC</span>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderKelasStatsTab(kelasStats) {
+  // 1. Distribusi Hari
+  const distHari = kelasStats.distribusi_hari || [];
+  const chartHari = document.getElementById('chart-hari-distribution');
+  if (chartHari) {
+    const maxHari = Math.max(...distHari.map(d => d.total), 1);
+    chartHari.innerHTML = distHari.map(d => {
+      const pct = Math.round((d.total / maxHari) * 100);
+      return `
+        <div class="stats-bar-chart-row">
+          <span class="stats-chart-label">${escapeHtml(d.hari)}</span>
+          <div class="stats-chart-track">
+            <div class="stats-chart-fill" style="width: ${pct}%;"></div>
+          </div>
+          <span class="stats-chart-val">${d.total} sesi</span>
+        </div>
+      `;
+    }).join('') || '<div style="color: var(--text-muted); font-size: 0.88rem; padding: 12px 0;">Tidak ada data distribusi hari</div>';
+  }
+
+  // 2. Jam Perkuliahan Terpadat
+  const distJam = kelasStats.distribusi_jam || [];
+  const chartJam = document.getElementById('chart-jam-distribution');
+  if (chartJam) {
+    const maxJam = Math.max(...distJam.map(j => j.total), 1);
+    chartJam.innerHTML = distJam.slice(0, 7).map(j => {
+      const pct = Math.round((j.total / maxJam) * 100);
+      return `
+        <div class="stats-bar-chart-row">
+          <span class="stats-chart-label">${escapeHtml(j.jam)}</span>
+          <div class="stats-chart-track">
+            <div class="stats-chart-fill" style="width: ${pct}%; background: linear-gradient(90deg, #06b6d4, #0284c7);"></div>
+          </div>
+          <span class="stats-chart-val">${j.total} sesi</span>
+        </div>
+      `;
+    }).join('') || '<div style="color: var(--text-muted); font-size: 0.88rem; padding: 12px 0;">Tidak ada data jam perkuliahan</div>';
+  }
+
+  // 3. Top Kelas Aktif
+  const topAktif = kelasStats.top_aktif || [];
+  const tbodyAktif = document.getElementById('tbody-top-kelas-aktif');
+  if (tbodyAktif) {
+    tbodyAktif.innerHTML = topAktif.slice(0, 8).map((k, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${escapeHtml(k.kelas)}</strong></td>
+        <td style="text-align: center;">${k.total_sesi}</td>
+        <td style="text-align: center; font-weight: 700; color: #8b5cf6;">${k.total_jam} Jam</td>
+        <td style="text-align: center;">
+          <span class="m-pill m-tm">${k.tm} TM</span>
+          <span class="m-pill m-ol">${k.ol} OL</span>
+        </td>
+      </tr>
+    `).join('') || `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Tidak ada data kelas</td></tr>`;
+  }
+
+  // 4. Top Kelas Anomali (OL & CC)
+  const topOl = kelasStats.top_ol || [];
+  const topCc = kelasStats.top_cc || [];
+  const anomaliMap = {};
+  topOl.forEach(k => { anomaliMap[k.kelas] = k; });
+  topCc.forEach(k => {
+    if (!anomaliMap[k.kelas]) anomaliMap[k.kelas] = k;
+  });
+  const anomaliList = Object.values(anomaliMap).sort((a, b) => (b.ol + b.cc) - (a.ol + a.cc)).slice(0, 8);
+
+  const tbodyAnomali = document.getElementById('tbody-top-kelas-anomali');
+  if (tbodyAnomali) {
+    tbodyAnomali.innerHTML = anomaliList.map((k, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${escapeHtml(k.kelas)}</strong></td>
+        <td style="text-align: center;"><span class="m-pill m-ol">${k.ol} Sesi</span></td>
+        <td style="text-align: center;"><span class="m-pill m-cc">${k.cc} Sesi</span></td>
+      </tr>
+    `).join('') || `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">Tidak ada data anomali kelas</td></tr>`;
+  }
+}
+
+function renderDosenStatsTab(dosenStats) {
+  // 1. Peringkat Beban Jam Mengajar
+  const topJam = dosenStats.top_jam || [];
+  const tbodyRank = document.getElementById('tbody-dosen-rankings');
+  if (tbodyRank) {
+    tbodyRank.innerHTML = topJam.map((d, i) => {
+      const rank = i + 1;
+      let badgeClass = 'rank-other';
+      if (rank === 1) badgeClass = 'rank-1';
+      else if (rank === 2) badgeClass = 'rank-2';
+      else if (rank === 3) badgeClass = 'rank-3';
+
+      return `
+        <tr>
+          <td style="text-align: center;"><span class="rank-badge ${badgeClass}">${rank}</span></td>
+          <td><strong>${escapeHtml(d.nama_dosen)}</strong></td>
+          <td style="text-align: center;">${d.total_sesi} Sesi</td>
+          <td style="text-align: center; font-weight: 700; color: #10b981;">${d.total_jam} Jam</td>
+          <td style="text-align: center;"><span class="m-pill m-tm">${d.tm}</span></td>
+          <td style="text-align: center;"><span class="m-pill m-ol">${d.ol}</span></td>
+          <td style="text-align: center;"><span class="m-pill m-cc">${d.cc}</span></td>
+        </tr>
+      `;
+    }).join('') || `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">Tidak ada data dosen</td></tr>`;
+  }
+
+  // 2. Dosen Top OL
+  const topOl = dosenStats.top_ol || [];
+  const tbodyOl = document.getElementById('tbody-dosen-top-ol');
+  if (tbodyOl) {
+    tbodyOl.innerHTML = topOl.slice(0, 8).map((d, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${escapeHtml(d.nama_dosen)}</strong></td>
+        <td style="text-align: center;"><span class="m-pill m-ol">${d.ol} Sesi</span></td>
+        <td style="text-align: center; font-weight: 700; color: #0284c7;">${+(Math.round((d.ol * 2.25) + "e+2") + "e-2")} Jam</td>
+      </tr>
+    `).join('') || `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">Tidak ada data dosen daring</td></tr>`;
+  }
+
+  // 3. Dosen Top CC
+  const topCc = dosenStats.top_cc || [];
+  const tbodyCc = document.getElementById('tbody-dosen-top-cc');
+  if (tbodyCc) {
+    tbodyCc.innerHTML = topCc.slice(0, 8).map((d, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${escapeHtml(d.nama_dosen)}</strong></td>
+        <td style="text-align: center;"><span class="m-pill m-cc">${d.cc} Batal</span></td>
+        <td style="text-align: center; font-weight: 700; color: #e11d48;">${+(Math.round((d.cc * 2.25) + "e+2") + "e-2")} Jam</td>
+      </tr>
+    `).join('') || `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">Tidak ada data pembatalan kelas</td></tr>`;
+  }
+}
+
+// =========================================================================
 // EXPOSE TO WINDOW & ATTACH DOM LISTENERS
 // =========================================================================
 function closeSettingAndOpenSpotlight() {
@@ -10464,6 +10903,12 @@ window.openTvMode = openTvMode;
 window.closeTvMode = closeTvMode;
 window.closeSettingAndOpenSpotlight = closeSettingAndOpenSpotlight;
 window.closeSettingAndOpenTvMode = closeSettingAndOpenTvMode;
+window.closeSettingAndOpenStatsMode = closeSettingAndOpenStatsMode;
+window.enterStatsMode = enterStatsMode;
+window.exitStatsMode = exitStatsMode;
+window.switchStatsTab = switchStatsTab;
+window.selectStatsSemesterSwitch = selectStatsSemesterSwitch;
+window.printOrExportStats = printOrExportStats;
 window.exportFilteredSchedulesToExcel = exportFilteredSchedulesToExcel;
 window.openSingleGoogleCalendar = openSingleGoogleCalendar;
 window.executeSpotlightAction = executeSpotlightAction;
@@ -10791,6 +11236,14 @@ window.addEventListener('popstate', (event) => {
     return;
   }
 
+  // 5b. Jika berada di Mode Statistik -> kembali ke Jadwal Utama
+  if (typeof isStatsExplorerMode !== 'undefined' && isStatsExplorerMode) {
+    if (typeof exitStatsMode === 'function') exitStatsMode();
+    syncMobileNavActiveState();
+    updateBodyScrollLock();
+    return;
+  }
+
   syncMobileNavActiveState();
   updateBodyScrollLock();
 });
@@ -10809,6 +11262,9 @@ function handleMobileNavAction(action) {
     closeAllModalsForNav();
     if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode) {
       exitSemesterExplorerMode();
+    }
+    if (typeof isStatsExplorerMode !== 'undefined' && isStatsExplorerMode) {
+      exitStatsMode();
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     syncMobileNavActiveState();
