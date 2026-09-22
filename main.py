@@ -2254,6 +2254,244 @@ def cari_kelas(kode: str):
             cursor.close()
             conn.close()
 
+@app.get("/api/detail_kelas")
+def get_detail_kelas(kelas: str, semester: str = None):
+    """
+    Mengambil jadwal komprehensif suatu kelas untuk tampilan Halaman Detail Kelas Interaktif:
+    - Informasi Program Studi, Angkatan, Semester/Tingkat
+    - Ringkasan KPI (Total MK, Total Jam, Total Sesi, Rasio TM/OL/CC)
+    - Daftar jadwal per sesi (hari, jam mulai - jam selesai, durasi, nama_mk, dosen, nama_ruangan, kampus, is_lab, metode, status)
+    """
+    if not kelas:
+        return {"status": "error", "message": "Parameter kelas tidak boleh kosong"}
+
+    clean_kelas = kelas.strip().upper()
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        target_sem = semester
+        if not target_sem or target_sem == "all":
+            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+            active_row = cursor.fetchone()
+            if active_row:
+                target_sem = active_row["nama_semester"]
+            else:
+                cursor.execute("SELECT semester FROM jadwal WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
+                j_row = cursor.fetchone()
+                target_sem = j_row["semester"] if j_row else "Genap 2025"
+
+        # Cek ketersediaan di tabel jadwal aktif
+        cursor.execute("SELECT COUNT(*) AS c FROM jadwal WHERE UPPER(kelas) = %s AND (semester = %s OR %s IS NULL)", (clean_kelas, target_sem, target_sem))
+        cnt = cursor.fetchone()["c"]
+        table_source = "jadwal" if cnt > 0 else "jadwal_permanent"
+
+        query = f'''
+            SELECT 
+                j.id_jadwal, j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                r.nama_ruangan, r.kampus, d.nama_dosen
+            FROM {table_source} j
+            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE UPPER(j.kelas) = %s AND (j.semester = %s OR %s IS NULL)
+            ORDER BY 
+                CASE j.hari
+                    WHEN 'Senin' THEN 1
+                    WHEN 'Selasa' THEN 2
+                    WHEN 'Rabu' THEN 3
+                    WHEN 'Kamis' THEN 4
+                    WHEN 'Jumat' THEN 5
+                    WHEN 'Sabtu' THEN 6
+                    WHEN 'Minggu' THEN 7
+                    ELSE 8
+                END ASC,
+                j.jam ASC
+        '''
+        cursor.execute(query, (clean_kelas, target_sem, target_sem))
+        raw_rows = cursor.fetchall()
+
+        if not raw_rows:
+            cursor.execute(f'''
+                SELECT 
+                    j.id_jadwal, j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                    r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM {table_source} j
+                LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(j.kelas) LIKE %s AND (j.semester = %s OR %s IS NULL)
+                ORDER BY 
+                    CASE j.hari
+                        WHEN 'Senin' THEN 1
+                        WHEN 'Selasa' THEN 2
+                        WHEN 'Rabu' THEN 3
+                        WHEN 'Kamis' THEN 4
+                        WHEN 'Jumat' THEN 5
+                        WHEN 'Sabtu' THEN 6
+                        ELSE 7
+                    END ASC,
+                    j.jam ASC
+            ''', (f"%{clean_kelas}%", target_sem, target_sem))
+            raw_rows = cursor.fetchall()
+
+        import re
+        m_prodi = re.search(r'([A-Za-z]+)', clean_kelas)
+        prodi_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
+        prodi_map_names = {
+            "PT": "Teknik Informatika (S1)",
+            "PS": "Sistem Informasi (S1)",
+            "PK": "Sistem Komputer (S1)",
+            "SK": "Sistem Komputer (S1)",
+            "MS": "Magister Sistem Informasi (S2)",
+            "MM": "Magister Manajemen (S2)",
+            "PM": "Peminatan / Manajemen",
+            "PW": "Kelas Eksekutif / Weekend",
+            "MW": "Kelas Eksekutif / Malam",
+            "PB": "Peminatan Bisnis",
+            "MI": "Manajemen Informatika (D3)",
+            "KA": "Komputerisasi Akuntansi (D3)"
+        }
+        nama_prodi = prodi_map_names.get(prodi_code, f"Program Studi {prodi_code}")
+
+        m_num = re.search(r'^(\d+)', clean_kelas)
+        sem_num = int(m_num.group(1)) if m_num else None
+        tingkat_str = f"Semester {sem_num}" if sem_num else "Reguler"
+
+        mk_set = set()
+        dosen_set = set()
+        kampus_counts = {"Kobar": 0, "Thehok": 0}
+        total_jam = 0.0
+        tm_count = 0
+        ol_count = 0
+        cc_count = 0
+
+        jadwal_list = []
+        for r in raw_rows:
+            dur_min = scraper.get_class_duration(r.get("nama_mk") or "") if hasattr(scraper, "get_class_duration") else 135
+            dur_hour = round(dur_min / 60.0, 2)
+            total_jam += dur_hour
+
+            mk_name = (r.get("nama_mk") or "-").strip()
+            if mk_name != "-": mk_set.add(mk_name)
+
+            dosen_name = (r.get("nama_dosen") or "-").strip()
+            if dosen_name and dosen_name != "-": dosen_set.add(dosen_name)
+
+            metode = (r.get("metode_pembelajaran") or "TM").upper()
+            status_low = (r.get("status_jadwal") or "").lower()
+            if "cancel" in status_low or "batal" in status_low or "cc" in status_low:
+                metode = "CC"
+                cc_count += 1
+            elif "online" in status_low or "daring" in status_low or "ol" in status_low:
+                metode = "OL"
+                ol_count += 1
+            else:
+                metode = "TM"
+                tm_count += 1
+
+            jam_mulai = "-"
+            jam_selesai = "-"
+            if r.get("jam"):
+                tot_sec = int(r["jam"].total_seconds())
+                sh = tot_sec // 3600
+                sm = (tot_sec % 3600) // 60
+                jam_mulai = f"{sh:02d}:{sm:02d}"
+                eh = (tot_sec // 60 + dur_min) // 60
+                em = (tot_sec // 60 + dur_min) % 60
+                jam_selesai = f"{eh:02d}:{em:02d}"
+
+            ruang = (r.get("nama_ruangan") or "-").strip()
+            kampus = (r.get("kampus") or "Kobar").strip()
+            if "kobar" in kampus.lower(): kampus_counts["Kobar"] += 1
+            else: kampus_counts["Thehok"] += 1
+
+            is_lab = scraper.is_lab(ruang)
+
+            jadwal_list.append({
+                "id_jadwal": r.get("id_jadwal"),
+                "hari": r.get("hari") or "Lainnya",
+                "jam_mulai": jam_mulai,
+                "jam_selesai": jam_selesai,
+                "waktu": f"{jam_mulai} - {jam_selesai}" if jam_mulai != "-" else "-",
+                "durasi_menit": dur_min,
+                "durasi_jam": dur_hour,
+                "nama_mk": mk_name,
+                "nama_dosen": dosen_name if dosen_name else "Dosen Belum Ditentukan",
+                "nama_ruangan": ruang,
+                "kampus": kampus,
+                "is_lab": is_lab,
+                "metode": metode,
+                "status_jadwal": r.get("status_jadwal") or ("Tatap Muka" if metode == "TM" else ("Kuliah Online" if metode == "OL" else "Dibatalkan"))
+            })
+
+        kampus_dominan = "Thehok" if kampus_counts["Thehok"] > kampus_counts["Kobar"] else "Kobar"
+        total_sesi = len(jadwal_list)
+
+        # Agregasi Jadwal Mingguan Terstruktur (Unik per Hari & Jam)
+        weekly_dict = {}
+        for item in jadwal_list:
+            w_key = f"{item['hari']}_{item['jam_mulai']}_{item['nama_mk']}_{item['nama_ruangan']}"
+            if w_key not in weekly_dict:
+                weekly_dict[w_key] = {
+                    "hari": item["hari"],
+                    "jam_mulai": item["jam_mulai"],
+                    "jam_selesai": item["jam_selesai"],
+                    "waktu": item["waktu"],
+                    "durasi_menit": item["durasi_menit"],
+                    "durasi_jam": item["durasi_jam"],
+                    "nama_mk": item["nama_mk"],
+                    "nama_dosen": item["nama_dosen"],
+                    "nama_ruangan": item["nama_ruangan"],
+                    "kampus": item["kampus"],
+                    "is_lab": item["is_lab"],
+                    "total_pertemuan": 1,
+                    "tm": 1 if item["metode"] == "TM" else 0,
+                    "ol": 1 if item["metode"] == "OL" else 0,
+                    "cc": 1 if item["metode"] == "CC" else 0,
+                    "status_jadwal": item["status_jadwal"]
+                }
+            else:
+                ws = weekly_dict[w_key]
+                ws["total_pertemuan"] += 1
+                if item["metode"] == "TM": ws["tm"] += 1
+                elif item["metode"] == "OL": ws["ol"] += 1
+                elif item["metode"] == "CC": ws["cc"] += 1
+
+        hari_order = {"Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6, "Minggu": 7}
+        jadwal_mingguan = sorted(weekly_dict.values(), key=lambda x: (hari_order.get(x["hari"], 8), x["jam_mulai"]))
+
+        return {
+            "status": "success",
+            "kelas": clean_kelas,
+            "semester": target_sem,
+            "source_table": table_source,
+            "info": {
+                "kode_kelas": clean_kelas,
+                "nama_prodi": nama_prodi,
+                "tingkat": tingkat_str,
+                "kampus_dominan": kampus_dominan,
+                "total_mk": len(mk_set),
+                "total_dosen": len(dosen_set),
+                "total_jam": round(total_jam, 2),
+                "total_sesi": total_sesi,
+                "total_slot_mingguan": len(jadwal_mingguan),
+                "tm": tm_count,
+                "ol": ol_count,
+                "cc": cc_count,
+                "persen_tm": round((tm_count / total_sesi) * 100, 1) if total_sesi > 0 else 0,
+                "persen_ol": round((ol_count / total_sesi) * 100, 1) if total_sesi > 0 else 0,
+                "persen_cc": round((cc_count / total_sesi) * 100, 1) if total_sesi > 0 else 0
+            },
+            "jadwal_mingguan": jadwal_mingguan,
+            "jadwal_semua": jadwal_list
+        }
+    except Exception as e:
+        print(f"[API Detail Kelas Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 

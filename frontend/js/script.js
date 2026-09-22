@@ -10473,6 +10473,12 @@ async function enterStatsMode(namaSemester) {
   const statsContainer = document.getElementById('stats-explorer-container');
   if (statsContainer) statsContainer.style.display = 'flex';
 
+  const statsMainView = document.getElementById('stats-main-view');
+  if (statsMainView) statsMainView.style.display = 'block';
+
+  const statsDetailView = document.getElementById('stats-detail-kelas-container');
+  if (statsDetailView) statsDetailView.style.display = 'none';
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Pastikan master semester terisi
@@ -10577,12 +10583,501 @@ function printOrExportStats() {
   window.print();
 }
 
+let currentStatsViewMode = 'bar';
+let currentDetailKelasData = null;
+let currentDetailKelasDay = 'ALL';
+
+function setStatsViewMode(mode) {
+  currentStatsViewMode = mode;
+  const modes = ['bar', 'donut', 'card', 'table'];
+  modes.forEach(m => {
+    const btn = document.getElementById(`btn-mode-${m}`);
+    const content = document.getElementById(`stats-view-content-${m}`);
+    if (m === mode) {
+      if (btn) btn.classList.add('active');
+      if (content) content.style.display = 'block';
+    } else {
+      if (btn) btn.classList.remove('active');
+      if (content) content.style.display = 'none';
+    }
+  });
+
+  if (mode === 'donut') renderDonutStats();
+  else if (mode === 'card') renderMatrixCards();
+  else if (mode === 'table') renderFullTableKelas();
+}
+
+function generateSvgDonut(segments, centerVal, centerLabel) {
+  const C = 251.327; // 2 * PI * 40
+  let currentOffset = 0;
+  let circlesSvg = '';
+
+  segments.forEach(seg => {
+    if (seg.pct <= 0) return;
+    const segLen = (seg.pct / 100) * C;
+    circlesSvg += `
+      <circle cx="50" cy="50" r="40" fill="transparent"
+        stroke="${seg.color}" stroke-width="13"
+        stroke-dasharray="${segLen.toFixed(2)} ${(C - segLen).toFixed(2)}"
+        stroke-dashoffset="${(-currentOffset).toFixed(2)}"
+        transform="rotate(-90 50 50)"
+        style="transition: stroke-dasharray 0.6s ease; cursor: pointer;">
+        <title>${escapeHtml(seg.label)}: ${seg.val} (${seg.pct}%)</title>
+      </circle>
+    `;
+    currentOffset += segLen;
+  });
+
+  return `
+    <svg viewBox="0 0 100 100" style="width: 100%; height: 100%; max-width: 170px; max-height: 170px;">
+      <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--bg-hover)" stroke-width="13"></circle>
+      ${circlesSvg}
+    </svg>
+    <div class="donut-center-text">
+      <div class="donut-center-val">${escapeHtml(String(centerVal))}</div>
+      <div class="donut-center-lbl">${escapeHtml(centerLabel)}</div>
+    </div>
+  `;
+}
+
+function renderDonutStats() {
+  if (!currentStatsData) return;
+  const s = currentStatsData.summary || {};
+  const lb = currentStatsData.lab_stats || {};
+  const ks = currentStatsData.kelas_stats || {};
+
+  // 1. Donut Metode Pembelajaran (TM vs OL vs CC)
+  const wrapMetode = document.getElementById('donut-metode-svg-wrap');
+  const legendMetode = document.getElementById('donut-metode-legend');
+  const rasio = lb.summary?.metode_rasio || {};
+
+  const segMetode = [
+    { label: 'Tatap Muka (TM)', val: `${rasio.tm || 0} Sesi`, pct: rasio.tm_pct || 0, color: '#10b981' },
+    { label: 'Kuliah Online (OL)', val: `${rasio.ol || 0} Sesi`, pct: rasio.ol_pct || 0, color: '#0ea5e9' },
+    { label: 'Dibatalkan (CC)', val: `${rasio.cc || 0} Sesi`, pct: rasio.cc_pct || 0, color: '#f43f5e' }
+  ];
+
+  if (wrapMetode) {
+    wrapMetode.innerHTML = generateSvgDonut(segMetode, `${rasio.total_sesi || 0}`, 'Total Sesi');
+  }
+  if (legendMetode) {
+    legendMetode.innerHTML = segMetode.map(m => `
+      <div class="donut-legend-item">
+        <div class="donut-legend-label">
+          <span class="donut-legend-dot" style="background: ${m.color};"></span>
+          <span>${m.label}</span>
+        </div>
+        <span class="donut-legend-val">${m.pct}% (${m.val})</span>
+      </div>
+    `).join('');
+  }
+
+  // 2. Donut Kampus (Kobar vs Thehok)
+  const wrapKampus = document.getElementById('donut-kampus-svg-wrap');
+  const legendKampus = document.getElementById('donut-kampus-legend');
+  const kp = lb.kampus || {};
+  const kobarJam = kp.Kobar?.total_jam || 0;
+  const thehokJam = kp.Thehok?.total_jam || 0;
+  const totJam = +(Math.round((kobarJam + thehokJam) + "e+2") + "e-2") || 1;
+  const kobarPct = Math.round((kobarJam / totJam) * 100);
+  const thehokPct = 100 - kobarPct;
+
+  const segKampus = [
+    { label: 'Kampus Kobar', val: `${kobarJam} Jam`, pct: kobarPct, color: '#6366f1' },
+    { label: 'Kampus Thehok', val: `${thehokJam} Jam`, pct: thehokPct, color: '#8b5cf6' }
+  ];
+
+  if (wrapKampus) {
+    wrapKampus.innerHTML = generateSvgDonut(segKampus, `${totJam}j`, 'Beban Jam');
+  }
+  if (legendKampus) {
+    legendKampus.innerHTML = segKampus.map(k => `
+      <div class="donut-legend-item">
+        <div class="donut-legend-label">
+          <span class="donut-legend-dot" style="background: ${k.color};"></span>
+          <span>${k.label}</span>
+        </div>
+        <span class="donut-legend-val">${k.pct}% (${k.val})</span>
+      </div>
+    `).join('');
+  }
+
+  // 3. Donut Program Studi
+  const wrapProdi = document.getElementById('donut-prodi-svg-wrap');
+  const legendProdi = document.getElementById('donut-prodi-legend');
+  const prodiList = ks.distribusi_prodi || [];
+  const totKelas = prodiList.reduce((acc, cur) => acc + (cur.total_kelas || 0), 0) || 1;
+
+  const prodiColors = ['#ec4899', '#8b5cf6', '#0284c7', '#10b981', '#f59e0b', '#64748b'];
+  const segProdi = prodiList.slice(0, 5).map((p, idx) => {
+    const pct = Math.round((p.total_kelas / totKelas) * 100);
+    return {
+      label: p.nama,
+      val: `${p.total_kelas} Kelas`,
+      pct: pct,
+      color: prodiColors[idx % prodiColors.length]
+    };
+  });
+
+  if (wrapProdi) {
+    wrapProdi.innerHTML = generateSvgDonut(segProdi, `${totKelas}`, 'Total Kelas');
+  }
+  if (legendProdi) {
+    legendProdi.innerHTML = segProdi.map(p => `
+      <div class="donut-legend-item">
+        <div class="donut-legend-label">
+          <span class="donut-legend-dot" style="background: ${p.color};"></span>
+          <span title="${escapeHtml(p.label)}">${escapeHtml(p.label)}</span>
+        </div>
+        <span class="donut-legend-val">${p.pct}% (${p.val})</span>
+      </div>
+    `).join('');
+  }
+}
+
+function renderMatrixCards() {
+  if (!currentStatsData) return;
+  const wrap = document.getElementById('stats-matrix-cards-wrap');
+  if (!wrap) return;
+
+  const s = currentStatsData.summary || {};
+  const lb = currentStatsData.lab_stats || {};
+  const ks = currentStatsData.kelas_stats || {};
+  const ds = currentStatsData.dosen_stats || {};
+
+  const busy = lb.summary?.lab_tersibuk || {};
+  const quiet = lb.summary?.lab_terkosong || {};
+  const topKelas = (ks.top_aktif && ks.top_aktif[0]) || {};
+  const topDosen = (ds.top_jam && ds.top_jam[0]) || {};
+  const topMk = (ks.top_mk && ks.top_mk[0]) || {};
+  const rasio = lb.summary?.metode_rasio || {};
+
+  wrap.innerHTML = `
+    <!-- Card 1: Labor Paling Padat -->
+    <div class="matrix-kpi-card" style="border-left: 4px solid #8b5cf6;">
+      <div class="matrix-card-head">
+        <span class="matrix-card-title">Labor Paling Padat</span>
+        <span class="badge-mini-sem" style="background: rgba(139,92,246,0.15); color: #8b5cf6;">${escapeHtml(busy.kampus || 'Kampus')}</span>
+      </div>
+      <div class="matrix-card-val">${formatRoomName(busy.nama_ruangan || '-', false)}</div>
+      <div class="matrix-card-desc">Total <strong>${busy.total_jam || 0} Jam</strong> (${busy.total_sesi || 0} sesi perkuliahan) dengan tingkat utilisasi tertinggi semester ini.</div>
+    </div>
+
+    <!-- Card 2: Labor Paling Lengang -->
+    <div class="matrix-kpi-card" style="border-left: 4px solid #06b6d4;">
+      <div class="matrix-card-head">
+        <span class="matrix-card-title">Labor Paling Lengang</span>
+        <span class="badge-mini-sem" style="background: rgba(6,182,212,0.15); color: #06b6d4;">${escapeHtml(quiet.kampus || 'Kampus')}</span>
+      </div>
+      <div class="matrix-card-val">${formatRoomName(quiet.nama_ruangan || '-', false)}</div>
+      <div class="matrix-card-desc">Terjadwal <strong>${quiet.total_jam || 0} Jam</strong> (${quiet.total_sesi || 0} sesi). Memiliki kuota waktu luang terbanyak untuk praktikum mandiri.</div>
+    </div>
+
+    <!-- Card 3: Kelas Paling Aktif -->
+    <div class="matrix-kpi-card" style="border-left: 4px solid #6366f1;">
+      <div class="matrix-card-head">
+        <span class="matrix-card-title">Kelas Paling Aktif</span>
+        <button type="button" class="badge-kelas-clickable" onclick="openDetailKelas('${escapeHtml(topKelas.kelas || '')}')">Buka Detail</button>
+      </div>
+      <div class="matrix-card-val">${escapeHtml(topKelas.kelas || '-')}</div>
+      <div class="matrix-card-desc">Memiliki <strong>${topKelas.total_jam || 0} Jam</strong> belajar aktif (${topKelas.tm || 0} sesi Tatap Muka dan ${topKelas.ol || 0} sesi Online).</div>
+    </div>
+
+    <!-- Card 4: Mata Kuliah Terpadat -->
+    <div class="matrix-kpi-card" style="border-left: 4px solid #ec4899;">
+      <div class="matrix-card-head">
+        <span class="matrix-card-title">MK Paralel Terbanyak</span>
+        <span class="badge-mini-sem" style="background: rgba(236,72,153,0.15); color: #ec4899;">${topMk.total_kelas || 0} Kelas</span>
+      </div>
+      <div class="matrix-card-val" style="font-size: 1.25rem;">${escapeHtml(topMk.nama_mk || '-')}</div>
+      <div class="matrix-card-desc">Dipelajari oleh ${topMk.total_kelas || 0} kelas paralel berbeda dengan akumulasi ${topMk.total_jam || 0} jam perkuliahan.</div>
+    </div>
+
+    <!-- Card 5: Dosen Terpadat -->
+    <div class="matrix-kpi-card" style="border-left: 4px solid #10b981;">
+      <div class="matrix-card-head">
+        <span class="matrix-card-title">Dosen Beban Terbanyak</span>
+        <span class="badge-mini-sem" style="background: rgba(16,185,129,0.15); color: #10b981;">${topDosen.total_jam || 0} Jam</span>
+      </div>
+      <div class="matrix-card-val" style="font-size: 1.2rem;">${escapeHtml(topDosen.nama_dosen || '-')}</div>
+      <div class="matrix-card-desc">Mengampu total ${topDosen.total_sesi || 0} sesi perkuliahan (${topDosen.tm || 0} Tatap Muka, ${topDosen.ol || 0} Online).</div>
+    </div>
+
+    <!-- Card 6: Efektivitas Perkuliahan -->
+    <div class="matrix-kpi-card" style="border-left: 4px solid #f59e0b;">
+      <div class="matrix-card-head">
+        <span class="matrix-card-title">Efektivitas Perkuliahan</span>
+        <span class="badge-mini-sem" style="background: rgba(245,158,11,0.15); color: #f59e0b;">${rasio.tm_pct || 0}% TM</span>
+      </div>
+      <div class="matrix-card-val">${rasio.tm_pct || 0}% Tatap Muka</div>
+      <div class="matrix-card-desc">${rasio.ol_pct || 0}% perkuliahan daring (OL) dan ${rasio.cc_pct || 0}% jadwal dibatalkan (CC).</div>
+    </div>
+  `;
+}
+
+function renderFullTableKelas() {
+  const searchInput = document.getElementById('stats-table-quick-search');
+  filterStatsTableData(searchInput ? searchInput.value : '');
+}
+
+function filterStatsTableData(query) {
+  if (!currentStatsData || !currentStatsData.kelas_stats) return;
+  const topAktif = currentStatsData.kelas_stats.top_aktif || [];
+  const tbody = document.getElementById('tbody-mode-full-kelas');
+  if (!tbody) return;
+
+  const q = (query || '').toLowerCase().trim();
+  const filtered = q ? topAktif.filter(k => k.kelas.toLowerCase().includes(q)) : topAktif;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);">Tidak ada kelas yang cocok dengan kata kunci "${escapeHtml(query)}"</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((k, i) => {
+    const prodiMatch = k.kelas.match(/[A-Za-z]+/);
+    const prodiCode = prodiMatch ? prodiMatch[0].toUpperCase() : '';
+    const prodiName = {
+      'PT': 'Teknik Informatika (S1)',
+      'PS': 'Sistem Informasi (S1)',
+      'PK': 'Sistem Komputer (S1)',
+      'SK': 'Sistem Komputer (S1)',
+      'MS': 'Magister SI (S2)',
+      'MM': 'Magister Manajemen (S2)',
+      'PM': 'Peminatan Manajemen'
+    }[prodiCode] || 'Program Studi Reguler';
+
+    return `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td>
+          <span class="badge-kelas-clickable" onclick="openDetailKelas('${escapeHtml(k.kelas)}')" title="Lihat detail jadwal kelas ${escapeHtml(k.kelas)}">
+            ${escapeHtml(k.kelas)}
+          </span>
+        </td>
+        <td>${escapeHtml(prodiName)}</td>
+        <td style="text-align: center;">${k.total_sesi} Sesi</td>
+        <td style="text-align: center; font-weight: 700; color: #8b5cf6;">${k.total_jam} Jam</td>
+        <td style="text-align: center;">
+          <div style="display: flex; gap: 4px; justify-content: center;">
+            <span class="m-pill m-tm">${k.tm} TM</span>
+            <span class="m-pill m-ol">${k.ol} OL</span>
+            <span class="m-pill m-cc">${k.cc} CC</span>
+          </div>
+        </td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openDetailKelas('${escapeHtml(k.kelas)}')" style="padding: 4px 10px; font-size: 0.8rem;">
+            Buka Detail
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function openDetailKelas(kodeKelas) {
+  if (!kodeKelas) return;
+
+  const mainView = document.getElementById('stats-main-view');
+  const detailContainer = document.getElementById('stats-detail-kelas-container');
+  if (mainView) mainView.style.display = 'none';
+  if (detailContainer) {
+    detailContainer.style.display = 'flex';
+    detailContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  const bcTitle = document.getElementById('detail-kelas-bc-title');
+  const badgeCode = document.getElementById('detail-kelas-badge-code');
+  const nameProdi = document.getElementById('detail-kelas-name-prodi');
+  const tagPills = document.getElementById('detail-kelas-tag-pills');
+  const timelineContent = document.getElementById('dk-timeline-content');
+
+  if (bcTitle) bcTitle.innerText = `Detail Kelas ${kodeKelas}`;
+  if (badgeCode) badgeCode.innerText = kodeKelas;
+  if (nameProdi) nameProdi.innerText = 'Memuat data perkuliahan...';
+  if (tagPills) tagPills.innerHTML = '<span class="detail-kelas-tag-pill">Mengambil data BAAK...</span>';
+  if (timelineContent) timelineContent.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted);"><div class="spinner-mini" style="margin: 0 auto 12px;"></div> Mengambil jadwal perkuliahan kelas <strong>${escapeHtml(kodeKelas)}</strong>...</div>`;
+
+  try {
+    const sem = currentStatsSemester || '';
+    const res = await fetch(`${API_BASE_URL}/api/detail_kelas?kelas=${encodeURIComponent(kodeKelas)}&semester=${encodeURIComponent(sem)}&_t=${Date.now()}`);
+    const json = await res.json();
+
+    if (json.status === 'success') {
+      currentDetailKelasData = json;
+      currentDetailKelasDay = 'ALL';
+
+      const info = json.info || {};
+      if (nameProdi) nameProdi.innerText = info.nama_prodi || `Kelas ${kodeKelas}`;
+      if (tagPills) {
+        tagPills.innerHTML = `
+          <span class="detail-kelas-tag-pill">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+            ${escapeHtml(info.tingkat || 'Reguler')}
+          </span>
+          <span class="detail-kelas-tag-pill">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            Kampus ${escapeHtml(info.kampus_dominan || 'Kobar')}
+          </span>
+          <span class="detail-kelas-tag-pill">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line></svg>
+            ${json.semester || 'Semester Aktif'}
+          </span>
+          <span class="detail-kelas-tag-pill">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            ${info.total_jam || 0} Jam Kuliah
+          </span>
+        `;
+      }
+
+      const dkMk = document.getElementById('dk-kpi-mk');
+      const dkJam = document.getElementById('dk-kpi-jam');
+      const dkSlot = document.getElementById('dk-kpi-slot');
+      const dkTm = document.getElementById('dk-kpi-tm');
+
+      if (dkMk) dkMk.innerText = `${info.total_mk || 0} MK`;
+      if (dkJam) dkJam.innerText = `${info.total_jam || 0} Jam`;
+      if (dkSlot) dkSlot.innerText = `${info.total_slot_mingguan || 0} Sesi / Mgg`;
+      if (dkTm) dkTm.innerText = `${info.persen_tm || 0}% (${info.tm || 0} TM)`;
+
+      renderDetailKelasTimeline('ALL');
+    } else {
+      if (timelineContent) timelineContent.innerHTML = `<div style="text-align: center; padding: 40px; color: #ef4444;">Gagal memuat detail kelas: ${escapeHtml(json.message || 'Error')}</div>`;
+    }
+  } catch (err) {
+    console.error("Error openDetailKelas:", err);
+    if (timelineContent) timelineContent.innerHTML = `<div style="text-align: center; padding: 40px; color: #ef4444;">Terjadi kesalahan jaringan saat memuat data kelas.</div>`;
+  }
+}
+
+function exitDetailKelas() {
+  const mainView = document.getElementById('stats-main-view');
+  const detailContainer = document.getElementById('stats-detail-kelas-container');
+  if (detailContainer) detailContainer.style.display = 'none';
+  if (mainView) {
+    mainView.style.display = 'block';
+    mainView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function filterDetailKelasDay(day) {
+  currentDetailKelasDay = day;
+  const buttons = document.querySelectorAll('#dk-day-filter-buttons .day-pill-btn');
+  buttons.forEach(btn => {
+    const txt = btn.innerText;
+    if (txt.includes(day) || (day === 'ALL' && txt.includes('Semua'))) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  renderDetailKelasTimeline(day);
+}
+
+function renderDetailKelasTimeline(targetDay) {
+  const timelineContent = document.getElementById('dk-timeline-content');
+  if (!timelineContent) return;
+
+  if (!currentDetailKelasData || !currentDetailKelasData.jadwal_mingguan || currentDetailKelasData.jadwal_mingguan.length === 0) {
+    timelineContent.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted);">Tidak ada jadwal perkuliahan terjadwal untuk kelas ini.</div>`;
+    return;
+  }
+
+  let slots = currentDetailKelasData.jadwal_mingguan;
+  if (targetDay && targetDay !== 'ALL') {
+    slots = slots.filter(s => (s.hari || '').toLowerCase() === targetDay.toLowerCase());
+  }
+
+  if (slots.length === 0) {
+    timelineContent.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted);">Tidak ada perkuliahan pada hari <strong>${escapeHtml(targetDay)}</strong>.</div>`;
+    return;
+  }
+
+  const daysMap = {};
+  const dayOrder = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+  slots.forEach(slot => {
+    const h = slot.hari || 'Lainnya';
+    if (!daysMap[h]) daysMap[h] = [];
+    daysMap[h].push(slot);
+  });
+
+  const sortedDays = Object.keys(daysMap).sort((a, b) => {
+    const ia = dayOrder.indexOf(a) !== -1 ? dayOrder.indexOf(a) : 99;
+    const ib = dayOrder.indexOf(b) !== -1 ? dayOrder.indexOf(b) : 99;
+    return ia - ib;
+  });
+
+  timelineContent.innerHTML = sortedDays.map(dayName => {
+    const daySlots = daysMap[dayName];
+    const totalDayJam = +(Math.round(daySlots.reduce((acc, cur) => acc + (cur.durasi_jam || 0), 0) + "e+2") + "e-2");
+
+    return `
+      <div class="daily-schedule-block">
+        <div class="daily-schedule-header">
+          <div class="daily-schedule-day-title">
+            <span class="daily-day-badge">${escapeHtml(dayName)}</span>
+            <span>Jadwal Hari ${escapeHtml(dayName)}</span>
+          </div>
+          <div class="daily-schedule-meta">${daySlots.length} Mata Kuliah • ${totalDayJam} Jam Belajar</div>
+        </div>
+        <div class="daily-schedule-list">
+          ${daySlots.map(s => {
+            const isLab = s.is_lab;
+            const roomLabel = isLab ? `Labor: ${escapeHtml(s.nama_ruangan)}` : `Ruang: ${escapeHtml(s.nama_ruangan)}`;
+            const roomClass = isLab ? 'sched-room-badge is-lab' : 'sched-room-badge';
+
+            let methodBadge = '<span class="m-pill m-tm">Tatap Muka</span>';
+            if (s.ol > 0 && s.tm === 0) methodBadge = '<span class="m-pill m-ol">Online</span>';
+            else if (s.cc > 0 && s.tm === 0) methodBadge = '<span class="m-pill m-cc">Dibatalkan</span>';
+
+            return `
+              <div class="schedule-card-item">
+                <div class="sched-time-col">
+                  <span class="sched-time-main">${escapeHtml(s.waktu)}</span>
+                  <span class="sched-dur-sub">${s.durasi_jam} Jam (${s.durasi_menit} mnt)</span>
+                </div>
+                <div class="sched-info-col">
+                  <div class="sched-course-title">${escapeHtml(s.nama_mk)}</div>
+                  <div class="sched-lecturer-name">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    <span>${escapeHtml(s.nama_dosen)}</span>
+                  </div>
+                </div>
+                <div class="sched-meta-col">
+                  <span class="${roomClass}">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                      <line x1="8" y1="21" x2="16" y2="21"></line>
+                      <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                    ${roomLabel} (${escapeHtml(s.kampus)})
+                  </span>
+                  ${methodBadge}
+                  <span class="badge-mini-sem" style="background: var(--bg-hover); color: var(--text-muted); font-size: 0.76rem;">${s.total_pertemuan} Sesi</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 window.enterStatsMode = enterStatsMode;
 window.exitStatsMode = exitStatsMode;
 window.closeSettingAndOpenStatsMode = closeSettingAndOpenStatsMode;
 window.switchStatsTab = switchStatsTab;
 window.selectStatsSemesterSwitch = selectStatsSemesterSwitch;
 window.printOrExportStats = printOrExportStats;
+window.setStatsViewMode = setStatsViewMode;
+window.renderDonutStats = renderDonutStats;
+window.renderMatrixCards = renderMatrixCards;
+window.renderFullTableKelas = renderFullTableKelas;
+window.filterStatsTableData = filterStatsTableData;
+window.openDetailKelas = openDetailKelas;
+window.exitDetailKelas = exitDetailKelas;
+window.filterDetailKelasDay = filterDetailKelasDay;
 
 async function loadStatisticsData(namaSemester) {
   // Set loading placeholder di tabel-tabel utama
@@ -10632,6 +11127,11 @@ function renderAllStats(data) {
 
   // 4. Tab 3: Dosen Stats
   renderDosenStatsTab(dosenStats);
+
+  // 5. Update mode aktif jika bukan bar
+  if (currentStatsViewMode === 'donut') renderDonutStats();
+  else if (currentStatsViewMode === 'card') renderMatrixCards();
+  else if (currentStatsViewMode === 'table') renderFullTableKelas();
 }
 
 function renderLabStatsTab(labStats) {
@@ -10793,7 +11293,11 @@ function renderKelasStatsTab(kelasStats) {
     tbodyAktif.innerHTML = topAktif.slice(0, 8).map((k, i) => `
       <tr>
         <td style="text-align: center;">${i + 1}</td>
-        <td><strong>${escapeHtml(k.kelas)}</strong></td>
+        <td>
+          <span class="badge-kelas-clickable" onclick="openDetailKelas('${escapeHtml(k.kelas)}')" title="Klik untuk lihat jadwal detail kelas ${escapeHtml(k.kelas)}">
+            ${escapeHtml(k.kelas)}
+          </span>
+        </td>
         <td style="text-align: center;">${k.total_sesi}</td>
         <td style="text-align: center; font-weight: 700; color: #8b5cf6;">${k.total_jam} Jam</td>
         <td style="text-align: center;">
@@ -10819,7 +11323,11 @@ function renderKelasStatsTab(kelasStats) {
     tbodyAnomali.innerHTML = anomaliList.map((k, i) => `
       <tr>
         <td style="text-align: center;">${i + 1}</td>
-        <td><strong>${escapeHtml(k.kelas)}</strong></td>
+        <td>
+          <span class="badge-kelas-clickable" onclick="openDetailKelas('${escapeHtml(k.kelas)}')" title="Klik untuk lihat jadwal detail kelas ${escapeHtml(k.kelas)}">
+            ${escapeHtml(k.kelas)}
+          </span>
+        </td>
         <td style="text-align: center;"><span class="m-pill m-ol">${k.ol} Sesi</span></td>
         <td style="text-align: center;"><span class="m-pill m-cc">${k.cc} Sesi</span></td>
       </tr>

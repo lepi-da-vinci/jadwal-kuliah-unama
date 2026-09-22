@@ -1538,63 +1538,113 @@
     </div>
   </div>
 
-  <!-- SUMMARY STATS BAR (KPI HERO CARDS) -->
-  <div class="sem-stats-grid stats-kpi-grid">
-    <div class="sem-stat-card card-total">
-      <div class="sem-stat-icon" style="color: #6366f1;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
+  <!-- MAIN STATS DASHBOARD VIEW -->
+  <div id="stats-main-view">
+    <!-- SUMMARY STATS BAR (KPI HERO CARDS) -->
+    <div class="sem-stats-grid stats-kpi-grid">
+      <div class="sem-stat-card card-total">
+        <div class="sem-stat-icon" style="color: #6366f1;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="stats-kpi-total-jam">-</div>
+          <div class="sem-stat-lbl">Total Jam Operasional</div>
+        </div>
       </div>
-      <div>
-        <div class="sem-stat-num" id="stats-kpi-total-jam">-</div>
-        <div class="sem-stat-lbl">Total Jam Operasional</div>
+      <div class="sem-stat-card card-tm">
+        <div class="sem-stat-icon" style="color: #8b5cf6;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="stats-kpi-total-lab">-</div>
+          <div class="sem-stat-lbl">Labor Aktif</div>
+        </div>
+      </div>
+      <div class="sem-stat-card card-ol">
+        <div class="sem-stat-icon" style="color: #0284c7;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="stats-kpi-total-kelas">-</div>
+          <div class="sem-stat-lbl">Total Kelas Terjadwal</div>
+        </div>
+      </div>
+      <div class="sem-stat-card card-dosen">
+        <div class="sem-stat-icon" style="color: #10b981;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="stats-kpi-total-dosen">-</div>
+          <div class="sem-stat-lbl">Dosen Pengajar Aktif</div>
+        </div>
       </div>
     </div>
-    <div class="sem-stat-card card-tm">
-      <div class="sem-stat-icon" style="color: #8b5cf6;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-          <line x1="8" y1="21" x2="16" y2="21"></line>
-          <line x1="12" y1="17" x2="12" y2="21"></line>
-        </svg>
-      </div>
-      <div>
-        <div class="sem-stat-num" id="stats-kpi-total-lab">-</div>
-        <div class="sem-stat-lbl">Labor Aktif</div>
-      </div>
-    </div>
-    <div class="sem-stat-card card-ol">
-      <div class="sem-stat-icon" style="color: #0284c7;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-      </div>
-      <div>
-        <div class="sem-stat-num" id="stats-kpi-total-kelas">-</div>
-        <div class="sem-stat-lbl">Total Kelas Terjadwal</div>
-      </div>
-    </div>
-    <div class="sem-stat-card card-dosen">
-      <div class="sem-stat-icon" style="color: #10b981;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-      </div>
-      <div>
-        <div class="sem-stat-num" id="stats-kpi-total-dosen">-</div>
-        <div class="sem-stat-lbl">Dosen Pengajar Aktif</div>
-      </div>
-    </div>
-  </div>
 
-  <!-- TABS NAVIGATOR: LAB | KELAS | DOSEN -->
-  <div class="stats-tabs-nav">
+    <!-- VISUALIZATION MODE SWITCHER TOOLBAR -->
+    <div class="stats-view-mode-bar">
+      <div class="stats-view-mode-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="20" x2="18" y2="10"></line>
+          <line x1="12" y1="20" x2="12" y2="4"></line>
+          <line x1="6" y1="20" x2="6" y2="14"></line>
+        </svg>
+        <span>Mode Tampilan Analitik:</span>
+      </div>
+      <div class="stats-view-mode-group">
+        <button type="button" class="stats-mode-pill-btn active" id="btn-mode-bar" onclick="setStatsViewMode('bar')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="12" width="4" height="8" rx="1"></rect>
+            <rect x="10" y="7" width="4" height="13" rx="1"></rect>
+            <rect x="17" y="3" width="4" height="17" rx="1"></rect>
+          </svg>
+          <span>Grafik Balok</span>
+        </button>
+        <button type="button" class="stats-mode-pill-btn" id="btn-mode-donut" onclick="setStatsViewMode('donut')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 3a9 9 0 0 1 9 9h-4a5 5 0 0 0-5-5V3z" fill="currentColor"></path>
+          </svg>
+          <span>Diagram Donut</span>
+        </button>
+        <button type="button" class="stats-mode-pill-btn" id="btn-mode-card" onclick="setStatsViewMode('card')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+          </svg>
+          <span>Kartu Metrik</span>
+        </button>
+        <button type="button" class="stats-mode-pill-btn" id="btn-mode-table" onclick="setStatsViewMode('table')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+          <span>Tabel Lengkap</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MODE 1: GRAFIK BALOK & TAB INTERAKTIF -->
+    <div class="stats-view-content" id="stats-view-content-bar">
+      <!-- TABS NAVIGATOR: LAB | KELAS | DOSEN -->
+      <div class="stats-tabs-nav">
     <button type="button" class="stats-tab-btn active" id="tab-btn-stats-lab" onclick="switchStatsTab('lab')">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -1889,6 +1939,201 @@
           </table>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+<!-- END OF stats-view-content-bar -->
+
+    <!-- MODE 2: DIAGRAM DONUT (SVG DONUT / LINGKARAN) -->
+    <div class="stats-view-content" id="stats-view-content-donut" style="display: none;">
+      <div class="stats-grid-three-col">
+        <!-- Donut 1: Rasio Metode Perkuliahan -->
+        <div class="stats-card-box stats-donut-card">
+          <div class="stats-card-header">
+            <div>
+              <h3 class="stats-card-title">Proporsi Metode Pembelajaran</h3>
+              <span class="stats-card-meta">Perbandingan Tatap Muka, Online & Batal</span>
+            </div>
+          </div>
+          <div class="donut-chart-container" id="donut-metode-svg-wrap">
+            <!-- Injected by JS -->
+          </div>
+          <div class="donut-legend-wrap" id="donut-metode-legend"></div>
+        </div>
+
+        <!-- Donut 2: Perbandingan Kampus -->
+        <div class="stats-card-box stats-donut-card">
+          <div class="stats-card-header">
+            <div>
+              <h3 class="stats-card-title">Proporsi Beban Kampus</h3>
+              <span class="stats-card-meta">Kampus Kobar vs Kampus Thehok</span>
+            </div>
+          </div>
+          <div class="donut-chart-container" id="donut-kampus-svg-wrap">
+            <!-- Injected by JS -->
+          </div>
+          <div class="donut-legend-wrap" id="donut-kampus-legend"></div>
+        </div>
+
+        <!-- Donut 3: Sebaran Program Studi -->
+        <div class="stats-card-box stats-donut-card">
+          <div class="stats-card-header">
+            <div>
+              <h3 class="stats-card-title">Sebaran Program Studi</h3>
+              <span class="stats-card-meta">Persentase Kelas per Jurusan</span>
+            </div>
+          </div>
+          <div class="donut-chart-container" id="donut-prodi-svg-wrap">
+            <!-- Injected by JS -->
+          </div>
+          <div class="donut-legend-wrap" id="donut-prodi-legend"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODE 3: KARTU METRIK VISUAL (MATRIX CARDS) -->
+    <div class="stats-view-content" id="stats-view-content-card" style="display: none;">
+      <div class="stats-matrix-grid" id="stats-matrix-cards-wrap">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+
+    <!-- MODE 4: TABEL DATA LENGKAP -->
+    <div class="stats-view-content" id="stats-view-content-table" style="display: none;">
+      <div class="stats-card-box">
+        <div class="stats-card-header" style="flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 class="stats-card-title">Direktori Data Kelas & Utilisasi Lengkap</h3>
+            <span class="stats-card-meta">Klik kode kelas untuk melihat rincian jadwal harian</span>
+          </div>
+          <div class="stats-table-search-box">
+            <input type="text" id="stats-table-quick-search" placeholder="Cari kode kelas..." oninput="filterStatsTableData(this.value)" class="stats-search-input">
+          </div>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table" id="table-mode-full-data">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Kode Kelas</th>
+                <th>Program Studi</th>
+                <th style="text-align: center;">Total Sesi</th>
+                <th style="text-align: center;">Total Jam</th>
+                <th style="text-align: center;">Rasio (TM / OL / CC)</th>
+                <th style="text-align: center; width: 140px;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-mode-full-kelas">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- END OF stats-main-view -->
+
+  <!-- ==================== SUB-VIEW: HALAMAN DETAIL KELAS ==================== -->
+  <div id="stats-detail-kelas-container" class="detail-kelas-wrapper" style="display: none;">
+    <!-- Breadcrumb & Header Banner -->
+    <div class="detail-kelas-banner">
+      <div class="detail-kelas-banner-left">
+        <div class="detail-kelas-breadcrumb">
+          <button type="button" class="breadcrumb-btn" onclick="exitDetailKelas()">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>Pusat Analitik</span>
+          </button>
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb-current" id="detail-kelas-bc-title">Detail Kelas</span>
+        </div>
+        <div class="detail-kelas-title-row">
+          <div class="detail-kelas-code-badge" id="detail-kelas-badge-code">...</div>
+          <div>
+            <h2 class="detail-kelas-main-title" id="detail-kelas-name-prodi">Memuat Detail Kelas...</h2>
+            <div class="detail-kelas-tags" id="detail-kelas-tag-pills">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="detail-kelas-banner-right">
+        <button type="button" class="btn btn-secondary sem-action-btn" onclick="exitDetailKelas()" title="Kembali ke Ringkasan Statistik">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Kembali ke Statistik</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Mini Cards Detail Kelas -->
+    <div class="sem-stats-grid stats-kpi-grid" style="margin-top: 20px;">
+      <div class="sem-stat-card card-total">
+        <div class="sem-stat-icon" style="color: #6366f1;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="dk-kpi-mk">-</div>
+          <div class="sem-stat-lbl">Mata Kuliah Berbeda</div>
+        </div>
+      </div>
+      <div class="sem-stat-card card-tm">
+        <div class="sem-stat-icon" style="color: #8b5cf6;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="dk-kpi-jam">-</div>
+          <div class="sem-stat-lbl">Total Jam Perkuliahan</div>
+        </div>
+      </div>
+      <div class="sem-stat-card card-ol">
+        <div class="sem-stat-icon" style="color: #0284c7;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="dk-kpi-slot">-</div>
+          <div class="sem-stat-lbl">Sesi Mingguan Rutin</div>
+        </div>
+      </div>
+      <div class="sem-stat-card card-dosen">
+        <div class="sem-stat-icon" style="color: #10b981;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        </div>
+        <div>
+          <div class="sem-stat-num" id="dk-kpi-tm">-</div>
+          <div class="sem-stat-lbl">Tatap Muka (TM)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Hari Segmented Control -->
+    <div class="detail-kelas-day-filter-bar">
+      <div class="day-filter-label">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <span>Pilih Hari Perkuliahan:</span>
+      </div>
+      <div class="day-filter-group" id="dk-day-filter-buttons">
+        <button type="button" class="day-pill-btn active" onclick="filterDetailKelasDay('ALL')">Semua Hari</button>
+        <button type="button" class="day-pill-btn" onclick="filterDetailKelasDay('Senin')">Senin</button>
+        <button type="button" class="day-pill-btn" onclick="filterDetailKelasDay('Selasa')">Selasa</button>
+        <button type="button" class="day-pill-btn" onclick="filterDetailKelasDay('Rabu')">Rabu</button>
+        <button type="button" class="day-pill-btn" onclick="filterDetailKelasDay('Kamis')">Kamis</button>
+        <button type="button" class="day-pill-btn" onclick="filterDetailKelasDay('Jumat')">Jumat</button>
+        <button type="button" class="day-pill-btn" onclick="filterDetailKelasDay('Sabtu')">Sabtu</button>
+      </div>
+    </div>
+
+    <!-- Timeline Jadwal Perkuliahan Harian -->
+    <div class="detail-kelas-timeline-wrap" id="dk-timeline-content">
+      <div style="text-align: center; padding: 40px; color: var(--text-muted);">Memuat jadwal perkuliahan kelas...</div>
     </div>
   </div>
 </div>
@@ -3823,7 +4068,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260922_stats_v5"></script>
+  <script src="frontend/js/script.js?v=20260922_stats_v6"></script>
 </body>
 
 </html>
