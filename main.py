@@ -856,6 +856,29 @@ def get_statistics(semester: str = None):
             "Thehok": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0}
         }
 
+        mk_kelas_map = collections.defaultdict(lambda: {
+            "nama_mk": "", "kelas_set": set(), "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        prodi_map = collections.defaultdict(lambda: {
+            "kode_prodi": "", "nama_prodi": "", "kelas_set": set(),
+            "total_sesi": 0, "total_jam": 0.0
+        })
+        prodi_names = {
+            "PT": "Teknik Informatika (S1)",
+            "PS": "Sistem Informasi (S1)",
+            "PK": "Sistem Komputer (S1)",
+            "SK": "Sistem Komputer (S1)",
+            "MS": "Magister Sistem Informasi (S2)",
+            "MM": "Magister Manajemen (S2)",
+            "PM": "Peminatan / Manajemen",
+            "PW": "Kelas Eksekutif / Weekend",
+            "MW": "Kelas Eksekutif / Malam",
+            "PB": "Peminatan Bisnis",
+            "MI": "Manajemen Informatika (D3)",
+            "KA": "Komputerisasi Akuntansi (D3)"
+        }
+
         for r in rows:
             dur_min = scraper.get_class_duration(r.get("nama_mk") or "") if hasattr(scraper, "get_class_duration") else 135
             dur_hour = round(dur_min / 60.0, 2)
@@ -931,6 +954,31 @@ def get_statistics(semester: str = None):
                 jam_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
                 jam_counts[jam_str] += 1
 
+            # 5. Agregasi Mata Kuliah per Kelas
+            mk_name = (r.get("nama_mk") or "").strip()
+            if mk_name:
+                mk_entry = mk_kelas_map[mk_name]
+                mk_entry["nama_mk"] = mk_name
+                if kelas and kelas != "Lainnya":
+                    mk_entry["kelas_set"].add(kelas)
+                mk_entry["total_sesi"] += 1
+                mk_entry["total_jam"] = round(mk_entry["total_jam"] + dur_hour, 2)
+                if metode == "TM": mk_entry["tm"] += 1
+                elif metode == "OL": mk_entry["ol"] += 1
+                elif metode == "CC": mk_entry["cc"] += 1
+
+            # 6. Agregasi Program Studi (Prodi)
+            import re
+            if kelas and kelas != "Lainnya":
+                m_prodi = re.search(r'([A-Za-z]+)', kelas)
+                p_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
+                p_entry = prodi_map[p_code]
+                p_entry["kode_prodi"] = p_code
+                p_entry["nama_prodi"] = prodi_names.get(p_code, f"Program Studi {p_code}")
+                p_entry["kelas_set"].add(kelas)
+                p_entry["total_sesi"] += 1
+                p_entry["total_jam"] = round(p_entry["total_jam"] + dur_hour, 2)
+
         # Format Lab Rankings
         lab_rankings = sorted(lab_data.values(), key=lambda x: x["total_jam"], reverse=True)
         max_lab_jam = lab_rankings[0]["total_jam"] if lab_rankings else 1.0
@@ -955,6 +1003,28 @@ def get_statistics(semester: str = None):
         top_kelas_aktif = sorted(kelas_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
         top_kelas_ol = sorted([k for k in kelas_data.values() if k["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
         top_kelas_cc = sorted([k for k in kelas_data.values() if k["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
+
+        top_mk_kelas = []
+        for m_item in sorted(mk_kelas_map.values(), key=lambda x: (len(x["kelas_set"]), x["total_sesi"]), reverse=True)[:15]:
+            top_mk_kelas.append({
+                "nama_mk": m_item["nama_mk"],
+                "total_kelas": len(m_item["kelas_set"]),
+                "total_sesi": m_item["total_sesi"],
+                "total_jam": m_item["total_jam"],
+                "tm": m_item["tm"],
+                "ol": m_item["ol"],
+                "cc": m_item["cc"]
+            })
+
+        distribusi_prodi = []
+        for p_item in sorted(prodi_map.values(), key=lambda x: len(x["kelas_set"]), reverse=True)[:10]:
+            distribusi_prodi.append({
+                "kode": p_item["kode_prodi"],
+                "nama": p_item["nama_prodi"],
+                "total_kelas": len(p_item["kelas_set"]),
+                "total_sesi": p_item["total_sesi"],
+                "total_jam": p_item["total_jam"]
+            })
 
         urutan_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
         sorted_hari = [{"hari": h, "total": hari_counts.get(h, 0)} for h in urutan_hari if hari_counts.get(h, 0) > 0]
@@ -994,7 +1064,9 @@ def get_statistics(semester: str = None):
                 "distribusi_jam": sorted_jam,
                 "top_aktif": top_kelas_aktif,
                 "top_ol": top_kelas_ol,
-                "top_cc": top_kelas_cc
+                "top_cc": top_kelas_cc,
+                "top_mk": top_mk_kelas,
+                "distribusi_prodi": distribusi_prodi
             },
             "dosen_stats": {
                 "total_dosen": dosen_aktif_count,

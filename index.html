@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6366f1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20260917_confirm_zindex">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20260922_stats_v3">
 </head>
 
 <body>
@@ -693,7 +693,7 @@
           <div style="background: var(--bg-elevated); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 14px;">
             <!-- Quick Category Pill Selector -->
             <div class="fitur-jenis-segmented" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-              <button type="button" id="btn-fitur-jenis-lab" class="btn btn-secondary btn-sm fitur-jenis-btn" title="Laboratorium" aria-label="Laboratorium"
+              <button type="button" id="btn-fitur-jenis-lab" class="btn btn-secondary btn-sm fitur-jenis-btn" title="Labor" aria-label="Labor"
                 style="padding: 6px 14px; border-radius: var(--radius-sm); font-size: 0.84em; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: #fff;">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 <span class="fitur-jenis-text"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>
@@ -1509,7 +1509,7 @@
         </div>
         <p class="sem-banner-subdesc">
           <span class="sem-offline-dot" style="background: #8b5cf6; box-shadow: 0 0 8px #8b5cf6;"></span>
-          Pusat Analitik Terpadu • Utilisasi Laboratorium, Sebaran Kelas & Beban Dosen Pengajar
+          Pusat Analitik Terpadu • Utilisasi Labor, Sebaran Kelas & Beban Dosen Pengajar
         </p>
       </div>
     </div>
@@ -1562,7 +1562,7 @@
       </div>
       <div>
         <div class="sem-stat-num" id="stats-kpi-total-lab">-</div>
-        <div class="sem-stat-lbl">Laboratorium Aktif</div>
+        <div class="sem-stat-lbl">Labor Aktif</div>
       </div>
     </div>
     <div class="sem-stat-card card-ol">
@@ -1601,7 +1601,7 @@
         <line x1="8" y1="21" x2="16" y2="21"></line>
         <line x1="12" y1="17" x2="12" y2="21"></line>
       </svg>
-      <span>Statistik Laboratorium</span>
+      <span>Statistik Labor</span>
     </button>
     <button type="button" class="stats-tab-btn" id="tab-btn-stats-kelas" onclick="switchStatsTab('kelas')">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
@@ -1662,7 +1662,7 @@
     <!-- Status Ratio Pie/Bar Breakdown -->
     <div class="stats-card-box" style="margin-top: 20px;">
       <div class="stats-card-header">
-        <h3 class="stats-card-title">Rasio Metode Perkuliahan di Laboratorium</h3>
+        <h3 class="stats-card-title">Rasio Metode Perkuliahan di Labor</h3>
         <span class="stats-card-meta" id="lab-method-meta">-</span>
       </div>
       <div class="stats-method-progress-wrap">
@@ -1682,7 +1682,7 @@
     <!-- Tabel Peringkat Utilisasi Lab -->
     <div class="stats-card-box" style="margin-top: 20px;">
       <div class="stats-card-header">
-        <h3 class="stats-card-title">Peringkat Utilisasi Seluruh Laboratorium</h3>
+        <h3 class="stats-card-title">Peringkat Utilisasi Seluruh Labor</h3>
         <span class="stats-card-meta">Diurutkan berdasarkan total jam terbang penggunaan</span>
       </div>
       <div class="stats-table-wrapper">
@@ -1690,7 +1690,7 @@
           <thead>
             <tr>
               <th style="width: 50px; text-align: center;">No</th>
-              <th>Nama Laboratorium</th>
+              <th>Nama Labor</th>
               <th>Kampus</th>
               <th style="text-align: center;">Total Sesi</th>
               <th style="text-align: center;">Total Jam</th>
@@ -1775,6 +1775,44 @@
               <!-- Injected by JS -->
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid 3: Mata Kuliah Terpadat & Sebaran Program Studi -->
+    <div class="stats-grid-two-col" style="margin-top: 20px;">
+      <!-- Mata Kuliah dengan Kelas Paralel Terbanyak -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Mata Kuliah dengan Kelas Paralel Terbanyak</h3>
+          <span class="stats-card-meta">MK yang dipelajari paling banyak kelas</span>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Nama Mata Kuliah</th>
+                <th style="text-align: center;">Total Kelas</th>
+                <th style="text-align: center;">Total Jam</th>
+                <th style="text-align: center;">Metode (TM / OL / CC)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-top-mk-paralel">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Sebaran Kelas per Program Studi -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Distribusi Kelas per Program Studi (Prodi)</h3>
+          <span class="stats-card-meta">Sebaran jenjang dan jurusan kelas</span>
+        </div>
+        <div id="chart-prodi-distribution" class="stats-bar-chart-container" style="padding: 10px 0;">
+          <!-- Injected by JS -->
         </div>
       </div>
     </div>
@@ -2902,7 +2940,7 @@
         <span>Mode Layar TV</span>
       </button>
 
-      <button class="btn btn-secondary" id="btn-setting-stats-mode" onclick="closeSettingAndOpenStatsMode()"
+      <button type="button" class="btn btn-secondary" id="btn-setting-stats-mode" onclick="closeSettingAndOpenStatsMode()"
         style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round" style="color: #8b5cf6;">
@@ -3785,7 +3823,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20260917_fix_syntax"></script>
+  <script src="frontend/js/script.js?v=20260922_stats_v5"></script>
 </body>
 
 </html>

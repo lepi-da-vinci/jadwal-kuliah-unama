@@ -4360,7 +4360,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
               </div>
               <div>
-                <div class="room-card-aslab-lbl">Asisten Laboratorium</div>
+                <div class="room-card-aslab-lbl">Asisten Labor</div>
                 <div class="room-card-aslab-name">${escapeHtml(matchedAslab.nama_aslab)}</div>
               </div>
             </div>
@@ -7568,7 +7568,7 @@ function renderFiturRooms() {
               <div class="room-card-meta">
                 <span class="room-meta-item">${escapeHtml(formatCampusName(r.kampus))}</span>
                 <span class="room-meta-sep">•</span>
-                <span class="room-meta-item"><span class="title-desktop">${r.isLab ? 'Laboratorium' : 'Ruang Kelas'}</span><span class="title-mobile">${r.isLab ? 'Lab' : 'Ruang Kelas'}</span></span>
+                <span class="room-meta-item"><span class="title-desktop">${r.isLab ? 'Labor' : 'Ruang Kelas'}</span><span class="title-mobile">${r.isLab ? 'Lab' : 'Ruang Kelas'}</span></span>
                 <span class="room-meta-sep">•</span>
                 <span class="room-meta-item ${r.isKobar ? 'room-kobar-tag' : 'room-thehok-tag'}">${r.isKobar ? 'Maks 17:00 (Non-Malam)' : 'Ada Kelas Malam (s/d 21:00)'}</span>
               </div>
@@ -10446,7 +10446,7 @@ let isStatsExplorerMode = false;
 let currentStatsSemester = null;
 let currentStatsData = null;
 
-window.enterStatsMode = async function(namaSemester) {
+async function enterStatsMode(namaSemester) {
   if (!namaSemester) {
     namaSemester = currentStatsSemester || currentActiveSemester || 'Genap 2025';
   }
@@ -10454,7 +10454,7 @@ window.enterStatsMode = async function(namaSemester) {
   isStatsExplorerMode = true;
 
   // Tutup mode semester explorer jika sedang aktif
-  if (isSemesterExplorerMode && typeof exitSemesterExplorerMode === 'function') {
+  if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode && typeof exitSemesterExplorerMode === 'function') {
     exitSemesterExplorerMode();
   }
 
@@ -10484,9 +10484,9 @@ window.enterStatsMode = async function(namaSemester) {
 
   updateStatsSemesterDropdown(namaSemester);
   await loadStatisticsData(namaSemester);
-};
+}
 
-window.exitStatsMode = function() {
+function exitStatsMode() {
   isStatsExplorerMode = false;
   document.body.classList.remove('stats-explorer-active');
 
@@ -10497,19 +10497,16 @@ window.exitStatsMode = function() {
   if (statsContainer) statsContainer.style.display = 'none';
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
-};
+}
 
-window.closeSettingAndOpenStatsMode = function() {
-  if (typeof closeSettingModal === 'function') {
-    closeSettingModal(false);
-  } else {
-    const testModal = document.getElementById('test-wa-modal');
-    if (testModal) testModal.classList.remove('open');
-  }
+function closeSettingAndOpenStatsMode() {
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+  if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
   enterStatsMode();
-};
+}
 
-window.switchStatsTab = function(tabName) {
+function switchStatsTab(tabName) {
   const tabs = ['lab', 'kelas', 'dosen'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-stats-${t}`);
@@ -10528,7 +10525,7 @@ window.switchStatsTab = function(tabName) {
       }
     }
   });
-};
+}
 
 function updateStatsSemesterDropdown(currentSem) {
   const labelEl = document.getElementById('stats-sem-label-switch');
@@ -10568,17 +10565,24 @@ function updateStatsSemesterDropdown(currentSem) {
   }).join('');
 }
 
-window.selectStatsSemesterSwitch = function(namaSemester) {
+function selectStatsSemesterSwitch(namaSemester) {
   const dropdown = document.getElementById('dropdown-stats-sem-switch');
   if (dropdown) dropdown.classList.remove('open');
 
   if (!namaSemester || namaSemester === currentStatsSemester) return;
   enterStatsMode(namaSemester);
-};
+}
 
-window.printOrExportStats = function() {
+function printOrExportStats() {
   window.print();
-};
+}
+
+window.enterStatsMode = enterStatsMode;
+window.exitStatsMode = exitStatsMode;
+window.closeSettingAndOpenStatsMode = closeSettingAndOpenStatsMode;
+window.switchStatsTab = switchStatsTab;
+window.selectStatsSemesterSwitch = selectStatsSemesterSwitch;
+window.printOrExportStats = printOrExportStats;
 
 async function loadStatisticsData(namaSemester) {
   // Set loading placeholder di tabel-tabel utama
@@ -10821,6 +10825,46 @@ function renderKelasStatsTab(kelasStats) {
       </tr>
     `).join('') || `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">Tidak ada data anomali kelas</td></tr>`;
   }
+
+  // 5. Top Mata Kuliah dengan Kelas Paralel Terbanyak
+  const topMk = kelasStats.top_mk || [];
+  const tbodyMk = document.getElementById('tbody-top-mk-paralel');
+  if (tbodyMk) {
+    tbodyMk.innerHTML = topMk.slice(0, 8).map((m, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${escapeHtml(m.nama_mk)}</strong></td>
+        <td style="text-align: center;"><span class="badge-mini-sem" style="font-weight: 700; background: rgba(99, 102, 241, 0.12); color: var(--primary); padding: 3px 10px; border-radius: 12px;">${m.total_kelas} Kelas</span></td>
+        <td style="text-align: center; font-weight: 700; color: #8b5cf6;">${m.total_jam} Jam</td>
+        <td style="text-align: center;">
+          <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+            <span class="m-pill m-tm">${m.tm} TM</span>
+            <span class="m-pill m-ol">${m.ol} OL</span>
+            ${m.cc > 0 ? `<span class="m-pill m-cc">${m.cc} CC</span>` : ''}
+          </div>
+        </td>
+      </tr>
+    `).join('') || `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Tidak ada data mata kuliah paralel</td></tr>`;
+  }
+
+  // 6. Distribusi Program Studi (Prodi)
+  const distProdi = kelasStats.distribusi_prodi || [];
+  const chartProdi = document.getElementById('chart-prodi-distribution');
+  if (chartProdi) {
+    const maxKelasProdi = Math.max(...distProdi.map(p => p.total_kelas), 1);
+    chartProdi.innerHTML = distProdi.slice(0, 7).map(p => {
+      const pct = Math.round((p.total_kelas / maxKelasProdi) * 100);
+      return `
+        <div class="stats-bar-chart-row">
+          <span class="stats-chart-label" style="min-width: 140px; font-weight: 600;" title="${escapeHtml(p.nama)}">${escapeHtml(p.nama)}</span>
+          <div class="stats-chart-track">
+            <div class="stats-chart-fill" style="width: ${pct}%; background: linear-gradient(90deg, #8b5cf6, #ec4899);"></div>
+          </div>
+          <span class="stats-chart-val" style="min-width: 90px; text-align: right;"><strong>${p.total_kelas} Kelas</strong> (${p.total_jam}j)</span>
+        </div>
+      `;
+    }).join('') || '<div style="color: var(--text-muted); font-size: 0.88rem; padding: 12px 0;">Tidak ada data sebaran program studi</div>';
+  }
 }
 
 function renderDosenStatsTab(dosenStats) {
@@ -10929,6 +10973,14 @@ document.addEventListener('DOMContentLoaded', () => {
     btnTv.addEventListener('click', (e) => {
       e.preventDefault();
       openTvMode();
+    });
+  }
+
+  const btnStats = document.getElementById('btn-setting-stats-mode');
+  if (btnStats) {
+    btnStats.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeSettingAndOpenStatsMode();
     });
   }
 

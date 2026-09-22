@@ -33,7 +33,7 @@
         </div>
         <p class="sem-banner-subdesc">
           <span class="sem-offline-dot" style="background: #8b5cf6; box-shadow: 0 0 8px #8b5cf6;"></span>
-          Pusat Analitik Terpadu • Utilisasi Laboratorium, Sebaran Kelas & Beban Dosen Pengajar
+          Pusat Analitik Terpadu • Utilisasi Labor, Sebaran Kelas & Beban Dosen Pengajar
         </p>
       </div>
     </div>
@@ -86,7 +86,7 @@
       </div>
       <div>
         <div class="sem-stat-num" id="stats-kpi-total-lab">-</div>
-        <div class="sem-stat-lbl">Laboratorium Aktif</div>
+        <div class="sem-stat-lbl">Labor Aktif</div>
       </div>
     </div>
     <div class="sem-stat-card card-ol">
@@ -125,7 +125,7 @@
         <line x1="8" y1="21" x2="16" y2="21"></line>
         <line x1="12" y1="17" x2="12" y2="21"></line>
       </svg>
-      <span>Statistik Laboratorium</span>
+      <span>Statistik Labor</span>
     </button>
     <button type="button" class="stats-tab-btn" id="tab-btn-stats-kelas" onclick="switchStatsTab('kelas')">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
@@ -186,7 +186,7 @@
     <!-- Status Ratio Pie/Bar Breakdown -->
     <div class="stats-card-box" style="margin-top: 20px;">
       <div class="stats-card-header">
-        <h3 class="stats-card-title">Rasio Metode Perkuliahan di Laboratorium</h3>
+        <h3 class="stats-card-title">Rasio Metode Perkuliahan di Labor</h3>
         <span class="stats-card-meta" id="lab-method-meta">-</span>
       </div>
       <div class="stats-method-progress-wrap">
@@ -206,7 +206,7 @@
     <!-- Tabel Peringkat Utilisasi Lab -->
     <div class="stats-card-box" style="margin-top: 20px;">
       <div class="stats-card-header">
-        <h3 class="stats-card-title">Peringkat Utilisasi Seluruh Laboratorium</h3>
+        <h3 class="stats-card-title">Peringkat Utilisasi Seluruh Labor</h3>
         <span class="stats-card-meta">Diurutkan berdasarkan total jam terbang penggunaan</span>
       </div>
       <div class="stats-table-wrapper">
@@ -214,7 +214,7 @@
           <thead>
             <tr>
               <th style="width: 50px; text-align: center;">No</th>
-              <th>Nama Laboratorium</th>
+              <th>Nama Labor</th>
               <th>Kampus</th>
               <th style="text-align: center;">Total Sesi</th>
               <th style="text-align: center;">Total Jam</th>
@@ -299,6 +299,44 @@
               <!-- Injected by JS -->
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid 3: Mata Kuliah Terpadat & Sebaran Program Studi -->
+    <div class="stats-grid-two-col" style="margin-top: 20px;">
+      <!-- Mata Kuliah dengan Kelas Paralel Terbanyak -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Mata Kuliah dengan Kelas Paralel Terbanyak</h3>
+          <span class="stats-card-meta">MK yang dipelajari paling banyak kelas</span>
+        </div>
+        <div class="stats-table-wrapper">
+          <table class="stats-custom-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">No</th>
+                <th>Nama Mata Kuliah</th>
+                <th style="text-align: center;">Total Kelas</th>
+                <th style="text-align: center;">Total Jam</th>
+                <th style="text-align: center;">Metode (TM / OL / CC)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-top-mk-paralel">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Sebaran Kelas per Program Studi -->
+      <div class="stats-card-box">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">Distribusi Kelas per Program Studi (Prodi)</h3>
+          <span class="stats-card-meta">Sebaran jenjang dan jurusan kelas</span>
+        </div>
+        <div id="chart-prodi-distribution" class="stats-bar-chart-container" style="padding: 10px 0;">
+          <!-- Injected by JS -->
         </div>
       </div>
     </div>

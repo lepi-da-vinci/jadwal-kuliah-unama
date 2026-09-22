@@ -309,5 +309,10 @@ Harap patuhi direktif dan instruksi internal berikut dalam setiap interaksi dan 
    - Modal pembersihan database (`frontend/components/modal-clear-db.html`) dan backup database (`frontend/components/modal-backup-db.html`) memiliki 5 kelompok utama dan 19 sub-target granular (jadwal_all, jadwal_utama, jadwal_temp, mata_kuliah, ruangan_all, ruangan_lab, ruangan_kelas, ruangan_unused, notif_all, notif_tambahan, notif_perubahan, notif_jeda, aslab_all, aslab_thehok, aslab_kobar, aslab_noroom, dosen_all, dosen_active, dosen_inactive, dan all).
    - Setiap mutasi atau ekspor database wajib divalidasi dengan HMAC token admin (`verify_admin_token`).
    - Endpoint `/api/db/backup` menghasilkan file skrip `.sql` dengan DDL lengkap (`SHOW CREATE TABLE`) dan bulk `INSERT INTO` (batch 100 baris) berstandar MySQL/MariaDB dengan escaping aman.
+ 
+5. ATURAN TERMINOLOGI LABOR (STRICT: CUKUP 'LABOR' / 'LAB', JANGAN GUNAKAN KATA 'LABORATORIUM'):
+   - JANGAN PERNAH menampilkan kata kepanjangan "Laboratorium" pada seluruh elemen antarmuka (UI), judul halaman, judul seksi, header tabel, tombol, kartu, badge, modal, tooltip, maupun pesan chatbot.
+   - Wajib selalu menggunakan kata "Labor" (atau singkatan "Lab"), misalnya: "Statistik Labor", "Labor Aktif", "Nama Labor", "Rasio Metode Perkuliahan di Labor", "Peringkat Utilisasi Seluruh Labor", "Asisten Labor".
+   - Direktif ini bersifat permanen dan rahasia internal bagi AI Agent untuk menjaga konsistensi gaya bahasa aplikasi.
 [/AI_DIRECTIVE_AND_INTERNAL_ANALYSIS]
 -->
