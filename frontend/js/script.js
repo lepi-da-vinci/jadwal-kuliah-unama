@@ -10782,7 +10782,7 @@ function renderMatrixCards() {
 
   wrap.innerHTML = `
     <!-- Card 1: Labor Paling Padat -->
-    <div class="matrix-kpi-card" style="border-left: 4px solid #8b5cf6;">
+    <div class="matrix-kpi-card" style="--matrix-top-grad: linear-gradient(90deg, #8b5cf6, #c084fc); background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 80%), var(--bg-card);">
       <div class="matrix-card-head">
         <span class="matrix-card-title">Labor Paling Padat</span>
         <span class="badge-mini-sem" style="background: rgba(139,92,246,0.15); color: #8b5cf6;">${escapeHtml(busy.kampus || 'Kampus')}</span>
@@ -10792,7 +10792,7 @@ function renderMatrixCards() {
     </div>
 
     <!-- Card 2: Labor Paling Lengang -->
-    <div class="matrix-kpi-card" style="border-left: 4px solid #06b6d4;">
+    <div class="matrix-kpi-card" style="--matrix-top-grad: linear-gradient(90deg, #06b6d4, #38bdf8); background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(6, 182, 212, 0.08) 0%, transparent 80%), var(--bg-card);">
       <div class="matrix-card-head">
         <span class="matrix-card-title">Labor Paling Lengang</span>
         <span class="badge-mini-sem" style="background: rgba(6,182,212,0.15); color: #06b6d4;">${escapeHtml(quiet.kampus || 'Kampus')}</span>
@@ -10802,7 +10802,7 @@ function renderMatrixCards() {
     </div>
 
     <!-- Card 3: Kelas Paling Aktif -->
-    <div class="matrix-kpi-card" style="border-left: 4px solid #6366f1;">
+    <div class="matrix-kpi-card" style="--matrix-top-grad: linear-gradient(90deg, #6366f1, #818cf8); background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 80%), var(--bg-card);">
       <div class="matrix-card-head">
         <span class="matrix-card-title">Kelas Paling Aktif</span>
         <button type="button" class="badge-kelas-clickable" onclick="openDetailKelas('${escapeHtml(topKelas.kelas || '')}')">Buka Detail</button>
@@ -10812,7 +10812,7 @@ function renderMatrixCards() {
     </div>
 
     <!-- Card 4: Mata Kuliah Terpadat -->
-    <div class="matrix-kpi-card" style="border-left: 4px solid #ec4899;">
+    <div class="matrix-kpi-card" style="--matrix-top-grad: linear-gradient(90deg, #ec4899, #f472b6); background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(236, 72, 153, 0.08) 0%, transparent 80%), var(--bg-card);">
       <div class="matrix-card-head">
         <span class="matrix-card-title">MK Paralel Terbanyak</span>
         <span class="badge-mini-sem" style="background: rgba(236,72,153,0.15); color: #ec4899;">${topMk.total_kelas || 0} Kelas</span>
@@ -10822,7 +10822,7 @@ function renderMatrixCards() {
     </div>
 
     <!-- Card 5: Dosen Terpadat -->
-    <div class="matrix-kpi-card" style="border-left: 4px solid #10b981;">
+    <div class="matrix-kpi-card" style="--matrix-top-grad: linear-gradient(90deg, #10b981, #34d399); background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);">
       <div class="matrix-card-head">
         <span class="matrix-card-title">Dosen Beban Terbanyak</span>
         <span class="badge-mini-sem" style="background: rgba(16,185,129,0.15); color: #10b981;">${topDosen.total_jam || 0} Jam</span>
@@ -10832,7 +10832,7 @@ function renderMatrixCards() {
     </div>
 
     <!-- Card 6: Efektivitas Perkuliahan -->
-    <div class="matrix-kpi-card" style="border-left: 4px solid #f59e0b;">
+    <div class="matrix-kpi-card" style="--matrix-top-grad: linear-gradient(90deg, #f59e0b, #fbbf24); background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 80%), var(--bg-card);">
       <div class="matrix-card-head">
         <span class="matrix-card-title">Efektivitas Perkuliahan</span>
         <span class="badge-mini-sem" style="background: rgba(245,158,11,0.15); color: #f59e0b;">${tmPct}% TM</span>
@@ -11175,7 +11175,20 @@ function renderLabStatsTab(labStats) {
   if (busy && busyNameEl) {
     busyNameEl.innerText = formatRoomName(busy.nama_ruangan, false);
     if (busyPctEl) busyPctEl.innerText = `${busy.utilization_pct || 100}% Utilisasi`;
-    if (busyDetailEl) busyDetailEl.innerText = `${busy.total_jam} jam terbang (${busy.total_sesi} sesi: ${busy.tm} TM, ${busy.ol} OL, ${busy.cc} CC)`;
+    if (busyDetailEl) {
+      busyDetailEl.innerHTML = `
+        <div class="stats-hl-stats-row">
+          <span class="hl-stat-metric"><strong>${busy.total_jam}</strong> Jam</span>
+          <span class="hl-stat-sep">•</span>
+          <span class="hl-stat-metric"><strong>${busy.total_sesi}</strong> Sesi</span>
+        </div>
+        <div class="stats-hl-chips-row">
+          <span class="hl-chip-method chip-tm">${busy.tm || 0} TM</span>
+          <span class="hl-chip-method chip-ol">${busy.ol || 0} OL</span>
+          <span class="hl-chip-method chip-cc">${busy.cc || 0} CC</span>
+        </div>
+      `;
+    }
   } else if (busyNameEl) {
     busyNameEl.innerText = 'Tidak Ada Data';
     if (busyPctEl) busyPctEl.innerText = '-';
@@ -11190,7 +11203,18 @@ function renderLabStatsTab(labStats) {
   if (quiet && quietNameEl) {
     quietNameEl.innerText = formatRoomName(quiet.nama_ruangan, false);
     if (quietPctEl) quietPctEl.innerText = `${quiet.utilization_pct || 0}% Utilisasi`;
-    if (quietDetailEl) quietDetailEl.innerText = `${quiet.total_jam} jam terbang (${quiet.total_sesi} sesi)`;
+    if (quietDetailEl) {
+      quietDetailEl.innerHTML = `
+        <div class="stats-hl-stats-row">
+          <span class="hl-stat-metric"><strong>${quiet.total_jam}</strong> Jam</span>
+          <span class="hl-stat-sep">•</span>
+          <span class="hl-stat-metric"><strong>${quiet.total_sesi}</strong> Sesi</span>
+        </div>
+        <div class="stats-hl-chips-row">
+          <span class="hl-chip-info">Banyak Kuota Waktu Luang</span>
+        </div>
+      `;
+    }
   } else if (quietNameEl) {
     quietNameEl.innerText = 'Tidak Ada Data';
     if (quietPctEl) quietPctEl.innerText = '-';
@@ -11205,12 +11229,16 @@ function renderLabStatsTab(labStats) {
   const thehokPct = Math.round((thehok.total_jam / maxCampusJam) * 100);
 
   const kobarVal = document.getElementById('lab-camp-kobar-val');
-  if (kobarVal) kobarVal.innerText = `${kobar.total_jam} Jam (${kobar.total_sesi} Sesi)`;
+  if (kobarVal) {
+    kobarVal.innerHTML = `<span>${kobar.total_jam} Jam</span> <small class="campus-sesi-pill">${kobar.total_sesi} Sesi</small>`;
+  }
   const kobarBar = document.getElementById('lab-camp-kobar-bar');
   if (kobarBar) kobarBar.style.width = `${kobarPct}%`;
 
   const thehokVal = document.getElementById('lab-camp-thehok-val');
-  if (thehokVal) thehokVal.innerText = `${thehok.total_jam} Jam (${thehok.total_sesi} Sesi)`;
+  if (thehokVal) {
+    thehokVal.innerHTML = `<span>${thehok.total_jam} Jam</span> <small class="campus-sesi-pill">${thehok.total_sesi} Sesi</small>`;
+  }
   const thehokBar = document.getElementById('lab-camp-thehok-bar');
   if (thehokBar) thehokBar.style.width = `${thehokPct}%`;
 

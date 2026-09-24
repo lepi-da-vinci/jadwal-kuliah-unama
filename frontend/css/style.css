@@ -6144,9 +6144,46 @@ body.kurikulum-explorer-active > .container > .card {
   color: #ffffff;
 }
 
-/* KPI Card Custom Color Themes for Stats */
+/* ==================== KPI HERO CARDS (ELEVATED MODERN AESTHETICS) ==================== */
+/* No clunky side border. Floating top-accent gradient bar + subtle ambient top tint */
+.card-kuri-jam,
+.card-kuri-lab,
+.card-kuri-kelas,
+.card-kuri-dosen {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-kuri-jam::before,
+.card-kuri-lab::before,
+.card-kuri-kelas::before,
+.card-kuri-dosen::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  border-radius: 16px 16px 0 0;
+  background: var(--kpi-top-grad, linear-gradient(90deg, #6366f1, #8b5cf6));
+  opacity: 0.88;
+  transition: height 0.25s ease, opacity 0.25s ease;
+  z-index: 2;
+}
+
+.card-kuri-jam:hover::before,
+.card-kuri-lab:hover::before,
+.card-kuri-kelas:hover::before,
+.card-kuri-dosen:hover::before {
+  height: 4.5px;
+  opacity: 1;
+}
+
+/* 1. Jam Operasional (Indigo) */
 .card-kuri-jam {
-  border-left: 4px solid #6366f1;
+  --kpi-accent-rgb: 99, 102, 241;
+  --kpi-top-grad: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 .icon-jam {
   background: rgba(99, 102, 241, 0.12);
@@ -6155,10 +6192,14 @@ body.kurikulum-explorer-active > .container > .card {
 .badge-jam {
   background: rgba(99, 102, 241, 0.1);
   color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
+/* 2. Labor Aktif (Purple) */
 .card-kuri-lab {
-  border-left: 4px solid #8b5cf6;
+  --kpi-accent-rgb: 139, 92, 246;
+  --kpi-top-grad: linear-gradient(90deg, #8b5cf6 0%, #c084fc 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(139, 92, 246, 0.09) 0%, transparent 80%), var(--bg-card);
 }
 .icon-lab {
   background: rgba(139, 92, 246, 0.12);
@@ -6167,10 +6208,14 @@ body.kurikulum-explorer-active > .container > .card {
 .badge-lab {
   background: rgba(139, 92, 246, 0.1);
   color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
+/* 3. Total Kelas (Cyan / Sky) */
 .card-kuri-kelas {
-  border-left: 4px solid #0284c7;
+  --kpi-accent-rgb: 2, 132, 199;
+  --kpi-top-grad: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(2, 132, 199, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 .icon-kelas {
   background: rgba(2, 132, 199, 0.12);
@@ -6179,10 +6224,14 @@ body.kurikulum-explorer-active > .container > .card {
 .badge-kelas {
   background: rgba(2, 132, 199, 0.1);
   color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.2);
 }
 
+/* 4. Dosen Pengajar (Emerald) */
 .card-kuri-dosen {
-  border-left: 4px solid #10b981;
+  --kpi-accent-rgb: 16, 185, 129;
+  --kpi-top-grad: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 .icon-dosen {
   background: rgba(16, 185, 129, 0.12);
@@ -6191,9 +6240,10 @@ body.kurikulum-explorer-active > .container > .card {
 .badge-dosen {
   background: rgba(16, 185, 129, 0.1);
   color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
-/* Unified Toolbar (Category Tabs on Left + Mode Pills on Right) */
+/* Unified Toolbar with Generous Margin & Separation */
 .stats-unified-toolbar {
   display: flex;
   align-items: center;
@@ -6201,10 +6251,12 @@ body.kurikulum-explorer-active > .container > .card {
   gap: 16px;
   flex-wrap: wrap;
   background: var(--bg-card);
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05);
+  margin-top: 4px;
+  margin-bottom: 24px !important;
 }
 
 .stats-category-tabs {
@@ -6306,43 +6358,74 @@ body.kurikulum-explorer-active > .container > .card {
   display: block;
 }
 
-/* Highlight Cards */
+/* ==================== HIGHLIGHT CARDS (ELEVATED BESPOKE AESTHETICS) ==================== */
 .stats-highlights-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 20px;
 }
 
 .stats-highlight-card {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
   padding: 22px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
-  box-shadow: var(--shadow-sm);
-  position: relative;
+  gap: 14px;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s ease;
+}
+
+.stats-highlight-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  border-radius: 16px 16px 0 0;
+  background: var(--hl-top-grad, linear-gradient(90deg, #8b5cf6, #c084fc));
+  opacity: 0.9;
+  transition: height 0.25s ease, opacity 0.25s ease;
+  z-index: 2;
 }
 
 .stats-highlight-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.09), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+  border-color: rgba(var(--hl-accent-rgb, 139, 92, 246), 0.35);
 }
 
-.stats-highlight-card.border-purple {
-  border-left: 4px solid #8b5cf6;
+.stats-highlight-card:hover::before {
+  height: 4.5px;
+  opacity: 1;
 }
 
-.stats-highlight-card.border-cyan {
-  border-left: 4px solid #06b6d4;
+.stats-highlight-card.border-purple,
+.stats-highlight-card.card-accent-purple {
+  --hl-accent-rgb: 139, 92, 246;
+  --hl-top-grad: linear-gradient(90deg, #8b5cf6 0%, #c084fc 100%);
+  background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(139, 92, 246, 0.09) 0%, transparent 80%), var(--bg-card);
 }
 
-.stats-highlight-card.border-green {
-  border-left: 4px solid #10b981;
+.stats-highlight-card.border-cyan,
+.stats-highlight-card.card-accent-cyan {
+  --hl-accent-rgb: 6, 182, 212;
+  --hl-top-grad: linear-gradient(90deg, #06b6d4 0%, #38bdf8 100%);
+  background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(6, 182, 212, 0.08) 0%, transparent 80%), var(--bg-card);
+}
+
+.stats-highlight-card.border-green,
+.stats-highlight-card.card-accent-green {
+  --hl-accent-rgb: 16, 185, 129;
+  --hl-top-grad: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 
 .stats-hl-header {
@@ -6365,16 +6448,19 @@ body.kurikulum-explorer-active > .container > .card {
 .stats-hl-badge.badge-busy {
   background: rgba(139, 92, 246, 0.14);
   color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.25);
 }
 
 .stats-hl-badge.badge-quiet {
   background: rgba(6, 182, 212, 0.14);
   color: #06b6d4;
+  border: 1px solid rgba(6, 182, 212, 0.25);
 }
 
 .stats-hl-badge.badge-campus {
   background: rgba(16, 185, 129, 0.14);
   color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .stats-hl-badge-sub {
@@ -6387,11 +6473,13 @@ body.kurikulum-explorer-active > .container > .card {
 .badge-busy-sub {
   background: rgba(16, 185, 129, 0.15);
   color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .badge-quiet-sub {
   background: rgba(245, 158, 11, 0.15);
   color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
 .stats-hl-body {
@@ -6412,6 +6500,86 @@ body.kurikulum-explorer-active > .container > .card {
   font-size: 0.88rem;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+/* Rich Stats Callouts & Chips */
+.stats-hl-stats-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 0.92rem;
+  color: var(--text-dark);
+}
+
+.hl-stat-metric strong {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+.hl-stat-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.stats-hl-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.hl-chip-method {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hl-chip-method.chip-tm {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.hl-chip-method.chip-ol {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.hl-chip-method.chip-cc {
+  background: rgba(244, 63, 94, 0.12);
+  color: #e11d48;
+  border: 1px solid rgba(244, 63, 94, 0.25);
+}
+
+.hl-chip-info {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(6, 182, 212, 0.12);
+  color: #0891b2;
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.campus-sesi-pill {
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  margin-left: 6px;
 }
 
 .stats-campus-bars {
@@ -7504,19 +7672,27 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 .card-kuri-wajib {
-  border-left: 4px solid #10b981;
+  --kpi-accent-rgb: 16, 185, 129;
+  --kpi-top-grad: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 
 .card-kuri-matkul {
-  border-left: 4px solid #0284c7;
+  --kpi-accent-rgb: 2, 132, 199;
+  --kpi-top-grad: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(2, 132, 199, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 
 .card-kuri-pilihan {
-  border-left: 4px solid #f59e0b;
+  --kpi-accent-rgb: 245, 158, 11;
+  --kpi-top-grad: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 
 .card-kuri-fokus {
-  border-left: 4px solid #8b5cf6;
+  --kpi-accent-rgb: 139, 92, 246;
+  --kpi-top-grad: linear-gradient(90deg, #8b5cf6 0%, #ec4899 100%);
+  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 80%), var(--bg-card);
 }
 
 .kuri-kpi-header {
