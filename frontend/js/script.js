@@ -417,6 +417,10 @@ window.enterSemesterExplorerMode = async function(namaSemester) {
   currentExplorerSemester = namaSemester;
   isSemesterExplorerMode = true;
 
+  if (typeof isKurikulumMode !== 'undefined' && isKurikulumMode && typeof exitKurikulumMode === 'function') {
+    exitKurikulumMode();
+  }
+
   // Tutup modal setting / semester jika terbuka
   const testModal = document.getElementById('test-wa-modal');
   if (testModal) testModal.classList.remove('open');
@@ -10457,6 +10461,9 @@ async function enterStatsMode(namaSemester) {
   if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode && typeof exitSemesterExplorerMode === 'function') {
     exitSemesterExplorerMode();
   }
+  if (typeof isKurikulumMode !== 'undefined' && isKurikulumMode && typeof exitKurikulumMode === 'function') {
+    exitKurikulumMode();
+  }
 
   // Tutup setting modal jika terbuka
   const testModal = document.getElementById('test-wa-modal');
@@ -11844,6 +11851,9 @@ function handleMobileNavAction(action) {
     if (typeof isStatsExplorerMode !== 'undefined' && isStatsExplorerMode) {
       exitStatsMode();
     }
+    if (typeof isKurikulumMode !== 'undefined' && isKurikulumMode) {
+      exitKurikulumMode();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     syncMobileNavActiveState();
   } else if (action === 'search') {
@@ -11865,6 +11875,427 @@ function handleMobileNavAction(action) {
   }
 }
 window.handleMobileNavAction = handleMobileNavAction;
+
+// ==================== VIEW 4: MODE EKSPLORASI KURIKULUM & MATA KULIAH AKADEMIK ====================
+let isKurikulumMode = false;
+let currentKurikulumProdi = 'TI';
+let currentKurikulumTahun = '2025';
+let currentKurikulumTab = 'semester';
+let currentKurikulumCourses = [];
+let currentKurikulumPerubahan = [];
+let currentKurikulumSemFilter = 'all';
+
+async function enterKurikulumMode(prodi = 'TI', tahun = '2025') {
+  currentKurikulumProdi = prodi;
+  currentKurikulumTahun = tahun;
+  isKurikulumMode = true;
+
+  // Tutup mode semester explorer & stats jika aktif
+  if (typeof isSemesterExplorerMode !== 'undefined' && isSemesterExplorerMode && typeof exitSemesterExplorerMode === 'function') {
+    exitSemesterExplorerMode();
+  }
+  if (typeof isStatsExplorerMode !== 'undefined' && isStatsExplorerMode && typeof exitStatsMode === 'function') {
+    exitStatsMode();
+  }
+
+  // Tutup setting modal jika terbuka
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+
+  document.body.classList.add('kurikulum-explorer-active');
+
+  const liveDash = document.getElementById('live-dashboard-view');
+  if (liveDash) liveDash.style.display = 'none';
+
+  const semContainer = document.getElementById('semester-explorer-container');
+  if (semContainer) semContainer.style.display = 'none';
+
+  const statsContainer = document.getElementById('stats-explorer-container');
+  if (statsContainer) statsContainer.style.display = 'none';
+
+  const kuriContainer = document.getElementById('kurikulum-explorer-container');
+  if (kuriContainer) kuriContainer.style.display = 'flex';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Update UI active buttons
+  updateKurikulumSelectorUI();
+  await loadKurikulumData();
+}
+
+function exitKurikulumMode() {
+  isKurikulumMode = false;
+  document.body.classList.remove('kurikulum-explorer-active');
+
+  const liveDash = document.getElementById('live-dashboard-view');
+  if (liveDash) liveDash.style.display = 'block';
+
+  const kuriContainer = document.getElementById('kurikulum-explorer-container');
+  if (kuriContainer) kuriContainer.style.display = 'none';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeSettingAndOpenKurikulumMode() {
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) testModal.classList.remove('open');
+  if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
+  enterKurikulumMode('TI', '2025');
+}
+
+function setKurikulumProdi(prodi) {
+  if (currentKurikulumProdi === prodi) return;
+  currentKurikulumProdi = prodi;
+  updateKurikulumSelectorUI();
+  loadKurikulumData();
+}
+
+function setKurikulumTahun(tahun) {
+  if (currentKurikulumTahun === tahun) return;
+  currentKurikulumTahun = tahun;
+  updateKurikulumSelectorUI();
+  loadKurikulumData();
+}
+
+function updateKurikulumSelectorUI() {
+  // Update Prodi Buttons
+  document.querySelectorAll('.kuri-pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-prodi') === currentKurikulumProdi);
+  });
+
+  // Update Tahun Buttons
+  document.querySelectorAll('.kuri-year-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tahun') === currentKurikulumTahun);
+  });
+
+  // Update Badge in Perubahan
+  const badgePerubahan = document.getElementById('kuri-perubahan-active-prodi-badge');
+  if (badgePerubahan) {
+    const pNames = { 'TI': 'Prodi Teknik Informatika', 'SI': 'Prodi Sistem Informasi', 'SK': 'Prodi Sistem Komputer' };
+    badgePerubahan.textContent = pNames[currentKurikulumProdi] || `Prodi ${currentKurikulumProdi}`;
+  }
+}
+
+function switchKurikulumTab(tabName) {
+  currentKurikulumTab = tabName;
+  
+  // Tab buttons
+  document.querySelectorAll('.kurikulum-tabs-nav .stats-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.id === `tab-btn-kuri-${tabName}`);
+  });
+
+  // Tab panes
+  document.querySelectorAll('#kurikulum-explorer-container .stats-tab-pane').forEach(pane => {
+    pane.classList.toggle('active', pane.id === `kurikulum-tab-pane-${tabName}`);
+  });
+
+  if (tabName === 'perubahan') {
+    renderKurikulumPerubahanView();
+  }
+}
+
+async function loadKurikulumData() {
+  const listContainer = document.getElementById('kurikulum-semester-list');
+  if (listContainer) {
+    listContainer.innerHTML = `
+      <div class="kurikulum-loading-state">
+        <div class="spinner"></div>
+        <span>Memuat data mata kuliah kurikulum ${currentKurikulumProdi} (${currentKurikulumTahun})...</span>
+      </div>
+    `;
+  }
+
+  try {
+    // 1. Fetch courses
+    const resCourses = await fetch(`/api/kurikulum?prodi=${currentKurikulumProdi}&tahun=${currentKurikulumTahun}`);
+    const dataCourses = await resCourses.json();
+    currentKurikulumCourses = dataCourses.data || [];
+
+    // 2. Fetch perubahan
+    const resPerubahan = await fetch(`/api/kurikulum/perubahan?prodi=${currentKurikulumProdi}`);
+    const dataPerubahan = await resPerubahan.json();
+    currentKurikulumPerubahan = dataPerubahan.data || [];
+
+    // Update perubahan count badge
+    const badgePerubahanCount = document.getElementById('kuri-badge-perubahan-count');
+    if (badgePerubahanCount) {
+      badgePerubahanCount.textContent = currentKurikulumPerubahan.length;
+    }
+
+    // 3. Render KPI Hero Cards
+    renderKurikulumKPIs(dataCourses);
+
+    // 4. Render Tab 1 (Semester list)
+    filterKurikulumSemesterList();
+
+    // 5. Render Tab 2 if active
+    if (currentKurikulumTab === 'perubahan') {
+      renderKurikulumPerubahanView();
+    }
+  } catch (err) {
+    console.error('Error loading kurikulum data:', err);
+    if (listContainer) {
+      listContainer.innerHTML = `
+        <div class="kurikulum-loading-state" style="color: #ef4444;">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span>Gagal memuat data kurikulum. Pastikan server backend aktif.</span>
+        </div>
+      `;
+    }
+  }
+}
+
+function renderKurikulumKPIs(dataCourses) {
+  const totalMk = currentKurikulumCourses.length;
+  const wajibCourses = currentKurikulumCourses.filter(c => c.status_mk === 'Wajib');
+  const pilihanCourses = currentKurikulumCourses.filter(c => c.status_mk === 'Pilihan');
+
+  const wajibSks = wajibCourses.reduce((sum, c) => sum + (c.sks || 0), 0);
+  const pilihanSks = pilihanCourses.reduce((sum, c) => sum + (c.sks || 0), 0);
+
+  const kpiWajib = document.getElementById('kuri-kpi-total-sks');
+  if (kpiWajib) kpiWajib.textContent = `${wajibSks || 128} SKS`;
+
+  const kpiTotalMk = document.getElementById('kuri-kpi-total-mk');
+  if (kpiTotalMk) kpiTotalMk.textContent = `${totalMk} MK`;
+
+  const kpiBreakdownMk = document.getElementById('kuri-kpi-breakdown-mk');
+  if (kpiBreakdownMk) kpiBreakdownMk.textContent = `${wajibCourses.length} Wajib • ${pilihanCourses.length} Pilihan`;
+
+  const kpiSksPilihan = document.getElementById('kuri-kpi-sks-pilihan');
+  if (kpiSksPilihan) kpiSksPilihan.textContent = `${pilihanSks} SKS`;
+
+  const kpiMkPilihanCount = document.getElementById('kuri-kpi-mk-pilihan-count');
+  if (kpiMkPilihanCount) kpiMkPilihanCount.textContent = `${pilihanCourses.length} MK Tersedia`;
+
+  // Fokus Keilmuan
+  const fokusTitle = document.getElementById('kuri-kpi-fokus-title');
+  const fokusDesc = document.getElementById('kuri-kpi-fokus-desc');
+  if (fokusTitle && fokusDesc) {
+    if (currentKurikulumProdi === 'TI') {
+      fokusTitle.textContent = 'AI & Data Science';
+      fokusDesc.textContent = 'Machine Learning, Deep Learning, Cloud & Big Data';
+    } else if (currentKurikulumProdi === 'SI') {
+      fokusTitle.textContent = 'Business Intel & BI';
+      fokusDesc.textContent = 'Data Warehouse, Data Mining & Enterprise SI';
+    } else {
+      fokusTitle.textContent = 'IoT & Robotika';
+      fokusDesc.textContent = 'Mekatronika, Robotika, Edge AI & Embedded System';
+    }
+  }
+}
+
+function filterKurikulumBySem(sem) {
+  currentKurikulumSemFilter = sem;
+  document.querySelectorAll('#kuri-sem-pills .kuri-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-sem') === String(sem));
+  });
+  filterKurikulumSemesterList();
+}
+
+function clearKurikulumSearch() {
+  const input = document.getElementById('kuri-search-input');
+  if (input) {
+    input.value = '';
+    const btnClear = document.getElementById('kuri-search-clear');
+    if (btnClear) btnClear.style.display = 'none';
+  }
+  filterKurikulumSemesterList();
+}
+
+function filterKurikulumSemesterList() {
+  const listContainer = document.getElementById('kurikulum-semester-list');
+  if (!listContainer) return;
+
+  const searchInput = document.getElementById('kuri-search-input');
+  const searchVal = (searchInput ? searchInput.value : '').trim().toLowerCase();
+  
+  const btnClear = document.getElementById('kuri-search-clear');
+  if (btnClear) btnClear.style.display = searchVal ? 'block' : 'none';
+
+  const kategoriSelect = document.getElementById('kuri-filter-kategori');
+  const katVal = kategoriSelect ? kategoriSelect.value : 'all';
+
+  let filtered = currentKurikulumCourses.filter(c => {
+    // 1. Search text filter
+    if (searchVal) {
+      const matchKode = (c.kode_mk || '').toLowerCase().includes(searchVal);
+      const matchNama = (c.nama_mk || '').toLowerCase().includes(searchVal);
+      if (!matchKode && !matchNama) return false;
+    }
+
+    // 2. Semester filter
+    if (currentKurikulumSemFilter !== 'all') {
+      if (currentKurikulumSemFilter === 'pilihan') {
+        if (c.status_mk !== 'Pilihan') return false;
+      } else {
+        if (String(c.semester_angka) !== String(currentKurikulumSemFilter)) return false;
+      }
+    }
+
+    // 3. Kategori filter
+    if (katVal !== 'all') {
+      if (c.kategori_mk !== katVal) return false;
+    }
+
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    listContainer.innerHTML = `
+      <div class="kurikulum-loading-state">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span>Tidak ada mata kuliah yang cocok dengan filter pencarian.</span>
+        <button type="button" class="btn btn-secondary" onclick="clearKurikulumSearch(); filterKurikulumBySem('all');" style="margin-top: 6px;">Reset Filter</button>
+      </div>
+    `;
+    return;
+  }
+
+  // Kelompokkan per semester_label
+  const grouped = {};
+  filtered.forEach(c => {
+    const label = c.semester_label || 'Lainnya';
+    if (!grouped[label]) {
+      grouped[label] = {
+        label: label,
+        sem_angka: c.semester_angka,
+        status: c.status_mk,
+        items: []
+      };
+    }
+    grouped[label].items.push(c);
+  });
+
+  // Urutkan grup: Semester 1 s/d 8 lalu Pilihan
+  const sortedKeys = Object.keys(grouped).sort((a, b) => {
+    const semA = grouped[a].sem_angka || 99;
+    const semB = grouped[b].sem_angka || 99;
+    return semA - semB;
+  });
+
+  let html = '';
+  sortedKeys.forEach(k => {
+    const g = grouped[k];
+    const totalSksGroup = g.items.reduce((sum, item) => sum + (item.sks || 0), 0);
+    const countMk = g.items.length;
+
+    html += `
+      <div class="semester-group-card">
+        <div class="semester-group-header">
+          <div class="sem-group-title">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" style="color: #10b981;">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>${escapeHtml(g.label)}</span>
+          </div>
+          <div class="sem-group-meta">
+            <span style="font-size: 0.84rem; color: var(--text-muted); font-weight: 600;">${countMk} Mata Kuliah</span>
+            <span class="sks-badge-pill">${totalSksGroup} SKS</span>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="kurikulum-clean-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Kode MK</th>
+                <th>Nama Mata Kuliah</th>
+                <th style="width: 170px;">Kategori</th>
+                <th style="width: 90px; text-align: center;">Bobot</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    g.items.forEach(mk => {
+      let badgeClass = 'badge-kuri-prodi';
+      if (mk.kategori_mk === 'Universitas') badgeClass = 'badge-kuri-univ';
+      else if (mk.kategori_mk === 'Fakultas') badgeClass = 'badge-kuri-fakultas';
+      else if (mk.kategori_mk === 'Kompetensi Pendukung') badgeClass = 'badge-kuri-kp';
+      else if (mk.status_mk === 'Pilihan') badgeClass = 'badge-kuri-pilihan';
+
+      html += `
+        <tr>
+          <td><span class="kode-mk-mono">${escapeHtml(mk.kode_mk)}</span></td>
+          <td><strong>${escapeHtml(mk.nama_mk)}</strong></td>
+          <td><span class="badge-kuri ${badgeClass}">${escapeHtml(mk.kategori_mk || mk.status_mk)}</span></td>
+          <td style="text-align: center;"><span class="sks-badge-pill" style="padding: 2px 8px; font-size: 0.8rem;">${mk.sks} SKS</span></td>
+        </tr>
+      `;
+    });
+
+    html += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  });
+
+  listContainer.innerHTML = html;
+}
+
+function renderKurikulumPerubahanView() {
+  const tbody = document.getElementById('tbody-kurikulum-perubahan');
+  if (!tbody) return;
+
+  if (!currentKurikulumPerubahan || currentKurikulumPerubahan.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 30px; color: var(--text-muted);">
+          Belum ada catatan perubahan kurikulum untuk prodi ${currentKurikulumProdi}.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  let html = '';
+  currentKurikulumPerubahan.forEach((item, idx) => {
+    html += `
+      <tr>
+        <td style="text-align: center; font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+        <td><strong>${escapeHtml(item.aspek_perubahan)}</strong></td>
+        <td>
+          <div style="color: var(--text-muted);">${escapeHtml(item.kurikulum_2024)}</div>
+          <span class="badge-change-old">2024</span>
+        </td>
+        <td>
+          <div style="font-weight: 700; color: #10b981;">${escapeHtml(item.kurikulum_2025)}</div>
+          <span class="badge-change-new">2025 Baru</span>
+        </td>
+        <td>
+          <div style="font-size: 0.88rem; color: var(--text-dark); line-height: 1.45;">
+            ${escapeHtml(item.catatan_dampak)}
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function printKurikulum() {
+  window.print();
+}
+
+// Global exports
+window.enterKurikulumMode = enterKurikulumMode;
+window.exitKurikulumMode = exitKurikulumMode;
+window.closeSettingAndOpenKurikulumMode = closeSettingAndOpenKurikulumMode;
+window.setKurikulumProdi = setKurikulumProdi;
+window.setKurikulumTahun = setKurikulumTahun;
+window.switchKurikulumTab = switchKurikulumTab;
+window.filterKurikulumBySem = filterKurikulumBySem;
+window.filterKurikulumSemesterList = filterKurikulumSemesterList;
+window.clearKurikulumSearch = clearKurikulumSearch;
+window.printKurikulum = printKurikulum;
+
 
 
 
