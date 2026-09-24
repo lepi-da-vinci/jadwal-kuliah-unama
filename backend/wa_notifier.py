@@ -761,6 +761,111 @@ def get_statistik_akademik(kategori: str):
             cursor.close()
             conn.close()
 
+def get_info_kurikulum(prodi: str = None, tahun: str = None, semester: str = None, kata_kunci: str = None):
+    """Mencari data kurikulum resmi (TI, SI, SK untuk Kurikulum 2024 & 2025): cek daftar mata kuliah per semester, bobot SKS, mata kuliah pilihan, atau analisis perbandingan kurikulum."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = "SELECT * FROM kurikulum_mata_kuliah WHERE 1=1"
+        params = []
+
+        if prodi and prodi.strip() != '':
+            p_clean = prodi.strip().upper()
+            if 'INFORMATIKA' in p_clean or p_clean == 'TI':
+                query += " AND prodi = 'TI'"
+            elif 'SISTEM INFORMASI' in p_clean or p_clean == 'SI':
+                query += " AND prodi = 'SI'"
+            elif 'KOMPUTER' in p_clean or p_clean == 'SK':
+                query += " AND prodi = 'SK'"
+
+        if tahun and tahun.strip() != '':
+            t_clean = tahun.strip()
+            if '2025' in t_clean or 'baru' in t_clean.lower():
+                query += " AND tahun_kurikulum = '2025'"
+            elif '2024' in t_clean or 'lama' in t_clean.lower():
+                query += " AND tahun_kurikulum = '2024'"
+
+        if semester and semester.strip() != '':
+            s_clean = semester.strip()
+            digits = re.findall(r'\d+', s_clean)
+            if digits:
+                query += " AND semester_angka = %s"
+                params.append(int(digits[0]))
+            elif 'pilihan' in s_clean.lower():
+                query += " AND status_mk = 'Pilihan'"
+
+        if kata_kunci and kata_kunci.strip() != '':
+            query += " AND (nama_mk LIKE %s OR kode_mk LIKE %s)"
+            params.append(f"%{kata_kunci.strip()}%")
+            params.append(f"%{kata_kunci.strip()}%")
+
+        query += " ORDER BY prodi, tahun_kurikulum, CASE WHEN semester_angka IS NULL THEN 99 ELSE semester_angka END, kode_mk LIMIT 30"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        if not rows:
+            return "Tidak ditemukan data mata kuliah kurikulum yang sesuai dengan kriteria."
+
+        total_sks = sum(r['sks'] for r in rows)
+        first_r = rows[0]
+        header_prodi = first_r['nama_prodi'] if len(set(r['prodi'] for r in rows)) == 1 else "Lintas Prodi"
+        header_tahun = f"Kurikulum {first_r['tahun_kurikulum']}" if len(set(r['tahun_kurikulum'] for r in rows)) == 1 else "Kurikulum 2024/2025"
+
+        msg = f"*Kurikulum {header_prodi} ({header_tahun})*\n"
+        msg += f"Total: {len(rows)} Mata Kuliah ({total_sks} SKS)\n\n"
+
+        current_sem = None
+        for r in rows:
+            if r['semester_label'] != current_sem:
+                current_sem = r['semester_label']
+                msg += f"*{current_sem}:*\n"
+            msg += f"- {r['kode_mk']} {r['nama_mk']} ({r['sks']} SKS)\n"
+
+        return msg.strip()
+    except Exception as e:
+        return f"Error mengambil kurikulum: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_perubahan_kurikulum(prodi: str = None):
+    """Melihat analisis perbedaan / perubahan kurikulum 2024 (lama) ke 2025 (baru) untuk prodi TI, SI, atau SK."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        query = "SELECT * FROM kurikulum_perubahan WHERE 1=1"
+        params = []
+        if prodi and prodi.strip() != '':
+            p_clean = prodi.strip().upper()
+            if 'INFORMATIKA' in p_clean or p_clean == 'TI': query += " AND prodi = 'TI'"
+            elif 'SISTEM INFORMASI' in p_clean or p_clean == 'SI': query += " AND prodi = 'SI'"
+            elif 'KOMPUTER' in p_clean or p_clean == 'SK': query += " AND prodi = 'SK'"
+
+        query += " ORDER BY prodi, id_perubahan LIMIT 20"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        if not rows:
+            return "Belum ada catatan perubahan kurikulum untuk prodi tersebut."
+
+        msg = "*Perubahan Kurikulum 2024 ke 2025*\n\n"
+        for r in rows:
+            msg += f"[{r['prodi']}] *{r['aspek_perubahan']}*\n"
+            msg += f"- 2024: {r['kurikulum_2024']}\n"
+            msg += f"- 2025: {r['kurikulum_2025']}\n"
+            msg += f"- Catatan: {r['catatan_dampak']}\n\n"
+
+        return msg.strip()
+    except Exception as e:
+        return f"Error perubahan kurikulum: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 def get_ngrok_link():
     """Mendapatkan link server aktif (Cloudflare Tunnel atau Ngrok) saat ini dan info scan QR di monitor."""
     # 1. Cek apakah ada URL Publik di .env (misal domain custom Cloudflare)
@@ -985,7 +1090,8 @@ ai_tools = [
     cek_semua_lab_kampus, cek_lab_kosong, cari_posisi_dosen,
     get_info_mase, get_ngrok_link, update_profil_aslab,
     list_aslab_lain, kirim_pesan_ke_aslab,
-    get_statistik_lab_saya, get_statistik_akademik
+    get_statistik_lab_saya, get_statistik_akademik,
+    get_info_kurikulum, get_perubahan_kurikulum
 ]
 
 chat_sessions = {}
@@ -993,7 +1099,7 @@ def get_or_create_chat_session(sender, nama_aslab, nama_ruangan, kampus):
     if sender not in chat_sessions:
         system_instruction = f"""Kamu adalah bot operasional jadwal kampus UNAMA untuk WhatsApp.
 Lawan bicaramu: Aslab '{nama_aslab}' ({nama_ruangan} {kampus}).
-Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab, statistik lab.
+Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab, statistik lab, info kurikulum mata kuliah.
 Selalu gunakan tools/functions untuk mengambil data, jangan pernah mengarang data.
 Tanggal acuan: {datetime.datetime.now().strftime('%Y-%m-%d')} ({format_tanggal_indo(datetime.datetime.now())}).
 
@@ -1016,6 +1122,9 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
 9. STATISTIK PENGGUNAAN LAB, KELAS, & DOSEN (SANGAT PENTING):
    - DEFAULT (JIKA TIDAK DIMINTA SPESIFIK): Jika aslab bertanya tentang statistik (misal: "statistik lab", "statistik penggunaan", "seberapa sering lab dipakai", "data statistik", dll), PANGGIL TOOL `get_statistik_lab_saya()` dan HANYA TAMPILKAN statistik lab aslab itu sendiri ('{nama_ruangan}'). JANGAN PERNAH menambahkan statistik kelas atau dosen pada jawaban default ini.
    - STATISTIK KELAS / DOSEN: HANYA panggil tool `get_statistik_akademik(kategori='dosen' atau 'kelas')` jika aslab secara spesifik/eksplisit memintanya (misal: "siapa dosen paling sibuk?", "statistik dosen", "statistik kelas terpadat").
+10. INFORMASI KURIKULUM & MATA KULIAH (TI, SI, SK - KURIKULUM 2024 & 2025):
+   - Jika aslab bertanya tentang kurikulum, daftar mata kuliah per semester, bobot SKS, atau mata kuliah pilihan, panggil tool `get_info_kurikulum(prodi, tahun, semester, kata_kunci)`.
+   - Jika aslab bertanya tentang perbedaan/perubahan kurikulum 2024 vs 2025 (misal: "apa beda kurikulum 2024 dan 2025 di TI?"), panggil tool `get_perubahan_kurikulum(prodi)`.
 
 FITUR RAHASIA (TITIP / SAMPAIKAN PESAN KE ASLAB LAIN):
 - Fitur ini adalah fitur rahasia AI (TIDAK DITAMPILKAN di daftar menu manapun).

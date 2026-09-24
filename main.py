@@ -1109,6 +1109,162 @@ def get_statistics(semester: str = None):
             cursor.close()
             conn.close()
 
+# ==================== ENDPOINT KURIKULUM AKADEMIK ====================
+
+@app.get("/api/kurikulum")
+def get_kurikulum(
+    prodi: str = None, 
+    tahun: str = None, 
+    semester: str = None, 
+    status_mk: str = None, 
+    kategori: str = None, 
+    search: str = None
+):
+    """
+    Mengambil data mata kuliah kurikulum (TI, SI, SK untuk Kurikulum 2024 & 2025).
+    Mendukung filter prodi, tahun_kurikulum, semester, status (Wajib/Pilihan), dan pencarian nama/kode.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM kurikulum_mata_kuliah WHERE 1=1"
+        params = []
+        
+        if prodi and prodi.strip() != '' and prodi.lower() != 'all':
+            query += " AND prodi = %s"
+            params.append(prodi.upper().strip())
+            
+        if tahun and tahun.strip() != '' and tahun.lower() != 'all':
+            query += " AND tahun_kurikulum = %s"
+            params.append(tahun.strip())
+            
+        if semester and semester.strip() != '' and semester.lower() != 'all':
+            sem_clean = semester.strip()
+            if sem_clean.isdigit():
+                query += " AND semester_angka = %s"
+                params.append(int(sem_clean))
+            elif 'pilihan' in sem_clean.lower():
+                query += " AND status_mk = 'Pilihan'"
+            else:
+                query += " AND semester_label LIKE %s"
+                params.append(f"%{sem_clean}%")
+                
+        if status_mk and status_mk.strip() != '' and status_mk.lower() != 'all':
+            query += " AND status_mk = %s"
+            params.append(status_mk.capitalize().strip())
+            
+        if kategori and kategori.strip() != '' and kategori.lower() != 'all':
+            query += " AND kategori_mk = %s"
+            params.append(kategori.strip())
+            
+        if search and search.strip() != '':
+            query += " AND (kode_mk LIKE %s OR nama_mk LIKE %s)"
+            params.append(f"%{search.strip()}%")
+            params.append(f"%{search.strip()}%")
+            
+        query += " ORDER BY prodi, tahun_kurikulum, CASE WHEN semester_angka IS NULL THEN 99 ELSE semester_angka END, kode_mk"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        total_sks = sum(r.get('sks', 0) for r in rows)
+        
+        # Kelompokkan per semester
+        breakdown_sem = {}
+        for r in rows:
+            s_label = r['semester_label']
+            if s_label not in breakdown_sem:
+                breakdown_sem[s_label] = {'semester': s_label, 'total_mk': 0, 'total_sks': 0}
+            breakdown_sem[s_label]['total_mk'] += 1
+            breakdown_sem[s_label]['total_sks'] += r.get('sks', 0)
+            
+        return {
+            "status": "success",
+            "total_mk": len(rows),
+            "total_sks": total_sks,
+            "breakdown_semester": list(breakdown_sem.values()),
+            "data": rows
+        }
+    except Exception as e:
+        print(f"[API Kurikulum Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/kurikulum/summary")
+def get_kurikulum_summary():
+    """
+    Mengambil ringkasan matrik kurikulum (total SKS wajib, total MK pilihan, per prodi dan tahun).
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT 
+                prodi, 
+                nama_prodi, 
+                tahun_kurikulum, 
+                status_mk, 
+                COUNT(*) as total_mk, 
+                SUM(sks) as total_sks
+            FROM kurikulum_mata_kuliah
+            GROUP BY prodi, nama_prodi, tahun_kurikulum, status_mk
+            ORDER BY prodi, tahun_kurikulum, status_mk DESC
+        """)
+        rows = cursor.fetchall()
+        
+        cursor.execute("SELECT prodi, COUNT(*) as total_perubahan FROM kurikulum_perubahan GROUP BY prodi")
+        perubahan_counts = {r['prodi']: r['total_perubahan'] for r in cursor.fetchall()}
+        
+        return {
+            "status": "success",
+            "matrix": rows,
+            "perubahan_counts": perubahan_counts
+        }
+    except Exception as e:
+        print(f"[API Kurikulum Summary Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/kurikulum/perubahan")
+def get_kurikulum_perubahan(prodi: str = None):
+    """
+    Mengambil data analisis komparatif perubahan kurikulum 2024 vs 2025.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM kurikulum_perubahan WHERE 1=1"
+        params = []
+        if prodi and prodi.strip() != '' and prodi.lower() != 'all':
+            query += " AND prodi = %s"
+            params.append(prodi.upper().strip())
+            
+        query += " ORDER BY prodi, id_perubahan"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        return {
+            "status": "success",
+            "total": len(rows),
+            "data": rows
+        }
+    except Exception as e:
+        print(f"[API Kurikulum Perubahan Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.post("/api/db/clear")
 @app.delete("/api/db/clear")
 @app.post("/api/clear-db")

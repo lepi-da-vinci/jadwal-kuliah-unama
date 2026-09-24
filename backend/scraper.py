@@ -215,6 +215,40 @@ def init_db_schema():
                 FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS kurikulum_mata_kuliah (
+                id_kurikulum INT AUTO_INCREMENT PRIMARY KEY,
+                prodi VARCHAR(20) NOT NULL,
+                nama_prodi VARCHAR(100) NOT NULL,
+                tahun_kurikulum VARCHAR(10) NOT NULL,
+                semester_label VARCHAR(50) NOT NULL,
+                semester_angka INT NULL,
+                status_mk ENUM('Wajib', 'Pilihan') DEFAULT 'Wajib',
+                kategori_mk VARCHAR(50) NULL,
+                kode_mk VARCHAR(50) NOT NULL,
+                nama_mk VARCHAR(150) NOT NULL,
+                sks INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_prodi_tahun_kode (prodi, tahun_kurikulum, kode_mk),
+                INDEX idx_prodi_tahun_sem (prodi, tahun_kurikulum, semester_angka),
+                INDEX idx_kode_mk (kode_mk),
+                INDEX idx_nama_mk (nama_mk)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS kurikulum_perubahan (
+                id_perubahan INT AUTO_INCREMENT PRIMARY KEY,
+                prodi VARCHAR(20) NOT NULL,
+                aspek_perubahan VARCHAR(150) NOT NULL,
+                kurikulum_2024 TEXT NOT NULL,
+                kurikulum_2025 TEXT NOT NULL,
+                catatan_dampak TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_perubahan_prodi (prodi)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
         
         cursor.execute("SELECT COUNT(*) FROM ruangan")
         if cursor.fetchone()[0] == 0:
