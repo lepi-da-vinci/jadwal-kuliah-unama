@@ -10520,6 +10520,9 @@ function closeSettingAndOpenStatsMode() {
 }
 
 function switchStatsTab(tabName) {
+  if (currentStatsViewMode !== 'bar') {
+    setStatsViewMode('bar');
+  }
   const tabs = ['lab', 'kelas', 'dosen'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-stats-${t}`);
@@ -12092,6 +12095,25 @@ function filterKurikulumBySem(sem) {
   });
   filterKurikulumSemesterList();
 }
+
+function selectKurikulumKategori(value, label) {
+  const filterInput = document.getElementById('kuri-filter-kategori');
+  if (filterInput) filterInput.value = value;
+
+  const labelEl = document.getElementById('label-kuri-kategori');
+  if (labelEl) labelEl.textContent = label;
+
+  const items = document.querySelectorAll('#dropdown-kuri-kategori .aslab-list-item');
+  items.forEach(item => {
+    item.classList.toggle('active', item.getAttribute('data-value') === value);
+  });
+
+  const dropdown = document.getElementById('dropdown-kuri-kategori');
+  if (dropdown) dropdown.classList.remove('open');
+
+  filterKurikulumSemesterList();
+}
+window.selectKurikulumKategori = selectKurikulumKategori;
 
 function clearKurikulumSearch() {
   const input = document.getElementById('kuri-search-input');

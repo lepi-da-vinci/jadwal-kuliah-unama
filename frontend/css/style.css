@@ -6133,8 +6133,9 @@ body.kurikulum-explorer-active > .container > .card {
 .stats-explorer-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   width: 100%;
+  padding-bottom: 60px;
   animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -6143,34 +6144,90 @@ body.kurikulum-explorer-active > .container > .card {
   color: #ffffff;
 }
 
-.card-dosen {
-  border-left: 4px solid #10b981;
+/* KPI Card Custom Color Themes for Stats */
+.card-kuri-jam {
+  border-left: 4px solid #6366f1;
+}
+.icon-jam {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+}
+.badge-jam {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
 }
 
-/* Navigation Tabs */
-.stats-tabs-nav {
+.card-kuri-lab {
+  border-left: 4px solid #8b5cf6;
+}
+.icon-lab {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+.badge-lab {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.card-kuri-kelas {
+  border-left: 4px solid #0284c7;
+}
+.icon-kelas {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+}
+.badge-kelas {
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+}
+
+.card-kuri-dosen {
+  border-left: 4px solid #10b981;
+}
+.icon-dosen {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+.badge-dosen {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+/* Unified Toolbar (Category Tabs on Left + Mode Pills on Right) */
+.stats-unified-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   background: var(--bg-card);
-  padding: 6px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
-.stats-tab-btn {
+.stats-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  border: none;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.stats-category-tabs .stats-tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 18px;
-  border: none;
+  padding: 9px 18px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font-heading);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 700;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -6178,15 +6235,66 @@ body.kurikulum-explorer-active > .container > .card {
   white-space: nowrap;
 }
 
-.stats-tab-btn:hover {
+.stats-category-tabs .stats-tab-btn:hover {
   color: var(--text-dark);
   background: var(--bg-hover);
 }
 
-.stats-tab-btn.active {
+.stats-category-tabs .stats-tab-btn.active {
   background: #8b5cf6;
   color: #ffffff;
+  border-color: #8b5cf6;
   box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+}
+
+.stats-mode-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-mode-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stats-view-mode-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  padding: 4px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+}
+
+.stats-mode-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.stats-mode-pill-btn:hover {
+  color: var(--text-dark);
+}
+
+.stats-mode-pill-btn.active {
+  background: var(--bg-card);
+  color: #8b5cf6;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
 }
 
 .stats-tab-pane {
@@ -6202,17 +6310,18 @@ body.kurikulum-explorer-active > .container > .card {
 .stats-highlights-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .stats-highlight-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   box-shadow: var(--shadow-sm);
   position: relative;
   overflow: hidden;
@@ -6240,14 +6349,16 @@ body.kurikulum-explorer-active > .container > .card {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .stats-hl-badge {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 9999px;
 }
 
@@ -6266,10 +6377,27 @@ body.kurikulum-explorer-active > .container > .card {
   color: #10b981;
 }
 
-.stats-hl-sub {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-muted);
+.stats-hl-badge-sub {
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 9999px;
+}
+
+.badge-busy-sub {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.badge-quiet-sub {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.stats-hl-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .stats-hl-title {
@@ -6277,36 +6405,44 @@ body.kurikulum-explorer-active > .container > .card {
   font-size: 1.35rem;
   font-weight: 800;
   color: var(--text-dark);
+  line-height: 1.25;
 }
 
 .stats-hl-detail {
   font-size: 0.88rem;
   color: var(--text-muted);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .stats-campus-bars {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 12px;
+  margin-top: 6px;
 }
 
 .campus-bar-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .campus-bar-label {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 0.84rem;
+  font-weight: 600;
   color: var(--text-dark);
 }
 
+.campus-bar-label strong {
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
 .campus-prog-track {
-  height: 8px;
+  height: 10px;
   background: var(--bg-hover);
   border-radius: 9999px;
   overflow: hidden;
@@ -6333,7 +6469,7 @@ body.kurikulum-explorer-active > .container > .card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 22px;
+  padding: 24px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -6342,14 +6478,14 @@ body.kurikulum-explorer-active > .container > .card {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .stats-card-title {
-  margin: 0;
+  margin: 0 0 4px 0;
   font-family: var(--font-heading);
-  font-size: 1.12rem;
+  font-size: 1.15rem;
   font-weight: 800;
   color: var(--text-dark);
 }
@@ -6359,13 +6495,23 @@ body.kurikulum-explorer-active > .container > .card {
   color: var(--text-muted);
 }
 
+.stats-card-meta-pill {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+}
+
 .stats-stacked-bar {
   display: flex;
-  height: 14px;
+  height: 16px;
   background: var(--bg-hover);
   border-radius: 9999px;
   overflow: hidden;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .stacked-bar-segment {
@@ -6414,6 +6560,8 @@ body.kurikulum-explorer-active > .container > .card {
 .stats-table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
 }
 
 .stats-custom-table {
@@ -6424,8 +6572,8 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 .stats-custom-table th {
-  background: var(--bg-hover);
-  padding: 12px 14px;
+  background: var(--bg-elevated);
+  padding: 13px 16px;
   font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -6436,7 +6584,7 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 .stats-custom-table td {
-  padding: 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-color);
   vertical-align: middle;
 }
@@ -7342,6 +7490,8 @@ body.kurikulum-explorer-active > .container > .card {
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  min-height: 155px;
   gap: 12px;
   position: relative;
   overflow: hidden;
@@ -7486,6 +7636,28 @@ body.kurikulum-explorer-active > .container > .card {
   overflow-x: auto;
 }
 
+.kurikulum-tabs-nav .stats-tab-btn {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.kurikulum-tabs-nav .stats-tab-btn:hover {
+  color: var(--text-dark) !important;
+  background: var(--bg-hover) !important;
+}
+
 .kurikulum-tabs-nav .stats-tab-btn.active {
   background: #10b981 !important;
   color: #ffffff !important;
@@ -7494,13 +7666,23 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 .tab-badge-pill {
-  background: rgba(255, 255, 255, 0.25);
-  color: inherit;
   font-size: 0.72rem;
-  padding: 1px 7px;
-  border-radius: 10px;
+  padding: 2px 8px;
+  border-radius: 9999px;
   font-weight: 800;
-  margin-left: 4px;
+  margin-left: 6px;
+  transition: all 0.2s ease;
+}
+
+.kurikulum-tabs-nav .stats-tab-btn.active .tab-badge-pill {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.kurikulum-tabs-nav .stats-tab-btn:not(.active) .tab-badge-pill {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
 }
 
 /* ==================== TAB 1: TOOLBAR & SEARCH ==================== */
@@ -7576,6 +7758,7 @@ body.kurikulum-explorer-active > .container > .card {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  position: relative;
 }
 
 .kuri-select-label {
@@ -7583,25 +7766,68 @@ body.kurikulum-explorer-active > .container > .card {
   font-weight: 700;
   color: var(--text-muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.kuri-select {
+.kuri-custom-select-wrapper {
+  min-width: 220px;
+  width: 230px;
+  position: relative;
+}
+
+.kuri-select-trigger {
   padding: 9px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-elevated);
   color: var(--text-dark);
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
-  min-width: 210px;
-  transition: border-color 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
-.kuri-select:focus {
-  outline: none;
+.kuri-select-trigger:hover,
+.kuri-custom-select-wrapper:hover .kuri-select-trigger {
   border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
+
+.kuri-select-dropdown {
+  min-width: 230px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  z-index: 10050;
+}
+
+.kuri-select-dropdown .aslab-list-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 2px;
+}
+
+.kuri-select-dropdown .aslab-list-item:hover:not(.active) {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  transform: translateX(3px);
+}
+
+.kuri-select-dropdown .aslab-list-item.active {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  font-weight: 700;
 }
 
 /* Row 2: Semester Filter Bar */

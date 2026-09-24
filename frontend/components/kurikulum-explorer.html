@@ -203,15 +203,31 @@
         </div>
 
         <div class="kuri-toolbar-select-wrap">
-          <label for="kuri-filter-kategori" class="kuri-select-label">Kategori:</label>
-          <select id="kuri-filter-kategori" class="kuri-select" onchange="filterKurikulumSemesterList()">
-            <option value="all">Semua Kategori</option>
-            <option value="Universitas">Universitas (UN)</option>
-            <option value="Fakultas">Fakultas (FK)</option>
-            <option value="Program Studi">Program Studi (PR)</option>
-            <option value="Kompetensi Pendukung">Kompetensi Pendukung (KP)</option>
-            <option value="Pilihan">Mata Kuliah Pilihan (MP)</option>
-          </select>
+          <span class="kuri-select-label">Kategori:</span>
+          <div class="custom-select-wrapper kuri-custom-select-wrapper" id="wrapper-kuri-kategori">
+            <div class="custom-select-trigger kuri-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
+              onclick="toggleCustomSelect('kuri-kategori', event)">
+              <span class="custom-select-label" id="label-kuri-kategori">Semua Kategori</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+            <div class="aslab-list-container custom-select-dropdown kuri-select-dropdown" id="dropdown-kuri-kategori">
+              <div class="aslab-list-item active" data-value="all"
+                onclick="selectKurikulumKategori('all', 'Semua Kategori')">Semua Kategori</div>
+              <div class="aslab-list-item" data-value="Universitas"
+                onclick="selectKurikulumKategori('Universitas', 'Universitas (UN)')">Universitas (UN)</div>
+              <div class="aslab-list-item" data-value="Fakultas"
+                onclick="selectKurikulumKategori('Fakultas', 'Fakultas (FK)')">Fakultas (FK)</div>
+              <div class="aslab-list-item" data-value="Program Studi"
+                onclick="selectKurikulumKategori('Program Studi', 'Program Studi (PR)')">Program Studi (PR)</div>
+              <div class="aslab-list-item" data-value="Kompetensi Pendukung"
+                onclick="selectKurikulumKategori('Kompetensi Pendukung', 'Kompetensi Pendukung (KP)')">Kompetensi Pendukung (KP)</div>
+              <div class="aslab-list-item" data-value="Pilihan"
+                onclick="selectKurikulumKategori('Pilihan', 'Mata Kuliah Pilihan (MP)')">Mata Kuliah Pilihan (MP)</div>
+            </div>
+            <input type="hidden" id="kuri-filter-kategori" value="all">
+          </div>
         </div>
       </div>
 
