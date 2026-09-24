@@ -11,3 +11,4 @@ tunnel_logs/*
 !tunnel_logs/.gitkeep
 *.log
 graphify-out/
+ide.md

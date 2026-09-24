@@ -850,6 +850,9 @@ def get_statistics(semester: str = None):
         total_lab_tm = 0
         total_lab_ol = 0
         total_lab_cc = 0
+        univ_tm = 0
+        univ_ol = 0
+        univ_cc = 0
 
         kampus_lab = {
             "Kobar": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0},
@@ -892,6 +895,10 @@ def get_statistics(semester: str = None):
                 metode = "OL"
             elif metode not in ["TM", "OL", "CC"]:
                 metode = "TM"
+
+            if metode == "TM": univ_tm += 1
+            elif metode == "OL": univ_ol += 1
+            elif metode == "CC": univ_cc += 1
 
             # 1. Agregasi Lab
             ruang = r.get("nama_ruangan") or ""
@@ -995,6 +1002,15 @@ def get_statistics(semester: str = None):
             "persen_tm": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
             "persen_ol": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
             "persen_cc": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "metode_rasio": {
+                "total_sesi": total_lab_sesi,
+                "tm": total_lab_tm,
+                "ol": total_lab_ol,
+                "cc": total_lab_cc,
+                "tm_pct": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+                "ol_pct": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+                "cc_pct": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            },
             "lab_tersibuk": lab_rankings[0] if lab_rankings else None,
             "lab_terkosong": lab_rankings[-1] if len(lab_rankings) > 1 else None,
         }
@@ -1039,13 +1055,23 @@ def get_statistics(semester: str = None):
         total_dosen_sesi = sum(d["total_sesi"] for d in dosen_data.values())
         rata_sesi_dosen = round(total_dosen_sesi / dosen_aktif_count, 1) if dosen_aktif_count > 0 else 0
 
+        total_rows = len(rows)
         summary = {
-            "total_perkuliahan": len(rows),
+            "total_perkuliahan": total_rows,
             "total_jam_operasional": round(total_jam_keseluruhan, 2),
             "total_lab_aktif": len(lab_data),
             "total_kelas": len(kelas_data),
             "total_dosen": dosen_aktif_count,
-            "rata_sesi_dosen": rata_sesi_dosen
+            "rata_sesi_dosen": rata_sesi_dosen,
+            "metode_rasio": {
+                "total_sesi": total_rows,
+                "tm": univ_tm,
+                "ol": univ_ol,
+                "cc": univ_cc,
+                "tm_pct": round((univ_tm / total_rows) * 100, 1) if total_rows > 0 else 0,
+                "ol_pct": round((univ_ol / total_rows) * 100, 1) if total_rows > 0 else 0,
+                "cc_pct": round((univ_cc / total_rows) * 100, 1) if total_rows > 0 else 0,
+            }
         }
 
         return {

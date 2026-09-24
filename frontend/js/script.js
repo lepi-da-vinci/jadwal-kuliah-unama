@@ -10611,14 +10611,18 @@ function generateSvgDonut(segments, centerVal, centerLabel) {
   const C = 251.327; // 2 * PI * 40
   let currentOffset = 0;
   let circlesSvg = '';
+  const activeSegments = segments.filter(s => s.pct > 0);
+  const hasMultiple = activeSegments.length > 1;
+  const gap = hasMultiple ? 2.5 : 0;
 
   segments.forEach(seg => {
     if (seg.pct <= 0) return;
     const segLen = (seg.pct / 100) * C;
+    const visibleLen = Math.max(segLen - gap, 0.5);
     circlesSvg += `
       <circle cx="50" cy="50" r="40" fill="transparent"
         stroke="${seg.color}" stroke-width="13"
-        stroke-dasharray="${segLen.toFixed(2)} ${(C - segLen).toFixed(2)}"
+        stroke-dasharray="${visibleLen.toFixed(2)} ${(C - visibleLen).toFixed(2)}"
         stroke-dashoffset="${(-currentOffset).toFixed(2)}"
         transform="rotate(-90 50 50)"
         style="transition: stroke-dasharray 0.6s ease; cursor: pointer;">
@@ -10649,16 +10653,26 @@ function renderDonutStats() {
   // 1. Donut Metode Pembelajaran (TM vs OL vs CC)
   const wrapMetode = document.getElementById('donut-metode-svg-wrap');
   const legendMetode = document.getElementById('donut-metode-legend');
-  const rasio = lb.summary?.metode_rasio || {};
+  
+  // Ambil rasio metode dari backend summary atau lab_stats summary
+  const rasioObj = s.metode_rasio || lb.summary?.metode_rasio || {};
+  const totalSesi = rasioObj.total_sesi ?? lb.summary?.total_sesi ?? 0;
+  const tmVal = rasioObj.tm ?? lb.summary?.tm ?? 0;
+  const olVal = rasioObj.ol ?? lb.summary?.ol ?? 0;
+  const ccVal = rasioObj.cc ?? lb.summary?.cc ?? 0;
+
+  const tmPct = rasioObj.tm_pct ?? lb.summary?.persen_tm ?? (totalSesi > 0 ? Math.round((tmVal / totalSesi) * 100) : 0);
+  const olPct = rasioObj.ol_pct ?? lb.summary?.persen_ol ?? (totalSesi > 0 ? Math.round((olVal / totalSesi) * 100) : 0);
+  const ccPct = rasioObj.cc_pct ?? lb.summary?.persen_cc ?? (totalSesi > 0 ? Math.round((ccVal / totalSesi) * 100) : 0);
 
   const segMetode = [
-    { label: 'Tatap Muka (TM)', val: `${rasio.tm || 0} Sesi`, pct: rasio.tm_pct || 0, color: '#10b981' },
-    { label: 'Kuliah Online (OL)', val: `${rasio.ol || 0} Sesi`, pct: rasio.ol_pct || 0, color: '#0ea5e9' },
-    { label: 'Dibatalkan (CC)', val: `${rasio.cc || 0} Sesi`, pct: rasio.cc_pct || 0, color: '#f43f5e' }
+    { label: 'Tatap Muka (TM)', val: `${tmVal} Sesi`, pct: tmPct, color: '#10b981' },
+    { label: 'Kuliah Online (OL)', val: `${olVal} Sesi`, pct: olPct, color: '#0ea5e9' },
+    { label: 'Dibatalkan (CC)', val: `${ccVal} Sesi`, pct: ccPct, color: '#f43f5e' }
   ];
 
   if (wrapMetode) {
-    wrapMetode.innerHTML = generateSvgDonut(segMetode, `${rasio.total_sesi || 0}`, 'Total Sesi');
+    wrapMetode.innerHTML = generateSvgDonut(segMetode, `${totalSesi}`, 'Total Sesi');
   }
   if (legendMetode) {
     legendMetode.innerHTML = segMetode.map(m => `
@@ -10683,8 +10697,8 @@ function renderDonutStats() {
   const thehokPct = 100 - kobarPct;
 
   const segKampus = [
-    { label: 'Kampus Kobar', val: `${kobarJam} Jam`, pct: kobarPct, color: '#6366f1' },
-    { label: 'Kampus Thehok', val: `${thehokJam} Jam`, pct: thehokPct, color: '#8b5cf6' }
+    { label: 'Kampus Kobar', val: `${kobarJam} Jam`, pct: kobarPct, color: '#0284c7' },
+    { label: 'Kampus Thehok', val: `${thehokJam} Jam`, pct: thehokPct, color: '#f59e0b' }
   ];
 
   if (wrapKampus) {
@@ -10750,7 +10764,11 @@ function renderMatrixCards() {
   const topKelas = (ks.top_aktif && ks.top_aktif[0]) || {};
   const topDosen = (ds.top_jam && ds.top_jam[0]) || {};
   const topMk = (ks.top_mk && ks.top_mk[0]) || {};
-  const rasio = lb.summary?.metode_rasio || {};
+  
+  const rasioObj = s.metode_rasio || lb.summary?.metode_rasio || {};
+  const tmPct = rasioObj.tm_pct ?? lb.summary?.persen_tm ?? 0;
+  const olPct = rasioObj.ol_pct ?? lb.summary?.persen_ol ?? 0;
+  const ccPct = rasioObj.cc_pct ?? lb.summary?.persen_cc ?? 0;
 
   wrap.innerHTML = `
     <!-- Card 1: Labor Paling Padat -->
@@ -10807,10 +10825,10 @@ function renderMatrixCards() {
     <div class="matrix-kpi-card" style="border-left: 4px solid #f59e0b;">
       <div class="matrix-card-head">
         <span class="matrix-card-title">Efektivitas Perkuliahan</span>
-        <span class="badge-mini-sem" style="background: rgba(245,158,11,0.15); color: #f59e0b;">${rasio.tm_pct || 0}% TM</span>
+        <span class="badge-mini-sem" style="background: rgba(245,158,11,0.15); color: #f59e0b;">${tmPct}% TM</span>
       </div>
-      <div class="matrix-card-val">${rasio.tm_pct || 0}% Tatap Muka</div>
-      <div class="matrix-card-desc">${rasio.ol_pct || 0}% perkuliahan daring (OL) dan ${rasio.cc_pct || 0}% jadwal dibatalkan (CC).</div>
+      <div class="matrix-card-val">${tmPct}% Tatap Muka</div>
+      <div class="matrix-card-desc">${olPct}% perkuliahan daring (OL) dan ${ccPct}% jadwal dibatalkan (CC).</div>
     </div>
   `;
 }

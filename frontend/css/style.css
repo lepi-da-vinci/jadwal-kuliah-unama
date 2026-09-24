@@ -6304,12 +6304,14 @@ body.stats-explorer-active #semester-explorer-container {
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.campus-prog-fill.bg-indigo {
-  background: linear-gradient(90deg, #6366f1, #4f46e5);
+.campus-prog-fill.bg-indigo,
+.campus-prog-fill.bg-kobar {
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
 }
 
-.campus-prog-fill.bg-purple {
-  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+.campus-prog-fill.bg-purple,
+.campus-prog-fill.bg-thehok {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
 }
 
 /* Card Box & Stacked Bar */
