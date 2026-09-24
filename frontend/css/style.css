@@ -7137,29 +7137,92 @@ body.kurikulum-explorer-active > .container > .card {
 .kurikulum-explorer-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   width: 100%;
   animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.kurikulum-banner-icon {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-  color: #ffffff;
+/* TOP BANNER 2-TIER DESIGN */
+.kurikulum-explorer-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
 }
 
+.kuri-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.kurikulum-banner-icon {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.kuri-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kuri-return-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border-color: #059669 !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
+}
+
+.kuri-return-btn:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  transform: translateY(-1px);
+}
+
+/* TIER 2: INTEGRATED CONTROLS */
+.kuri-banner-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  width: 100%;
+}
+
+.kuri-control-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kuri-control-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Switcher Prodi Pills */
 .kurikulum-prodi-pills {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-left: 12px;
 }
 
 .kuri-pill-btn {
-  background: var(--bg-card);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   border: 1.5px solid var(--border-color);
-  padding: 6px 14px;
+  padding: 7px 16px;
   border-radius: var(--radius-sm);
   font-family: var(--font-heading);
   font-size: 0.88rem;
@@ -7168,7 +7231,16 @@ body.kurikulum-explorer-active > .container > .card {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.kuri-pill-code {
+  font-size: 0.74rem;
+  font-weight: 800;
+  background: rgba(100, 116, 139, 0.15);
+  color: inherit;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .kuri-pill-btn:hover {
@@ -7185,6 +7257,12 @@ body.kurikulum-explorer-active > .container > .card {
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
 }
 
+.kuri-pill-btn.active .kuri-pill-code {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Switcher Tahun Kurikulum */
 .kurikulum-tahun-switcher {
   display: flex;
   align-items: center;
@@ -7202,7 +7280,7 @@ body.kurikulum-explorer-active > .container > .card {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-xs, 4px);
   font-family: var(--font-heading);
   font-size: 0.85rem;
@@ -7236,11 +7314,43 @@ body.kurikulum-explorer-active > .container > .card {
   background: #64748b;
 }
 
-/* Kurikulum KPI Grid */
+/* ==================== KPI HERO CARDS ==================== */
 .kurikulum-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .kurikulum-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .kurikulum-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kuri-kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kuri-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .card-kuri-wajib {
@@ -7259,11 +7369,128 @@ body.kurikulum-explorer-active > .container > .card {
   border-left: 4px solid #8b5cf6;
 }
 
-/* Tabs */
+.kuri-kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kuri-kpi-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-wajib {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.icon-matkul {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+}
+
+.icon-pilihan {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.icon-fokus {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.kuri-kpi-badge {
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.badge-wajib {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.badge-matkul {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.25);
+}
+
+.badge-pilihan {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.badge-fokus {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.kuri-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.kuri-kpi-val {
+  font-family: var(--font-heading);
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--text-dark);
+  line-height: 1.15;
+}
+
+.kuri-fokus-val {
+  font-size: 1.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kuri-kpi-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-top: 2px;
+}
+
+.kuri-kpi-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  white-space: normal;
+}
+
+/* ==================== TABS NAVIGATION ==================== */
+.kurikulum-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
 .kurikulum-tabs-nav .stats-tab-btn.active {
   background: #10b981 !important;
-  color: #ffffff;
+  color: #ffffff !important;
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35) !important;
+  border-color: #10b981 !important;
 }
 
 .tab-badge-pill {
@@ -7273,21 +7500,29 @@ body.kurikulum-explorer-active > .container > .card {
   padding: 1px 7px;
   border-radius: 10px;
   font-weight: 800;
+  margin-left: 4px;
 }
 
-/* Toolbar */
-.kurikulum-toolbar {
+/* ==================== TAB 1: TOOLBAR & SEARCH ==================== */
+.kurikulum-toolbar-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 14px;
-  flex-wrap: wrap;
   background: var(--bg-card);
-  padding: 12px 16px;
+  padding: 16px 20px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.kuri-toolbar-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 .kurikulum-search-box {
@@ -7295,19 +7530,19 @@ body.kurikulum-explorer-active > .container > .card {
   display: flex;
   align-items: center;
   flex: 1;
-  min-width: 260px;
+  min-width: 280px;
 }
 
 .kurikulum-search-box svg {
   position: absolute;
-  left: 12px;
+  left: 14px;
   color: var(--text-muted);
   pointer-events: none;
 }
 
 .kurikulum-search-box input {
   width: 100%;
-  padding: 9px 34px 9px 36px;
+  padding: 10px 38px 10px 42px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-elevated);
@@ -7326,39 +7561,80 @@ body.kurikulum-explorer-active > .container > .card {
 
 #kuri-search-clear {
   position: absolute;
-  right: 10px;
+  right: 12px;
   background: none;
   border: none;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   color: var(--text-muted);
   cursor: pointer;
   line-height: 1;
+  padding: 0;
 }
 
-.kurikulum-filter-group {
+.kuri-toolbar-select-wrap {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+
+.kuri-select-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.kuri-select {
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-dark);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 210px;
+  transition: border-color 0.2s ease;
+}
+
+.kuri-select:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+/* Row 2: Semester Filter Bar */
+.kuri-toolbar-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.kuri-filter-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .kurikulum-filter-pills {
   display: flex;
   align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  max-width: 520px;
-  padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .kuri-filter-btn {
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: 0.82rem;
   font-weight: 600;
   border: 1px solid var(--border-color);
   border-radius: 20px;
-  background: var(--bg-card);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -7368,6 +7644,7 @@ body.kurikulum-explorer-active > .container > .card {
 .kuri-filter-btn:hover {
   color: var(--text-dark);
   background: var(--bg-hover);
+  border-color: #10b981;
 }
 
 .kuri-filter-btn.active {
@@ -7377,28 +7654,11 @@ body.kurikulum-explorer-active > .container > .card {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
-.kuri-select {
-  padding: 7px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  color: var(--text-dark);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-
-.kuri-select:focus {
-  outline: none;
-  border-color: #10b981;
-}
-
-/* Semester Cards & Tables */
+/* ==================== TAB 1: SEMESTER CARDS & TABLES ==================== */
 .kurikulum-semester-grid {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .semester-group-card {
@@ -7418,7 +7678,7 @@ body.kurikulum-explorer-active > .container > .card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 18px;
+  padding: 14px 20px;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-color);
 }
@@ -7429,25 +7689,26 @@ body.kurikulum-explorer-active > .container > .card {
   color: var(--text-dark);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-family: var(--font-heading);
 }
 
 .sem-group-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .sks-badge-pill {
   background: rgba(16, 185, 129, 0.14);
   color: #10b981;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 12px;
   font-size: 0.85rem;
   border: 1px solid rgba(16, 185, 129, 0.3);
   display: inline-block;
+  white-space: nowrap;
 }
 
 .sks-badge-pill.highlight {
@@ -7469,17 +7730,18 @@ body.kurikulum-explorer-active > .container > .card {
 
 .kurikulum-clean-table th {
   background: var(--bg-card);
-  padding: 11px 16px;
+  padding: 12px 18px;
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
+  letter-spacing: 0.4px;
   border-bottom: 1px solid var(--border-color);
   text-align: left;
 }
 
 .kurikulum-clean-table td {
-  padding: 12px 16px;
+  padding: 13px 18px;
   font-size: 0.9rem;
   color: var(--text-dark);
   border-bottom: 1px solid var(--border-color);
@@ -7499,6 +7761,10 @@ body.kurikulum-explorer-active > .container > .card {
   font-weight: 700;
   font-size: 0.88rem;
   color: var(--text-dark);
+  background: var(--bg-elevated);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
 }
 
 /* Category Badges */
@@ -7507,8 +7773,8 @@ body.kurikulum-explorer-active > .container > .card {
   align-items: center;
   gap: 4px;
   font-size: 0.76rem;
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -7543,7 +7809,7 @@ body.kurikulum-explorer-active > .container > .card {
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
-/* Tab 2: Perubahan */
+/* ==================== TAB 2: ANALISIS PERUBAHAN ==================== */
 .kurikulum-perubahan-header {
   display: flex;
   align-items: center;
@@ -7551,16 +7817,16 @@ body.kurikulum-explorer-active > .container > .card {
   gap: 16px;
   flex-wrap: wrap;
   background: var(--bg-card);
-  padding: 16px 20px;
+  padding: 18px 24px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .kurikulum-perubahan-info h3 {
-  margin: 0 0 4px 0;
-  font-size: 1.15rem;
+  margin: 0 0 6px 0;
+  font-size: 1.18rem;
   color: var(--text-dark);
 }
 
@@ -7568,45 +7834,50 @@ body.kurikulum-explorer-active > .container > .card {
   margin: 0;
   font-size: 0.88rem;
   color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .kurikulum-perubahan-prodi-badge {
   background: #10b981;
   color: #ffffff;
-  padding: 6px 14px;
+  padding: 7px 16px;
   border-radius: 20px;
   font-weight: 700;
   font-size: 0.88rem;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+  white-space: nowrap;
 }
 
 .badge-change-new {
+  display: inline-block;
   background: rgba(16, 185, 129, 0.15);
   color: #10b981;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.74rem;
   font-weight: 700;
   border: 1px solid rgba(16, 185, 129, 0.3);
-  margin-left: 6px;
+  margin-top: 4px;
 }
 
 .badge-change-old {
+  display: inline-block;
   background: rgba(100, 116, 139, 0.15);
   color: #64748b;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.74rem;
   font-weight: 700;
   border: 1px solid rgba(100, 116, 139, 0.3);
-  margin-left: 6px;
+  margin-top: 4px;
 }
 
-/* Tab 3: Matriks */
-.kurikulum-matriks-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 18px;
+/* ==================== TAB 3: MATRIKS KOMPARASI (STACKED CLEAN DESIGN) ==================== */
+.kurikulum-matriks-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
 }
 
 .kurikulum-matriks-card {
@@ -7614,24 +7885,25 @@ body.kurikulum-explorer-active > .container > .card {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
-  padding: 20px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  width: 100%;
 }
 
 .matriks-card-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 12px;
+  padding-bottom: 14px;
 }
 
 .matriks-card-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-sm);
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7639,70 +7911,56 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 .matriks-card-header h4 {
-  margin: 0 0 3px 0;
-  font-size: 1.05rem;
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
   color: var(--text-dark);
 }
 
 .matriks-card-header p {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
 }
 
-.kuri-matriks-table {
+/* 3-Column Focus Cards */
+.prodi-focus-grid-new {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
   width: 100%;
 }
 
-.kuri-matriks-table th {
-  background: var(--bg-elevated);
-  padding: 10px 12px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
+@media (max-width: 992px) {
+  .prodi-focus-grid-new {
+    grid-template-columns: 1fr;
+  }
 }
 
-.kuri-matriks-table td {
-  padding: 10px 12px;
-  font-size: 0.88rem;
-  border-bottom: 1px solid var(--border-color);
-  vertical-align: middle;
-}
-
-.tr-total-sks td {
-  background: var(--bg-elevated);
-  font-size: 0.95rem;
-  border-top: 2px solid var(--border-color);
-}
-
-.prodi-focus-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.prodi-focus-item {
+.prodi-focus-card {
   background: var(--bg-elevated);
   border-radius: var(--radius-sm);
-  padding: 16px;
+  padding: 18px;
   border: 1px solid var(--border-color);
-  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.prodi-focus-item:hover {
-  transform: translateX(4px);
+.prodi-focus-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
 }
 
-.prodi-focus-item.prodi-ti {
+.prodi-focus-card.prodi-ti {
   border-left: 4px solid #0284c7;
 }
 
-.prodi-focus-item.prodi-si {
+.prodi-focus-card.prodi-si {
   border-left: 4px solid #f59e0b;
 }
 
-.prodi-focus-item.prodi-sk {
+.prodi-focus-card.prodi-sk {
   border-left: 4px solid #10b981;
 }
 
@@ -7730,23 +7988,67 @@ body.kurikulum-explorer-active > .container > .card {
   color: #10b981;
 }
 
-.prodi-focus-item h5 {
-  margin: 0 0 8px 0;
-  font-size: 0.96rem;
+.prodi-focus-card h5 {
+  margin: 0;
+  font-size: 1rem;
   color: var(--text-dark);
+  font-weight: 700;
+  line-height: 1.35;
 }
 
-.prodi-focus-item ul {
+.prodi-focus-list {
   margin: 0;
   padding-left: 20px;
   font-size: 0.86rem;
   color: var(--text-muted);
+  line-height: 1.5;
 }
 
-.prodi-focus-item li {
-  margin-bottom: 4px;
+.prodi-focus-list li {
+  margin-bottom: 6px;
 }
 
+.prodi-focus-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Full Width Matriks Table */
+.kuri-matriks-table-new {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kuri-matriks-table-new th {
+  background: var(--bg-elevated);
+  padding: 12px 16px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kuri-matriks-table-new td {
+  padding: 13px 16px;
+  font-size: 0.88rem;
+  color: var(--text-dark);
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.kuri-matriks-table-new tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.tr-total-sks td {
+  background: var(--bg-elevated) !important;
+  font-size: 0.95rem;
+  border-top: 2px solid var(--border-color) !important;
+  font-weight: 700;
+}
+
+/* ==================== LOADING STATE & RESPONSIVE ==================== */
 .kurikulum-loading-state {
   display: flex;
   flex-direction: column;
@@ -7761,17 +8063,29 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 @media (max-width: 768px) {
-  .kurikulum-prodi-pills {
-    margin-left: 0;
-    margin-top: 8px;
+  .kurikulum-explorer-banner {
+    padding: 16px;
   }
-  .kurikulum-filter-pills {
-    max-width: 100%;
+  .kuri-banner-controls {
+    flex-direction: column;
+    align-items: flex-start;
   }
-  .kurikulum-matriks-grid {
-    grid-template-columns: 1fr;
+  .kurikulum-toolbar-card {
+    padding: 14px;
+  }
+  .kuri-toolbar-top-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .kuri-toolbar-select-wrap {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .kuri-select {
+    flex: 1;
   }
 }
+
 
 
 

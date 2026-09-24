@@ -2144,131 +2144,157 @@
 <div id="kurikulum-explorer-container" class="kurikulum-explorer-wrapper" style="display: none;">
   <!-- TOP BANNER: KURIKULUM EXPLORER HEADER -->
   <div class="sem-explorer-banner kurikulum-explorer-banner">
-    <div class="sem-banner-left">
-      <div class="sem-banner-icon kurikulum-banner-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff;">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
-      </div>
-      <div>
-        <div class="sem-banner-title-wrap">
-          <h2 class="sem-banner-title">Katalog & Kurikulum Akademik</h2>
-          
-          <!-- Switcher Prodi Pills -->
-          <div class="kurikulum-prodi-pills">
-            <button type="button" class="kuri-pill-btn active" data-prodi="TI" onclick="setKurikulumProdi('TI')">
-              <span>Teknik Informatika (TI)</span>
-            </button>
-            <button type="button" class="kuri-pill-btn" data-prodi="SI" onclick="setKurikulumProdi('SI')">
-              <span>Sistem Informasi (SI)</span>
-            </button>
-            <button type="button" class="kuri-pill-btn" data-prodi="SK" onclick="setKurikulumProdi('SK')">
-              <span>Sistem Komputer (SK)</span>
-            </button>
-          </div>
+    <!-- TIER 1: HEADER & ACTIONS -->
+    <div class="kuri-banner-top">
+      <div class="sem-banner-left">
+        <div class="sem-banner-icon kurikulum-banner-icon">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
         </div>
-        <p class="sem-banner-subdesc">
-          <span class="sem-offline-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-          Database Kurikulum Resmi UNAMA • Pemetaan 128 SKS Wajib Lulus & Matriks Transformasi Silabus
-        </p>
+        <div>
+          <h2 class="sem-banner-title">Katalog & Kurikulum Akademik</h2>
+          <p class="sem-banner-subdesc">
+            <span class="sem-offline-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+            Database Kurikulum Resmi UNAMA • Pemetaan 128 SKS Wajib Lulus & Matriks Transformasi Silabus
+          </p>
+        </div>
+      </div>
+
+      <div class="sem-banner-right kuri-banner-actions">
+        <button type="button" class="btn btn-secondary sem-action-btn" onclick="printKurikulum()" title="Cetak Katalog Kurikulum">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+          <span>Cetak / PDF</span>
+        </button>
+
+        <button type="button" class="btn btn-secondary sem-action-btn" onclick="document.getElementById('theme-toggle')?.click()" title="Ganti Tema" style="padding: 10px 14px;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+
+        <button type="button" class="btn btn-primary sem-return-btn kuri-return-btn" onclick="exitKurikulumMode()" title="Kembali ke Dashboard Utama">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Kembali ke Dashboard Realtime</span>
+        </button>
       </div>
     </div>
 
-    <div class="sem-banner-right">
-      <!-- Switcher Kurikulum 2025 vs 2024 -->
-      <div class="kurikulum-tahun-switcher">
-        <button type="button" class="kuri-year-btn active" data-tahun="2025" onclick="setKurikulumTahun('2025')">
-          <span class="kuri-year-badge">Baru</span>
-          <span>Kurikulum 2025</span>
-        </button>
-        <button type="button" class="kuri-year-btn" data-tahun="2024" onclick="setKurikulumTahun('2024')">
-          <span class="kuri-year-badge old">Lama</span>
-          <span>Kurikulum 2024</span>
-        </button>
+    <!-- TIER 2: INTEGRATED CONTROL & FILTER BAR -->
+    <div class="kuri-banner-controls">
+      <div class="kuri-control-group">
+        <span class="kuri-control-label">Program Studi:</span>
+        <div class="kurikulum-prodi-pills">
+          <button type="button" class="kuri-pill-btn active" data-prodi="TI" onclick="setKurikulumProdi('TI')">
+            <span class="kuri-pill-code">TI</span>
+            <span>Teknik Informatika</span>
+          </button>
+          <button type="button" class="kuri-pill-btn" data-prodi="SI" onclick="setKurikulumProdi('SI')">
+            <span class="kuri-pill-code">SI</span>
+            <span>Sistem Informasi</span>
+          </button>
+          <button type="button" class="kuri-pill-btn" data-prodi="SK" onclick="setKurikulumProdi('SK')">
+            <span class="kuri-pill-code">SK</span>
+            <span>Sistem Komputer</span>
+          </button>
+        </div>
       </div>
 
-      <button type="button" class="btn btn-secondary sem-action-btn" onclick="printKurikulum()" title="Cetak Katalog Kurikulum">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 6 2 18 2 18 9"></polyline>
-          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-          <rect x="6" y="14" width="12" height="8"></rect>
-        </svg>
-        <span>Cetak / PDF</span>
-      </button>
-
-      <button type="button" class="btn btn-secondary sem-action-btn" onclick="document.getElementById('theme-toggle')?.click()" title="Ganti Tema" style="padding: 10px 14px;">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-        </svg>
-      </button>
-
-      <button type="button" class="btn btn-primary sem-return-btn" onclick="exitKurikulumMode()" title="Kembali ke Dashboard Utama">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
-        <span>Kembali ke Dashboard Realtime</span>
-      </button>
+      <div class="kuri-control-group">
+        <span class="kuri-control-label">Versi Kurikulum:</span>
+        <div class="kurikulum-tahun-switcher">
+          <button type="button" class="kuri-year-btn active" data-tahun="2025" onclick="setKurikulumTahun('2025')">
+            <span class="kuri-year-badge">Baru</span>
+            <span>Kurikulum 2025</span>
+          </button>
+          <button type="button" class="kuri-year-btn" data-tahun="2024" onclick="setKurikulumTahun('2024')">
+            <span class="kuri-year-badge old">Lama</span>
+            <span>Kurikulum 2024</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- KPI HERO CARDS -->
-  <div class="stats-kpi-grid kurikulum-kpi-grid">
-    <div class="stats-kpi-card card-kuri-wajib">
-      <div class="stats-kpi-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-          <polyline points="22 4 12 14.01 9 11.01"></polyline>
-        </svg>
+  <div class="kurikulum-kpi-grid">
+    <!-- Card 1: SKS Wajib Lulus -->
+    <div class="kuri-kpi-card card-kuri-wajib">
+      <div class="kuri-kpi-header">
+        <div class="kuri-kpi-icon icon-wajib">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <span class="kuri-kpi-badge badge-wajib" id="kuri-kpi-status-sks">Standar Dikti</span>
       </div>
-      <div class="stats-kpi-content">
-        <div class="stats-kpi-val" id="kuri-kpi-total-sks">128 SKS</div>
-        <div class="stats-kpi-label">Beban SKS Wajib Lulus (Sem 1 - 8)</div>
+      <div class="kuri-kpi-body">
+        <div class="kuri-kpi-val" id="kuri-kpi-total-sks">128 SKS</div>
+        <div class="kuri-kpi-title">Beban SKS Wajib Lulus</div>
+        <div class="kuri-kpi-sub">Total paket kelulusan (Semester 1 - 8)</div>
       </div>
-      <div class="stats-kpi-badge badge-success" id="kuri-kpi-status-sks">Standar Dikti</div>
     </div>
 
-    <div class="stats-kpi-card card-kuri-matkul">
-      <div class="stats-kpi-icon" style="background: rgba(2, 132, 199, 0.12); color: #0284c7;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
+    <!-- Card 2: Total Mata Kuliah -->
+    <div class="kuri-kpi-card card-kuri-matkul">
+      <div class="kuri-kpi-header">
+        <div class="kuri-kpi-icon icon-matkul">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+        </div>
+        <span class="kuri-kpi-badge badge-matkul" id="kuri-kpi-breakdown-mk">47 Wajib • 14 Pilihan</span>
       </div>
-      <div class="stats-kpi-content">
-        <div class="stats-kpi-val" id="kuri-kpi-total-mk">-</div>
-        <div class="stats-kpi-label">Total Mata Kuliah Ditawarkan</div>
+      <div class="kuri-kpi-body">
+        <div class="kuri-kpi-val" id="kuri-kpi-total-mk">61 MK</div>
+        <div class="kuri-kpi-title">Total Mata Kuliah Ditawarkan</div>
+        <div class="kuri-kpi-sub">Kurikulum aktif terdaftar di sistem</div>
       </div>
-      <div class="stats-kpi-badge" id="kuri-kpi-breakdown-mk" style="background: rgba(2, 132, 199, 0.14); color: #0284c7;">-</div>
     </div>
 
-    <div class="stats-kpi-card card-kuri-pilihan">
-      <div class="stats-kpi-icon" style="background: rgba(245, 158, 11, 0.12); color: #f59e0b;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
+    <!-- Card 3: Pilihan Keahlian -->
+    <div class="kuri-kpi-card card-kuri-pilihan">
+      <div class="kuri-kpi-header">
+        <div class="kuri-kpi-icon icon-pilihan">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </div>
+        <span class="kuri-kpi-badge badge-pilihan" id="kuri-kpi-mk-pilihan-count">14 MK Tersedia</span>
       </div>
-      <div class="stats-kpi-content">
-        <div class="stats-kpi-val" id="kuri-kpi-sks-pilihan">-</div>
-        <div class="stats-kpi-label">Pilihan Keahlian / Konsentrasi</div>
+      <div class="kuri-kpi-body">
+        <div class="kuri-kpi-val" id="kuri-kpi-sks-pilihan">42 SKS</div>
+        <div class="kuri-kpi-title">Pilihan Keahlian / Konsentrasi</div>
+        <div class="kuri-kpi-sub">Mata kuliah spesialisasi kompetensi</div>
       </div>
-      <div class="stats-kpi-badge" id="kuri-kpi-mk-pilihan-count" style="background: rgba(245, 158, 11, 0.14); color: #f59e0b;">-</div>
     </div>
 
-    <div class="stats-kpi-card card-kuri-fokus">
-      <div class="stats-kpi-icon" style="background: rgba(139, 92, 246, 0.12); color: #8b5cf6;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-        </svg>
+    <!-- Card 4: Fokus Unggulan -->
+    <div class="kuri-kpi-card card-kuri-fokus">
+      <div class="kuri-kpi-header">
+        <div class="kuri-kpi-icon icon-fokus">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+          </svg>
+        </div>
+        <span class="kuri-kpi-badge badge-fokus">Kurikulum Unggulan</span>
       </div>
-      <div class="stats-kpi-content">
-        <div class="stats-kpi-val" id="kuri-kpi-fokus-title">-</div>
-        <div class="stats-kpi-label" id="kuri-kpi-fokus-desc">Fokus Keilmuan Utama Prodi</div>
+      <div class="kuri-kpi-body">
+        <div class="kuri-kpi-val kuri-fokus-val" id="kuri-kpi-fokus-title">AI & Data Science</div>
+        <div class="kuri-kpi-title">Arah Kompetensi Utama</div>
+        <div class="kuri-kpi-sub" id="kuri-kpi-fokus-desc">Machine Learning, Deep Learning, Cloud & Big Data</div>
       </div>
-      <div class="stats-kpi-badge" style="background: rgba(139, 92, 246, 0.14); color: #8b5cf6;">Kurikulum Unggulan</div>
     </div>
   </div>
 
@@ -2289,7 +2315,7 @@
         <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
         <polyline points="17 6 23 6 23 12"></polyline>
       </svg>
-      <span>Analisis Transformasi (2024 vs 2025)</span>
+      <span>Analisis Transformasi (2024 → 2025)</span>
       <span class="tab-badge-pill" id="kuri-badge-perubahan-count">0</span>
     </button>
 
@@ -2305,19 +2331,35 @@
 
   <!-- TAB 1: STRUKTUR SEMESTER & MATA KULIAH -->
   <div id="kurikulum-tab-pane-semester" class="stats-tab-pane active">
-    <!-- Filter & Search Toolbar -->
-    <div class="kurikulum-toolbar">
-      <div class="kurikulum-search-box">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input type="text" id="kuri-search-input" placeholder="Cari nama mata kuliah atau kode MK (contoh: Basis Data, Algoritma, PRTI...)" oninput="filterKurikulumSemesterList()">
-        <button type="button" id="kuri-search-clear" onclick="clearKurikulumSearch()" style="display: none;">&times;</button>
+    <!-- Filter & Search Toolbar (2-Tier Clean Layout) -->
+    <div class="kurikulum-toolbar-card">
+      <!-- Row 1: Search & Category Select -->
+      <div class="kuri-toolbar-top-row">
+        <div class="kurikulum-search-box">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="kuri-search-input" placeholder="Cari nama mata kuliah atau kode MK (contoh: Basis Data, Algoritma, PRTI...)" oninput="filterKurikulumSemesterList()">
+          <button type="button" id="kuri-search-clear" onclick="clearKurikulumSearch()" style="display: none;" title="Hapus pencarian">&times;</button>
+        </div>
+
+        <div class="kuri-toolbar-select-wrap">
+          <label for="kuri-filter-kategori" class="kuri-select-label">Kategori:</label>
+          <select id="kuri-filter-kategori" class="kuri-select" onchange="filterKurikulumSemesterList()">
+            <option value="all">Semua Kategori</option>
+            <option value="Universitas">Universitas (UN)</option>
+            <option value="Fakultas">Fakultas (FK)</option>
+            <option value="Program Studi">Program Studi (PR)</option>
+            <option value="Kompetensi Pendukung">Kompetensi Pendukung (KP)</option>
+            <option value="Pilihan">Mata Kuliah Pilihan (MP)</option>
+          </select>
+        </div>
       </div>
 
-      <div class="kurikulum-filter-group">
-        <!-- Filter Semester Pills -->
+      <!-- Row 2: Semester Pills Filter -->
+      <div class="kuri-toolbar-bottom-row">
+        <span class="kuri-filter-label">Filter Semester:</span>
         <div class="kurikulum-filter-pills" id="kuri-sem-pills">
           <button type="button" class="kuri-filter-btn active" data-sem="all" onclick="filterKurikulumBySem('all')">Semua Semester</button>
           <button type="button" class="kuri-filter-btn" data-sem="1" onclick="filterKurikulumBySem('1')">Sem 1</button>
@@ -2330,16 +2372,6 @@
           <button type="button" class="kuri-filter-btn" data-sem="8" onclick="filterKurikulumBySem('8')">Sem 8</button>
           <button type="button" class="kuri-filter-btn" data-sem="pilihan" onclick="filterKurikulumBySem('pilihan')">MK Pilihan</button>
         </div>
-
-        <!-- Filter Kategori Dropdown -->
-        <select id="kuri-filter-kategori" class="kuri-select" onchange="filterKurikulumSemesterList()">
-          <option value="all">Semua Kategori</option>
-          <option value="Universitas">Universitas (UN)</option>
-          <option value="Fakultas">Fakultas (FK)</option>
-          <option value="Program Studi">Program Studi (PR)</option>
-          <option value="Kompetensi Pendukung">Kompetensi Pendukung (KP)</option>
-          <option value="Pilihan">Mata Kuliah Pilihan (MP)</option>
-        </select>
       </div>
     </div>
 
@@ -2357,7 +2389,7 @@
   <div id="kurikulum-tab-pane-perubahan" class="stats-tab-pane">
     <div class="kurikulum-perubahan-header">
       <div class="kurikulum-perubahan-info">
-        <h3>Matriks Transformasi Kurikulum 2024 (Lama) $\rightarrow$ 2025 (Baru)</h3>
+        <h3>Matriks Transformasi Kurikulum: 2024 (Lama) &rarr; 2025 (Baru)</h3>
         <p>Analisis pembaruan kurikulum, penataan ulang semester, pemadatan mata kuliah, integrasi teknologi mutakhir, dan transisi Proyek Penelitian menjadi Capstone Project.</p>
       </div>
       <div class="kurikulum-perubahan-prodi-badge" id="kuri-perubahan-active-prodi-badge">Prodi TI</div>
@@ -2366,7 +2398,7 @@
     <!-- Table of Curriculum Changes -->
     <div class="stats-table-wrapper kurikulum-table-card">
       <div class="table-responsive">
-        <table class="table-clean kurikulum-clean-table" id="table-kurikulum-perubahan">
+        <table class="table-clean kurikulum-clean-table kuri-perubahan-table" id="table-kurikulum-perubahan">
           <thead>
             <tr>
               <th style="width: 50px; text-align: center;">No</th>
@@ -2384,106 +2416,10 @@
     </div>
   </div>
 
-  <!-- TAB 3: MATRIKS KOMPARASI ANTAR PRODI -->
+  <!-- TAB 3: MATRIKS KOMPARASI ANTAR PRODI (CLEAN FULL-WIDTH STACK) -->
   <div id="kurikulum-tab-pane-matriks" class="stats-tab-pane">
-    <div class="kurikulum-matriks-grid">
-      <!-- Card Komparasi Beban SKS Semester 1-8 -->
-      <div class="kurikulum-matriks-card">
-        <div class="matriks-card-header">
-          <div class="matriks-card-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 20V10"></path>
-              <path d="M18 20V4"></path>
-              <path d="M6 20v-4"></path>
-            </svg>
-          </div>
-          <div>
-            <h4>Distribusi Beban SKS Lintas Semester</h4>
-            <p>Struktur sebaran 128 SKS Wajib untuk TI, SI, dan SK (Konsisten & Seimbang)</p>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table-clean kuri-matriks-table">
-            <thead>
-              <tr>
-                <th>Semester</th>
-                <th>Teknik Informatika (TI)</th>
-                <th>Sistem Informasi (SI)</th>
-                <th>Sistem Komputer (SK)</th>
-                <th>Keterangan</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Semester 1</strong></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td>Fondasi Dasar & MKU Universitas</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 2</strong></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td>Matematika & Pemrograman Lanjut</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 3</strong></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td>Struktur Data & Basis Data Inti</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 4</strong></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td>Jaringan & Keilmuan Terapan</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 5</strong></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td><span class="sks-badge-pill">20 SKS</span></td>
-                <td>AI / Machine Learning / Keahlian</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 6</strong></td>
-                <td><span class="sks-badge-pill highlight">11 SKS</span></td>
-                <td><span class="sks-badge-pill highlight">11 SKS</span></td>
-                <td><span class="sks-badge-pill highlight">11 SKS</span></td>
-                <td>Mata Kuliah Lanjut & Persiapan Skripsi</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 7</strong></td>
-                <td><span class="sks-badge-pill highlight">11 SKS</span></td>
-                <td><span class="sks-badge-pill highlight">11 SKS</span></td>
-                <td><span class="sks-badge-pill highlight">11 SKS</span></td>
-                <td>Capstone Project (4 SKS) & Kewirausahaan</td>
-              </tr>
-              <tr>
-                <td><strong>Semester 8</strong></td>
-                <td><span class="sks-badge-pill highlight-gold">6 SKS</span></td>
-                <td><span class="sks-badge-pill highlight-gold">6 SKS</span></td>
-                <td><span class="sks-badge-pill highlight-gold">6 SKS</span></td>
-                <td>Tugas Akhir / Skripsi</td>
-              </tr>
-              <tr class="tr-total-sks">
-                <td><strong>TOTAL SKS WAJIB</strong></td>
-                <td><strong>128 SKS</strong></td>
-                <td><strong>128 SKS</strong></td>
-                <td><strong>128 SKS</strong></td>
-                <td><strong>Beban SKS Kelulusan Seragam</strong></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Card Profil Keunggulan Kurikulum 2025 -->
+    <div class="kurikulum-matriks-stack">
+      <!-- SECTION A: FOKUS STRATEGIS 3 PRODI (3-COL CARDS) -->
       <div class="kurikulum-matriks-card">
         <div class="matriks-card-header">
           <div class="matriks-card-icon" style="background: rgba(139, 92, 246, 0.12); color: #8b5cf6;">
@@ -2495,43 +2431,148 @@
           </div>
           <div>
             <h4>Fokus Strategis & Diferensiasi Kurikulum 2025</h4>
-            <p>Arah kompetensi lulusan berdasarkan kurikulum baru UNAMA</p>
+            <p>Arah kompetensi dan profil lulusan berdasarkan kurikulum baru UNAMA</p>
           </div>
         </div>
 
-        <div class="prodi-focus-grid">
-          <div class="prodi-focus-item prodi-ti">
-            <div class="prodi-focus-badge">Teknik Informatika (TI)</div>
-            <h5>Artificial Intelligence, Big Data & Cloud Computing</h5>
-            <ul>
-              <li><strong>Data Science (Sem 4)</strong>: Penguasaan pemrosesan data & analitik statistik modern.</li>
-              <li><strong>Deep Learning (Sem 6)</strong>: Arsitektur saraf tiruan lanjut & pemrosesan citra.</li>
+        <div class="prodi-focus-grid-new">
+          <!-- TI Card -->
+          <div class="prodi-focus-card prodi-ti">
+            <div class="prodi-focus-header">
+              <span class="prodi-focus-badge">Teknik Informatika (TI)</span>
+              <h5>Artificial Intelligence, Big Data & Cloud Computing</h5>
+            </div>
+            <ul class="prodi-focus-list">
+              <li><strong>Data Science (Sem 4)</strong>: Pemrosesan data & analitik statistik modern.</li>
+              <li><strong>Deep Learning (Sem 6)</strong>: Arsitektur saraf tiruan lanjut & computer vision.</li>
               <li><strong>Cloud & Big Data (Sem 6)</strong>: Infrastruktur komputasi awan berskala besar.</li>
-              <li><strong>Capstone Project (Sem 7)</strong>: Portofolio rekayasa perangkat lunak terintegrasi.</li>
+              <li><strong>Capstone Project (Sem 7)</strong>: Portofolio rekayasa perangkat lunak mandiri.</li>
             </ul>
           </div>
 
-          <div class="prodi-focus-item prodi-si">
-            <div class="prodi-focus-badge">Sistem Informasi (SI)</div>
-            <h5>Business Intelligence, Data Analytics & Enterprise</h5>
-            <ul>
-              <li><strong>Sistem Basis Data (Sem 2)</strong>: Percepatan pemahaman struktur data bisnis.</li>
+          <!-- SI Card -->
+          <div class="prodi-focus-card prodi-si">
+            <div class="prodi-focus-header">
+              <span class="prodi-focus-badge">Sistem Informasi (SI)</span>
+              <h5>Business Intelligence, Data Analytics & Enterprise</h5>
+            </div>
+            <ul class="prodi-focus-list">
+              <li><strong>Sistem Basis Data (Sem 2)</strong>: Percepatan penguasaan struktur data bisnis.</li>
               <li><strong>Data Warehouse & BI (Sem 4)</strong>: Dasbor analitik pendukung keputusan manajerial.</li>
-              <li><strong>Data Mining (Sem 4 Wajib)</strong>: Penemuan pola dan wawasan data perusahaan.</li>
-              <li><strong>Visualisasi Data (Sem 6)</strong>: Komunikasi visual data berbasis analitik.</li>
+              <li><strong>Data Mining (Sem 4)</strong>: Penemuan pola dan wawasan data perusahaan.</li>
+              <li><strong>Visualisasi Data (Sem 6)</strong>: Komunikasi visual data analitik interaktif.</li>
             </ul>
           </div>
 
-          <div class="prodi-focus-item prodi-sk">
-            <div class="prodi-focus-badge">Sistem Komputer (SK)</div>
-            <h5>IoT Platform, Embedded AI & Robotika Terapan</h5>
-            <ul>
-              <li><strong>Mekatronika Lebih Dini (Sem 3)</strong>: Penguasaan mekanik & elektronik seawal mungkin.</li>
-              <li><strong>Interaksi Manusia & Robot (Sem 4)</strong>: Desain antarmuka sistem kendali robotik.</li>
-              <li><strong>IoT Platform & Cloud (Sem 6)</strong>: Arsitektur ekosistem sensor & aktuator cerdas.</li>
-              <li><strong>Machine Learning for Edge (Sem 6)</strong>: Pemodelan kecerdasan buatan pada perangkat embedded.</li>
+          <!-- SK Card -->
+          <div class="prodi-focus-card prodi-sk">
+            <div class="prodi-focus-header">
+              <span class="prodi-focus-badge">Sistem Komputer (SK)</span>
+              <h5>IoT Platform, Embedded AI & Robotika Terapan</h5>
+            </div>
+            <ul class="prodi-focus-list">
+              <li><strong>Mekatronika Dini (Sem 3)</strong>: Penguasaan mekanik & elektronik seawal mungkin.</li>
+              <li><strong>Interaksi Manusia & Robot (Sem 4)</strong>: Desain antarmuka kendali robotik.</li>
+              <li><strong>IoT Platform & Cloud (Sem 6)</strong>: Arsitektur ekosistem sensor cerdas.</li>
+              <li><strong>Machine Learning Edge (Sem 6)</strong>: AI terintegrasi pada micro controller.</li>
             </ul>
           </div>
+        </div>
+      </div>
+
+      <!-- SECTION B: DISTRIBUSI BEBAN SKS LINTAS SEMESTER (FULL WIDTH TABLE) -->
+      <div class="kurikulum-matriks-card">
+        <div class="matriks-card-header">
+          <div class="matriks-card-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20V10"></path>
+              <path d="M18 20V4"></path>
+              <path d="M6 20v-4"></path>
+            </svg>
+          </div>
+          <div>
+            <h4>Distribusi Beban SKS Lintas Semester</h4>
+            <p>Struktur sebaran 128 SKS Wajib untuk TI, SI, dan SK (Konsisten, Seimbang & Terstandarisasi)</p>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table-clean kuri-matriks-table-new">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Semester</th>
+                <th style="width: 160px; text-align: center;">Teknik Informatika (TI)</th>
+                <th style="width: 160px; text-align: center;">Sistem Informasi (SI)</th>
+                <th style="width: 160px; text-align: center;">Sistem Komputer (SK)</th>
+                <th>Keterangan & Fokus Pembelajaran</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Semester 1</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td>Fondasi Dasar Pemrograman, Logika Matematika & MKU Universitas</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 2</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td>Penguatan Matematika Lanjut, Algoritma & Pemrograman Berorientasi Objek</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 3</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td>Struktur Data, Basis Data Inti & Rekayasa Perangkat Lunak</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 4</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td>Jaringan Komputer, Data Science / Data Mining & Kecerdasan Buatan Dasar</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 5</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill">20 SKS</span></td>
+                <td>Keahlian Lanjutan, Pengolahan Citra, Tata Kelola & Sistem Terdistribusi</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 6</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight">11 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight">11 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight">11 SKS</span></td>
+                <td>Deep Learning / Cloud Platform & Metodologi Penelitian Skripsi</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 7</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight">11 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight">11 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight">11 SKS</span></td>
+                <td>Capstone Project (4 SKS), Kerja Praktik & Kewirausahaan Mandiri</td>
+              </tr>
+              <tr>
+                <td><strong>Semester 8</strong></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight-gold">6 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight-gold">6 SKS</span></td>
+                <td style="text-align: center;"><span class="sks-badge-pill highlight-gold">6 SKS</span></td>
+                <td>Tugas Akhir / Skripsi & Sidang Yudisium Sarjana</td>
+              </tr>
+              <tr class="tr-total-sks">
+                <td><strong>TOTAL SKS WAJIB</strong></td>
+                <td style="text-align: center;"><strong>128 SKS</strong></td>
+                <td style="text-align: center;"><strong>128 SKS</strong></td>
+                <td style="text-align: center;"><strong>128 SKS</strong></td>
+                <td><strong>Beban SKS Kelulusan Seragam Sesuai Kurikulum Nasional</strong></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
