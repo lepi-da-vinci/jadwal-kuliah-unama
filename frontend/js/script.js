@@ -11416,15 +11416,24 @@ function renderKelasStatsTab(kelasStats) {
   const chartProdi = document.getElementById('chart-prodi-distribution');
   if (chartProdi) {
     const maxKelasProdi = Math.max(...distProdi.map(p => p.total_kelas), 1);
+    chartProdi.className = 'stats-prodi-dist-container';
     chartProdi.innerHTML = distProdi.slice(0, 7).map(p => {
       const pct = Math.round((p.total_kelas / maxKelasProdi) * 100);
       return `
-        <div class="stats-bar-chart-row">
-          <span class="stats-chart-label" style="min-width: 140px; font-weight: 600;" title="${escapeHtml(p.nama)}">${escapeHtml(p.nama)}</span>
-          <div class="stats-chart-track">
-            <div class="stats-chart-fill" style="width: ${pct}%; background: linear-gradient(90deg, #8b5cf6, #ec4899);"></div>
+        <div class="stats-prodi-dist-item">
+          <div class="stats-prodi-dist-header">
+            <div class="stats-prodi-dist-name">
+              <span class="stats-prodi-dot"></span>
+              <span class="stats-prodi-title" title="${escapeHtml(p.nama)}">${escapeHtml(p.nama)}</span>
+            </div>
+            <div class="stats-prodi-dist-val">
+              <strong>${p.total_kelas} Kelas</strong>
+              <span class="stats-prodi-hours">(${p.total_jam}j)</span>
+            </div>
           </div>
-          <span class="stats-chart-val" style="min-width: 90px; text-align: right;"><strong>${p.total_kelas} Kelas</strong> (${p.total_jam}j)</span>
+          <div class="stats-prodi-track">
+            <div class="stats-prodi-fill" style="width: ${pct}%;"></div>
+          </div>
         </div>
       `;
     }).join('') || '<div style="color: var(--text-muted); font-size: 0.88rem; padding: 12px 0;">Tidak ada data sebaran program studi</div>';
