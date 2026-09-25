@@ -420,6 +420,9 @@ window.enterSemesterExplorerMode = async function(namaSemester) {
   if (typeof isKurikulumMode !== 'undefined' && isKurikulumMode && typeof exitKurikulumMode === 'function') {
     exitKurikulumMode();
   }
+  if (typeof isStatsExplorerMode !== 'undefined' && isStatsExplorerMode && typeof exitStatsMode === 'function') {
+    exitStatsMode();
+  }
 
   // Tutup modal setting / semester jika terbuka
   const testModal = document.getElementById('test-wa-modal');
@@ -1682,9 +1685,13 @@ function detectScheduleConflicts(scheduleList) {
 
       // ATURAN 2: Bentrok Ruangan Fisik (Room Conflict)
       // HANYA bentrok jika KEDUA jadwal Tatap Muka (bukan OL, bukan Cancel) dan kelas berbeda
-      const roomA = (a.nama_ruangan || '').trim().toLowerCase();
-      const roomB = (b.nama_ruangan || '').trim().toLowerCase();
-      if (!isOnlineA && !isOnlineB && roomA && roomB && roomA === roomB && roomA !== '-' && roomA !== 'online') {
+      const cleanRoomA = formatRoomName(a.nama_ruangan || '', false).replace(/\s*\(.*?\)/gi, '').trim().toLowerCase();
+      const cleanRoomB = formatRoomName(b.nama_ruangan || '', false).replace(/\s*\(.*?\)/gi, '').trim().toLowerCase();
+      const campA = formatCampusName(a.kampus || getRoomCampus(a.nama_ruangan)).toLowerCase();
+      const campB = formatCampusName(b.kampus || getRoomCampus(b.nama_ruangan)).toLowerCase();
+      const isSamePhysicalRoom = cleanRoomA && cleanRoomB && cleanRoomA === cleanRoomB && (campA === campB || !campA || !campB) && cleanRoomA !== '-' && cleanRoomA !== 'online';
+
+      if (!isOnlineA && !isOnlineB && isSamePhysicalRoom) {
         if (!roomConflicts.has(keyA)) roomConflicts.set(keyA, { item: a, list: [] });
         if (!roomConflicts.has(keyB)) roomConflicts.set(keyB, { item: b, list: [] });
         roomConflicts.get(keyA).list.push(b);
@@ -2152,51 +2159,77 @@ function updateActiveLabPanel() {
 
   let roomSchedules = {};
 
-  // 1. Group schedules by room
+  const getCleanRoom = (str) => {
+    if (!str) return '';
+    return formatRoomName(str, false)
+      .replace(/\s*\(Kampus\s+(?:Thehok|Kobar)\)/gi, '')
+      .replace(/\s*\((?:Thehok|Kobar)\)/gi, '')
+      .replace(/\s*\(.*?\)/gi, '')
+      .trim();
+  };
+
+  const getRoomKey = (roomName, campusName) => {
+    const clean = getCleanRoom(roomName).toLowerCase();
+    const camp = formatCampusName(campusName || getRoomCampus(roomName)).toLowerCase();
+    return `${clean}__${camp}`;
+  };
+
+  const filterKey = filterRuangan !== 'semua' ? getRoomKey(filterRuangan) : null;
+  const filterClean = filterRuangan !== 'semua' ? getCleanRoom(filterRuangan).toLowerCase() : null;
+
+  // 1. Group schedules by normalized room key
   allJadwal.forEach(item => {
-    if (item.tanggal === activeDate && item.jam && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
-      if (filterRuangan !== 'semua' && item.nama_ruangan !== filterRuangan) return;
+    if (item.tanggal === activeDate && item.jam) {
+      const key = getRoomKey(item.nama_ruangan, item.kampus);
+      if (filterRuangan !== 'semua') {
+        const itemClean = getCleanRoom(item.nama_ruangan).toLowerCase();
+        if (key !== filterKey && itemClean !== filterClean && item.nama_ruangan !== filterRuangan) return;
+      }
       if (filterMetode !== 'semua' && item.metode_pembelajaran !== filterMetode) return;
 
       const parts = item.jam.split(':');
       const startTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-
-      if (!roomSchedules[item.nama_ruangan]) roomSchedules[item.nama_ruangan] = [];
       const dur = getClassDuration(item);
-      roomSchedules[item.nama_ruangan].push({
+
+      if (!roomSchedules[key]) roomSchedules[key] = [];
+      roomSchedules[key].push({
         start: startTime,
         end: startTime + dur,
         dur: dur,
         nama: item.nama_mk,
-        jam: item.jam
+        jam: item.jam,
+        metode: (item.metode_pembelajaran || '').toUpperCase(),
+        kelas: item.kelas || '',
+        rawName: item.nama_ruangan,
+        cleanName: getCleanRoom(item.nama_ruangan),
+        kampus: item.kampus || getRoomCampus(item.nama_ruangan)
       });
     }
   });
 
   // 2. Determine state for each room in the database
-  allRuanganData.forEach(r => {
-    if (filterRuangan !== 'semua' && r.nama_ruangan !== filterRuangan) return;
+  const processedKeys = new Set();
 
+  allRuanganData.forEach(r => {
     let rawName = r.nama_ruangan;
     let kampus = formatCampusName(r.kampus) || getRoomCampus(rawName);
+    let cleanName = getCleanRoom(rawName);
+    const roomKey = getRoomKey(rawName, kampus);
+
+    if (filterRuangan !== 'semua') {
+      const rClean = cleanName.toLowerCase();
+      if (roomKey !== filterKey && rClean !== filterClean && rawName !== filterRuangan) return;
+    }
+
     let isThehok = !kampus.includes('Kobar');
     let isKobar = !isThehok;
-    let cleanName = formatRoomName(rawName, false).replace(/ \((?:Kampus )?.*?\)/, "").trim();
     let isRoomLab = isLab(cleanName);
 
     let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
 
-    let state = 'empty'; // empty (red), waiting (orange), occupied (green), finished (gray)
-    let text = 'Kosong';
-    let jamText = '';
+    processedKeys.add(roomKey);
 
-    // Ambil jadwal yang cocok dengan nama ruangan dan kampus
-    let schedules = (roomSchedules[rawName] || []).concat(
-      roomSchedules[`${rawName} (${kampus})`] || [],
-      roomSchedules[`${cleanName} (${kampus})`] || []
-    );
-
-    // Sort schedules by start time
+    let schedules = (roomSchedules[roomKey] || []).slice();
     schedules.sort((a, b) => a.start - b.start);
 
     let isOccupied = false;
@@ -2206,67 +2239,7 @@ function updateActiveLabPanel() {
 
     if (isToday) {
       for (const s of schedules) {
-        if (currentTime >= s.start && currentTime <= s.end) {
-          isOccupied = true;
-          activeClass = s;
-          break;
-        } else if (currentTime < s.start) {
-          hasFutureClass = true;
-          if (!nextClass) nextClass = s; // First future class
-        }
-      }
-    }
-
-    if (isOccupied) {
-      state = 'occupied';
-      text = activeClass.nama;
-      jamText = activeClass.jam;
-    } else if (hasFutureClass) {
-      state = 'waiting';
-      text = 'Jeda';
-      const isNight = nextClass.start >= 17 * 60;
-      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    } else if (!isToday && schedules.length > 0) {
-      state = 'scheduled';
-      text = 'Terjadwal';
-      jamText = `(${schedules.length} Kelas)`;
-    } else {
-      state = 'empty';
-      text = 'Kosong';
-      jamText = '';
-    }
-
-    targetDict[cleanName] = { state, text, jamText };
-  });
-
-  // Handle rooms that are in schedule but not in allRuanganData (e.g., specific regular rooms)
-  Object.keys(roomSchedules).forEach(rawName => {
-    let kampus = getRoomCampus(rawName);
-    let isThehok = !kampus.includes('Kobar');
-    let isKobar = !isThehok;
-
-    let cleanName = formatRoomName(rawName, false).replace(/ \((?:Kampus )?.*?\)/, "").trim();
-    let isRoomLab = isLab(cleanName);
-
-    let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
-
-    // Jika ruangan sudah diproses dan sudah memiliki status jadwal aktif, lewati agar tidak tertimpa
-    if (targetDict[cleanName] && targetDict[cleanName].state !== 'empty') return;
-
-    let state = 'empty';
-    let text = 'Kosong';
-    let jamText = '';
-
-    let schedules = roomSchedules[rawName];
-    schedules.sort((a, b) => a.start - b.start);
-
-    let isOccupied = false;
-    let hasFutureClass = false;
-    let activeClass = null;
-    let nextClass = null;
-
-    if (isToday) {
-      for (const s of schedules) {
+        if (s.metode === 'CC' || s.metode === 'OL') continue;
         if (currentTime >= s.start && currentTime <= s.end) {
           isOccupied = true;
           activeClass = s;
@@ -2278,6 +2251,10 @@ function updateActiveLabPanel() {
       }
     }
 
+    let state = 'empty'; // empty (red), waiting (orange), occupied (green), scheduled (blue)
+    let text = 'Kosong';
+    let jamText = '';
+
     if (isOccupied) {
       state = 'occupied';
       text = activeClass.nama;
@@ -2290,7 +2267,73 @@ function updateActiveLabPanel() {
     } else if (!isToday && schedules.length > 0) {
       state = 'scheduled';
       text = 'Terjadwal';
-      jamText = `(${schedules.length} Kelas)`;
+      jamText = `(${schedules.length} Jadwal)`;
+    } else {
+      state = 'empty';
+      text = 'Kosong';
+      jamText = '';
+    }
+
+    targetDict[cleanName] = { state, text, jamText };
+  });
+
+  // Handle rooms that are in schedule but not in allRuanganData (e.g., specific regular rooms)
+  Object.keys(roomSchedules).forEach(key => {
+    if (processedKeys.has(key)) return;
+    processedKeys.add(key);
+
+    let schedules = roomSchedules[key] || [];
+    if (schedules.length === 0) return;
+
+    let sample = schedules[0];
+    let rawName = sample.rawName;
+    let kampus = formatCampusName(sample.kampus) || getRoomCampus(rawName);
+    let isThehok = !kampus.includes('Kobar');
+    let cleanName = getCleanRoom(rawName);
+    let isRoomLab = isLab(cleanName);
+
+    let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
+
+    if (targetDict[cleanName] && targetDict[cleanName].state !== 'empty') return;
+
+    schedules.sort((a, b) => a.start - b.start);
+
+    let isOccupied = false;
+    let hasFutureClass = false;
+    let activeClass = null;
+    let nextClass = null;
+
+    if (isToday) {
+      for (const s of schedules) {
+        if (s.metode === 'CC' || s.metode === 'OL') continue;
+        if (currentTime >= s.start && currentTime <= s.end) {
+          isOccupied = true;
+          activeClass = s;
+          break;
+        } else if (currentTime < s.start) {
+          hasFutureClass = true;
+          if (!nextClass) nextClass = s;
+        }
+      }
+    }
+
+    let state = 'empty';
+    let text = 'Kosong';
+    let jamText = '';
+
+    if (isOccupied) {
+      state = 'occupied';
+      text = activeClass.nama;
+      jamText = activeClass.jam;
+    } else if (hasFutureClass) {
+      state = 'waiting';
+      text = 'Jeda';
+      const isNight = nextClass.start >= 17 * 60;
+      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+    } else if (!isToday && schedules.length > 0) {
+      state = 'scheduled';
+      text = 'Terjadwal';
+      jamText = `(${schedules.length} Jadwal)`;
     } else {
       state = 'empty';
       text = 'Kosong';
@@ -2304,8 +2347,10 @@ function updateActiveLabPanel() {
   currentLabWarnings = [];
   currentRuangWarnings = [];
   if (isToday) {
-    for (const [room, schedules] of Object.entries(roomSchedules)) {
+    for (const [key, schedules] of Object.entries(roomSchedules)) {
       if (!schedules || schedules.length === 0) continue;
+      const sample = schedules[0];
+      const room = sample.cleanName || sample.rawName || key;
       const lastClassEndTime = Math.max(...schedules.map(s => s.end || (s.start + 135)));
       const minsLeft = lastClassEndTime - currentTime;
 
@@ -2321,7 +2366,7 @@ function updateActiveLabPanel() {
           ? `<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>` 
           : `<span class="notif-cat-badge kelas">Kelas</span>`;
 
-        const roomCampus = getRoomCampus(room);
+        const roomCampus = formatCampusName(sample.kampus || getRoomCampus(room));
         const isKobarRoom = roomCampus.includes('Kobar');
         const campusNote = isKobarRoom ? ' (Kobar - Tidak ada kelas malam)' : (lastClassEndTime >= 17 * 60 ? ' (Sesi Malam Thehok)' : '');
 
@@ -10238,6 +10283,21 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const isToday = (targetDate === todayStr);
 
+  const getCleanRoom = (str) => {
+    if (!str) return '';
+    return formatRoomName(str, false)
+      .replace(/\s*\(Kampus\s+(?:Thehok|Kobar)\)/gi, '')
+      .replace(/\s*\((?:Thehok|Kobar)\)/gi, '')
+      .replace(/\s*\(.*?\)/gi, '')
+      .trim();
+  };
+
+  const getRoomKey = (roomName, campusName) => {
+    const clean = getCleanRoom(roomName).toLowerCase();
+    const camp = formatCampusName(campusName || getRoomCampus(roomName)).toLowerCase();
+    return `${clean}__${camp}`;
+  };
+
   let roomSchedules = {};
   dayJadwal.forEach(item => {
     if (item.nama_ruangan && item.jam && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL') {
@@ -10253,8 +10313,9 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
               endTime = endParts[0] * 60 + endParts[1];
             }
           }
-          if (!roomSchedules[item.nama_ruangan]) roomSchedules[item.nama_ruangan] = [];
-          roomSchedules[item.nama_ruangan].push({
+          const key = getRoomKey(item.nama_ruangan, item.kampus);
+          if (!roomSchedules[key]) roomSchedules[key] = [];
+          roomSchedules[key].push({
             start: startTime,
             end: endTime,
             nama_mk: item.nama_mk,
@@ -10270,21 +10331,29 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
   if (Array.isArray(allRuanganData) && allRuanganData.length > 0) {
     allRuanganData.forEach(r => {
       if (r.nama_ruangan) {
-        allUniqueRooms.set(r.nama_ruangan, {
-          nama: r.nama_ruangan,
-          isLab: isLab(r.nama_ruangan),
-          kampus: r.kampus || ''
+        const clean = getCleanRoom(r.nama_ruangan);
+        const camp = formatCampusName(r.kampus || getRoomCampus(r.nama_ruangan));
+        const key = getRoomKey(r.nama_ruangan, r.kampus);
+        allUniqueRooms.set(key, {
+          nama: clean,
+          isLab: isLab(clean),
+          kampus: camp,
+          key: key
         });
       }
     });
   }
 
-  Object.keys(roomSchedules).forEach(rName => {
-    if (!allUniqueRooms.has(rName)) {
-      allUniqueRooms.set(rName, {
-        nama: rName,
-        isLab: isLab(rName),
-        kampus: ''
+  Object.keys(roomSchedules).forEach(key => {
+    if (!allUniqueRooms.has(key)) {
+      const parts = key.split('__');
+      const clean = parts[0] || key;
+      const camp = parts[1] || '';
+      allUniqueRooms.set(key, {
+        nama: clean,
+        isLab: isLab(clean),
+        kampus: camp,
+        key: key
       });
     }
   });
@@ -10298,7 +10367,7 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
     allTotal++;
     if (room.isLab) allLab++; else allKelas++;
 
-    const schedules = roomSchedules[room.nama] || [];
+    const schedules = roomSchedules[room.key] || [];
     let isOccupied = false;
     let hasFuture = false;
 
