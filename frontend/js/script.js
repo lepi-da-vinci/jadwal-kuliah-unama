@@ -4292,7 +4292,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
       if (s.metode_pembelajaran === 'CC') {
         cardStatusClass = 'cancelled';
-        liveBadgeHtml = `<span class="badge cc" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Ditiadakan</span>`;
+        liveBadgeHtml = `<span class="badge cc" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Cancel</span>`;
       } else if (isToday) {
         if (currentMinutes >= startM && currentMinutes <= endM) {
           cardStatusClass = 'active-now';
@@ -6558,7 +6558,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
       dosen: j.nama_dosen || '-',
       ruangan: j.nama_ruangan || '-',
       kampus: j.kampus || 'Kampus UNAMA',
-      desc: `Kelas ditiadakan / dibatalkan oleh dosen pengampu.`
+      desc: `Kelas cancel / dibatalkan oleh dosen pengampu.`
     });
   });
 
@@ -7639,7 +7639,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
       dosen: j.nama_dosen || '-',
       ruangan: j.nama_ruangan || '-',
       kampus: j.kampus || 'Kampus UNAMA',
-      desc: 'Kelas perkuliahan ditiadakan atau dibatalkan (Metode CC).'
+      desc: 'Kelas perkuliahan cancel / dibatalkan (Metode CC).'
     });
   });
 
