@@ -6199,103 +6199,76 @@ body.kurikulum-explorer-active > .container > .card {
   color: #ffffff;
 }
 
-/* ==================== KPI HERO CARDS (ELEVATED MODERN AESTHETICS) ==================== */
-/* No clunky side border. Floating top-accent gradient bar + subtle ambient top tint */
+/* ==================== KPI HERO CARDS (EXECUTIVE UNIFIED AESTHETICS) ==================== */
+/* Unified, cohesive, clean executive design without rainbow top borders or mismatched colors */
 .card-kuri-jam,
 .card-kuri-lab,
 .card-kuri-kelas,
 .card-kuri-dosen {
   position: relative;
   overflow: hidden;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 4px 20px -2px rgba(100, 116, 139, 0.08), 0 2px 6px -1px rgba(100, 116, 139, 0.04) !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease !important;
 }
 
+.card-kuri-jam:hover,
+.card-kuri-lab:hover,
+.card-kuri-kelas:hover,
+.card-kuri-dosen:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 28px -4px rgba(100, 116, 139, 0.14), 0 4px 10px -2px rgba(100, 116, 139, 0.06) !important;
+  border-color: rgba(139, 124, 246, 0.4) !important;
+}
+
+/* Eliminate all rainbow top border lines completely */
 .card-kuri-jam::before,
 .card-kuri-lab::before,
 .card-kuri-kelas::before,
 .card-kuri-dosen::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3.5px;
-  border-radius: 16px 16px 0 0;
-  background: var(--kpi-top-grad, linear-gradient(90deg, #6366f1, #8b5cf6));
-  opacity: 0.88;
-  transition: height 0.25s ease, opacity 0.25s ease;
-  z-index: 2;
+  display: none !important;
+  content: none !important;
 }
 
-.card-kuri-jam:hover::before,
-.card-kuri-lab:hover::before,
-.card-kuri-kelas:hover::before,
-.card-kuri-dosen:hover::before {
-  height: 4.5px;
-  opacity: 1;
-}
-
-/* 1. Jam Operasional (Indigo) */
-.card-kuri-jam {
-  --kpi-accent-rgb: 99, 102, 241;
-  --kpi-top-grad: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 80%), var(--bg-card);
-}
-.icon-jam {
-  background: rgba(99, 102, 241, 0.12);
-  color: #6366f1;
-}
-.badge-jam {
-  background: rgba(99, 102, 241, 0.1);
-  color: #6366f1;
-  border: 1px solid rgba(99, 102, 241, 0.2);
-}
-
-/* 2. Labor Aktif (Purple) */
-.card-kuri-lab {
-  --kpi-accent-rgb: 139, 92, 246;
-  --kpi-top-grad: linear-gradient(90deg, #8b5cf6 0%, #c084fc 100%);
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(139, 92, 246, 0.09) 0%, transparent 80%), var(--bg-card);
-}
-.icon-lab {
-  background: rgba(139, 92, 246, 0.12);
-  color: #8b5cf6;
-}
-.badge-lab {
-  background: rgba(139, 92, 246, 0.1);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-}
-
-/* 3. Total Kelas (Cyan / Sky) */
-.card-kuri-kelas {
-  --kpi-accent-rgb: 2, 132, 199;
-  --kpi-top-grad: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(2, 132, 199, 0.08) 0%, transparent 80%), var(--bg-card);
-}
-.icon-kelas {
-  background: rgba(2, 132, 199, 0.12);
-  color: #0284c7;
-}
-.badge-kelas {
-  background: rgba(2, 132, 199, 0.1);
-  color: #0284c7;
-  border: 1px solid rgba(2, 132, 199, 0.2);
-}
-
-/* 4. Dosen Pengajar (Emerald) */
-.card-kuri-dosen {
-  --kpi-accent-rgb: 16, 185, 129;
-  --kpi-top-grad: linear-gradient(90deg, #10b981 0%, #34d399 100%);
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);
-}
+/* Cohesive, unified icon style across all cards */
+.icon-jam,
+.icon-lab,
+.icon-kelas,
 .icon-dosen {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
+  background: rgba(139, 124, 246, 0.09) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(139, 124, 246, 0.15) !important;
+  border-radius: 12px !important;
+  width: 42px !important;
+  height: 42px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
 }
+
+.card-kuri-jam:hover .icon-jam,
+.card-kuri-lab:hover .icon-lab,
+.card-kuri-kelas:hover .icon-kelas,
+.card-kuri-dosen:hover .icon-dosen {
+  transform: scale(1.05);
+}
+
+/* Cohesive, unified neutral metadata badges */
+.badge-jam,
+.badge-lab,
+.badge-kelas,
 .badge-dosen {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: var(--bg-elevated) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border) !important;
+  font-size: 0.73rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  padding: 4px 10px !important;
+  border-radius: 9999px !important;
 }
 
 /* Stats Unified Toolbar & Tabs are styled in unified Apple Segmented Controls section */
@@ -6359,7 +6332,7 @@ body.kurikulum-explorer-active > .container > .card {
   display: block;
 }
 
-/* ==================== HIGHLIGHT CARDS (ELEVATED BESPOKE AESTHETICS) ==================== */
+/* ==================== HIGHLIGHT CARDS (CLEAN EXECUTIVE REDESIGN) ==================== */
 .stats-highlights-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -6368,65 +6341,41 @@ body.kurikulum-explorer-active > .container > .card {
 
 .stats-highlight-card {
   position: relative;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 22px;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 18px !important;
+  padding: 22px !important;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 14px;
-  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+  gap: 16px;
+  box-shadow: 0 4px 20px -2px rgba(100, 116, 139, 0.08), 0 2px 6px -1px rgba(100, 116, 139, 0.04) !important;
   overflow: hidden;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
               box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.25s ease;
+              border-color 0.25s ease !important;
 }
 
+/* Eliminate all colored top stripes on highlight cards */
 .stats-highlight-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3.5px;
-  border-radius: 16px 16px 0 0;
-  background: var(--hl-top-grad, linear-gradient(90deg, #8b5cf6, #c084fc));
-  opacity: 0.9;
-  transition: height 0.25s ease, opacity 0.25s ease;
-  z-index: 2;
+  display: none !important;
+  content: none !important;
 }
 
 .stats-highlight-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.09), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
-  border-color: rgba(var(--hl-accent-rgb, 139, 92, 246), 0.35);
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 28px -4px rgba(100, 116, 139, 0.14), 0 4px 10px -2px rgba(100, 116, 139, 0.06) !important;
+  border-color: rgba(139, 124, 246, 0.4) !important;
 }
 
-.stats-highlight-card:hover::before {
-  height: 4.5px;
-  opacity: 1;
-}
-
+/* Neutralize all border-color class variants so they are unified */
 .stats-highlight-card.border-purple,
-.stats-highlight-card.card-accent-purple {
-  --hl-accent-rgb: 139, 92, 246;
-  --hl-top-grad: linear-gradient(90deg, #8b5cf6 0%, #c084fc 100%);
-  background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(139, 92, 246, 0.09) 0%, transparent 80%), var(--bg-card);
-}
-
+.stats-highlight-card.card-accent-purple,
 .stats-highlight-card.border-cyan,
-.stats-highlight-card.card-accent-cyan {
-  --hl-accent-rgb: 6, 182, 212;
-  --hl-top-grad: linear-gradient(90deg, #06b6d4 0%, #38bdf8 100%);
-  background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(6, 182, 212, 0.08) 0%, transparent 80%), var(--bg-card);
-}
-
+.stats-highlight-card.card-accent-cyan,
 .stats-highlight-card.border-green,
 .stats-highlight-card.card-accent-green {
-  --hl-accent-rgb: 16, 185, 129;
-  --hl-top-grad: linear-gradient(90deg, #10b981 0%, #34d399 100%);
-  background: radial-gradient(ellipse 130% 70% at 85% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);
+  background: var(--bg-card) !important;
 }
 
 .stats-hl-header {
@@ -6437,50 +6386,39 @@ body.kurikulum-explorer-active > .container > .card {
   gap: 8px;
 }
 
-.stats-hl-badge {
-  font-size: 0.74rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-}
-
-.stats-hl-badge.badge-busy {
-  background: rgba(139, 92, 246, 0.14);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.25);
-}
-
-.stats-hl-badge.badge-quiet {
-  background: rgba(6, 182, 212, 0.14);
-  color: #06b6d4;
-  border: 1px solid rgba(6, 182, 212, 0.25);
-}
-
+/* Subtle, sophisticated section badges */
+.stats-hl-badge,
+.stats-hl-badge.badge-busy,
+.stats-hl-badge.badge-quiet,
 .stats-hl-badge.badge-campus {
-  background: rgba(16, 185, 129, 0.14);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  padding: 4px 10px !important;
+  border-radius: 9999px !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text-dark) !important;
+  border: 1px solid var(--border) !important;
 }
 
-.stats-hl-badge-sub {
-  font-size: 0.76rem;
-  font-weight: 800;
-  padding: 3px 9px;
-  border-radius: 9999px;
-}
-
-.badge-busy-sub {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.25);
-}
-
+/* Refined, cohesive percentage & status pills */
+.stats-hl-badge-sub,
+.badge-busy-sub,
 .badge-quiet-sub {
-  background: rgba(245, 158, 11, 0.15);
-  color: #d97706;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
+  padding: 3px 10px !important;
+  border-radius: 9999px !important;
+  background: rgba(139, 124, 246, 0.08) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(139, 124, 246, 0.18) !important;
+}
+
+.stats-hl-sub {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .stats-hl-body {
@@ -6491,10 +6429,10 @@ body.kurikulum-explorer-active > .container > .card {
 
 .stats-hl-title {
   font-family: var(--font-heading);
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--text-dark);
-  line-height: 1.25;
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  color: var(--text-dark) !important;
+  line-height: 1.3;
 }
 
 .stats-hl-detail {
@@ -6510,7 +6448,7 @@ body.kurikulum-explorer-active > .container > .card {
   gap: 8px;
   margin-top: 4px;
   font-size: 0.92rem;
-  color: var(--text-dark);
+  color: var(--text-secondary);
 }
 
 .hl-stat-metric strong {
@@ -6522,7 +6460,7 @@ body.kurikulum-explorer-active > .container > .card {
 
 .hl-stat-sep {
   color: var(--text-muted);
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .stats-hl-chips-row {
@@ -6533,43 +6471,21 @@ body.kurikulum-explorer-active > .container > .card {
   margin-top: 8px;
 }
 
-.hl-chip-method {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.hl-chip-method.chip-tm {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.25);
-}
-
-.hl-chip-method.chip-ol {
-  background: rgba(14, 165, 233, 0.12);
-  color: #0284c7;
-  border: 1px solid rgba(14, 165, 233, 0.25);
-}
-
-.hl-chip-method.chip-cc {
-  background: rgba(244, 63, 94, 0.12);
-  color: #e11d48;
-  border: 1px solid rgba(244, 63, 94, 0.25);
-}
-
+/* Unified, clean method chips instead of neon buttons */
+.hl-chip-method,
+.hl-chip-method.chip-tm,
+.hl-chip-method.chip-ol,
+.hl-chip-method.chip-cc,
 .hl-chip-info {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  background: rgba(6, 182, 212, 0.12);
-  color: #0891b2;
-  border: 1px solid rgba(6, 182, 212, 0.25);
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  font-size: 0.76rem !important;
+  font-weight: 600 !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border) !important;
 }
 
 .campus-sesi-pill {
@@ -6583,11 +6499,12 @@ body.kurikulum-explorer-active > .container > .card {
   margin-left: 6px;
 }
 
+/* Campus Comparison Bars - Refined & Harmonious */
 .stats-campus-bars {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .campus-bar-item {
@@ -6608,12 +6525,13 @@ body.kurikulum-explorer-active > .container > .card {
 .campus-bar-label strong {
   font-size: 0.84rem;
   font-weight: 800;
+  color: var(--text-dark);
 }
 
 .campus-prog-track {
-  height: 10px;
-  background: var(--bg-hover);
-  border-radius: 9999px;
+  height: 8px !important;
+  background: var(--bg-hover) !important;
+  border-radius: 9999px !important;
   overflow: hidden;
 }
 
@@ -6623,14 +6541,15 @@ body.kurikulum-explorer-active > .container > .card {
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Harmonious brand-aligned campus bar fills */
 .campus-prog-fill.bg-indigo,
 .campus-prog-fill.bg-kobar {
-  background: linear-gradient(90deg, #0284c7, #38bdf8);
+  background: linear-gradient(90deg, #6366f1, #818cf8) !important;
 }
 
 .campus-prog-fill.bg-purple,
 .campus-prog-fill.bg-thehok {
-  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa) !important;
 }
 
 /* Card Box & Stacked Bar */
@@ -7970,20 +7889,11 @@ body.kurikulum-explorer-active > .container > .card {
   box-shadow: var(--clay-card-hover);
 }
 
-.card-kuri-wajib, .card-kuri-jam {
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 80%), var(--bg-card);
-}
-
-.card-kuri-matkul, .card-kuri-lab {
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(2, 132, 199, 0.08) 0%, transparent 80%), var(--bg-card);
-}
-
-.card-kuri-pilihan, .card-kuri-kelas {
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 80%), var(--bg-card);
-}
-
+.card-kuri-wajib, .card-kuri-jam,
+.card-kuri-matkul, .card-kuri-lab,
+.card-kuri-pilihan, .card-kuri-kelas,
 .card-kuri-fokus, .card-kuri-dosen {
-  background: radial-gradient(ellipse 130% 70% at 90% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 80%), var(--bg-card);
+  background: var(--bg-card) !important;
 }
 
 .kuri-kpi-header {
@@ -7994,67 +7904,41 @@ body.kurikulum-explorer-active > .container > .card {
 }
 
 .kuri-kpi-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: var(--clay-pill);
+  box-shadow: none;
 }
 
-.icon-wajib, .icon-jam {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-}
-
-.icon-matkul, .icon-lab {
-  background: rgba(2, 132, 199, 0.12);
-  color: #0284c7;
-}
-
-.icon-pilihan, .icon-kelas {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-}
-
+.icon-wajib, .icon-jam,
+.icon-matkul, .icon-lab,
+.icon-pilihan, .icon-kelas,
 .icon-fokus, .icon-dosen {
-  background: rgba(139, 92, 246, 0.12);
-  color: #8b5cf6;
+  background: rgba(139, 124, 246, 0.09) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(139, 124, 246, 0.15) !important;
 }
 
 .kuri-kpi-badge {
-  font-size: 0.74rem;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
   white-space: nowrap;
   letter-spacing: 0.02em;
 }
 
-.badge-wajib, .badge-jam {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.25);
-}
-
-.badge-matkul, .badge-lab {
-  background: rgba(2, 132, 199, 0.12);
-  color: #0284c7;
-  border: 1px solid rgba(2, 132, 199, 0.25);
-}
-
-.badge-pilihan, .badge-kelas {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
-}
-
+.badge-wajib, .badge-jam,
+.badge-matkul, .badge-lab,
+.badge-pilihan, .badge-kelas,
 .badge-fokus, .badge-dosen {
-  background: rgba(139, 92, 246, 0.12);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: var(--bg-elevated) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border) !important;
 }
 
 .kuri-kpi-body {
