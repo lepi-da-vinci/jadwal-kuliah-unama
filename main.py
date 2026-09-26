@@ -392,8 +392,8 @@ def get_semesters():
             conn.close()
 
 @app.post("/api/semesters/active")
-def set_active_semester(req: SemesterActiveRequest, admin: str = Depends(verify_admin_token)):
-    """Mengubah semester aktif sistem (memerlukan token Admin)"""
+def set_active_semester(req: SemesterActiveRequest):
+    """Mengubah semester aktif sistem"""
     try:
         nama_sem = req.nama_semester.strip()
         if not nama_sem:

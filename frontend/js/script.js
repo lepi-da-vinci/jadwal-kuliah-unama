@@ -1281,15 +1281,20 @@ window.applySelectedSemester = async function() {
   }
 
   try {
+    const headers = (typeof getAdminHeaders === 'function')
+      ? getAdminHeaders({ 'Content-Type': 'application/json' })
+      : { 'Content-Type': 'application/json' };
+
     const res = await fetch(`${API_BASE_URL}/api/semesters/active`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify({ nama_semester: selectedSemesterTemp })
     });
     const json = await res.json();
-    if (json.status === 'success') {
+    if (res.ok && json.status === 'success') {
       updateSemesterDisplay(selectedSemesterTemp);
       await fetchAllJadwal();
+      await fetchSemestersData();
 
       // Refresh notifikasi lab jika ada filter tanggal
       const tgl = document.getElementById('filter-tanggal')?.value;
@@ -1315,7 +1320,8 @@ window.applySelectedSemester = async function() {
         alert(`Database semester aktif dialihkan ke: ${selectedSemesterTemp}`);
       }
     } else {
-      alert("Gagal mengubah semester: " + (json.message || 'Error'));
+      const errMsg = json.message || json.detail || (typeof json === 'string' ? json : 'Terjadi kesalahan pada server');
+      alert("Gagal mengubah semester: " + errMsg);
     }
   } catch (err) {
     console.error("Gagal mengalihkan semester:", err);
