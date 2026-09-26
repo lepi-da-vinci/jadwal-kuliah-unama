@@ -11011,87 +11011,7 @@ function renderDonutStats() {
 }
 
 function renderMatrixCards() {
-  if (!currentStatsData) return;
-  const wrap = document.getElementById('stats-matrix-cards-wrap');
-  if (!wrap) return;
-
-  const s = currentStatsData.summary || {};
-  const lb = currentStatsData.lab_stats || {};
-  const ks = currentStatsData.kelas_stats || {};
-  const ds = currentStatsData.dosen_stats || {};
-
-  const busy = lb.summary?.lab_tersibuk || {};
-  const quiet = lb.summary?.lab_terkosong || {};
-  const topKelas = (ks.top_aktif && ks.top_aktif[0]) || {};
-  const topDosen = (ds.top_jam && ds.top_jam[0]) || {};
-  const topMk = (ks.top_mk && ks.top_mk[0]) || {};
-  
-  const rasioObj = s.metode_rasio || lb.summary?.metode_rasio || {};
-  const tmPct = rasioObj.tm_pct ?? lb.summary?.persen_tm ?? 0;
-  const olPct = rasioObj.ol_pct ?? lb.summary?.persen_ol ?? 0;
-  const ccPct = rasioObj.cc_pct ?? lb.summary?.persen_cc ?? 0;
-
-  wrap.innerHTML = `
-    <!-- Card 1: Labor Paling Padat -->
-    <div class="matrix-kpi-card">
-      <div class="matrix-card-head">
-        <span class="matrix-card-title">Labor Paling Padat</span>
-        <span class="badge-mini-sem" style="background: rgba(139,92,246,0.15); color: #8b5cf6;">${escapeHtml(busy.kampus || 'Kampus')}</span>
-      </div>
-      <div class="matrix-card-val">${formatRoomName(busy.nama_ruangan || '-', false)}</div>
-      <div class="matrix-card-desc">Total <strong>${busy.total_jam || 0} Jam</strong> (${busy.total_sesi || 0} sesi perkuliahan) dengan tingkat utilisasi tertinggi semester ini.</div>
-    </div>
-
-    <!-- Card 2: Labor Paling Lengang -->
-    <div class="matrix-kpi-card">
-      <div class="matrix-card-head">
-        <span class="matrix-card-title">Labor Paling Lengang</span>
-        <span class="badge-mini-sem" style="background: rgba(6,182,212,0.15); color: #06b6d4;">${escapeHtml(quiet.kampus || 'Kampus')}</span>
-      </div>
-      <div class="matrix-card-val">${formatRoomName(quiet.nama_ruangan || '-', false)}</div>
-      <div class="matrix-card-desc">Terjadwal <strong>${quiet.total_jam || 0} Jam</strong> (${quiet.total_sesi || 0} sesi). Memiliki kuota waktu luang terbanyak untuk praktikum mandiri.</div>
-    </div>
-
-    <!-- Card 3: Kelas Paling Aktif -->
-    <div class="matrix-kpi-card">
-      <div class="matrix-card-head">
-        <span class="matrix-card-title">Kelas Paling Aktif</span>
-        <button type="button" class="badge-kelas-clickable" onclick="openDetailKelas('${escapeHtml(topKelas.kelas || '')}')">Buka Detail</button>
-      </div>
-      <div class="matrix-card-val">${escapeHtml(topKelas.kelas || '-')}</div>
-      <div class="matrix-card-desc">Memiliki <strong>${topKelas.total_jam || 0} Jam</strong> belajar aktif (${topKelas.tm || 0} sesi Tatap Muka dan ${topKelas.ol || 0} sesi Online).</div>
-    </div>
-
-    <!-- Card 4: Mata Kuliah Terpadat -->
-    <div class="matrix-kpi-card">
-      <div class="matrix-card-head">
-        <span class="matrix-card-title">MK Paralel Terbanyak</span>
-        <span class="badge-mini-sem" style="background: rgba(236,72,153,0.15); color: #ec4899;">${topMk.total_kelas || 0} Kelas</span>
-      </div>
-      <div class="matrix-card-val" style="font-size: 1.25rem;">${escapeHtml(topMk.nama_mk || '-')}</div>
-      <div class="matrix-card-desc">Dipelajari oleh ${topMk.total_kelas || 0} kelas paralel berbeda dengan akumulasi ${topMk.total_jam || 0} jam perkuliahan.</div>
-    </div>
-
-    <!-- Card 5: Dosen Terpadat -->
-    <div class="matrix-kpi-card">
-      <div class="matrix-card-head">
-        <span class="matrix-card-title">Dosen Beban Terbanyak</span>
-        <span class="badge-mini-sem" style="background: rgba(16,185,129,0.15); color: #10b981;">${topDosen.total_jam || 0} Jam</span>
-      </div>
-      <div class="matrix-card-val" style="font-size: 1.2rem;">${escapeHtml(topDosen.nama_dosen || '-')}</div>
-      <div class="matrix-card-desc">Mengampu total ${topDosen.total_sesi || 0} sesi perkuliahan (${topDosen.tm || 0} Tatap Muka, ${topDosen.ol || 0} Online).</div>
-    </div>
-
-    <!-- Card 6: Efektivitas Perkuliahan -->
-    <div class="matrix-kpi-card">
-      <div class="matrix-card-head">
-        <span class="matrix-card-title">Efektivitas Perkuliahan</span>
-        <span class="badge-mini-sem" style="background: rgba(245,158,11,0.15); color: #f59e0b;">${tmPct}% TM</span>
-      </div>
-      <div class="matrix-card-val">${tmPct}% Tatap Muka</div>
-      <div class="matrix-card-desc">${olPct}% perkuliahan daring (OL) dan ${ccPct}% jadwal dibatalkan (CC).</div>
-    </div>
-  `;
+  renderStatsMatrixCards();
 }
 
 function renderFullTableKelas() {
@@ -12817,12 +12737,7 @@ window.switchStatsTab = function(tabName) {
   if (paneKelas) paneKelas.style.display = (tabName === 'kelas') ? 'block' : 'none';
   if (paneDosen) paneDosen.style.display = (tabName === 'dosen') ? 'block' : 'none';
 
-  // Pastikan view mode kembali ke bar jika user beralih tab kategori
-  if (currentStatsViewMode !== 'bar') {
-    setStatsViewMode('bar');
-  } else {
-    renderStatsView();
-  }
+  renderStatsView();
 };
 
 window.setStatsViewMode = function(modeName) {
@@ -13261,28 +13176,42 @@ function renderStatsMatrixCards() {
   const container = document.getElementById('stats-matrix-cards-wrap');
   if (!container || !currentStatsData) return;
 
+  if (currentStatsTab === 'kelas') {
+    renderMatrixCardsKelas(container);
+  } else if (currentStatsTab === 'dosen') {
+    renderMatrixCardsDosen(container);
+  } else {
+    renderMatrixCardsLab(container);
+  }
+}
+
+function renderMatrixCardsLab(container) {
   const rankings = (currentStatsData.lab_stats && currentStatsData.lab_stats.rankings) || [];
 
   if (rankings.length === 0) {
-    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted); grid-column: 1/-1;">Belum ada metrik laboratorium.</div>`;
+    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted); grid-column: 1/-1;">Belum ada metrik laboratorium untuk semester ini.</div>`;
     return;
   }
 
+  const maxJam = rankings[0]?.total_jam || 1;
+
   container.innerHTML = rankings.map((lb, idx) => {
     const isTop = idx === 0;
-    const campusBadge = lb.kampus && lb.kampus.toLowerCase().includes('thehok') 
-      ? '<span class="badge-campus-tag campus-thehok">Thehok</span>' 
-      : '<span class="badge-campus-tag campus-kobar">Kobar</span>';
+    const isThehok = lb.kampus && lb.kampus.toLowerCase().includes('thehok');
+    const campusBadge = isThehok 
+      ? '<span class="badge-campus-tag campus-thehok">Kampus Thehok</span>' 
+      : '<span class="badge-campus-tag campus-kobar">Kampus Kobar</span>';
+    const utilPct = lb.utilization_pct || Math.round((lb.total_jam / maxJam) * 100);
 
     return `
       <div class="stats-matrix-card ${isTop ? 'highlight-top' : ''}">
         <div class="matrix-card-header">
           <div>
-            <div class="matrix-card-title">${safeEscapeStats(lb.nama_ruangan)}</div>
-            <div style="margin-top: 4px;">${campusBadge}</div>
+            <div class="matrix-card-title">${formatRoomName(lb.nama_ruangan, false)}</div>
+            <div style="margin-top: 6px;">${campusBadge}</div>
           </div>
           <div class="matrix-card-gauge">
-            <span class="matrix-gauge-val">${lb.utilization_pct || 0}%</span>
+            <span class="matrix-gauge-val">${utilPct}%</span>
             <span class="matrix-gauge-lbl">Utilisasi</span>
           </div>
         </div>
@@ -13298,14 +13227,149 @@ function renderStatsMatrixCards() {
           </div>
         </div>
 
-        <div class="matrix-prog-track">
-          <div class="matrix-prog-bar" style="width: ${lb.utilization_pct || 0}%;"></div>
+        <div class="matrix-prog-track" title="Utilisasi: ${utilPct}%">
+          <div class="matrix-prog-bar" style="width: ${utilPct}%;"></div>
         </div>
 
         <div class="matrix-card-footer">
-          <span class="badge-method-tm">${lb.tm || 0} TM</span>
-          <span class="badge-method-ol">${lb.ol || 0} OL</span>
-          <span class="badge-method-cc">${lb.cc || 0} CC</span>
+          <div style="display: flex; gap: 5px;">
+            <span class="badge-method-tm">${lb.tm || 0} TM</span>
+            <span class="badge-method-ol">${lb.ol || 0} OL</span>
+            <span class="badge-method-cc">${lb.cc || 0} CC</span>
+          </div>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">Peringkat #${idx + 1}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderMatrixCardsKelas(container) {
+  const kStats = currentStatsData.kelas_stats || {};
+  const topAktif = kStats.top_aktif || [];
+
+  if (topAktif.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted); grid-column: 1/-1;">Belum ada metrik kelas untuk semester ini.</div>`;
+    return;
+  }
+
+  const maxJam = topAktif[0]?.total_jam || 1;
+
+  container.innerHTML = topAktif.map((k, idx) => {
+    const isTop = idx === 0;
+    const prodiMatch = (k.kelas || '').match(/[A-Za-z]+/);
+    const rawProdi = prodiMatch ? prodiMatch[0].toUpperCase() : '';
+    let prodiName = 'Kelas Perkuliahan';
+    if (rawProdi.startsWith('PS')) prodiName = 'Sistem Informasi (S1)';
+    else if (rawProdi.startsWith('PT')) prodiName = 'Teknik Informatika (S1)';
+    else if (rawProdi.startsWith('PK') || rawProdi.startsWith('SK')) prodiName = 'Sistem Komputer (S1)';
+    else if (rawProdi.startsWith('PM')) prodiName = 'Peminatan Manajemen';
+    else if (rawProdi.startsWith('MT')) prodiName = 'Magister Teknik (S2)';
+    else if (rawProdi.startsWith('MM')) prodiName = 'Magister Manajemen (S2)';
+    else if (rawProdi.startsWith('MS')) prodiName = 'Magister SI (S2)';
+    else if (rawProdi.startsWith('MK')) prodiName = 'Magister Komputer (S2)';
+    else if (rawProdi.startsWith('PW')) prodiName = 'Kelas Weekend';
+    else if (rawProdi.startsWith('MW')) prodiName = 'Kelas Malam';
+
+    const safeKode = safeEscapeStats(k.kelas).replace(/'/g, "\\'");
+    const pct = Math.round((k.total_jam / maxJam) * 100);
+
+    return `
+      <div class="stats-matrix-card ${isTop ? 'highlight-top' : ''}">
+        <div class="matrix-card-header">
+          <div>
+            <div class="matrix-card-title">${safeEscapeStats(k.kelas)}</div>
+            <div style="margin-top: 6px;"><span class="badge-campus-tag" style="background: rgba(139,92,246,0.12); color: #8b5cf6;">${safeEscapeStats(prodiName)}</span></div>
+          </div>
+          <div class="matrix-card-gauge">
+            <span class="matrix-gauge-val">${k.total_jam}j</span>
+            <span class="matrix-gauge-lbl">Total Jam</span>
+          </div>
+        </div>
+
+        <div class="matrix-card-body">
+          <div class="matrix-stat-item">
+            <span class="matrix-stat-lbl">Frekuensi Sesi</span>
+            <strong class="matrix-stat-val text-primary">${k.total_sesi} Sesi</strong>
+          </div>
+          <div class="matrix-stat-item">
+            <span class="matrix-stat-lbl">Intensitas</span>
+            <strong class="matrix-stat-val">${pct}% Beban</strong>
+          </div>
+        </div>
+
+        <div class="matrix-prog-track" title="Intensitas beban kelas: ${pct}%">
+          <div class="matrix-prog-bar" style="width: ${pct}%; background: linear-gradient(90deg, #ec4899, #8b5cf6);"></div>
+        </div>
+
+        <div class="matrix-card-footer">
+          <div style="display: flex; gap: 5px;">
+            <span class="badge-method-tm">${k.tm || 0} TM</span>
+            <span class="badge-method-ol">${k.ol || 0} OL</span>
+            <span class="badge-method-cc">${k.cc || 0} CC</span>
+          </div>
+          <button type="button" class="btn-card-action" onclick="openDetailKelas('${safeKode}')">
+            <span>Detail Jadwal</span>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderMatrixCardsDosen(container) {
+  const dStats = currentStatsData.dosen_stats || {};
+  const topJam = dStats.top_jam || [];
+
+  if (topJam.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted); grid-column: 1/-1;">Belum ada metrik dosen pengajar untuk semester ini.</div>`;
+    return;
+  }
+
+  const maxJam = topJam[0]?.total_jam || 1;
+
+  container.innerHTML = topJam.map((d, idx) => {
+    const isTop = idx === 0;
+    const pct = Math.round((d.total_jam / maxJam) * 100);
+
+    return `
+      <div class="stats-matrix-card ${isTop ? 'highlight-top' : ''}">
+        <div class="matrix-card-header">
+          <div>
+            <div class="matrix-card-title">${safeEscapeStats(d.nama_dosen)}</div>
+            <div style="margin-top: 6px;"><span class="badge-campus-tag" style="background: rgba(16,185,129,0.12); color: #10b981;">Dosen Pengajar</span></div>
+          </div>
+          <div class="matrix-card-gauge">
+            <span class="matrix-gauge-val">${d.total_jam}j</span>
+            <span class="matrix-gauge-lbl">Total Beban</span>
+          </div>
+        </div>
+
+        <div class="matrix-card-body">
+          <div class="matrix-stat-item">
+            <span class="matrix-stat-lbl">Frekuensi Sesi</span>
+            <strong class="matrix-stat-val text-primary">${d.total_sesi} Sesi</strong>
+          </div>
+          <div class="matrix-stat-item">
+            <span class="matrix-stat-lbl">Intensitas</span>
+            <strong class="matrix-stat-val">${pct}% Beban</strong>
+          </div>
+        </div>
+
+        <div class="matrix-prog-track" title="Intensitas jam mengajar: ${pct}%">
+          <div class="matrix-prog-bar" style="width: ${pct}%; background: linear-gradient(90deg, #10b981, #0284c7);"></div>
+        </div>
+
+        <div class="matrix-card-footer">
+          <div style="display: flex; gap: 5px;">
+            <span class="badge-method-tm">${d.tm || 0} TM</span>
+            <span class="badge-method-ol">${d.ol || 0} OL</span>
+            <span class="badge-method-cc">${d.cc || 0} CC</span>
+          </div>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">Peringkat #${idx + 1}</span>
         </div>
       </div>
     `;
