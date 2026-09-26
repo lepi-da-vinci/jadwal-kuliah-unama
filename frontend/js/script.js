@@ -300,9 +300,9 @@ function showSkeleton() {
 }
 
 // ==================== STATE DATABASE SEMESTER ====================
-let currentActiveSemester = 'Genap 2025';
+let currentActiveSemester = '';
 let allSemestersList = [];
-let selectedSemesterTemp = 'Genap 2025';
+let selectedSemesterTemp = '';
 
 function updateSemesterDisplay(semName) {
   if (!semName) return;
@@ -412,7 +412,7 @@ let explorerSearchTimeout = null;
 
 window.enterSemesterExplorerMode = async function(namaSemester) {
   if (!namaSemester) {
-    namaSemester = selectedSemesterTemp || currentActiveSemester || 'Genap 2025';
+    namaSemester = selectedSemesterTemp || currentActiveSemester || 'Ganjil 2026';
   }
   currentExplorerSemester = namaSemester;
   isSemesterExplorerMode = true;
@@ -454,7 +454,7 @@ window.enterSemesterExplorerMode = async function(namaSemester) {
 };
 
 window.launchSelectedSemesterExplorer = function() {
-  const target = selectedSemesterTemp || currentActiveSemester || 'Genap 2025';
+  const target = selectedSemesterTemp || currentActiveSemester || 'Ganjil 2026';
   enterSemesterExplorerMode(target);
 };
 

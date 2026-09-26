@@ -379,7 +379,7 @@ def get_semesters():
         """)
         rows = cursor.fetchall()
         
-        active_sem = "Genap 2025"
+        active_sem = rows[0].get('nama_semester', 'Ganjil 2026') if rows else 'Ganjil 2026'
         for r in rows:
             if r.get('start_date'):
                 r['start_date'] = str(r['start_date'])
