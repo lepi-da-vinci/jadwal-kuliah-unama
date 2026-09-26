@@ -8923,6 +8923,151 @@ body.kurikulum-explorer-active > .container > .card {
   }
 }
 
+/* ==========================================================================
+   HEADER SEMESTER BADGE & AUTO SWITCH SEMESTER TOAST
+   ========================================================================== */
+.header-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-semester-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary, #6366f1);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.header-semester-badge::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.header-semester-badge:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.45);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.18);
+}
+
+.auto-switch-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  max-width: 440px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-left: 4.5px solid var(--primary, #6366f1);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.18), 0 8px 12px -6px rgba(0, 0, 0, 0.1);
+  transform: translateY(130%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+}
+
+.auto-switch-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.auto-switch-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.auto-switch-toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary, #6366f1);
+  flex-shrink: 0;
+}
+
+.auto-switch-toast-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.auto-switch-toast-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-color, #1e293b);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.auto-switch-toast-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.4;
+}
+
+.auto-switch-toast-desc b {
+  color: var(--primary, #6366f1);
+}
+
+.auto-switch-toast-desc span {
+  font-weight: 600;
+  color: var(--text-color, #334155);
+}
+
+.auto-switch-toast-close {
+  background: none;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.auto-switch-toast-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-color, #1e293b);
+}
+
+@media (max-width: 640px) {
+  .auto-switch-toast {
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    max-width: none;
+  }
+}
+
+
 
 
 

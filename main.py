@@ -223,32 +223,36 @@ def admin_verify(token: str = Depends(verify_admin_token)):
 def get_db():
     pwd = os.getenv("DB_PASSWORD", "")
     host = os.getenv("DB_HOST", "127.0.0.1")
-    port = int(os.getenv("DB_PORT", 3306))
+    configured_port = int(os.getenv("DB_PORT", 3307))
     user = os.getenv("DB_USER", "root")
     db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
-    try:
-        return mysql.connector.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=pwd,
-            database=db_name
-        )
-    except mysql.connector.Error as err:
-        if err.errno == 1045:
-            for fallback_pwd in ["", "123456", "root"]:
-                if fallback_pwd != pwd:
-                    try:
-                        return mysql.connector.connect(
-                            host=host,
-                            port=port,
-                            user=user,
-                            password=fallback_pwd,
-                            database=db_name
-                        )
-                    except mysql.connector.Error:
-                        continue
-        raise err
+
+    ports_to_try = [configured_port]
+    for p in [3307, 3306]:
+        if p not in ports_to_try:
+            ports_to_try.append(p)
+
+    passwords_to_try = [pwd]
+    for p_word in ["", "123456", "root"]:
+        if p_word not in passwords_to_try:
+            passwords_to_try.append(p_word)
+
+    last_err = None
+    for p in ports_to_try:
+        for p_word in passwords_to_try:
+            try:
+                return mysql.connector.connect(
+                    host=host,
+                    port=p,
+                    user=user,
+                    password=p_word,
+                    database=db_name
+                )
+            except mysql.connector.Error as err:
+                last_err = err
+                continue
+    if last_err:
+        raise last_err
 
 @app.get("/api/server-urls")
 def get_server_urls(refresh: bool = False):
@@ -355,7 +359,7 @@ class SemesterAddRequest(BaseModel):
 
 @app.get("/api/semesters")
 def get_semesters():
-    """Mengambil daftar seluruh semester, status aktif, dan statistik jumlah jadwal per semester"""
+    """Mengambil daftar seluruh semester, status aktif, statistik jumlah jadwal, serta rentang tanggal awal & akhir"""
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -365,7 +369,9 @@ def get_semesters():
                 s.id_semester, 
                 s.nama_semester, 
                 s.is_active,
-                COUNT(j.id_jadwal) AS total_jadwal
+                COUNT(j.id_jadwal) AS total_jadwal,
+                MIN(j.tanggal) AS start_date,
+                MAX(j.tanggal) AS end_date
             FROM semester s
             LEFT JOIN jadwal j ON s.nama_semester = j.semester
             GROUP BY s.id_semester, s.nama_semester, s.is_active
@@ -375,9 +381,12 @@ def get_semesters():
         
         active_sem = "Genap 2025"
         for r in rows:
+            if r.get('start_date'):
+                r['start_date'] = str(r['start_date'])
+            if r.get('end_date'):
+                r['end_date'] = str(r['end_date'])
             if r.get('is_active') == 1:
                 active_sem = r.get('nama_semester')
-                break
                 
         return {
             "status": "success",
@@ -386,6 +395,86 @@ def get_semesters():
         }
     except mysql.connector.Error as err:
         return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/semesters/resolve-date")
+def resolve_semester_by_date(tanggal: str, auto_switch: bool = False):
+    """
+    Mendeteksi semester yang sesuai berdasarkan tanggal tertentu.
+    Jika auto_switch=True dan tanggal milik semester berbeda, otomatis update semester aktif di database.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 1. Cek semester aktif saat ini
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        active_row = cursor.fetchone()
+        current_active = active_row['nama_semester'] if active_row else 'Ganjil 2026'
+        
+        # 2. Cek apakah ada jadwal langsung pada tanggal ini (di jadwal atau jadwal_permanent)
+        cursor.execute("""
+            SELECT semester 
+            FROM (
+                SELECT semester FROM jadwal WHERE tanggal = %s
+                UNION
+                SELECT semester FROM jadwal_permanent WHERE tanggal = %s
+            ) t LIMIT 1
+        """, (tanggal, tanggal))
+        matched = cursor.fetchone()
+        
+        matched_semester = matched['semester'] if matched else None
+        
+        # 3. Jika tanggal tidak ada jadwal persis (misal hari Minggu/Libur), cari berdasarkan rentang tanggal semester
+        if not matched_semester:
+            cursor.execute("""
+                SELECT s.nama_semester
+                FROM semester s
+                JOIN (
+                    SELECT semester, MIN(tanggal) as min_d, MAX(tanggal) as max_d 
+                    FROM (
+                        SELECT semester, tanggal FROM jadwal WHERE tanggal IS NOT NULL
+                        UNION ALL
+                        SELECT semester, tanggal FROM jadwal_permanent WHERE tanggal IS NOT NULL
+                    ) all_j
+                    GROUP BY semester
+                ) rng ON s.nama_semester = rng.semester
+                WHERE %s BETWEEN rng.min_d AND rng.max_d
+                ORDER BY s.id_semester DESC
+                LIMIT 1
+            """, (tanggal,))
+            range_match = cursor.fetchone()
+            if range_match:
+                matched_semester = range_match['nama_semester']
+                
+        # Jika tetap tidak cocok dengan rentang manapun, tetap di current_active
+        if not matched_semester:
+            matched_semester = current_active
+            
+        is_different = (matched_semester != current_active)
+        switched = False
+        
+        # 4. Jika auto_switch diminta dan semester berbeda, aktifkan semester baru di DB
+        if auto_switch and is_different:
+            cursor.execute("UPDATE semester SET is_active = 0")
+            cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (matched_semester,))
+            conn.commit()
+            switched = True
+            print(f"[Auto-Switch] Berhasil mengalihkan database aktif ke '{matched_semester}' untuk tanggal {tanggal}.")
+            
+        return {
+            "status": "success",
+            "tanggal": tanggal,
+            "matched_semester": matched_semester,
+            "current_active": current_active,
+            "is_different": is_different,
+            "switched": switched
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()

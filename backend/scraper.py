@@ -30,32 +30,36 @@ load_dotenv()
 def get_db():
     pwd = os.getenv("DB_PASSWORD", "")
     host = os.getenv("DB_HOST", "127.0.0.1")
-    port = int(os.getenv("DB_PORT", 3306))
+    configured_port = int(os.getenv("DB_PORT", 3307))
     user = os.getenv("DB_USER", "root")
     db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
-    try:
-        return mysql.connector.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=pwd,
-            database=db_name
-        )
-    except mysql.connector.Error as err:
-        if err.errno == 1045:
-            for fallback_pwd in ["", "123456", "root"]:
-                if fallback_pwd != pwd:
-                    try:
-                        return mysql.connector.connect(
-                            host=host,
-                            port=port,
-                            user=user,
-                            password=fallback_pwd,
-                            database=db_name
-                        )
-                    except mysql.connector.Error:
-                        continue
-        raise err
+
+    ports_to_try = [configured_port]
+    for p in [3307, 3306]:
+        if p not in ports_to_try:
+            ports_to_try.append(p)
+
+    passwords_to_try = [pwd]
+    for p_word in ["", "123456", "root"]:
+        if p_word not in passwords_to_try:
+            passwords_to_try.append(p_word)
+
+    last_err = None
+    for p in ports_to_try:
+        for p_word in passwords_to_try:
+            try:
+                return mysql.connector.connect(
+                    host=host,
+                    port=p,
+                    user=user,
+                    password=p_word,
+                    database=db_name
+                )
+            except mysql.connector.Error as err:
+                last_err = err
+                continue
+    if last_err:
+        raise last_err
 
 def init_db_schema():
     """Memastikan seluruh tabel dan master data dasar tersedia saat startup (terutama di Docker)"""

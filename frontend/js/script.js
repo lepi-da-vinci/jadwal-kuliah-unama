@@ -6753,13 +6753,153 @@ document.getElementById('btn-open-room-finder')?.addEventListener('click', () =>
   openRoomFinderModal();
 });
 
-filterTanggal.addEventListener('change', () => {
+// =========================================================================
+// AUTO-SWITCH DATABASE SEMESTER BERDASARKAN TANGGAL DIPILIH
+// =========================================================================
+let isAutoSwitchingSemester = false;
+
+function showAutoSwitchToast(targetSemester, dateStr) {
+  let toast = document.getElementById('auto-switch-semester-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'auto-switch-semester-toast';
+    toast.className = 'auto-switch-toast';
+    document.body.appendChild(toast);
+  }
+  
+  let formattedDate = dateStr;
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const dt = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      const options = { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' };
+      formattedDate = dt.toLocaleDateString('id-ID', options);
+    }
+  } catch (e) {}
+
+  toast.innerHTML = `
+    <div class="auto-switch-toast-content">
+      <div class="auto-switch-toast-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </div>
+      <div class="auto-switch-toast-text">
+        <div class="auto-switch-toast-title">
+          <span>Otomatis Beralih Database</span>
+        </div>
+        <div class="auto-switch-toast-desc">
+          Beralih ke semester <b>${escapeHtml(targetSemester)}</b> untuk jadwal <span>${escapeHtml(formattedDate)}</span>
+        </div>
+      </div>
+      <button type="button" class="auto-switch-toast-close" onclick="this.closest('.auto-switch-toast').classList.remove('show')" aria-label="Tutup Notifikasi">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+  `;
+  
+  toast.classList.add('show');
+  
+  if (window._autoSwitchToastTimeout) clearTimeout(window._autoSwitchToastTimeout);
+  window._autoSwitchToastTimeout = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 4000);
+}
+window.showAutoSwitchToast = showAutoSwitchToast;
+
+async function handleSelectedDateChange(dateStr) {
+  if (!dateStr) {
+    updateRuanganFilterOptions();
+    applyFilters();
+    if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+    return;
+  }
+
+  // Pastikan filterTanggal selalu sync
+  const mainTanggal = document.getElementById('filter-tanggal');
+  if (mainTanggal && mainTanggal.value !== dateStr) {
+    mainTanggal.value = dateStr;
+  }
+
+  // 1. Cek apakah tanggal ini sudah ada di dalam jadwal semester aktif yang sedang dimuat (allJadwal)
+  const existsInCurrent = allJadwal && allJadwal.length > 0 && allJadwal.some(j => j.tanggal === dateStr);
+  
+  if (existsInCurrent) {
+    // Tanggal sudah cocok dengan database aktif saat ini
+    updateRuanganFilterOptions();
+    applyFilters();
+    if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+    fetchNotifikasiLab(dateStr, false);
+    syncData(dateStr);
+    return;
+  }
+
+  // 2. Jika tanggal belum ditemukan di semester yang sedang aktif, cek apakah milik database semester lain
+  if (!isAutoSwitchingSemester) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/semesters/resolve-date?tanggal=${encodeURIComponent(dateStr)}&auto_switch=true&_t=${Date.now()}`);
+      const json = await res.json();
+      
+      if (json.status === 'success' && json.is_different && json.matched_semester) {
+        isAutoSwitchingSemester = true;
+        const targetSemester = json.matched_semester;
+        
+        // Tampilkan notifikasi auto-switch yang elegan
+        showAutoSwitchToast(targetSemester, dateStr);
+        
+        // Update display semester aktif
+        currentActiveSemester = targetSemester;
+        updateSemesterDisplay(targetSemester);
+        
+        // Reload allJadwal untuk semester baru
+        showSkeleton();
+        const semParam = `&semester=${encodeURIComponent(targetSemester)}`;
+        const response = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}${semParam}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          allJadwal = (data.data || []).map(item => {
+            if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
+            return item;
+          });
+          populateFilters();
+        }
+        
+        // Pastikan tanggal tetap terpilih
+        if (mainTanggal) mainTanggal.value = dateStr;
+        
+        updateRuanganFilterOptions();
+        applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+        fetchNotifikasiLab(dateStr, false);
+        syncData(dateStr);
+        
+        // Update tampilan modal card di background
+        fetchSemestersData();
+        
+        isAutoSwitchingSemester = false;
+        return;
+      }
+    } catch (err) {
+      console.warn("[Auto-Switch Semester] Gagal memeriksa kecocokan tanggal semester:", err);
+    } finally {
+      isAutoSwitchingSemester = false;
+    }
+  }
+
+  // Fallback standar jika tidak ada pergantian semester
   updateRuanganFilterOptions();
   applyFilters();
-  if (filterTanggal.value) {
-    fetchNotifikasiLab(filterTanggal.value, false);
-    syncData(filterTanggal.value);
-  }
+  if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+  fetchNotifikasiLab(dateStr, false);
+  syncData(dateStr);
+}
+window.handleSelectedDateChange = handleSelectedDateChange;
+
+filterTanggal.addEventListener('change', () => {
+  handleSelectedDateChange(filterTanggal.value);
 });
 
 // 6. Auto-Sync setiap 10 menit
@@ -8710,10 +8850,7 @@ flatpickr("input[type='date'], #filter-tanggal", {
       onToday: (todayStr) => {
         const mainTanggal = document.getElementById('filter-tanggal');
         if (mainTanggal) mainTanggal.value = todayStr;
-        updateRuanganFilterOptions();
-        applyFilters();
-        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
-        syncData(todayStr);
+        handleSelectedDateChange(todayStr);
       }
     });
   },
@@ -8729,10 +8866,7 @@ flatpickr("input[type='date'], #filter-tanggal", {
       onToday: (todayStr) => {
         const mainTanggal = document.getElementById('filter-tanggal');
         if (mainTanggal) mainTanggal.value = todayStr;
-        updateRuanganFilterOptions();
-        applyFilters();
-        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
-        syncData(todayStr);
+        handleSelectedDateChange(todayStr);
       }
     });
   },
@@ -8741,10 +8875,7 @@ flatpickr("input[type='date'], #filter-tanggal", {
     const mainTanggal = document.getElementById('filter-tanggal');
     if (dateStr) {
       if (mainTanggal) mainTanggal.value = dateStr;
-      updateRuanganFilterOptions();
-      applyFilters();
-      if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
-      syncData(dateStr);
+      handleSelectedDateChange(dateStr);
     } else {
       if (mainTanggal) mainTanggal.value = '';
       updateRuanganFilterOptions();
