@@ -12528,9 +12528,28 @@ window.printKurikulum = printKurikulum;
 
 // ==================== VIEW 3: MODE EKSPLORASI STATISTIK PENGGUNAAN (LAB, KELAS & DOSEN) ====================
 var currentStatsTab = 'lab';
+var currentRoomFilter = 'all';
 var currentDetailKelasCode = null;
 var currentDetailKelasFilterDay = 'ALL';
 var currentDetailKelasJadwal = [];
+
+window.filterRoomTable = function(type) {
+  currentRoomFilter = type || 'all';
+  document.querySelectorAll('#group-filter-room .stats-subfilter-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  if (currentRoomFilter === 'all') {
+    const b = document.getElementById('subfilter-btn-all');
+    if (b) b.classList.add('active');
+  } else if (currentRoomFilter === 'Laboratorium') {
+    const b = document.getElementById('subfilter-btn-lab');
+    if (b) b.classList.add('active');
+  } else if (currentRoomFilter === 'Ruang Kelas') {
+    const b = document.getElementById('subfilter-btn-kelas');
+    if (b) b.classList.add('active');
+  }
+  renderLabStats();
+};
 
 
 function safeEscapeStats(str) {
@@ -12696,10 +12715,15 @@ function renderStatisticsUI() {
   if (kpiJam) kpiJam.innerText = `${(summary.total_jam_operasional || 0).toLocaleString('id-ID')} Jam`;
 
   const kpiLab = document.getElementById('stats-kpi-total-lab');
-  if (kpiLab) kpiLab.innerText = `${summary.total_lab_aktif || 0} Ruang`;
+  if (kpiLab) kpiLab.innerText = `${summary.total_ruang_aktif || summary.total_lab_aktif || 0} Ruang`;
+
+  const subRuang = document.getElementById('stats-kpi-sub-ruang');
+  if (subRuang && summary.total_lab_aktif !== undefined && summary.total_ruang_kelas_aktif !== undefined) {
+    subRuang.innerText = `${summary.total_lab_aktif} Lab Praktikum • ${summary.total_ruang_kelas_aktif} Ruang Teori`;
+  }
 
   const kpiKelas = document.getElementById('stats-kpi-total-kelas');
-  if (kpiKelas) kpiKelas.innerText = `${summary.total_kelas || 0} Kelas`;
+  if (kpiKelas) kpiKelas.innerText = `${summary.total_kelas || 0} Rombel`;
 
   const kpiDosen = document.getElementById('stats-kpi-total-dosen');
   if (kpiDosen) kpiDosen.innerText = `${summary.total_dosen || 0} Dosen`;
@@ -12764,13 +12788,31 @@ window.printOrExportStats = function() {
   window.print();
 };
 
-// ==================== RENDERING TAB 1: LABORATORIUM ====================
+// ==================== RENDERING TAB 1: LABORATORIUM & RUANG KELAS ====================
 function renderLabStats() {
   if (!currentStatsData || !currentStatsData.lab_stats) return;
   const labStats = currentStatsData.lab_stats;
   const summary = labStats.summary || {};
-  const rankings = labStats.rankings || [];
+  const allRankings = labStats.rankings || [];
+  const labRankings = labStats.lab_rankings || allRankings.filter(r => r.tipe === 'Laboratorium');
+  const kelasRankings = labStats.ruang_kelas_rankings || allRankings.filter(r => r.tipe === 'Ruang Kelas');
   const kampus = labStats.kampus || {};
+
+  // Update Subfilter Counts
+  const cntAll = document.getElementById('count-subfilter-all');
+  if (cntAll) cntAll.innerText = allRankings.length;
+  const cntLab = document.getElementById('count-subfilter-lab');
+  if (cntLab) cntLab.innerText = labRankings.length;
+  const cntKelas = document.getElementById('count-subfilter-kelas');
+  if (cntKelas) cntKelas.innerText = kelasRankings.length;
+
+  // Filter rankings according to currentRoomFilter
+  let displayRankings = allRankings;
+  if (currentRoomFilter === 'Laboratorium') {
+    displayRankings = labRankings;
+  } else if (currentRoomFilter === 'Ruang Kelas') {
+    displayRankings = kelasRankings;
+  }
 
   // 1. Highlight Cards
   const busy = summary.lab_tersibuk;
@@ -12841,17 +12883,19 @@ function renderLabStats() {
   const metaPill = document.getElementById('lab-method-meta');
   if (metaPill) metaPill.innerText = `Total ${summary.total_sesi || 0} Sesi Terjadwal`;
 
-  // 4. Lab Rankings Table
+  // 4. Room Rankings Table
   const tbody = document.getElementById('tbody-lab-rankings');
   if (!tbody) return;
 
-  if (rankings.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);">Tidak ada data utilisasi laboratorium untuk semester ini.</td></tr>`;
+  if (displayRankings.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-muted);">Tidak ada data ruangan untuk kategori yang dipilih.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = rankings.map((lb, idx) => {
+  tbody.innerHTML = displayRankings.map((lb, idx) => {
     const isTop = idx === 0;
+    const isLab = lb.tipe === 'Laboratorium';
+    const tipeBadge = `<span class="badge-type-${isLab ? 'lab' : 'kelas'}">${isLab ? 'Laboratorium' : 'Ruang Kelas'}</span>`;
     const campusBadge = lb.kampus && lb.kampus.toLowerCase().includes('thehok') 
       ? '<span class="badge-campus-tag campus-thehok">Thehok</span>' 
       : '<span class="badge-campus-tag campus-kobar">Kobar</span>';
@@ -12864,6 +12908,7 @@ function renderLabStats() {
         <td>
           <div style="font-weight: 700; color: var(--text-dark);">${safeEscapeStats(lb.nama_ruangan)}</div>
         </td>
+        <td style="text-align: center;">${tipeBadge}</td>
         <td style="text-align: center;">${campusBadge}</td>
         <td style="text-align: center; font-weight: 600;">${lb.total_sesi} Sesi</td>
         <td style="text-align: center; font-weight: 700; color: var(--primary);">${lb.total_jam} Jam</td>
@@ -13189,7 +13234,7 @@ function renderMatrixCardsLab(container) {
   const rankings = (currentStatsData.lab_stats && currentStatsData.lab_stats.rankings) || [];
 
   if (rankings.length === 0) {
-    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted); grid-column: 1/-1;">Belum ada metrik laboratorium untuk semester ini.</div>`;
+    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted); grid-column: 1/-1;">Belum ada metrik ruangan untuk semester ini.</div>`;
     return;
   }
 
@@ -13201,6 +13246,8 @@ function renderMatrixCardsLab(container) {
     const campusBadge = isThehok 
       ? '<span class="badge-campus-tag campus-thehok">Kampus Thehok</span>' 
       : '<span class="badge-campus-tag campus-kobar">Kampus Kobar</span>';
+    const isLab = lb.tipe === 'Laboratorium';
+    const tipeBadge = `<span class="badge-type-${isLab ? 'lab' : 'kelas'}">${isLab ? 'Laboratorium' : 'Ruang Kelas'}</span>`;
     const utilPct = lb.utilization_pct || Math.round((lb.total_jam / maxJam) * 100);
 
     return `
@@ -13208,7 +13255,10 @@ function renderMatrixCardsLab(container) {
         <div class="matrix-card-header">
           <div>
             <div class="matrix-card-title">${formatRoomName(lb.nama_ruangan, false)}</div>
-            <div style="margin-top: 6px;">${campusBadge}</div>
+            <div style="margin-top: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
+              ${campusBadge}
+              ${tipeBadge}
+            </div>
           </div>
           <div class="matrix-card-gauge">
             <span class="matrix-gauge-val">${utilPct}%</span>

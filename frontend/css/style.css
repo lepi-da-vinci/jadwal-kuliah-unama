@@ -7374,6 +7374,319 @@ body.kurikulum-explorer-active > .container > .card {
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
+/* ==================== STATS GRID & CHARTS (HARI, JAM, PRODI) ==================== */
+.stats-grid-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 992px) {
+  .stats-grid-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stats-bar-chart-container,
+.stats-prodi-dist-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.stats-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.88rem;
+}
+
+.stats-bar-label {
+  width: 80px;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-prodi-dist-container .stats-bar-label {
+  width: 185px;
+}
+
+.stats-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.stats-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--primary);
+}
+
+.stats-bar-fill.fill-hari {
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+}
+
+.stats-bar-fill.fill-jam {
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+}
+
+.stats-bar-fill.fill-prodi {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.stats-bar-val {
+  min-width: 75px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--text-dark);
+  font-size: 0.84rem;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ==================== STATS TABLES (RANKINGS & DETAIL) ==================== */
+.stats-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  border-radius: 12px;
+}
+
+.stats-custom-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.stats-custom-table th {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.stats-custom-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.stats-custom-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+/* Progress bar inside stats table */
+.stats-table-prog-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 130px;
+}
+
+.stats-table-prog-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.stats-table-prog-bar {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  transition: width 0.6s ease;
+}
+
+.stats-table-prog-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  min-width: 42px;
+  text-align: right;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Table Method Badges */
+.stats-table-method-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.stats-table-method-badges .badge-method-tm,
+.stats-table-method-badges .badge-method-ol,
+.stats-table-method-badges .badge-method-cc {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.badge-method-tm {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.badge-method-ol {
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.2);
+}
+
+.badge-method-cc {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Button & Badge Helpers for Tables */
+.btn-link-kelas {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dark);
+  padding: 3px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-link-kelas:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.badge-mini-stat {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.badge-anomali-ol {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.18);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #0284c7;
+}
+
+.badge-anomali-cc {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #ef4444;
+}
+
+.badge-kelas-count {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+/* Room Type Badges */
+.badge-type-lab {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(139, 124, 246, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(139, 124, 246, 0.22);
+}
+
+.badge-type-kelas {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+}
+
+/* Sub-filter group for Ruangan Table */
+.stats-subfilter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.stats-subfilter-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.stats-subfilter-btn:hover {
+  color: var(--text-dark);
+}
+
+.stats-subfilter-btn.active {
+  background: var(--bg-card);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
 /* ==========================================================================
    SUB-VIEW: HALAMAN DETAIL KELAS
    ========================================================================== */
@@ -9518,6 +9831,7 @@ body.kurikulum-explorer-active > .container > .card {
   transform: translateX(4px);
 }
 
+/* ==========================================================================
    HEADER SEMESTER BADGE & AUTO SWITCH SEMESTER TOAST
    ========================================================================== */
 .header-title-wrap {
@@ -9658,11 +9972,6 @@ body.kurikulum-explorer-active > .container > .card {
     left: 16px;
     right: 16px;
     max-width: none;
+    }
   }
 }
-
-
-
-
-
-

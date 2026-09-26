@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import datetime
 import hashlib
 import hmac
@@ -917,9 +918,12 @@ def get_statistics(semester: str = None):
                 "dosen_stats": {"total_dosen": 0, "top_jam": [], "top_ol": [], "top_cc": []}
             }
 
-        import collections
+        all_ruangan_data = collections.defaultdict(lambda: {
+            "nama_ruangan": "", "kampus": "", "tipe": "Ruang Kelas", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
         lab_data = collections.defaultdict(lambda: {
-            "nama_ruangan": "", "kampus": "", "total_sesi": 0, "total_jam": 0.0,
+            "nama_ruangan": "", "kampus": "", "tipe": "Laboratorium", "total_sesi": 0, "total_jam": 0.0,
             "tm": 0, "ol": 0, "cc": 0
         })
         dosen_data = collections.defaultdict(lambda: {
@@ -992,27 +996,44 @@ def get_statistics(semester: str = None):
             elif metode == "OL": univ_ol += 1
             elif metode == "CC": univ_cc += 1
 
-            # 1. Agregasi Lab
+            # 1. Agregasi Ruangan (Laboratorium & Ruang Kelas Teori)
             ruang = r.get("nama_ruangan") or ""
             kampus = (r.get("kampus") or "Kobar").strip()
-            if scraper.is_lab(ruang):
+            if ruang:
                 clean_ruang = f"{ruang} ({kampus})" if kampus and kampus.lower() not in ruang.lower() else ruang
-                lab_entry = lab_data[clean_ruang]
-                lab_entry["nama_ruangan"] = clean_ruang
-                lab_entry["kampus"] = kampus
-                lab_entry["total_sesi"] += 1
-                lab_entry["total_jam"] = round(lab_entry["total_jam"] + dur_hour, 2)
-                
-                total_lab_jam += dur_hour
-                if metode == "TM":
-                    lab_entry["tm"] += 1
-                    total_lab_tm += 1
-                elif metode == "OL":
-                    lab_entry["ol"] += 1
-                    total_lab_ol += 1
-                elif metode == "CC":
-                    lab_entry["cc"] += 1
-                    total_lab_cc += 1
+                is_lab_room = scraper.is_lab(ruang)
+                tipe_ruang = "Laboratorium" if is_lab_room else "Ruang Kelas"
+
+                # Semua Ruangan (41 Ruang)
+                r_entry = all_ruangan_data[clean_ruang]
+                r_entry["nama_ruangan"] = clean_ruang
+                r_entry["kampus"] = kampus
+                r_entry["tipe"] = tipe_ruang
+                r_entry["total_sesi"] += 1
+                r_entry["total_jam"] = round(r_entry["total_jam"] + dur_hour, 2)
+                if metode == "TM": r_entry["tm"] += 1
+                elif metode == "OL": r_entry["ol"] += 1
+                elif metode == "CC": r_entry["cc"] += 1
+
+                # Khusus Laboratorium (13 Lab)
+                if is_lab_room:
+                    lab_entry = lab_data[clean_ruang]
+                    lab_entry["nama_ruangan"] = clean_ruang
+                    lab_entry["kampus"] = kampus
+                    lab_entry["tipe"] = "Laboratorium"
+                    lab_entry["total_sesi"] += 1
+                    lab_entry["total_jam"] = round(lab_entry["total_jam"] + dur_hour, 2)
+                    
+                    total_lab_jam += dur_hour
+                    if metode == "TM":
+                        lab_entry["tm"] += 1
+                        total_lab_tm += 1
+                    elif metode == "OL":
+                        lab_entry["ol"] += 1
+                        total_lab_ol += 1
+                    elif metode == "CC":
+                        lab_entry["cc"] += 1
+                        total_lab_cc += 1
 
                 # Kampus stats
                 k_key = "Kobar" if "kobar" in kampus.lower() else "Thehok"
@@ -1096,11 +1117,14 @@ def get_statistics(semester: str = None):
                 p_entry["total_sesi"] += 1
                 p_entry["total_jam"] = round(p_entry["total_jam"] + dur_hour, 2)
 
-        # Format Lab Rankings
-        lab_rankings = sorted(lab_data.values(), key=lambda x: x["total_jam"], reverse=True)
-        max_lab_jam = lab_rankings[0]["total_jam"] if lab_rankings else 1.0
-        for lb in lab_rankings:
-            lb["utilization_pct"] = round((lb["total_jam"] / max_lab_jam) * 100, 1) if max_lab_jam > 0 else 0
+        # Format Ruangan Rankings (Semua Ruangan: Lab + Ruang Kelas)
+        all_ruangan_rankings = sorted(all_ruangan_data.values(), key=lambda x: x["total_jam"], reverse=True)
+        max_ruang_jam = all_ruangan_rankings[0]["total_jam"] if all_ruangan_rankings else 1.0
+        for rb in all_ruangan_rankings:
+            rb["utilization_pct"] = round((rb["total_jam"] / max_ruang_jam) * 100, 1) if max_ruang_jam > 0 else 0
+
+        lab_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Laboratorium"]
+        ruang_kelas_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Ruang Kelas"]
 
         total_lab_sesi = total_lab_tm + total_lab_ol + total_lab_cc
         lab_summary = {
@@ -1166,10 +1190,16 @@ def get_statistics(semester: str = None):
         rata_sesi_dosen = round(total_dosen_sesi / dosen_aktif_count, 1) if dosen_aktif_count > 0 else 0
 
         total_rows = len(rows)
+        total_ruang_aktif_cnt = len(all_ruangan_rankings)
+        total_lab_cnt = len(lab_rankings)
+        total_ruang_kelas_cnt = len(ruang_kelas_rankings)
+
         summary = {
             "total_perkuliahan": total_rows,
             "total_jam_operasional": round(total_jam_keseluruhan, 2),
-            "total_lab_aktif": len(lab_data),
+            "total_ruang_aktif": total_ruang_aktif_cnt,
+            "total_lab_aktif": total_lab_cnt,
+            "total_ruang_kelas_aktif": total_ruang_kelas_cnt,
             "total_kelas": len(kelas_data),
             "total_dosen": dosen_aktif_count,
             "rata_sesi_dosen": rata_sesi_dosen,
@@ -1191,7 +1221,13 @@ def get_statistics(semester: str = None):
             "summary": summary,
             "lab_stats": {
                 "summary": lab_summary,
-                "rankings": lab_rankings,
+                "rankings": all_ruangan_rankings,
+                "all_rankings": all_ruangan_rankings,
+                "lab_rankings": lab_rankings,
+                "ruang_kelas_rankings": ruang_kelas_rankings,
+                "total_ruang": total_ruang_aktif_cnt,
+                "total_lab": total_lab_cnt,
+                "total_ruang_kelas": total_ruang_kelas_cnt,
                 "kampus": kampus_lab
             },
             "kelas_stats": {
