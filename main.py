@@ -996,16 +996,17 @@ def get_statistics(semester: str = None):
             elif metode == "OL": univ_ol += 1
             elif metode == "CC": univ_cc += 1
 
-            # 1. Agregasi Ruangan (Laboratorium & Ruang Kelas Teori)
+            # 1. Agregasi Ruangan (Labor & Ruang Kelas Teori)
             ruang = r.get("nama_ruangan") or ""
             kampus = (r.get("kampus") or "Kobar").strip()
             if ruang:
-                clean_ruang = f"{ruang} ({kampus})" if kampus and kampus.lower() not in ruang.lower() else ruang
-                is_lab_room = scraper.is_lab(ruang)
-                tipe_ruang = "Laboratorium" if is_lab_room else "Ruang Kelas"
+                clean_ruang = re.sub(r"\s*\((Thehok|Kobar|Kampus.*?)\)", "", ruang, flags=re.IGNORECASE).strip()
+                room_key = f"{clean_ruang}_{kampus}"
+                is_lab_room = scraper.is_lab(clean_ruang)
+                tipe_ruang = "Labor" if is_lab_room else "Ruang Kelas"
 
                 # Semua Ruangan (41 Ruang)
-                r_entry = all_ruangan_data[clean_ruang]
+                r_entry = all_ruangan_data[room_key]
                 r_entry["nama_ruangan"] = clean_ruang
                 r_entry["kampus"] = kampus
                 r_entry["tipe"] = tipe_ruang
@@ -1015,12 +1016,12 @@ def get_statistics(semester: str = None):
                 elif metode == "OL": r_entry["ol"] += 1
                 elif metode == "CC": r_entry["cc"] += 1
 
-                # Khusus Laboratorium (13 Lab)
+                # Khusus Labor (13 Lab)
                 if is_lab_room:
-                    lab_entry = lab_data[clean_ruang]
+                    lab_entry = lab_data[room_key]
                     lab_entry["nama_ruangan"] = clean_ruang
                     lab_entry["kampus"] = kampus
-                    lab_entry["tipe"] = "Laboratorium"
+                    lab_entry["tipe"] = "Labor"
                     lab_entry["total_sesi"] += 1
                     lab_entry["total_jam"] = round(lab_entry["total_jam"] + dur_hour, 2)
                     
@@ -1088,7 +1089,6 @@ def get_statistics(semester: str = None):
                 elif metode == "CC": mk_entry["cc"] += 1
 
             # 6. Agregasi Program Studi (Prodi)
-            import re
             if kelas and kelas != "Lainnya":
                 m_prodi = re.search(r'([A-Za-z]+)', kelas)
                 raw_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
@@ -1123,7 +1123,7 @@ def get_statistics(semester: str = None):
         for rb in all_ruangan_rankings:
             rb["utilization_pct"] = round((rb["total_jam"] / max_ruang_jam) * 100, 1) if max_ruang_jam > 0 else 0
 
-        lab_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Laboratorium"]
+        lab_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Labor"]
         ruang_kelas_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Ruang Kelas"]
 
         total_lab_sesi = total_lab_tm + total_lab_ol + total_lab_cc
