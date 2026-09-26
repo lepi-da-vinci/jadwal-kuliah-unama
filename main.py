@@ -957,16 +957,19 @@ def get_statistics(semester: str = None):
             "total_sesi": 0, "total_jam": 0.0
         })
         prodi_names = {
-            "PT": "Teknik Informatika (S1)",
             "PS": "Sistem Informasi (S1)",
-            "PK": "Sistem Komputer (S1)",
+            "PT": "Teknik Informatika (S1)",
             "SK": "Sistem Komputer (S1)",
-            "MS": "Magister Sistem Informasi (S2)",
-            "MM": "Magister Manajemen (S2)",
+            "PK": "Sistem Komputer (S1)",
             "PM": "Peminatan / Manajemen",
+            "MT": "Magister Teknik Informatika (S2)",
+            "MM": "Magister Manajemen (S2)",
+            "MS": "Magister Sistem Informasi (S2)",
+            "MK": "Magister Ilmu Komputer (S2)",
             "PW": "Kelas Eksekutif / Weekend",
             "MW": "Kelas Eksekutif / Malam",
             "PB": "Peminatan Bisnis",
+            "MB": "Magister Bisnis",
             "MI": "Manajemen Informatika (D3)",
             "KA": "Komputerisasi Akuntansi (D3)"
         }
@@ -1067,7 +1070,25 @@ def get_statistics(semester: str = None):
             import re
             if kelas and kelas != "Lainnya":
                 m_prodi = re.search(r'([A-Za-z]+)', kelas)
-                p_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
+                raw_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
+                
+                # Normalisasi prefix kode prodi UNAMA (contoh: PSP/PST -> PS, PTP/PTT -> PT, PKP/PKT -> SK)
+                p_code = raw_code
+                if raw_code.startswith("PS"): p_code = "PS"
+                elif raw_code.startswith("PT"): p_code = "PT"
+                elif raw_code.startswith("PK") or raw_code.startswith("SK"): p_code = "SK"
+                elif raw_code.startswith("PM"): p_code = "PM"
+                elif raw_code.startswith("MS"): p_code = "MS"
+                elif raw_code.startswith("MM"): p_code = "MM"
+                elif raw_code.startswith("MT"): p_code = "MT"
+                elif raw_code.startswith("MK"): p_code = "MK"
+                elif raw_code.startswith("MW"): p_code = "MW"
+                elif raw_code.startswith("PW"): p_code = "PW"
+                elif raw_code.startswith("PB"): p_code = "PB"
+                elif raw_code.startswith("MB"): p_code = "MB"
+                elif raw_code.startswith("MI"): p_code = "MI"
+                elif raw_code.startswith("KA"): p_code = "KA"
+                
                 p_entry = prodi_map[p_code]
                 p_entry["kode_prodi"] = p_code
                 p_entry["nama_prodi"] = prodi_names.get(p_code, f"Program Studi {p_code}")
@@ -1122,7 +1143,7 @@ def get_statistics(semester: str = None):
             })
 
         distribusi_prodi = []
-        for p_item in sorted(prodi_map.values(), key=lambda x: len(x["kelas_set"]), reverse=True)[:10]:
+        for p_item in sorted(prodi_map.values(), key=lambda x: len(x["kelas_set"]), reverse=True):
             distribusi_prodi.append({
                 "kode": p_item["kode_prodi"],
                 "nama": p_item["nama_prodi"],
