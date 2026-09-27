@@ -3305,7 +3305,17 @@ async function exitAdminMode(notifyBackend = true) {
 
 function closeSettingModal(keepAdminSession = false) {
   const testModal = document.getElementById('test-wa-modal');
-  if (testModal) testModal.classList.remove('open');
+  if (testModal) {
+    testModal.classList.remove('open');
+    testModal.style.backgroundColor = '';
+    testModal.style.transition = '';
+    const modalBox = testModal.querySelector('.modal-box');
+    if (modalBox) {
+      modalBox.style.transform = '';
+      modalBox.style.transition = '';
+      modalBox.style.willChange = '';
+    }
+  }
 
   if (!keepAdminSession && !isTestingPopupNotif) {
     exitAdminMode();
@@ -3314,6 +3324,179 @@ function closeSettingModal(keepAdminSession = false) {
   if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('setting');
   if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
 }
+
+/**
+ * Fitur Gesture Tarik / Swipe-to-Dismiss untuk Modal Setting (Bottom Sheet di HP)
+ * Memungkinkan user menahan dan menarik handle bar di atas setting naik (elastis) atau turun ke bawah untuk menutup modal.
+ */
+function initSettingModalDragToDismiss() {
+  const modalOverlay = document.getElementById('test-wa-modal');
+  if (!modalOverlay) return;
+
+  const modalBox = modalOverlay.querySelector('.setting-modal-box') || modalOverlay.querySelector('.modal-box');
+  const dragHandle = document.getElementById('setting-drag-handle');
+  if (!modalBox || !dragHandle) return;
+
+  if (dragHandle.dataset.dragInitialized === 'true') return;
+  dragHandle.dataset.dragInitialized = 'true';
+
+  let isDragging = false;
+  let startY = 0;
+  let currentY = 0;
+  let startTime = 0;
+  let activePointerId = null;
+
+  function resetBoxStyles(animate = true) {
+    if (animate) {
+      modalBox.style.transition = 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)';
+      modalOverlay.style.transition = 'background-color 0.28s ease';
+    } else {
+      modalBox.style.transition = 'none';
+      modalOverlay.style.transition = 'none';
+    }
+    modalBox.style.transform = '';
+    modalOverlay.style.backgroundColor = '';
+    dragHandle.classList.remove('dragging');
+
+    if (animate) {
+      setTimeout(() => {
+        modalBox.style.transition = '';
+        modalOverlay.style.transition = '';
+      }, 300);
+    }
+  }
+
+  function handleStart(clientY, pointerId, target) {
+    if (target && target.closest('button, input, select, a, [role="button"]:not(#setting-drag-handle)')) {
+      return false;
+    }
+
+    isDragging = true;
+    activePointerId = pointerId;
+    startY = clientY;
+    currentY = clientY;
+    startTime = Date.now();
+
+    modalBox.style.transition = 'none';
+    modalOverlay.style.transition = 'none';
+    modalBox.style.willChange = 'transform';
+    dragHandle.classList.add('dragging');
+    return true;
+  }
+
+  function handleMove(clientY) {
+    if (!isDragging) return;
+    currentY = clientY;
+    const deltaY = currentY - startY;
+
+    if (deltaY > 0) {
+      // Tarik ke bawah (mengikuti jari)
+      modalBox.style.transform = `translateY(${deltaY}px)`;
+      const progress = Math.min(deltaY / 400, 1);
+      const alpha = Math.max(0.12, 0.6 * (1 - progress * 0.75));
+      modalOverlay.style.backgroundColor = `rgba(15, 23, 42, ${alpha})`;
+    } else {
+      // Tarik ke atas (efek karet / elastis rubber-band)
+      const damped = Math.max(-28, deltaY * 0.22);
+      modalBox.style.transform = `translateY(${damped}px)`;
+    }
+  }
+
+  function handleEnd(target) {
+    if (!isDragging) return;
+    isDragging = false;
+    modalBox.style.willChange = '';
+    dragHandle.classList.remove('dragging');
+
+    const deltaY = currentY - startY;
+    const dt = Math.max(Date.now() - startTime, 1);
+    const velocity = deltaY / dt;
+
+    const isTapOnHandle = Math.abs(deltaY) < 8 && dt < 280 && Boolean(target && target.closest('#setting-drag-handle'));
+    const isSwipeDown = deltaY > 75 || (deltaY > 25 && velocity > 0.32);
+
+    if (isSwipeDown || isTapOnHandle) {
+      // Meluncur ke bawah menutup modal
+      modalBox.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)';
+      modalOverlay.style.transition = 'background-color 0.22s ease';
+      modalBox.style.transform = 'translateY(110%)';
+      modalOverlay.style.backgroundColor = 'rgba(15, 23, 42, 0)';
+
+      setTimeout(() => {
+        closeSettingModal(false);
+        resetBoxStyles(false);
+      }, 230);
+    } else {
+      // Kembali ke posisi awal
+      resetBoxStyles(true);
+    }
+  }
+
+  const targets = [dragHandle];
+  const modalIcon = document.getElementById('wa-modal-icon');
+  if (modalIcon) targets.push(modalIcon);
+
+  if (window.PointerEvent) {
+    targets.forEach(el => {
+      el.style.touchAction = 'none';
+      el.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        if (!handleStart(e.clientY, e.pointerId, e.target)) return;
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch (_) {}
+      });
+      el.addEventListener('pointermove', (e) => {
+        if (!isDragging || e.pointerId !== activePointerId) return;
+        handleMove(e.clientY);
+      });
+      const onPointerUp = (e) => {
+        if (!isDragging || (activePointerId !== null && e.pointerId !== activePointerId)) return;
+        try {
+          if (el.hasPointerCapture(e.pointerId)) {
+            el.releasePointerCapture(e.pointerId);
+          }
+        } catch (_) {}
+        activePointerId = null;
+        handleEnd(e.target);
+      };
+      el.addEventListener('pointerup', onPointerUp);
+      el.addEventListener('pointercancel', onPointerUp);
+    });
+  } else {
+    // Touch fallback untuk browser lama
+    targets.forEach(el => {
+      el.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length === 1) {
+          handleStart(e.touches[0].clientY, 'touch', e.target);
+        }
+      }, { passive: true });
+      el.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches && e.touches.length === 1) {
+          handleMove(e.touches[0].clientY);
+        }
+      }, { passive: true });
+      el.addEventListener('touchend', (e) => {
+        if (isDragging) handleEnd(e.target);
+      }, { passive: true });
+      el.addEventListener('touchcancel', () => {
+        if (isDragging) {
+          resetBoxStyles(true);
+          isDragging = false;
+        }
+      }, { passive: true });
+    });
+  }
+
+  // Aksesibilitas Keyboard pada drag handle
+  dragHandle.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      closeSettingModal(false);
+    }
+  });
+}
+window.initSettingModalDragToDismiss = initSettingModalDragToDismiss;
 
 function getAdminHeaders(customHeaders = {}) {
   const headers = { ...customHeaders };
@@ -3677,7 +3860,18 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     };
 
     showMenu();
+    testModal.style.backgroundColor = '';
+    testModal.style.transition = '';
+    const modalBoxEl = testModal.querySelector('.modal-box');
+    if (modalBoxEl) {
+      modalBoxEl.style.transform = '';
+      modalBoxEl.style.transition = '';
+      modalBoxEl.style.willChange = '';
+    }
     testModal.classList.add('open');
+    if (typeof initSettingModalDragToDismiss === 'function') {
+      initSettingModalDragToDismiss();
+    }
     if (typeof pushModalHistory === 'function') pushModalHistory('setting');
     if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
 
@@ -12041,6 +12235,10 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initSettingModalDragToDismiss === 'function') {
+    initSettingModalDragToDismiss();
+  }
+
   const btnSpotlight = document.getElementById('btn-spotlight');
   if (btnSpotlight) {
     btnSpotlight.addEventListener('click', (e) => {

@@ -1396,6 +1396,56 @@ body.modal-open {
 .setting-modal-box {
   max-width: 840px;
 }
+/* Drag Handle Zone untuk Bottom Sheet & Modal Swipe-to-Dismiss */
+.modal-drag-handle-zone {
+  display: flex;
+  width: 100%;
+  padding: 4px 0 14px 0;
+  margin: -6px 0 2px 0;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  -webkit-tap-highlight-color: transparent;
+}
+.modal-drag-handle-zone:active {
+  cursor: grabbing;
+}
+.modal-drag-handle-bar {
+  width: 44px;
+  height: 4.5px;
+  background: var(--border-light, #94a3b8);
+  border-radius: 999px;
+  opacity: 0.7;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+              background-color 0.2s ease, 
+              opacity 0.2s ease, 
+              transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.modal-drag-handle-zone:hover .modal-drag-handle-bar {
+  opacity: 0.95;
+  width: 52px;
+  background: var(--primary, #6366f1);
+  transform: scaleY(1.2);
+}
+.modal-drag-handle-zone:active .modal-drag-handle-bar,
+.modal-drag-handle-zone.dragging .modal-drag-handle-bar {
+  opacity: 1;
+  width: 58px;
+  background: var(--primary, #6366f1);
+  transform: scaleY(1.3);
+}
+.setting-modal-box::before,
+.modal-box:has(.modal-drag-handle-zone)::before {
+  display: none !important;
+  content: none !important;
+}
 .modal-box .modal-icon {
   font-size: 2.2em;
   margin: 0 auto 14px;
