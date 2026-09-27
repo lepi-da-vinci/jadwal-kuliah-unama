@@ -1536,49 +1536,117 @@ function populateFilters() {
 }
 
 // ─── Detektor & Indikator Jadwal Bentrok (Conflict Detector) ───
-function is2Sks(namaMk) {
-  if (!namaMk || typeof namaMk !== 'string') return false;
-  const mk = namaMk.toLowerCase();
-  const twoSksKeywords = [
-    'pemrograman mobile',
-    'basic computer',
-    'bahasa inggris',
-    'kecakapan antar personal',
-    'matematika diskrit',
-    'kewarganegaraan',
-    'komputer dan masyarakat',
-    'kalkulus',
-    'kewirausahaan',
-    'rekayasa perangkat lunak',
-    'toefl',
-    'pengantar akuntansi',
-    'pengantar bisnis',
-    'pasar keuangan',
-    'hukum bisnis',
-    'pengantar sistem komputer',
-    'socialpreneurship',
-    'knowledge management',
-    'analisa kinerja',
-    'perilaku konsumen',
-    'praktikum',
-    'manajemen stratejik',
-    'pengantar ekonomi',
-    'sistem digital',
-    'sistem informasi manajemen',
-    'strategi bisnis',
-    'tata kelola sistem informasi',
-    'manajemen mutu',
-    'manajemen proyek tik'
-  ];
-  return twoSksKeywords.some(k => mk.includes(k));
+let _clientCurriculumSksMap = null;
+async function initCurriculumSksMap() {
+  if (_clientCurriculumSksMap) return _clientCurriculumSksMap;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/sks-map`);
+    const json = await res.json();
+    if (json && json.status === 'success') {
+      _clientCurriculumSksMap = json;
+    }
+  } catch (e) {
+    console.warn('[SKS Map Init Notice]', e);
+  }
+  return _clientCurriculumSksMap;
+}
+initCurriculumSksMap();
+
+function extractProdiFromKelas(kelas) {
+  if (!kelas || typeof kelas !== 'string') return null;
+  const m = kelas.match(/\d{2}[A-Za-z]([A-Za-z])/);
+  if (m) {
+    const c = m[1].toUpperCase();
+    if (c === 'T') return 'TI';
+    if (c === 'S') return 'SI';
+    if (c === 'K') return 'SK';
+    if (c === 'M' || c === 'W') return 'MANAJEMEN';
+    if (c === 'A') return 'AKUNTANSI';
+    if (c === 'B') return 'BISNIS';
+  }
+  return null;
+}
+
+const TWO_SKS_KEYWORDS = [
+  'pemrograman mobile', 'basic computer', 'bahasa inggris', 'kecakapan antar personal',
+  'kecakapan antar personil', 'matematika diskrit', 'kewarganegaraan', 'pend. kewarganegaraan',
+  'pendidikan kewarganegaraan', 'pend. pancasila', 'pendidikan pancasila', 'pendidikan agama',
+  'komputer dan masyarakat', 'kalkulus', 'kewirausahaan', 'rekayasa perangkat lunak',
+  'toefl', 'pengantar akuntansi', 'pengantar bisnis', 'pasar keuangan', 'hukum bisnis',
+  'pengantar sistem komputer', 'socialpreneurship', 'knowledge management', 'analisa kinerja',
+  'perilaku konsumen', 'praktikum', 'manajemen stratejik', 'manajemen strategik',
+  'pengantar ekonomi', 'sistem digital', 'sistem informasi manajemen', 'strategi bisnis',
+  'tata kelola sistem informasi', 'manajemen mutu', 'manajemen proyek tik',
+  'pengantar teknologi informasi', 'pengantar audit', 'pengantar manajemen',
+  'pengantar kewirausahaan', 'pengantar cloud', 'pengantar mekatronika',
+  'etika profesi', 'komunikasi bisnis', 'logika matematika', 'aljabar linear',
+  'arsitektur dan org', 'arsitektur dan organisasi', 'sistem operasi',
+  'analisa numerik', 'teori bahasa dan automata', 'laboratorium kewirausahaan',
+  'laboraturium kewirausahaan', 'analisis laporan keuangan', 'seni pentas',
+  'dinamika kewirausahaan', 'kepemimpinan dan pengembangan organisasi'
+];
+
+function getSks(itemOrMk) {
+  if (!itemOrMk) return 3;
+  // 1. Jika item berupa object dan sudah memiliki field sks dari backend
+  if (typeof itemOrMk === 'object' && typeof itemOrMk.sks === 'number' && itemOrMk.sks > 0) {
+    return itemOrMk.sks;
+  }
+  
+  const namaMk = typeof itemOrMk === 'string' ? itemOrMk : (itemOrMk.nama_mk || '');
+  const kelas = typeof itemOrMk === 'object' ? (itemOrMk.kelas || '') : '';
+  if (!namaMk) return 3;
+  const mk = namaMk.trim().toLowerCase();
+  const prodi = extractProdiFromKelas(kelas);
+
+  // 2. Cek kurikulum sks map jika sudah ter-fetch
+  if (_clientCurriculumSksMap) {
+    if (prodi && _clientCurriculumSksMap.prodi_map && _clientCurriculumSksMap.prodi_map[`${mk}:::${prodi}`]) {
+      return _clientCurriculumSksMap.prodi_map[`${mk}:::${prodi}`];
+    }
+    if (_clientCurriculumSksMap.name_map && _clientCurriculumSksMap.name_map[mk]) {
+      return _clientCurriculumSksMap.name_map[mk];
+    }
+  }
+
+  // 3. Khusus Kecerdasan Buatan (3 SKS di TI, 2 SKS di SI dan SK)
+  if (mk.includes('kecerdasan buatan')) {
+    if (prodi === 'TI') return 3;
+    if (prodi === 'SI' || prodi === 'SK') return 2;
+  }
+
+  // 4. Cek daftar pola kata kunci 2 SKS umum
+  if (TWO_SKS_KEYWORDS.some(k => mk.includes(k))) {
+    return 2;
+  }
+
+  // 5. Cek skripsi/proyek
+  if (mk.includes('tugas akhir') || mk.includes('skripsi')) return 6;
+  if (mk.includes('proyek penelitian') || mk.includes('capstone')) return 4;
+
+  return 3;
+}
+
+function is2Sks(itemOrMk) {
+  return getSks(itemOrMk) === 2;
 }
 
 function getClassDuration(itemOrMk) {
   if (!itemOrMk) return 135;
-  const namaMk = typeof itemOrMk === 'string' ? itemOrMk : (itemOrMk.nama_mk || '');
-  if (is2Sks(namaMk)) return 90;
+  // 1. Jika item memiliki durasi_menit langsung dari backend
+  if (typeof itemOrMk === 'object' && typeof itemOrMk.durasi_menit === 'number' && itemOrMk.durasi_menit > 0) {
+    return itemOrMk.durasi_menit;
+  }
   
-  // Deteksi berbasis slot waktu 90 menit UNAMA: 09:30, 11:00, 15:30, 18:30, 20:00
+  // 2. Hitung durasi berdasarkan SKS (2 SKS = 90 menit, 3 SKS = 135 menit)
+  const sks = getSks(itemOrMk);
+  if (sks === 2) return 90;
+  if (sks === 3) return 135;
+  if (sks === 4) return 180;
+  if (sks === 1) return 45;
+  if (sks === 6) return 270;
+
+  // 3. Deteksi berbasis slot waktu 90 menit UNAMA: 09:30, 11:00, 15:30, 18:30, 20:00
   const jam = typeof itemOrMk === 'object' ? itemOrMk.jam : null;
   if (jam) {
     const startMin = parseTimeToMinutes(jam);
@@ -1587,6 +1655,13 @@ function getClassDuration(itemOrMk) {
     }
   }
   return 135;
+}
+
+function formatMinutesToTime(totalMin) {
+  if (totalMin === null || totalMin === undefined || isNaN(totalMin)) return '';
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function parseTimeToMinutes(timeStr) {
@@ -8075,7 +8150,20 @@ function renderBentrokList() {
     `;
   }
 
-  container.innerHTML = collisionItems.map(c => `
+  container.innerHTML = collisionItems.map(c => {
+    const durA = getClassDuration(c.itemA);
+    const smA = parseTimeToMinutes(c.itemA.jam);
+    const emA = smA !== null ? smA + durA : null;
+    const endStrA = emA !== null ? formatMinutesToTime(emA) : '';
+    const sksA = getSks(c.itemA);
+
+    const durB = getClassDuration(c.itemB);
+    const smB = parseTimeToMinutes(c.itemB.jam);
+    const emB = smB !== null ? smB + durB : null;
+    const endStrB = emB !== null ? formatMinutesToTime(emB) : '';
+    const sksB = getSks(c.itemB);
+
+    return `
     <div class="info-bentrok-card">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
         <span class="info-tag tag-batal">
@@ -8092,14 +8180,17 @@ function renderBentrokList() {
       <div class="bentrok-pair-grid">
         <!-- Kelas 1 -->
         <div class="bentrok-item-box">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="info-time-chip" style="font-size: 0.78em;">${escapeHtml(c.itemA.jam || '-')}</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="info-time-chip" style="font-size: 0.78em;">${escapeHtml(c.itemA.jam || '-')}${endStrA ? ` - ${endStrA}` : ''}</span>
+              <span style="font-size: 0.72em; padding: 2px 7px; border-radius: 4px; background: rgba(59, 130, 246, 0.12); color: #3b82f6; font-weight: 700;">${sksA} SKS</span>
+            </div>
             <span style="font-size: 0.76em; font-weight: 700; color: var(--badge-tm);">Kelas A</span>
           </div>
-          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 2px;">
+          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 4px;">
             ${escapeHtml(c.itemA.nama_mk || '-')} <small style="color: var(--text-muted);">(${escapeHtml(c.itemA.kelas || '-')})</small>
           </div>
-          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
+          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 3px;">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             <span>${escapeHtml(c.itemA.nama_dosen || '-')}</span>
           </div>
@@ -8111,14 +8202,17 @@ function renderBentrokList() {
 
         <!-- Kelas 2 -->
         <div class="bentrok-item-box">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="info-time-chip" style="font-size: 0.78em;">${escapeHtml(c.itemB.jam || '-')}</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="info-time-chip" style="font-size: 0.78em;">${escapeHtml(c.itemB.jam || '-')}${endStrB ? ` - ${endStrB}` : ''}</span>
+              <span style="font-size: 0.72em; padding: 2px 7px; border-radius: 4px; background: rgba(239, 68, 68, 0.12); color: #ef4444; font-weight: 700;">${sksB} SKS</span>
+            </div>
             <span style="font-size: 0.76em; font-weight: 700; color: #ef4444;">Kelas B</span>
           </div>
-          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 2px;">
+          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); margin-top: 4px;">
             ${escapeHtml(c.itemB.nama_mk || '-')} <small style="color: var(--text-muted);">(${escapeHtml(c.itemB.kelas || '-')})</small>
           </div>
-          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
+          <div style="font-size: 0.8em; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 3px;">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             <span>${escapeHtml(c.itemB.nama_dosen || '-')}</span>
           </div>
@@ -8129,7 +8223,8 @@ function renderBentrokList() {
         </div>
       </div>
     </div>
-  `).join('');
+    `;
+  }).join('');
 }
 window.renderBentrokList = renderBentrokList;
 

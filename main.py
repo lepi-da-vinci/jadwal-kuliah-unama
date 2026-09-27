@@ -685,6 +685,9 @@ def get_semua_jadwal(semester: str = None):
 
                 if item.get('kampus') and f"({item['kampus']})" not in item['nama_ruangan']:
                     item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
+
+                item['sks'] = scraper.get_class_sks(item.get('nama_mk') or '', item.get('kelas'))
+                item['durasi_menit'] = scraper.get_class_duration(item.get('nama_mk') or '', item.get('kelas'))
                 
         return {
             "status": "success", 
@@ -979,7 +982,7 @@ def get_statistics(semester: str = None):
         }
 
         for r in rows:
-            dur_min = scraper.get_class_duration(r.get("nama_mk") or "") if hasattr(scraper, "get_class_duration") else 135
+            dur_min = scraper.get_class_duration(r.get("nama_mk") or "", r.get("kelas")) if hasattr(scraper, "get_class_duration") else 135
             dur_hour = round(dur_min / 60.0, 2)
             total_jam_keseluruhan += dur_hour
 
@@ -1378,6 +1381,21 @@ def get_kurikulum_summary():
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+@app.get("/api/sks-map")
+def get_sks_map():
+    """Mengembalikan peta SKS kurikulum untuk percepatan lookup di frontend"""
+    try:
+        cache = scraper.load_curriculum_sks_cache()
+        prodi_map = {f"{k[0]}:::{k[1]}": v for k, v in cache.get('prodi', {}).items()}
+        return {
+            "status": "success",
+            "name_map": cache.get('name', {}),
+            "prodi_map": prodi_map,
+            "two_sks_patterns": scraper.TWO_SKS_PATTERNS
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/api/kurikulum/perubahan")
 def get_kurikulum_perubahan(prodi: str = None):
@@ -2445,7 +2463,7 @@ async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
                 room_schedules[rname] = []
             if r['jam']:
                 sm = int(r['jam'].total_seconds()) // 60
-                dur = scraper.get_class_duration(r.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                dur = scraper.get_class_duration(r.get('nama_mk', ''), r.get('kelas')) if hasattr(scraper, 'get_class_duration') else 135
                 room_schedules[rname].append((sm, dur))
         
         data = []
@@ -2511,7 +2529,7 @@ def cari_dosen(nama: str, tanggal: str | None = None):
                 ts = int(row['jam'].total_seconds())
                 h = ts // 3600
                 m = (ts % 3600) // 60
-                dur = scraper.get_class_duration(row.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                dur = scraper.get_class_duration(row.get('nama_mk', ''), row.get('kelas')) if hasattr(scraper, 'get_class_duration') else 135
                 eh = (ts // 60 + dur) // 60
                 em = (ts // 60 + dur) % 60
                 row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
@@ -2694,7 +2712,7 @@ def get_detail_kelas(kelas: str, semester: str = None):
 
         jadwal_list = []
         for r in raw_rows:
-            dur_min = scraper.get_class_duration(r.get("nama_mk") or "") if hasattr(scraper, "get_class_duration") else 135
+            dur_min = scraper.get_class_duration(r.get("nama_mk") or "", r.get("kelas")) if hasattr(scraper, "get_class_duration") else 135
             dur_hour = round(dur_min / 60.0, 2)
             total_jam += dur_hour
 

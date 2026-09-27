@@ -504,47 +504,124 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
         
     return hasil_scraping
 
-def is_2_sks(nama_mk: str) -> bool:
-    """Mendeteksi apakah suatu mata kuliah adalah 2 SKS (90 menit) atau bukan."""
-    if not nama_mk:
-        return False
-    mk = nama_mk.lower()
-    two_sks_keywords = [
-        'pemrograman mobile',
-        'basic computer',
-        'bahasa inggris',
-        'kecakapan antar personal',
-        'matematika diskrit',
-        'kewarganegaraan',
-        'komputer dan masyarakat',
-        'kalkulus',
-        'kewirausahaan',
-        'rekayasa perangkat lunak',
-        'toefl',
-        'pengantar akuntansi',
-        'pengantar bisnis',
-        'pasar keuangan',
-        'hukum bisnis',
-        'pengantar sistem komputer',
-        'socialpreneurship',
-        'knowledge management',
-        'analisa kinerja',
-        'perilaku konsumen',
-        'praktikum',
-        'manajemen stratejik',
-        'pengantar ekonomi',
-        'sistem digital',
-        'sistem informasi manajemen',
-        'strategi bisnis',
-        'tata kelola sistem informasi',
-        'manajemen mutu',
-        'manajemen proyek tik'
-    ]
-    return any(k in mk for k in two_sks_keywords)
+_curriculum_sks_cache = None
 
-def get_class_duration(nama_mk: str) -> int:
-    """Mengembalikan durasi perkuliahan dalam menit (2 SKS = 90 menit, 3 SKS = 135 menit)."""
-    return 90 if is_2_sks(nama_mk) else 135
+def load_curriculum_sks_cache(conn=None):
+    """Memuat pemetaan SKS kurikulum dari database ke memori untuk lookup super cepat."""
+    global _curriculum_sks_cache
+    cache_prodi = {}
+    cache_name = {}
+    close_at_end = False
+    try:
+        if conn is None:
+            conn = get_db()
+            close_at_end = True
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT prodi, nama_mk, sks FROM kurikulum_mata_kuliah")
+        for row in cursor.fetchall():
+            p = (row.get('prodi') or '').strip().upper()
+            nm = (row.get('nama_mk') or '').strip().lower()
+            sks = int(row.get('sks') or 3)
+            cache_prodi[(nm, p)] = sks
+            if nm not in cache_name:
+                cache_name[nm] = sks
+        cursor.close()
+    except Exception as e:
+        print(f"[Curriculum Cache Warning] {e}")
+    finally:
+        if close_at_end and conn and conn.is_connected():
+            conn.close()
+            
+    _curriculum_sks_cache = {
+        'prodi': cache_prodi,
+        'name': cache_name
+    }
+    return _curriculum_sks_cache
+
+def extract_prodi_from_kelas(kelas: str) -> str | None:
+    """Mengekstrak kode program studi dari kode kelas (contoh: 04PS1 -> SI, 05PT4 -> TI, 02PK1 -> SK)."""
+    if not kelas or not isinstance(kelas, str):
+        return None
+    m = re.search(r'\d{2}[A-Za-z]([A-Za-z])', kelas)
+    if m:
+        c = m.group(1).upper()
+        if c == 'T': return 'TI'
+        if c == 'S': return 'SI'
+        if c == 'K': return 'SK'
+        if c in ('M', 'W'): return 'MANAJEMEN'
+        if c == 'A': return 'AKUNTANSI'
+        if c == 'B': return 'BISNIS'
+    return None
+
+TWO_SKS_PATTERNS = [
+    'pemrograman mobile', 'basic computer', 'bahasa inggris', 'kecakapan antar personal',
+    'kecakapan antar personil', 'matematika diskrit', 'kewarganegaraan', 'pend. kewarganegaraan',
+    'pendidikan kewarganegaraan', 'pend. pancasila', 'pendidikan pancasila', 'pendidikan agama',
+    'komputer dan masyarakat', 'kalkulus', 'kewirausahaan', 'rekayasa perangkat lunak',
+    'toefl', 'pengantar akuntansi', 'pengantar bisnis', 'pasar keuangan', 'hukum bisnis',
+    'pengantar sistem komputer', 'socialpreneurship', 'knowledge management', 'analisa kinerja',
+    'perilaku konsumen', 'praktikum', 'manajemen stratejik', 'manajemen strategik',
+    'pengantar ekonomi', 'sistem digital', 'sistem informasi manajemen', 'strategi bisnis',
+    'tata kelola sistem informasi', 'manajemen mutu', 'manajemen proyek tik',
+    'pengantar teknologi informasi', 'pengantar audit', 'pengantar manajemen',
+    'pengantar kewirausahaan', 'pengantar cloud', 'pengantar mekatronika',
+    'etika profesi', 'komunikasi bisnis', 'logika matematika', 'aljabar linear',
+    'arsitektur dan org', 'arsitektur dan organisasi', 'sistem operasi',
+    'analisa numerik', 'teori bahasa dan automata', 'laboratorium kewirausahaan',
+    'laboraturium kewirausahaan', 'analisis laporan keuangan', 'seni pentas',
+    'dinamika kewirausahaan', 'kepemimpinan dan pengembangan organisasi'
+]
+
+def get_class_sks(nama_mk: str, kelas: str = None) -> int:
+    """Mengembalikan bobot SKS dari suatu mata kuliah (2, 3, 4, dll) berdasarkan kurikulum."""
+    if not nama_mk or not isinstance(nama_mk, str):
+        return 3
+    nm = nama_mk.strip().lower()
+    
+    global _curriculum_sks_cache
+    if _curriculum_sks_cache is None:
+        load_curriculum_sks_cache()
+        
+    prodi = extract_prodi_from_kelas(kelas)
+    if _curriculum_sks_cache:
+        # Cek kurikulum spesifik prodi terlebih dahulu
+        if prodi and (nm, prodi) in _curriculum_sks_cache['prodi']:
+            return _curriculum_sks_cache['prodi'][(nm, prodi)]
+        # Cek kurikulum nama umum
+        if nm in _curriculum_sks_cache['name']:
+            return _curriculum_sks_cache['name'][nm]
+            
+    # Pola kata kunci mata kuliah 2 SKS umum (lintas prodi)
+    for pat in TWO_SKS_PATTERNS:
+        if pat in nm:
+            return 2
+            
+    # Proyek / Skripsi / Tugas Akhir
+    if 'tugas akhir' in nm or 'skripsi' in nm:
+        return 6
+    if 'proyek penelitian' in nm or 'capstone' in nm:
+        return 4
+        
+    return 3
+
+def is_2_sks(nama_mk: str, kelas: str = None) -> bool:
+    """Mendeteksi apakah suatu mata kuliah adalah 2 SKS (90 menit) atau bukan."""
+    return get_class_sks(nama_mk, kelas) == 2
+
+def get_class_duration(nama_mk: str, kelas: str = None) -> int:
+    """Mengembalikan durasi perkuliahan dalam menit berbasis SKS (2 SKS = 90 menit, 3 SKS = 135 menit)."""
+    sks = get_class_sks(nama_mk, kelas)
+    if sks == 2:
+        return 90
+    elif sks == 3:
+        return 135
+    elif sks == 4:
+        return 180
+    elif sks == 1:
+        return 45
+    elif sks == 6:
+        return 270
+    return sks * 45
 
 def is_lab(nama_ruangan):
     if not nama_ruangan: return False
@@ -579,7 +656,7 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA' AND semester = %s", (target_date, sem_final))
     
     cursor.execute("""
-        SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk
+        SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas
         FROM jadwal j
         JOIN ruangan r ON j.id_ruangan = r.id_ruangan
         WHERE j.tanggal = %s AND j.semester = %s 
@@ -596,8 +673,9 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             nama_ruangan = row.get('nama_ruangan')
             lokasi = row.get('kampus')
             nama_mk = row.get('nama_mk')
+            kelas = row.get('kelas', '')
         else:
-            jam, nama_ruangan, lokasi, nama_mk = row
+            jam, nama_ruangan, lokasi, nama_mk, kelas = row
 
         if not nama_ruangan or not jam: continue
         ruang_lengkap = f"{nama_ruangan} ({lokasi})" if lokasi else nama_ruangan
@@ -616,7 +694,7 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         else:
             continue
 
-        end_min = start_min + get_class_duration(nama_mk)
+        end_min = start_min + get_class_duration(nama_mk, kelas)
         
         h = start_min // 60
         m = start_min % 60
@@ -704,7 +782,7 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         else:
             continue
 
-        end_min = start_min + get_class_duration(nama_mk)
+        end_min = start_min + get_class_duration(nama_mk, kelas)
         is_cc = (metode == 'CC' or str(status).lower() in ('cc', 'cancel', 'batal'))
         item_type = 'CC' if is_cc else 'OL'
 
