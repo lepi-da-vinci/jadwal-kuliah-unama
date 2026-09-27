@@ -117,25 +117,64 @@ Susunan tampilan layar smartphone diatur dari atas ke bawah secara terstruktur d
     `Ruangan Kosong` | `Perubahan & Tambahan (22)` | `Jadwal Bentrok (1)` | `Posisi Dosen` | `Kode Kelas`.
   - Pasangan jadwal bentrok ditampilkan bertumpuk vertikal (Kelas A di atas, Kelas B di bawah) dengan indikator rentang jam dan SKS yang jelas.
 
-### 3.6. Mode Statistik & Kurikulum Explorer di HP
-- Header aksi ("Cetak / PDF", "Kembali") disusun adaptif: tombol kembali membentang penuh (*100% width*) di posisi teratas atau paling bawah agar mudah ditekan satu tangan.
-- Grafik batang (*bar chart*) dan donat (*donut chart*) dibatasi dengan `max-width: 100%` dan `height: auto` sehingga tidak memicu *horizontal scrollbar*.
+### 3.6. Mode Statistik & Kurikulum Explorer di HP (Format Golden Ratio)
+Sesuai prinsip **Golden Ratio ($\Phi \approx 1.618$)**, seluruh elemen di Pusat Statistik & Kurikulum ditata dengan proporsi matematis yang seimbang:
+1. **Hero KPI Cards (2x2 Matrix Golden Rectangle)**:
+   - Menggunakan `grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;`.
+   - Proporsi kartu mendekati persegi panjang emas ($180\text{px} \times 110\text{px} \approx 1.618:1$).
+   - Angka nilai KPI menggunakan font berbobot proporsional `1.25rem` (bukan font raksasa 3rem yang memakan layar), dengan judul `0.74rem` dan subteks `0.64rem` (2-line clamp).
+   - Seluruh 4 KPI (Jam Operasional, Ruangan Aktif, Rombel Mahasiswa, Dosen Aktif) tertampil ringkas dalam ketinggian total $\approx 230\text{px}$ (dari sebelumnya $720\text{px}$!).
+2. **Bilah Kategori Tab & Mode Selector**:
+   - `stats-tabs-nav` menggunakan track horizontal swipeable tanpa wrapping liar (`overflow-x: auto; flex-wrap: nowrap;`).
+   - Tombol tab berukuran kompak `padding: 6px 12px; font-size: 0.76rem;`.
+   - `Mode Tampilan:` tertata rapi dalam satu baris fleksibel tanpa overlap.
+3. **Tabel Analitik Ruangan & Dosen (Horizontal Smooth Scrolling)**:
+   - Pembungkus tabel `.stats-table-wrapper` menerapkan `overflow-x: auto; -webkit-overflow-scrolling: touch;`.
+   - Kolom tabel tidak terpotong kaku; pengguna dapat menggeser tabel ke samping secara mulus.
+   - Badge tipe ruangan (`Labor` / `Ruang Kelas`) terkunci dengan `white-space: nowrap; font-size: 0.68rem; padding: 2.5px 7px; border-radius: 6px;` sehingga kata "RUANG KELAS" tidak terbelah vertikal.
+4. **Header Banner Responsif**:
+   - Header aksi ("Cetak / PDF", "Ganti Tema", "Kembali") disusun adaptif: tombol kembali membentang penuh (*100% width*) di posisi bawah agar mudah ditekan satu tangan.
 
 ---
 
-## 4. Breakpoint CSS Standar
+## 4. Sistem Skala Rasio Emas (The Golden Ratio $\Phi \approx 1.618$ Scale)
+
+Untuk memastikan keharmonisan visual di seluruh aplikasi tanpa perkiraan manual (*ad-hoc*), desain seluler mengacu pada deret matematis Golden Ratio:
+
+### 4.1. Skala Tipografi Modular Golden Ratio
+- **Micro / Pill Badge (`--font-phi-3xs`)**: `10px` (`0.625rem`) — Badge SKS, counter subfilter, chip status mini.
+- **Caption / Tag (`--font-phi-2xs`)**: `11px` (`0.6875rem`) — Chip ruangan, legend dot, timestamp.
+- **Meta / Subtitle (`--font-phi-xs`)**: `12.5px` (`0.78rem`) — Header tabel, subtitle kartu, nama dosen.
+- **Base / Body Text (`--font-phi-sm`)**: `14px` (`0.875rem`) — Teks isi, input form, label filter.
+- **Card Subheading (`--font-phi-md`)**: `16px` (`1rem`) — Judul kartu jadwal, tombol navigasi utama.
+- **Section / Modal Title (`--font-phi-lg`)**: `18px` (`1.125rem`) — Judul modal, subjudul analitik.
+- **Page Title (`--font-phi-xl`)**: `22px` (`1.375rem`) — Judul header utama, banner explorer.
+- **Hero KPI Number (`--font-phi-2xl`)**: `26px` (`1.625rem`) — Angka statistik KPI pada mode ponsel (proporsional & elegan).
+
+### 4.2. Skala Spacing & Padding Fibonacci ($\Phi$ Steps)
+$$\text{Scale: } 3\text{px} \xrightarrow{\times 1.618} 5\text{px} \xrightarrow{\times 1.618} 8\text{px} \xrightarrow{\times 1.618} 13\text{px} \xrightarrow{\times 1.618} 21\text{px} \xrightarrow{\times 1.618} 34\text{px} \xrightarrow{\times 1.618} 55\text{px}$$
+
+- Kartu dan panel pada ponsel menggunakan padding berukuran step 13px (`padding: 10px 13px;`).
+- Gap antar komponen menggunakan step 8px (`gap: 8px;`).
+- Ikon ringkas menggunakan ukuran step 34px (`width: 32px - 34px;`).
+
+---
+
+## 5. Breakpoint CSS Standar
 
 | Breakpoint | Target Perangkat | Aturan Utama |
 |---|---|---|
-| `max-width: 480px` | Smartphone compact (iPhone SE, Galaxy A-series) | Grid 1fr/2-col, font 0.82–0.9rem, filter rapat, padding layar 10px |
+| `max-width: 480px` | Smartphone compact (iPhone SE, Galaxy A-series) | Grid 1fr/2-col, font modular golden ratio, padding layar 10px |
 | `max-width: 768px` | Smartphone modern & phablet (iPhone 14/15, Pixel) | Bottom Nav aktif, kartu mobile aktif, tabel desktop tersembunyi, modal bottom sheet |
 | `min-width: 769px` | Tablet landscape & Desktop | Bottom Nav nonaktif, tabel desktop aktif, filter grid multi-kolom horizontal |
 
 ---
 
-## 5. Checklist Verifikasi Responsivitas Mobile
+## 6. Checklist Verifikasi Responsivitas Mobile
 - [x] Tidak ada scrollbar horizontal pada window browser saat dibuka pada lebar 360px, 390px, dan 412px.
 - [x] Seluruh bilah tab (*fitur tabs, spotlight tabs, stats tabs*) dapat digeser ke samping dengan sentuhan jari tanpa memecah layout.
+- [x] KPI Hero Cards menggunakan matriks 2-kolom golden rectangle yang ringkas dan tidak memakan layar.
+- [x] Tabel analitik ruangan di Stats Explorer dapat di-scroll horizontal secara mandiri tanpa memotong kolom atau membelah badge kata.
 - [x] Konten paling bawah tidak tertutup oleh *Floating Bottom Nav Dock*.
 - [x] Seluruh teks panjang tidak meluber ke luar kartu.
 - [x] Modal Pusat Informasi dan Setting tertampil rapi sebagai bottom sheet dengan tombol tutup yang mudah dijangkau.

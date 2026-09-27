@@ -13785,7 +13785,6 @@ function renderDetailKelasTimeline() {
 }
 
 // Global exports untuk View 3 (Statistik)
-window.enterStatsMode = enterStatsMode;
 window.exitStatsMode = exitStatsMode;
 window.closeSettingAndOpenStatsMode = closeSettingAndOpenStatsMode;
 window.switchStatsSemester = switchStatsSemester;

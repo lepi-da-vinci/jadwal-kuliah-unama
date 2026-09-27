@@ -79,6 +79,30 @@
   --space-xl: 32px;
   --space-2xl: 48px;
 
+  /* ─── Golden Ratio (Phi ≈ 1.618) Proportional & Typographic Scale ─── */
+  --phi: 1.618;
+  --phi-inv: 0.618;
+
+  /* Golden Modular Typography Tokens */
+  --font-phi-3xs: 0.625rem; /* 10px - Micro badge, pill tag */
+  --font-phi-2xs: 0.6875rem; /* 11px - Badge, chip, timestamp, legend */
+  --font-phi-xs: 0.78rem;   /* 12.5px - Caption, meta, table header, subtitle */
+  --font-phi-sm: 0.875rem;  /* 14px - Base body text, inputs, table cell */
+  --font-phi-md: 1rem;      /* 16px - Subheading, button, card header */
+  --font-phi-lg: 1.125rem;  /* 18px - Section header, modal title */
+  --font-phi-xl: 1.375rem;  /* 22px - Screen title, banner heading */
+  --font-phi-2xl: 1.625rem; /* 26px - KPI hero values on mobile */
+  --font-phi-3xl: 2.125rem; /* 34px - Desktop hero display */
+
+  /* Golden Fibonacci Spacing Tokens */
+  --space-phi-1: 3px;
+  --space-phi-2: 5px;
+  --space-phi-3: 8px;
+  --space-phi-4: 13px;
+  --space-phi-5: 21px;
+  --space-phi-6: 34px;
+  --space-phi-7: 55px;
+
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Plus Jakarta Sans", "Inter", -apple-system, system-ui, sans-serif;
   --font-heading: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Plus Jakarta Sans", "Inter", -apple-system, system-ui, sans-serif;
   --transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1996,7 +2020,8 @@ body.dark-theme .spotlight-icon {
   font-weight: 500;
   line-height: 1.4;
 }
-.spotlight-badge {
+.spotlight-badge,
+[class*="badge-type-"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8278,13 +8303,6 @@ body.kurikulum-explorer-active > .container > .card {
   }
 }
 
-@media (max-width: 640px) {
-  .kurikulum-kpi-grid,
-  .stats-kpi-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .kuri-kpi-card {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
@@ -8392,6 +8410,69 @@ body.kurikulum-explorer-active > .container > .card {
   color: var(--text-muted);
   line-height: 1.4;
   white-space: normal;
+}
+
+/* Golden Ratio Mobile Responsive Override */
+@media (max-width: 768px) {
+  .kurikulum-kpi-grid,
+  .stats-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .kuri-kpi-card {
+    padding: 10px 12px !important;
+    min-height: 108px !important;
+    height: auto !important;
+    gap: 6px !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .kuri-kpi-header {
+    gap: 6px !important;
+  }
+
+  .kuri-kpi-icon {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 8px !important;
+  }
+
+  .kuri-kpi-icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .kuri-kpi-badge {
+    font-size: 0.60rem !important;
+    padding: 2px 6px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .kuri-kpi-val {
+    font-size: 1.25rem !important;
+    line-height: 1.18 !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  .kuri-fokus-val {
+    font-size: 0.95rem !important;
+  }
+
+  .kuri-kpi-title {
+    font-size: 0.74rem !important;
+    line-height: 1.25 !important;
+  }
+
+  .kuri-kpi-sub {
+    font-size: 0.64rem !important;
+    line-height: 1.25 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+  }
 }
 
 /* ==================== APPLE HIG SEGMENTED TAB NAVIGATION ==================== */
@@ -9326,7 +9407,10 @@ body.kurikulum-explorer-active > .container > .card {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
   box-shadow: var(--clay-card);
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  max-width: 100%;
 }
 
 .stats-custom-table {
@@ -9432,6 +9516,67 @@ body.kurikulum-explorer-active > .container > .card {
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
+
+  /* Golden Ratio Tabs Navigation on Mobile */
+  .stats-tabs-nav,
+  .stats-category-tabs {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+    padding: 3px !important;
+    gap: 3px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 12px !important;
+  }
+
+  .stats-tab-btn {
+    padding: 6px 12px !important;
+    font-size: 0.76rem !important;
+    gap: 5px !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  .stats-tab-btn svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .stats-mode-selector-wrap {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 6px !important;
+    margin-top: 4px !important;
+  }
+
+  .stats-mode-label {
+    font-size: 0.70rem !important;
+    white-space: nowrap !important;
+  }
+
+  .stats-view-mode-group {
+    display: inline-flex !important;
+    padding: 2.5px !important;
+    gap: 2px !important;
+  }
+
+  .stats-mode-pill-btn {
+    padding: 5px 10px !important;
+    font-size: 0.74rem !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .stats-mode-pill-btn svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
   .kurikulum-toolbar-card {
     padding: 14px 12px !important;
     max-width: 100% !important;
@@ -9445,6 +9590,70 @@ body.kurikulum-explorer-active > .container > .card {
   .kuri-toolbar-select-wrap {
     width: 100% !important;
     justify-content: space-between !important;
+  }
+
+  /* Golden Ratio Stats Cards & Table on Mobile */
+  .stats-card-box {
+    padding: 12px 13px !important;
+    gap: 10px !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .stats-card-title {
+    font-size: 0.92rem !important;
+    font-weight: 700 !important;
+  }
+
+  .stats-card-meta {
+    font-size: 0.70rem !important;
+  }
+
+  .stats-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+    border-radius: var(--radius-sm) !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    box-shadow: none !important;
+    border: 1px solid var(--border-light) !important;
+  }
+
+  .stats-custom-table th {
+    padding: 8px 10px !important;
+    font-size: 0.68rem !important;
+    white-space: nowrap !important;
+  }
+
+  .stats-custom-table td {
+    padding: 8px 10px !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap !important;
+  }
+
+  .stats-subfilter-group {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+    gap: 3px !important;
+    padding: 3px !important;
+    max-width: 100% !important;
+  }
+
+  .stats-subfilter-btn {
+    padding: 4px 9px !important;
+    font-size: 0.70rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .rank-badge {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 0.70rem !important;
   }
 }
 
