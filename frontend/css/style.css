@@ -1399,9 +1399,10 @@ body.modal-open {
 /* Drag Handle Zone untuk Bottom Sheet & Modal Swipe-to-Dismiss */
 .modal-drag-handle-zone {
   display: flex;
+  flex-direction: column;
   width: 100%;
-  padding: 4px 0 14px 0;
-  margin: -6px 0 2px 0;
+  padding: 8px 0 6px 0;
+  margin: -6px 0 4px 0;
   cursor: grab;
   touch-action: none;
   -webkit-user-select: none;
@@ -1411,36 +1412,73 @@ body.modal-open {
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  gap: 5px;
   -webkit-tap-highlight-color: transparent;
 }
 .modal-drag-handle-zone:active {
   cursor: grabbing;
 }
 .modal-drag-handle-bar {
-  width: 44px;
-  height: 4.5px;
-  background: var(--border-light, #94a3b8);
+  width: 48px;
+  height: 5px;
+  background: #94a3b8;
   border-radius: 999px;
-  opacity: 0.7;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
-              background-color 0.2s ease, 
-              opacity 0.2s ease, 
-              transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 1;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+  transition: width 0.16s cubic-bezier(0.16, 1, 0.3, 1), 
+              background-color 0.16s ease, 
+              box-shadow 0.16s ease, 
+              transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
 }
 .modal-drag-handle-zone:hover .modal-drag-handle-bar {
-  opacity: 0.95;
-  width: 52px;
-  background: var(--primary, #6366f1);
-  transform: scaleY(1.2);
+  background: var(--primary, #8b7cf6);
+  width: 56px;
+  box-shadow: 0 0 10px rgba(139, 124, 246, 0.45);
 }
-.modal-drag-handle-zone:active .modal-drag-handle-bar,
 .modal-drag-handle-zone.dragging .modal-drag-handle-bar {
-  opacity: 1;
-  width: 58px;
-  background: var(--primary, #6366f1);
-  transform: scaleY(1.3);
+  background: var(--primary, #8b7cf6);
+  box-shadow: 0 0 14px rgba(139, 124, 246, 0.65);
 }
+
+/* Dynamic Live Feedback Indicator saat ditarik */
+.modal-drag-hint-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 12px;
+  border-radius: 999px;
+  color: var(--text-secondary, #64748b);
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.9);
+  transition: opacity 0.18s ease, transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.modal-drag-handle-zone.dragging .modal-drag-hint-pill {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.modal-drag-hint-pill.ready-to-close {
+  background: linear-gradient(135deg, rgba(139, 124, 246, 0.22), rgba(99, 102, 241, 0.28)) !important;
+  color: var(--primary, #8b7cf6) !important;
+  border-color: var(--primary, #8b7cf6) !important;
+  box-shadow: 0 2px 10px rgba(139, 124, 246, 0.3) !important;
+  transform: translateY(0) scale(1.06) !important;
+}
+.modal-drag-hint-pill svg {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: currentColor;
+}
+.modal-drag-hint-pill.ready-to-close svg {
+  transform: translateY(2px) scale(1.2);
+}
+
 .setting-modal-box::before,
 .modal-box:has(.modal-drag-handle-zone)::before {
   display: none !important;

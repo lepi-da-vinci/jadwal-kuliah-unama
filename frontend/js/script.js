@@ -3346,22 +3346,42 @@ function initSettingModalDragToDismiss() {
   let startTime = 0;
   let activePointerId = null;
 
+  const pillBar = dragHandle.querySelector('.modal-drag-handle-bar');
+  const hintPill = document.getElementById('setting-drag-hint');
+  const hintText = hintPill ? hintPill.querySelector('.hint-text') : null;
+
   function resetBoxStyles(animate = true) {
     if (animate) {
       modalBox.style.transition = 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)';
       modalOverlay.style.transition = 'background-color 0.28s ease';
+      if (pillBar) {
+        pillBar.style.transition = 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, box-shadow 0.25s ease';
+      }
     } else {
       modalBox.style.transition = 'none';
       modalOverlay.style.transition = 'none';
+      if (pillBar) pillBar.style.transition = 'none';
     }
     modalBox.style.transform = '';
     modalOverlay.style.backgroundColor = '';
     dragHandle.classList.remove('dragging');
+    if (pillBar) {
+      pillBar.style.width = '';
+      pillBar.style.backgroundColor = '';
+      pillBar.style.boxShadow = '';
+    }
+    if (hintPill) {
+      hintPill.classList.remove('ready-to-close');
+    }
+    if (hintText) {
+      hintText.innerText = 'Tarik ke bawah untuk menutup';
+    }
 
     if (animate) {
       setTimeout(() => {
         modalBox.style.transition = '';
         modalOverlay.style.transition = '';
+        if (pillBar) pillBar.style.transition = '';
       }, 300);
     }
   }
@@ -3380,7 +3400,11 @@ function initSettingModalDragToDismiss() {
     modalBox.style.transition = 'none';
     modalOverlay.style.transition = 'none';
     modalBox.style.willChange = 'transform';
+    if (pillBar) pillBar.style.transition = 'none';
+
     dragHandle.classList.add('dragging');
+    if (hintPill) hintPill.classList.remove('ready-to-close');
+    if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
     return true;
   }
 
@@ -3390,15 +3414,42 @@ function initSettingModalDragToDismiss() {
     const deltaY = currentY - startY;
 
     if (deltaY > 0) {
-      // Tarik ke bawah (mengikuti jari)
-      modalBox.style.transform = `translateY(${deltaY}px)`;
+      // Tarik ke bawah (mengikuti jari secara real-time + efek depth scale)
+      const ratio = Math.min(deltaY / 75, 1);
+      const scale = 1 - Math.min(deltaY / 1500, 0.035);
+      modalBox.style.transform = `translateY(${deltaY}px) scale(${scale})`;
+
       const progress = Math.min(deltaY / 400, 1);
-      const alpha = Math.max(0.12, 0.6 * (1 - progress * 0.75));
+      const alpha = Math.max(0.1, 0.6 * (1 - progress * 0.75));
       modalOverlay.style.backgroundColor = `rgba(15, 23, 42, ${alpha})`;
+
+      // Animasi dinamis pada garis / bar handle
+      if (pillBar) {
+        const dynamicWidth = Math.min(74, 48 + ratio * 24);
+        pillBar.style.width = `${dynamicWidth}px`;
+        pillBar.style.backgroundColor = 'var(--primary, #8b7cf6)';
+      }
+
+      // Animasi badge status
+      if (deltaY >= 75) {
+        if (hintPill && !hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.add('ready-to-close');
+          if (hintText) hintText.innerText = 'Lepas untuk menutup';
+          if (pillBar) pillBar.style.boxShadow = '0 0 16px rgba(139, 124, 246, 0.8)';
+        }
+      } else {
+        if (hintPill && hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.remove('ready-to-close');
+          if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+          if (pillBar) pillBar.style.boxShadow = '';
+        }
+      }
     } else {
       // Tarik ke atas (efek karet / elastis rubber-band)
       const damped = Math.max(-28, deltaY * 0.22);
       modalBox.style.transform = `translateY(${damped}px)`;
+      if (pillBar) pillBar.style.width = '42px';
+      if (hintPill) hintPill.classList.remove('ready-to-close');
     }
   }
 
@@ -3417,9 +3468,9 @@ function initSettingModalDragToDismiss() {
 
     if (isSwipeDown || isTapOnHandle) {
       // Meluncur ke bawah menutup modal
-      modalBox.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)';
+      modalBox.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease';
       modalOverlay.style.transition = 'background-color 0.22s ease';
-      modalBox.style.transform = 'translateY(110%)';
+      modalBox.style.transform = 'translateY(115%) scale(0.95)';
       modalOverlay.style.backgroundColor = 'rgba(15, 23, 42, 0)';
 
       setTimeout(() => {
@@ -3427,7 +3478,7 @@ function initSettingModalDragToDismiss() {
         resetBoxStyles(false);
       }, 230);
     } else {
-      // Kembali ke posisi awal
+      // Kembali ke posisi awal secara halus
       resetBoxStyles(true);
     }
   }
