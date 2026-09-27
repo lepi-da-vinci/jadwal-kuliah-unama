@@ -15,7 +15,13 @@ import scraper
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-load_dotenv()
+# Prioritaskan path .env dari root project agar konsisten di server & Docker
+_root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+if os.path.exists(_root_env):
+    load_dotenv(_root_env)
+else:
+    load_dotenv()
+
 GEMINI_API_KEYS_STR = os.getenv("GEMINI_API_KEYS", os.getenv("GEMINI_API_KEY", "")).strip()
 AVAILABLE_API_KEYS = [k.strip() for k in GEMINI_API_KEYS_STR.split(",") if k.strip()]
 
@@ -1151,7 +1157,12 @@ aslab_session_states = {}
 gemini_cooldown_until = 0
 
 def is_gemini_available():
-    global gemini_cooldown_until
+    global gemini_cooldown_until, AVAILABLE_API_KEYS
+    if not AVAILABLE_API_KEYS:
+        # Re-check environment variables in case .env was reloaded
+        raw_keys = os.getenv("GEMINI_API_KEYS", os.getenv("GEMINI_API_KEY", "")).strip()
+        if raw_keys:
+            AVAILABLE_API_KEYS = [k.strip() for k in raw_keys.split(",") if k.strip()]
     if not AVAILABLE_API_KEYS:
         return False
     if time.time() < gemini_cooldown_until:

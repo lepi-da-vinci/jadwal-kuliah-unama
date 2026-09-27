@@ -39,6 +39,8 @@ services:
       - "8000:8000"
     volumes:
       - ./:/app
+    env_file:
+      - .env
     environment:
       - DB_HOST=db
       - DB_USER=root
@@ -46,6 +48,8 @@ services:
       - DB_NAME=db_jadwal_kuliah
       - WA_BOT_URL=http://wa-bot:3000/send
       - WA_BOT_SECRET_KEY=${WA_BOT_SECRET_KEY:-unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
     depends_on:
       - db
       - wa-bot
