@@ -558,6 +558,9 @@ async function loadSemesterExplorerData(namaSemester) {
         if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
         return item;
       });
+      if (namaSemester && typeof spotlightScheduleCache !== 'undefined') {
+        spotlightScheduleCache.set(namaSemester, explorerAllJadwal);
+      }
     } else {
       explorerAllJadwal = [];
     }
@@ -1436,6 +1439,9 @@ async function fetchAllJadwal() {
         if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
         return item;
       });
+      if (currentActiveSemester && typeof spotlightScheduleCache !== 'undefined') {
+        spotlightScheduleCache.set(currentActiveSemester, allJadwal);
+      }
       populateFilters();
       applyFilters();
     } else {
@@ -9217,6 +9223,147 @@ function exportFilteredSchedulesToExcel() {
 let spotlightActiveCategory = 'all';
 let spotlightActiveIndex = 0;
 window._spotlightCurrentResults = [];
+let spotlightCurrentSemester = null;
+const spotlightScheduleCache = new Map();
+
+function getCurrentlySelectedSemester() {
+  if (isSemesterExplorerMode && currentExplorerSemester) {
+    return currentExplorerSemester;
+  }
+  if (typeof isStatsExplorerMode !== 'undefined' && isStatsExplorerMode && currentStatsSemester) {
+    return currentStatsSemester;
+  }
+  return currentActiveSemester || (allSemestersList && allSemestersList[0] ? allSemestersList[0].nama_semester : 'Ganjil 2026');
+}
+
+async function getSpotlightDataForSemester(targetSemester) {
+  if (!targetSemester) targetSemester = getCurrentlySelectedSemester();
+  
+  if (spotlightScheduleCache.has(targetSemester)) {
+    const cached = spotlightScheduleCache.get(targetSemester);
+    if (Array.isArray(cached) && cached.length > 0) return cached;
+  }
+  
+  if (targetSemester === currentActiveSemester && Array.isArray(allJadwal) && allJadwal.length > 0) {
+    spotlightScheduleCache.set(targetSemester, allJadwal);
+    return allJadwal;
+  }
+  
+  if (targetSemester === currentExplorerSemester && Array.isArray(explorerAllJadwal) && explorerAllJadwal.length > 0) {
+    spotlightScheduleCache.set(targetSemester, explorerAllJadwal);
+    return explorerAllJadwal;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/jadwal?semester=${encodeURIComponent(targetSemester)}&_t=${Date.now()}`);
+    const json = await res.json();
+    if (json.status === 'success' && Array.isArray(json.data)) {
+      const cleaned = json.data.map(item => {
+        if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
+        return item;
+      });
+      spotlightScheduleCache.set(targetSemester, cleaned);
+      return cleaned;
+    }
+  } catch (err) {
+    console.error(`Gagal memuat jadwal spotlight untuk ${targetSemester}:`, err);
+  }
+  return [];
+}
+
+function updateSpotlightSemesterUI() {
+  const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
+  const labelEl = document.getElementById('spotlight-sem-label');
+  const footerSemText = document.getElementById('spotlight-footer-sem-text');
+  const input = document.getElementById('spotlight-input');
+  
+  if (labelEl) labelEl.textContent = sem;
+  if (footerSemText) footerSemText.textContent = `Semester: ${sem}`;
+  if (input) input.placeholder = `Cari kelas (04PT4), dosen, mata kuliah, ruangan di ${sem}...`;
+  
+  renderSpotlightSemesterDropdownList();
+}
+
+function renderSpotlightSemesterDropdownList() {
+  const container = document.getElementById('spotlight-sem-dropdown-list');
+  if (!container) return;
+  
+  const list = (Array.isArray(allSemestersList) && allSemestersList.length > 0)
+    ? allSemestersList
+    : [{ nama_semester: 'Ganjil 2026', total_jadwal: 14144 }, { nama_semester: 'Genap 2025', total_jadwal: 11063 }];
+  
+  const currentSem = spotlightCurrentSemester || getCurrentlySelectedSemester();
+  
+  container.innerHTML = list.map(s => {
+    const isActive = s.nama_semester === currentSem;
+    const count = s.total_jadwal ? `${Number(s.total_jadwal).toLocaleString('id-ID')} Jadwal` : '';
+    const safeSem = escapeHtml(s.nama_semester).replace(/'/g, "\\'");
+    return `
+      <div class="spotlight-sem-item ${isActive ? 'active' : ''}" onclick="selectSpotlightSemester('${safeSem}')">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: 700;">${escapeHtml(s.nama_semester)}</span>
+          ${count ? `<span style="font-size: 0.76em; color: var(--text-muted);">${count}</span>` : ''}
+        </div>
+        ${isActive ? `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--primary);">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleSpotlightSemesterDropdown(e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  const menu = document.getElementById('spotlight-sem-dropdown');
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+  } else {
+    renderSpotlightSemesterDropdownList();
+    menu.classList.add('open');
+  }
+}
+
+async function selectSpotlightSemester(namaSemester) {
+  const menu = document.getElementById('spotlight-sem-dropdown');
+  if (menu) menu.classList.remove('open');
+  if (!namaSemester) return;
+  
+  spotlightCurrentSemester = namaSemester;
+  updateSpotlightSemesterUI();
+  
+  const input = document.getElementById('spotlight-input');
+  const currentVal = input ? input.value.trim().toLowerCase() : '';
+  
+  await ensureSpotlightDataAndRender(currentVal);
+}
+
+async function ensureSpotlightDataAndRender(query) {
+  const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
+  let cachedData = spotlightScheduleCache.get(sem);
+  
+  if (!cachedData || cachedData.length === 0) {
+    const container = document.getElementById('spotlight-results');
+    if (container) {
+      container.innerHTML = `
+        <div style="padding: 40px 20px; text-align: center; color: var(--primary);">
+          <div style="width: 32px; height: 32px; border: 3px solid rgba(99, 102, 241, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;"></div>
+          <div style="font-weight: 600; font-size: 0.95em;">Memuat data semester <b>${escapeHtml(sem)}</b>...</div>
+          <div style="font-size: 0.82em; color: var(--text-muted); margin-top: 4px;">Menyesuaikan indeks pencarian dengan semester yang dipilih</div>
+        </div>
+      `;
+    }
+    cachedData = await getSpotlightDataForSemester(sem);
+  }
+  
+  renderSpotlightResults(query);
+}
 
 const svgSearchIcons = {
   kelas: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
@@ -9235,8 +9382,14 @@ function openSpotlightModal() {
     input.value = '';
     spotlightActiveCategory = 'all';
     spotlightActiveIndex = 0;
+    
+    // Automatically synchronize with current selected semester
+    spotlightCurrentSemester = getCurrentlySelectedSemester();
+    updateSpotlightSemesterUI();
     updateSpotlightCategoryTabs();
-    renderSpotlightResults('');
+    
+    ensureSpotlightDataAndRender('');
+    
     if (typeof pushModalHistory === 'function') pushModalHistory('spotlight');
     if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
     setTimeout(() => {
@@ -9250,7 +9403,14 @@ function handleSpotlightInput(val) {
   const clearBtn = document.getElementById('spotlight-clear-btn');
   if (clearBtn) clearBtn.style.display = val ? 'inline-flex' : 'none';
   spotlightActiveIndex = 0;
-  renderSpotlightResults((val || '').trim().toLowerCase());
+  
+  const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
+  const cached = spotlightScheduleCache.get(sem);
+  if (!cached || cached.length === 0) {
+    ensureSpotlightDataAndRender((val || '').trim().toLowerCase());
+  } else {
+    renderSpotlightResults((val || '').trim().toLowerCase());
+  }
 }
 window.handleSpotlightInput = handleSpotlightInput;
 
@@ -9444,6 +9604,23 @@ function renderSpotlightResults(query) {
   const container = document.getElementById('spotlight-results');
   if (!container) return;
 
+  const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
+  let targetJadwal = spotlightScheduleCache.get(sem);
+  if (!targetJadwal || !Array.isArray(targetJadwal) || targetJadwal.length === 0) {
+    if (sem === currentActiveSemester && Array.isArray(allJadwal) && allJadwal.length > 0) {
+      targetJadwal = allJadwal;
+      spotlightScheduleCache.set(sem, allJadwal);
+    } else if (sem === currentExplorerSemester && Array.isArray(explorerAllJadwal) && explorerAllJadwal.length > 0) {
+      targetJadwal = explorerAllJadwal;
+      spotlightScheduleCache.set(sem, explorerAllJadwal);
+    } else {
+      targetJadwal = [];
+    }
+  }
+
+  // Filter targetJadwal strictly to the selected semester
+  targetJadwal = targetJadwal.filter(item => !item.semester || item.semester === sem);
+
   const cat = spotlightActiveCategory;
   const cleanQ = (query || '').replace(/\s+/g, '').toLowerCase();
   const looksLikeClassCode = cleanQ && (
@@ -9461,10 +9638,10 @@ function renderSpotlightResults(query) {
   // 0. KELAS INDEXING (KODE KELAS MAHASISWA, MISAL 04PT4, 02PS2)
   // Index selalu aktif di tab 'all', 'kelas', atau jika query menyerupai kode kelas
   // ==========================================
-  if ((cat === 'all' || cat === 'kelas' || looksLikeClassCode) && Array.isArray(allJadwal)) {
+  if ((cat === 'all' || cat === 'kelas' || looksLikeClassCode) && Array.isArray(targetJadwal)) {
     const kelasMap = new Map();
 
-    allJadwal.forEach(item => {
+    targetJadwal.forEach(item => {
       if (!item.kelas) return;
       const rawK = String(item.kelas).trim();
       const kUpper = rawK.toUpperCase();
@@ -9534,9 +9711,9 @@ function renderSpotlightResults(query) {
         const p = k.parsed;
         let subtitle = '';
         if (p && p.namaProdiSingkat && p.semesterLabel) {
-          subtitle = `${p.namaProdiSingkat} (${p.modeWaktuSingkat}) • ${p.semesterLabel} • Mempelajari ${mkCount} Mata Kuliah`;
+          subtitle = `${p.namaProdiSingkat} (${p.modeWaktuSingkat}) • ${p.semesterLabel} • Mempelajari ${mkCount} Mata Kuliah (${sem})`;
         } else {
-          subtitle = `${mkCount} Mata Kuliah Dipelajari di Semester Ini`;
+          subtitle = `${mkCount} Mata Kuliah Dipelajari di Semester ${sem}`;
         }
 
         kelasResults.push({
@@ -9547,7 +9724,8 @@ function renderSpotlightResults(query) {
           svgIcon: svgSearchIcons.kelas,
           title: `Kelas ${k.name}`,
           subtitle: subtitle,
-          parsedKelas: p
+          parsedKelas: p,
+          semester: sem
         });
       });
   }
@@ -9555,10 +9733,10 @@ function renderSpotlightResults(query) {
   // ==========================================
   // 1. DOSEN INDEXING (SEMUA DOSEN & TIM TEACHING)
   // ==========================================
-  if ((cat === 'all' || cat === 'dosen') && Array.isArray(allJadwal)) {
+  if ((cat === 'all' || cat === 'dosen') && Array.isArray(targetJadwal)) {
     const dosenMap = new Map();
 
-    allJadwal.forEach(item => {
+    targetJadwal.forEach(item => {
       if (!item.nama_dosen) return;
       // Split multi-dosen (e.g. "Yovi Pratama, Lazuardi Yudha Pradana" or "Dr. X, M.Kom / Y, S.Kom")
       const rawNames = item.nama_dosen.split(/[,/&]/).map(n => n.trim()).filter(Boolean);
@@ -9593,7 +9771,8 @@ function renderSpotlightResults(query) {
           badgeText: 'DOSEN',
           svgIcon: svgSearchIcons.dosen,
           title: d.name,
-          subtitle: `Dosen Pengampu • ${d.schedules.length} Sesi Kuliah • ${mkText || 'Jadwal Kuliah'}`
+          subtitle: `Dosen Pengampu • ${d.schedules.length} Sesi Kuliah • ${mkText || 'Jadwal Kuliah'} (${sem})`,
+          semester: sem
         });
       });
   }
@@ -9601,10 +9780,10 @@ function renderSpotlightResults(query) {
   // ==========================================
   // 2. MATA KULIAH INDEXING
   // ==========================================
-  if ((cat === 'all' || cat === 'mk') && Array.isArray(allJadwal)) {
+  if ((cat === 'all' || cat === 'mk') && Array.isArray(targetJadwal)) {
     const mkMap = new Map();
 
-    allJadwal.forEach(item => {
+    targetJadwal.forEach(item => {
       if (!item.nama_mk) return;
       const mkName = item.nama_mk.trim();
       if (!mkMap.has(mkName)) {
@@ -9634,7 +9813,8 @@ function renderSpotlightResults(query) {
           badgeText: 'MATKUL',
           svgIcon: svgSearchIcons.mk,
           title: mk.name,
-          subtitle: `Mata Kuliah • ${mk.schedules.length} Kelas • Pengampu: ${dosenText || '-'}`
+          subtitle: `Mata Kuliah • ${mk.schedules.length} Kelas • Pengampu: ${dosenText || '-'} (${sem})`,
+          semester: sem
         });
       });
   }
@@ -9712,9 +9892,9 @@ function renderSpotlightResults(query) {
       });
     }
 
-    // Proses data jadwal
-    if (Array.isArray(allJadwal)) {
-      allJadwal.forEach(j => {
+    // Proses data jadwal semester yang dipilih
+    if (Array.isArray(targetJadwal)) {
+      targetJadwal.forEach(j => {
         processRoom(j.nama_ruangan, j.kampus || '');
       });
     }
@@ -9726,6 +9906,14 @@ function renderSpotlightResults(query) {
       const badgeText = r.isLabor ? 'LAB' : 'KELAS';
       const svgIcon = r.isLabor ? svgSearchIcons.lab : svgSearchIcons.ruangan;
 
+      // Hitung sesi ruangan khusus di semester ini
+      const roomSessions = targetJadwal.filter(j => {
+        if (!j.nama_ruangan) return false;
+        const rLower = j.nama_ruangan.toLowerCase();
+        if (Array.isArray(r.rawNames) && Array.from(r.rawNames).some(rn => rLower.includes(rn.toLowerCase()))) return true;
+        return rLower.includes(r.cleanTitle.toLowerCase());
+      }).length;
+
       const fmtTitle = formatRoomName(r.cleanTitle, false);
       if (!query || r.cleanTitle.toLowerCase().includes(query) || fmtTitle.toLowerCase().includes(query) || r.kampusLabel.toLowerCase().includes(query) || tipeLabel.toLowerCase().includes(query)) {
         roomTemp.push({
@@ -9736,10 +9924,11 @@ function renderSpotlightResults(query) {
           badgeText,
           svgIcon,
           title: r.cleanTitle,
-          subtitle: `${r.kampusLabel} • ${tipeLabel}`,
+          subtitle: `${r.kampusLabel} • ${tipeLabel} • ${roomSessions} Sesi Perkuliahan (${sem})`,
           kampusPriority: r.kampusPriority,
           typePriority: r.typePriority,
-          rawName: r.cleanTitle
+          rawName: r.cleanTitle,
+          semester: sem
         });
       }
     });
@@ -9861,20 +10050,35 @@ function openSpotlightDetailModal(item) {
 
   if (!backdrop || !item) return;
 
+  const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
+  let targetJadwal = spotlightScheduleCache.get(sem) || [];
+  if (targetJadwal.length === 0) {
+    if (sem === currentActiveSemester && Array.isArray(allJadwal)) targetJadwal = allJadwal;
+    else if (sem === currentExplorerSemester && Array.isArray(explorerAllJadwal)) targetJadwal = explorerAllJadwal;
+  }
+  targetJadwal = targetJadwal.filter(item => !item.semester || item.semester === sem);
+
   titleEl.innerText = item.type === 'ruangan' ? formatRoomName(item.title, false) : item.title;
   badgeEl.className = `spotlight-badge ${item.badgeClass}`;
   badgeEl.innerText = item.badgeText;
-  subEl.innerText = item.subtitle;
+
+  const semBadgeEl = document.getElementById('spotlight-detail-sem-badge');
+  if (semBadgeEl) {
+    semBadgeEl.innerText = sem;
+    semBadgeEl.style.display = 'inline-flex';
+  }
+
+  subEl.innerText = `${item.subtitle} • Semester: ${sem}`;
   iconEl.innerHTML = item.svgIcon;
 
   let matchingSchedules = [];
-  if (Array.isArray(allJadwal)) {
+  if (Array.isArray(targetJadwal)) {
     if (item.type === 'dosen') {
-      matchingSchedules = allJadwal.filter(j => j.nama_dosen && j.nama_dosen.toLowerCase().includes(item.rawValue.toLowerCase()));
+      matchingSchedules = targetJadwal.filter(j => j.nama_dosen && j.nama_dosen.toLowerCase().includes(item.rawValue.toLowerCase()));
     } else if (item.type === 'mk') {
-      matchingSchedules = allJadwal.filter(j => j.nama_mk && j.nama_mk.toLowerCase().includes(item.rawValue.toLowerCase()));
+      matchingSchedules = targetJadwal.filter(j => j.nama_mk && j.nama_mk.toLowerCase().includes(item.rawValue.toLowerCase()));
     } else if (item.type === 'ruangan') {
-      matchingSchedules = allJadwal.filter(j => {
+      matchingSchedules = targetJadwal.filter(j => {
         if (!j.nama_ruangan) return false;
         const jRoomLower = j.nama_ruangan.toLowerCase();
         const rawLower = item.rawValue.toLowerCase();
@@ -9882,7 +10086,7 @@ function openSpotlightDetailModal(item) {
         return jRoomLower.includes(rawLower);
       });
     } else if (item.type === 'kelas') {
-      matchingSchedules = allJadwal.filter(j => j.kelas && j.kelas.toUpperCase() === item.rawValue.toUpperCase());
+      matchingSchedules = targetJadwal.filter(j => j.kelas && j.kelas.toUpperCase() === item.rawValue.toUpperCase());
     }
 
     matchingSchedules.sort((a, b) => {
@@ -10167,8 +10371,34 @@ function closeSpotlightDetailModal(e) {
 
 function applySpotlightFilterToMainTable(type, val, schedules) {
   closeSpotlightDetailModal();
+  const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
 
-  const filtered = (schedules && schedules.length > 0) ? schedules : allJadwal.filter(j => {
+  if (isSemesterExplorerMode) {
+    if (currentExplorerSemester !== sem) {
+      switchExplorerSemester(sem);
+    }
+    const searchKw = document.getElementById('sem-search-keyword');
+    if (searchKw) {
+      searchKw.value = val;
+      handleSemesterSearchInput();
+    }
+    return;
+  }
+
+  if (sem !== currentActiveSemester) {
+    enterSemesterExplorerMode(sem);
+    setTimeout(() => {
+      const searchKw = document.getElementById('sem-search-keyword');
+      if (searchKw) {
+        searchKw.value = val;
+        handleSemesterSearchInput();
+      }
+    }, 200);
+    return;
+  }
+
+  const targetJadwal = (spotlightScheduleCache.get(sem) || allJadwal).filter(item => !item.semester || item.semester === sem);
+  const filtered = (schedules && schedules.length > 0) ? schedules : targetJadwal.filter(j => {
     if (type === 'kelas') return j.kelas && j.kelas.toUpperCase() === val.toUpperCase();
     if (type === 'dosen') return j.nama_dosen === val;
     if (type === 'mk') return j.nama_mk === val;
@@ -10194,7 +10424,7 @@ function applySpotlightFilterToMainTable(type, val, schedules) {
   const bannerText = document.getElementById('spotlight-banner-text');
   if (banner && bannerText) {
     const label = type === 'kelas' ? `Kelas ${val}` : val;
-    bannerText.innerHTML = `Menampilkan jadwal untuk: <strong>${escapeHtml(label)}</strong> (${filtered.length} jadwal ditemukan)`;
+    bannerText.innerHTML = `Menampilkan jadwal untuk: <strong>${escapeHtml(label)}</strong> (${filtered.length} jadwal ditemukan di Semester ${escapeHtml(sem)})`;
     banner.style.display = 'flex';
   }
 
@@ -11797,6 +12027,18 @@ window.openSingleGoogleCalendar = openSingleGoogleCalendar;
 window.executeSpotlightAction = executeSpotlightAction;
 window.openDbClearModal = openDbClearModal;
 window.initDbClearModalEvents = initDbClearModalEvents;
+window.toggleSpotlightSemesterDropdown = toggleSpotlightSemesterDropdown;
+window.selectSpotlightSemester = selectSpotlightSemester;
+window.getCurrentlySelectedSemester = getCurrentlySelectedSemester;
+
+document.addEventListener('click', (e) => {
+  const semMenu = document.getElementById('spotlight-sem-dropdown');
+  if (semMenu && semMenu.classList.contains('open')) {
+    if (!e.target.closest('#spotlight-semester-scope')) {
+      semMenu.classList.remove('open');
+    }
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   const btnSpotlight = document.getElementById('btn-spotlight');

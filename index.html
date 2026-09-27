@@ -4285,60 +4285,84 @@
         </button>
       </div>
 
-      <!-- Quick Category Filter Tabs with SVGs (No Emojis) -->
-      <div class="spotlight-tabs">
-        <button class="spotlight-tab-btn active" data-type="all" onclick="filterSpotlightCategory('all')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7"></rect>
-            <rect x="14" y="3" width="7" height="7"></rect>
-            <rect x="14" y="14" width="7" height="7"></rect>
-            <rect x="3" y="14" width="7" height="7"></rect>
-          </svg>
-          Semua
-        </button>
-        <button class="spotlight-tab-btn" data-type="kelas" onclick="filterSpotlightCategory('kelas')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-            <circle cx="9" cy="7" r="4"></circle>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-          </svg>
-          Kelas
-        </button>
-        <button class="spotlight-tab-btn" data-type="dosen" onclick="filterSpotlightCategory('dosen')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
-          Dosen
-        </button>
-        <button class="spotlight-tab-btn" data-type="mk" onclick="filterSpotlightCategory('mk')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-          </svg>
-          Mata Kuliah
-        </button>
-        <button class="spotlight-tab-btn" data-type="ruangan" onclick="filterSpotlightCategory('ruangan')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path
-              d="M3 21h18M3 7v14M21 7v14M6 3h12a2 2 0 0 1 2 2v2H4V5a2 2 0 0 1 2-2zM9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2">
-            </path>
-          </svg>
-          Ruangan
-        </button>
-        <button class="spotlight-tab-btn" data-type="aslab" onclick="filterSpotlightCategory('aslab')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-          </svg>
-          Asisten Lab
-        </button>
+      <!-- Quick Category Filter Tabs & Semester Switcher -->
+      <div class="spotlight-tabs-bar">
+        <div class="spotlight-tabs">
+          <button class="spotlight-tab-btn active" data-type="all" onclick="filterSpotlightCategory('all')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            Semua
+          </button>
+          <button class="spotlight-tab-btn" data-type="kelas" onclick="filterSpotlightCategory('kelas')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            Kelas
+          </button>
+          <button class="spotlight-tab-btn" data-type="dosen" onclick="filterSpotlightCategory('dosen')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Dosen
+          </button>
+          <button class="spotlight-tab-btn" data-type="mk" onclick="filterSpotlightCategory('mk')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            Mata Kuliah
+          </button>
+          <button class="spotlight-tab-btn" data-type="ruangan" onclick="filterSpotlightCategory('ruangan')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path
+                d="M3 21h18M3 7v14M21 7v14M6 3h12a2 2 0 0 1 2 2v2H4V5a2 2 0 0 1 2-2zM9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2">
+              </path>
+            </svg>
+            Ruangan
+          </button>
+          <button class="spotlight-tab-btn" data-type="aslab" onclick="filterSpotlightCategory('aslab')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            Asisten Lab
+          </button>
+        </div>
+
+        <!-- SEMESTER SCOPE SELECTOR -->
+        <div class="spotlight-semester-scope" id="spotlight-semester-scope">
+          <button type="button" class="spotlight-sem-toggle-btn" id="spotlight-sem-toggle-btn" onclick="toggleSpotlightSemesterDropdown(event)" title="Ganti Semester untuk Pencarian Ini">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span id="spotlight-sem-label">Ganjil 2026</span>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" class="sem-chevron">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="spotlight-sem-dropdown" id="spotlight-sem-dropdown" onclick="event.stopPropagation()">
+            <div class="spotlight-sem-dropdown-header">Filter Semester:</div>
+            <div class="spotlight-sem-dropdown-list" id="spotlight-sem-dropdown-list">
+              <!-- Dynamically populated from allSemestersList -->
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="spotlight-results" class="spotlight-results">
@@ -4351,7 +4375,13 @@
           <span>Gunakan <kbd class="kbd-badge">↑</kbd> <kbd class="kbd-badge">↓</kbd> untuk memilih</span>
           <span><kbd class="kbd-badge">Enter</kbd> untuk buka detail</span>
         </div>
-        <span style="color: var(--primary); font-weight: 700;">Jadwal UNAMA Spotlight</span>
+        <div class="spotlight-footer-right">
+          <span class="spotlight-footer-sem-pill" id="spotlight-footer-sem-badge">
+            <span class="sem-dot"></span>
+            <span id="spotlight-footer-sem-text">Semester: Ganjil 2026</span>
+          </span>
+          <span style="color: var(--primary); font-weight: 700;">Spotlight</span>
+        </div>
       </div>
     </div>
   </div>
@@ -4369,6 +4399,7 @@
               <h3 id="spotlight-detail-title"
                 style="margin: 0; font-size: 1.2em; font-weight: 700; color: var(--text);">Detail</h3>
               <span id="spotlight-detail-badge" class="spotlight-badge"></span>
+              <span id="spotlight-detail-sem-badge" class="spotlight-badge badge-type-sem"></span>
             </div>
             <div id="spotlight-detail-subtitle" style="font-size: 0.85em; color: var(--text-muted); margin-top: 3px;">
             </div>

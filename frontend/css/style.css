@@ -1885,24 +1885,124 @@ body.dark-theme .spotlight-btn-close-wrap {
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.3);
 }
+.spotlight-tabs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
 .spotlight-tabs {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+  background: transparent;
   overflow-x: auto !important;
   -webkit-overflow-scrolling: touch !important;
   touch-action: pan-x !important;
   overscroll-behavior-x: contain !important;
-  flex-shrink: 0;
-  min-height: 56px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 48px;
   box-sizing: border-box;
   scrollbar-width: none;
 }
 .spotlight-tabs::-webkit-scrollbar {
   display: none;
+}
+.spotlight-semester-scope {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.spotlight-sem-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  color: var(--primary);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+.spotlight-sem-toggle-btn:hover {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+.spotlight-sem-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.25), 0 6px 16px -4px rgba(0, 0, 0, 0.12);
+  min-width: 220px;
+  z-index: 1050;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.18s ease;
+}
+body.dark-theme .spotlight-sem-dropdown, [data-theme="dark"] .spotlight-sem-dropdown {
+  background: #181926;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+}
+.spotlight-sem-dropdown.open {
+  display: flex;
+}
+.spotlight-sem-dropdown-header {
+  padding: 10px 14px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface, var(--bg));
+}
+.spotlight-sem-dropdown-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.spotlight-sem-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
+}
+.spotlight-sem-item:last-child {
+  border-bottom: none;
+}
+.spotlight-sem-item:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+}
+.spotlight-sem-item.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary);
+  font-weight: 700;
 }
 .spotlight-tab-btn {
   background: transparent;
@@ -2054,6 +2154,17 @@ body.dark-theme .badge-type-ruang, [data-theme="dark"] .badge-type-ruang { backg
 .badge-type-aslab { background: rgba(245, 158, 11, 0.12); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.28); }
 body.dark-theme .badge-type-aslab, [data-theme="dark"] .badge-type-aslab { background: rgba(251, 191, 36, 0.18); color: #fcd34d; border-color: rgba(251, 191, 36, 0.35); }
 
+.badge-type-sem {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+}
+body.dark-theme .badge-type-sem, [data-theme="dark"] .badge-type-sem {
+  background: rgba(167, 139, 250, 0.18);
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
 .spotlight-item-right {
   display: flex;
   align-items: center;
@@ -2083,6 +2194,29 @@ body.dark-theme .badge-type-aslab, [data-theme="dark"] .badge-type-aslab { backg
   color: var(--text-muted);
   background: var(--bg-elevated);
   flex-shrink: 0;
+}
+.spotlight-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.spotlight-footer-sem-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--primary);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+.spotlight-footer-sem-pill .sem-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
 }
 .spotlight-keys {
   display: flex;
@@ -6084,10 +6218,14 @@ body.semester-explorer-active #semester-explorer-container {
     display: none !important;
   }
 
-  .spotlight-tabs {
-    padding: 8px 12px !important;
+  .spotlight-tabs-bar {
+    padding: 6px 10px !important;
     gap: 6px !important;
-    min-height: 48px !important;
+  }
+  .spotlight-tabs {
+    padding: 4px 0 !important;
+    gap: 6px !important;
+    min-height: 42px !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     touch-action: pan-x !important;
@@ -6096,6 +6234,15 @@ body.semester-explorer-active #semester-explorer-container {
   }
   .spotlight-tabs::-webkit-scrollbar {
     display: none !important;
+  }
+  .spotlight-sem-toggle-btn {
+    padding: 5px 9px !important;
+    font-size: 0.74rem !important;
+  }
+  .spotlight-sem-dropdown {
+    right: 4px !important;
+    top: calc(100% + 4px) !important;
+    min-width: 190px !important;
   }
 
   .modal-table-scroll-wrap {
