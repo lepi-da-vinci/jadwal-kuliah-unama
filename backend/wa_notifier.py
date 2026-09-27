@@ -1242,12 +1242,17 @@ def is_gemini_available():
     global gemini_cooldown_until, AVAILABLE_API_KEYS
     if not AVAILABLE_API_KEYS:
         # Re-check environment variables in case .env was reloaded
+        if os.path.exists(_root_env):
+            load_dotenv(_root_env, override=True)
         raw_keys = os.getenv("GEMINI_API_KEYS", os.getenv("GEMINI_API_KEY", "")).strip()
         if raw_keys:
             AVAILABLE_API_KEYS = [k.strip() for k in raw_keys.split(",") if k.strip()]
+            print(f"[GEMINI] Berhasil memuat {len(AVAILABLE_API_KEYS)} API key dari .env")
     if not AVAILABLE_API_KEYS:
         return False
     if time.time() < gemini_cooldown_until:
+        sisa_cd = int(gemini_cooldown_until - time.time())
+        print(f"[GEMINI INFO] Sedang cooldown ({sisa_cd}s lagi). Memakai fallback Python.")
         return False
     return True
 
@@ -1279,6 +1284,8 @@ def extract_date_or_today(text_clean):
         return (now - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     if 'lusa' in text_clean:
         return (now + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+    if 'hari ini' in text_clean or 'today' in text_clean:
+        return now.strftime("%Y-%m-%d")
 
     # Deteksi hari dalam seminggu (misal: "senin", "selasa depan", "hari jumat")
     hari_map = {
@@ -1296,6 +1303,16 @@ def extract_date_or_today(text_clean):
                 diff += 7
             target_dt = now + datetime.timedelta(days=diff)
             return target_dt.strftime("%Y-%m-%d")
+
+    m_tgl = re.search(r'\b(?:tgl|tanggal)\s+(\d{1,2})\b', text_clean)
+    if m_tgl:
+        day_num = int(m_tgl.group(1))
+        if 1 <= day_num <= 31:
+            try:
+                target_dt = now.replace(day=day_num)
+                return target_dt.strftime("%Y-%m-%d")
+            except ValueError:
+                pass
 
     m = re.search(r'\b\d{4}-\d{2}-\d{2}\b', text_clean)
     if m:
@@ -1349,8 +1366,8 @@ def fallback_python_handler(sender, text, aslab):
 
     # 3. Cek Menu / Sapaan Umum (Bahasa Slang Santai Khas Anak Lab)
     menu_teks = (
-        f"Yo mase {nama}! Sante dulu, token/kuota AI lagi istirahat bentar nih wkwk. "
-        f"Tapi bot tetep gacor pake mode santuy, nih inpo yang ada:\n\n"
+        f"mase {nama}! Sante dulu, token abis AI istirahat bentar. "
+        f"Nih inpo yang ada:\n\n"
         f"1. Jadwal {label_ruang}\n"
         f"2. Kelas Berikutnya (Habis ini kelas apo?)\n"
         f"3. Status Real-time {label_ruang} (Lagi dipake/kosong?)\n"
@@ -1360,7 +1377,7 @@ def fallback_python_handler(sender, text, aslab):
         f"7. Info Mase\n"
         f"8. Link Web & Barcode Server\n"
         f"9. Statistik Lab (Total jam & utilisasi semester ini)\n\n"
-        f"Ketik nomor 1 s/d 9 atau langsung ketik bae (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
+        f"Ketik nomor 1 s/d 9 atau langsung ketik ae (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
     )
 
     if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
@@ -1368,8 +1385,21 @@ def fallback_python_handler(sender, text, aslab):
         return menu_teks
 
     has_specific_room = bool(re.search(r'\b\d+\.\d+\b', text_clean))
-    # 4. Opsi 1: Jadwal Lab Sendiri (Hanya jika tidak menyebut nomor lab spesifik)
-    if not has_specific_room and (text_clean == "1" or any(text_clean.startswith(k) for k in ["jadwal saya", "jadwal sendiri", "lab saya", "ruang saya", "jadwal lab", "jadwal hari ini"])):
+    
+    # 4. Opsi 1: Jadwal Lab Sendiri (bisa: '1', '1 besok', '1 kemarin', '1 lusa', '1 senin', '1 tgl 28', 'jadwal besok', 'besok', dll.)
+    is_opsi_1 = False
+    if not has_specific_room:
+        if (text_clean == "1" or 
+            re.search(r'^\s*1\b', text_clean) or
+            any(k in text_clean for k in ["jadwal saya", "jadwal sendiri", "lab saya", "ruang saya", "jadwal lab", "jadwal hari ini", "jadwal besok", "jadwal kemarin", "jadwal lusa"]) or
+            re.search(r'^(kalau\s+|kalo\s+|gimana\s+)?(besok|kemarin|lusa)\??$', text_clean) or
+            text_clean in ["besok", "kemarin", "lusa", "hari ini"] or
+            (text_clean.startswith("jadwal") and not any(w in text_clean for w in ["semua", "kobar", "thehok", "dosen"])) or
+            (text_clean.startswith("cek jadwal") and not any(w in text_clean for w in ["semua", "kobar", "thehok", "dosen"])) or
+            re.search(r'^(ada\s+)?(jadwal|kelas)\s+(dak|nggak|ngga|gak|ada)?', text_clean)):
+            is_opsi_1 = True
+
+    if is_opsi_1:
         target_date = extract_date_or_today(text_clean)
         return cek_jadwal_lab_tertentu(aslab['nama_ruangan'], target_date)
 
@@ -1381,14 +1411,18 @@ def fallback_python_handler(sender, text, aslab):
     if text_clean == "3" or any(k in text_clean for k in ["status", "status lab", "lagi dipake", "lagi dipakai", "kondisi lab", "lab kosong dak", "dipakai", "status ruangan"]):
         return status_lab_sekarang(aslab['nama_ruangan'])
 
-    # 7. Opsi 4: Jadwal Semua Lab
-    if text_clean == "4" or any(text_clean.startswith(k) for k in ["jadwal semua", "semua lab", "jadwal kobar", "jadwal thehok"]):
+    # 7. Opsi 4: Jadwal Semua Lab (misal '4', '4 besok', '4 lusa', 'jadwal semua besok')
+    if (text_clean == "4" or 
+        re.search(r'^\s*4\b', text_clean) or 
+        any(text_clean.startswith(k) for k in ["jadwal semua", "semua lab", "jadwal kobar", "jadwal thehok"])):
         target_date = extract_date_or_today(text_clean)
         k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else kampus_default)
         return cek_semua_lab_kampus(k, target_date)
 
-    # 8. Opsi 5: Cek Lab Kosong
-    if text_clean == "5" or any(text_clean.startswith(k) for k in ["lab kosong", "cek lab kosong", "kosong"]):
+    # 8. Opsi 5: Cek Lab Kosong (misal '5', '5 besok', '5 lusa', 'lab kosong besok')
+    if (text_clean == "5" or 
+        re.search(r'^\s*5\b', text_clean) or 
+        any(text_clean.startswith(k) for k in ["lab kosong", "cek lab kosong", "kosong"])):
         target_date = extract_date_or_today(text_clean)
         k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else kampus_default)
         return cek_lab_kosong(k, target_date)
@@ -1431,7 +1465,7 @@ def fallback_python_handler(sender, text, aslab):
 
     # 14. Default Fallback: Menu Slang Ramah
     return (
-        f"Waduh mase {nama}, bot belum mudeng nih wkwk. "
+        f"Waduh mas, bot belum paham nih.\n"
         f"Pilih nomor menu di bawah atau ketik langsung ya:\n\n"
         f"1. Jadwal {label_ruang}\n"
         f"2. Kelas Berikutnya\n"
@@ -1442,7 +1476,7 @@ def fallback_python_handler(sender, text, aslab):
         f"7. Info Mase\n"
         f"8. Link Web & Barcode Server\n"
         f"9. Statistik Lab {label_ruang}\n\n"
-        f"Ketik nomor 1 s/d 9 atau langsung ketik bae!"
+        f"Ketik nomor 1 s/d 9 atau langsung ketik ae!"
     )
 
 
