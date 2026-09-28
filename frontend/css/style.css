@@ -6435,11 +6435,15 @@ body.semester-explorer-active #semester-explorer-container {
   .kurikulum-tahun-switcher,
   .spotlight-tabs,
   .stats-mode-selector-wrap,
+  .stats-view-mode-group,
+  .stats-tabs-nav,
+  .stats-category-tabs,
   .kuri-banner-controls {
     max-width: 100% !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
     flex-wrap: nowrap !important;
   }
 
@@ -6447,8 +6451,15 @@ body.semester-explorer-active #semester-explorer-container {
   .stats-subfilter-group::-webkit-scrollbar,
   .kurikulum-prodi-pills::-webkit-scrollbar,
   .kurikulum-tahun-switcher::-webkit-scrollbar,
-  .spotlight-tabs::-webkit-scrollbar {
+  .spotlight-tabs::-webkit-scrollbar,
+  .stats-mode-selector-wrap::-webkit-scrollbar,
+  .stats-view-mode-group::-webkit-scrollbar,
+  .stats-tabs-nav::-webkit-scrollbar,
+  .stats-category-tabs::-webkit-scrollbar,
+  .kuri-banner-controls::-webkit-scrollbar {
     display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   .sem-stats-grid {
@@ -8728,6 +8739,18 @@ body.kurikulum-explorer-active > .container > .card {
   user-select: none;
   max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.kurikulum-tabs-nav::-webkit-scrollbar,
+.stats-tabs-nav::-webkit-scrollbar,
+.stats-category-tabs::-webkit-scrollbar,
+.stats-view-mode-group::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .kurikulum-tabs-nav,
@@ -9799,17 +9822,36 @@ body.kurikulum-explorer-active > .container > .card {
     width: 100% !important;
     gap: 6px !important;
     margin-top: 4px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  .stats-mode-selector-wrap::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   .stats-mode-label {
     font-size: 0.70rem !important;
     white-space: nowrap !important;
+    flex-shrink: 0 !important;
   }
 
   .stats-view-mode-group {
     display: inline-flex !important;
     padding: 2.5px !important;
     gap: 2px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  .stats-view-mode-group::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   .stats-mode-pill-btn {
