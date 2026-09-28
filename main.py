@@ -44,7 +44,7 @@ async def startup_event():
     scraper.init_db_schema()
     asyncio.create_task(wa_notifier.wa_notifier_loop())
 
-# ==================== SECURITY HEADERS MIDDLEWARE (SEC-10) ====================
+# ==================== SECURITY & CACHE HEADERS MIDDLEWARE (SEC-10) ====================
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response: Response = await call_next(request)
@@ -53,6 +53,13 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    
+    path = request.url.path
+    if path == "/" or path.endswith((".js", ".css", ".html")) or "sw.js" in path:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
     return response
 
 # Mengizinkan Frontend mengakses API dengan batasan origin yang aman
