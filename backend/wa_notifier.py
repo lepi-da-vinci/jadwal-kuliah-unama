@@ -1234,13 +1234,16 @@ FITUR RAHASIA (TITIP / SAMPAIKAN PESAN KE ASLAB LAIN):
   4. Setelah pengguna memberikan isi pesan, panggil tool `kirim_pesan_ke_aslab(nama_atau_ruangan_target, isi_pesan)`.
   5. Konfirmasikan ke pengguna bahwa pesan telah berhasil terkirim."""
 
+        assigned_key = random.choice(AVAILABLE_API_KEYS) if AVAILABLE_API_KEYS else None
+        if assigned_key:
+            genai.configure(api_key=assigned_key, transport='rest')
+
         model = genai.GenerativeModel(
-            model_name='gemini-flash-lite-latest',
+            model_name='gemini-flash-latest',
             system_instruction=system_instruction,
             tools=ai_tools
         )
         chat = model.start_chat(enable_automatic_function_calling=True)
-        assigned_key = random.choice(AVAILABLE_API_KEYS) if AVAILABLE_API_KEYS else None
         chat_sessions[sender] = {'chat': chat, 'api_key': assigned_key}
     return chat_sessions[sender]
 
@@ -1377,18 +1380,17 @@ def fallback_python_handler(sender, text, aslab):
 
     # 3. Cek Menu / Sapaan Umum (Bahasa Slang Santai Khas Anak Lab)
     menu_teks = (
-        f"mase {nama}! Sante dulu, token abis AI istirahat bentar. "
-        f"Nih inpo yang ada:\n\n"
+        f"Halo mase {nama}! Nih menu dan informasi yang bisa kamu cek:\n\n"
         f"1. Jadwal {label_ruang}\n"
-        f"2. Kelas Berikutnya (Habis ini kelas apo?)\n"
+        f"2. Kelas Berikutnya (Habis ini kelas ape?)\n"
         f"3. Status Real-time {label_ruang} (Lagi dipake/kosong?)\n"
         f"4. Jadwal Semua Lab ({kampus_default})\n"
         f"5. Cek Lab Kosong ({kampus_default})\n"
-        f"6. Cari Posisi Dosen (Lagi ngajar di mano?)\n"
+        f"6. Cari Posisi Dosen (Lagi ngajar dimana?)\n"
         f"7. Info Mase\n"
         f"8. Link Web & Barcode Server\n"
         f"9. Statistik Lab (Total jam & utilisasi semester ini)\n\n"
-        f"Ketik nomor 1 s/d 9 atau langsung ketik ae (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
+        f"Ketik nomor 1 s/d 9 atau langsung ketik pertanyaannya ya (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
     )
 
     if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
@@ -1787,9 +1789,43 @@ def handle_incoming_message(sender, text):
     send_wa_typing(sender, 'composing')
     current_sender_context.sender = sender
     
-    if sender in aslab_session_states:
+    def is_quick_command(cmd_text):
+        """Mendeteksi apakah pesan pengguna adalah shortcut angka 1-9, inpo, status, link, dll."""
+        # 1. Nomor menu 1 s/d 9 (mandiri atau ada kelanjutan seperti '1 besok', '4 thehok')
+        if re.search(r'^\s*[1-9]\b', cmd_text):
+            return True
+        # 2. Kata kunci menu / sapaan shortcut
+        if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', cmd_text) or 
+            re.search(r'\b(menu|inpo|infoo|inpoo)\b', cmd_text)):
+            return True
+        # 3. Permintaan Link server / tunnel / barcode
+        if any(k in cmd_text for k in ["link", "server", "web", "ngrok", "barcode", "tunnel", "cloudflare"]):
+            return True
+        # 4. Operasional spesifik
+        ops_kw = [
+            "kelas berikutnya", "next class", "habis ini", "setelah ini", "kelas selanjutnya",
+            "status", "status lab", "lagi dipake", "lagi dipakai", "kondisi lab",
+            "semua lab", "jadwal semua", "lab kosong", "cek lab kosong",
+            "posisi dosen", "cari dosen", "info mase", "inpo mase",
+            "statistik", "utilisasi", "batal", "cancel"
+        ]
+        if any(k in cmd_text for k in ops_kw):
+            return True
+        # 5. Modifikasi profil aslab
+        if any(cmd_text.startswith(k) for k in ["ganti nama ", "ubah nama ", "ganti lab ", "ubah lab "]):
+            return True
+        # 6. Nomor lab spesifik (misal '1.5', '1.8', 'lab 1.8', 'ruang 3.4')
+        if re.search(r'^(?:lab\s*|labor\s*|ruang\s*)?\d+\.\d+\b', cmd_text):
+            return True
+        return False
+
+    # 1. FAST-PATH: Jika pesan berupa shortcut menu atau nomor, langsung proses via Python engine (0.01s)
+    # Dijamin tidak akan pernah timeout, tidak akan salah menyapa, dan responsif seketika.
+    if sender in aslab_session_states or is_quick_command(text_clean):
+        print(f"[FAST-PATH] Memproses shortcut/menu '{text_clean}' secara instan untuk {aslab['nama_aslab']}.")
         return fallback_python_handler(sender, text, aslab)
 
+    # 2. NATURAL LANGUAGE / OBROLAN BEBAS: Gunakan Gemini AI
     if is_gemini_available():
         try:
             session_data = get_or_create_chat_session(sender, aslab['nama_aslab'], aslab['nama_ruangan'], aslab['kampus'])
@@ -1798,8 +1834,8 @@ def handle_incoming_message(sender, text):
             
             with ai_lock:
                 if api_key:
-                    genai.configure(api_key=api_key)
-                response = chat.send_message(text)
+                    genai.configure(api_key=api_key, transport='rest')
+                response = chat.send_message(text, request_options={'timeout': 8})
                 
             if response and response.text:
                 return response.text
@@ -1809,12 +1845,12 @@ def handle_incoming_message(sender, text):
         except Exception as e:
             err_str = str(e).lower()
             print(f"[GEMINI AI ERROR]: {e}")
-            if any(term in err_str for term in ["429", "quota", "resourceexhausted", "resource_exhausted", "ratelimit", "rate limit", "token"]):
+            if any(term in err_str for term in ["429", "quota", "resourceexhausted", "resource_exhausted", "ratelimit", "rate limit", "token", "timed out", "timeout"]):
                 mark_gemini_exhausted(180) # Cooldown 3 menit sebelum mencoba AI lagi
             print("[DYNAMIC SWITCH] Beralih otomatis ke engine Python.")
             return fallback_python_handler(sender, text, aslab)
     else:
-        print(f"[WA ENGINE] Mode fallback Python aktif untuk {aslab['nama_aslab']}.")
+        print(f"[WA ENGINE] Mode Python aktif untuk {aslab['nama_aslab']}.")
         return fallback_python_handler(sender, text, aslab)
 
 

@@ -2417,10 +2417,14 @@ class WebhookRequest(BaseModel):
 @app.post("/api/webhook/wa")
 def wa_webhook(req: WebhookRequest, valid: bool = Depends(verify_bot_secret)):
     """Menerima pesan masuk dari WA Bot (Node.js) dengan proteksi Secret Token"""
-    response_msg = wa_notifier.handle_incoming_message(req.sender, req.text)
-    if response_msg:
-        # Kirim balasan
-        wa_notifier.send_wa_message(req.sender, response_msg)
+    try:
+        response_msg = wa_notifier.handle_incoming_message(req.sender, req.text)
+        if response_msg:
+            # Kirim balasan
+            wa_notifier.send_wa_message(req.sender, response_msg)
+    finally:
+        # Pastikan status mengetik dihentikan agar tidak menggantung di WA
+        wa_notifier.send_wa_typing(req.sender, 'paused')
     return {"status": "ok"}
 
 @app.get("/api/cek_kosong")
