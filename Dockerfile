@@ -1,5 +1,13 @@
 FROM python:3.11-slim
 
+# Set timezone ke Asia/Jakarta (WIB, UTC+7) agar scheduler & notifikasi presisi
+ENV TZ=Asia/Jakarta
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime \
+    && dpkg-reconfigure --frontend noninteractive tzdata \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy requirements file

@@ -436,17 +436,27 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
 
 ---
 
-### 4.5 Alur Siklus Notifikasi Asisten Labor
+### 4.5 Alur Siklus Notifikasi Asisten Labor & Sinkronisasi Waktu Presisi (WIB)
 1. **Background Polling Browser**:
-   - Fungsi `checkLabNotifications()` dieksekusi secara periodik setiap 60 detik.
-2. **Pengecekan Waktu**:
-   - Menghitung selisih waktu (`diffMin = startTotalMin - currentTotalMin`).
-3. **Pemicu Notifikasi**:
+   - Fungsi `checkLabNotifications()` dieksekusi secara periodik setiap 60 detik di sisi klien.
+2. **Pengecekan Waktu Klien**:
+   - Menghitung selisih waktu (`diffMin = startTotalMin - currentTotalMin`) berdasarkan jam lokal perangkat peramban.
+3. **Pemicu Notifikasi Web**:
    - **T-90 Menit (Pukul 06:30)**: Jika kelas pertama mulai jam 08:00, browser memunculkan modal peringatan persiapan pembukaan lab, dan synthesizer audio membunyikan alarm peringatan.
    - **T-30 & T-15 Menit**: Peringatan lanjutan agar aslab segera membuka pintu dan menghidupkan komputer lab.
    - **Selesai Kelas**: Peringatan untuk mengunci lab saat waktu selesai tercapai.
-4. **Eksekusi Bot WhatsApp**:
-   - Pada saat yang bersamaan, daemon `backend/wa_notifier.py` mengirim pesan notifikasi resmi melalui WhatsApp Gateway Baileys langsung ke nomor handphone Asisten Lab yang bersangkutan.
+4. **Eksekusi Bot WhatsApp Otomatis (`wa_notifier.py`)**:
+   - Daemon `wa_notifier_loop()` berjalan di latar belakang setiap 30 detik.
+   - Secara berkala membandingkan jadwal sesi aktif hari ini di database dengan jam sekarang.
+   - Mengirim notifikasi WhatsApp otomatis ke grup/nomor asisten lab via gateway Baileys (`wa-bot`) pada interval H-30 menit dan H-15 menit sebelum kelas dibuka, serta notifikasi penutupan lab saat sesi berakhir.
+5. **Jaminan Sinkronisasi Zona Waktu (WIB / UTC+7) & Penanganan Delay**:
+   - **Akar Masalah Keterlambatan Terdahulu**: Container Docker secara bawaan (*default*) beroperasi pada zona waktu UTC (`Etc/UTC`). Ketika jam menunjukkan pukul 14:30 WIB di Indonesia, jam di dalam container Docker masih pukul 07:30 UTC. Akibatnya, kelas pukul 08:00 pagi terhitung selisih 30 menit pada pukul 14:30 WIB (`480 - 450 = 30 menit`), menyebabkan notifikasi kelas pagi baru terkirim di sore hari (tepat terlambat 7 jam).
+   - **Solusi Komprehensif Zona Waktu**:
+     - Di level aplikasi Python (`backend/wa_notifier.py` dan `backend/scraper.py`), seluruh pemanggilan waktu menggunakan `ZoneInfo("Asia/Jakarta")` melalui fungsi pembungkus terpusat `get_wib_now()`. Waktu komparasi jadwal dijamin selalu 100% WIB tanpa terpengaruh oleh zona waktu server induk ataupun container.
+     - Di level container (`Dockerfile` backend dan `wa-bot/Dockerfile`), paket sistem `tzdata` diinstal dan `ENV TZ=Asia/Jakarta` diatur dengan `/etc/localtime` yang dikonfigurasi ke Jakarta.
+     - Di level orkestrasi (`docker-compose.yml`), variabel lingkungan `TZ: "Asia/Jakarta"` disuntikkan ke seluruh layanan (`db`, `wa-bot`, `backend`).
+   - **Window Toleransi Jitter (*Minute Tolerance Window*)**:
+     - Logika pemicu tidak lagi menggunakan komparasi kaku `diff == 30`, melainkan rentang toleransi 2 menit (`target_diff - 1 <= diff_buka <= target_diff`). Hal ini mencegah notifikasi terlewat jika terjadi latensi jaringan atau pergeseran detik pada *event loop* asynchronous. Notifikasi yang sudah terkirim dicatat dalam `notified_cache` dengan kunci berbasis tanggal dan slot menit agar tidak terjadi pengiriman duplikat.
 
 ---
 

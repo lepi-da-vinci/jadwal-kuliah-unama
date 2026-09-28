@@ -1084,7 +1084,11 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
     for ev in detected_events:
         events_by_date[ev['tanggal']].append(ev)
 
-    today = datetime.now().date()
+    try:
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("Asia/Jakarta")).date()
+    except Exception:
+        today = (datetime.utcnow() + timedelta(hours=7)).date()
     tomorrow = today + timedelta(days=1)
 
     for t_date, ev_list in events_by_date.items():

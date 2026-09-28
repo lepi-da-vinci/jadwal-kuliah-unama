@@ -22,6 +22,17 @@ if os.path.exists(_root_env):
 else:
     load_dotenv()
 
+# Konfigurasi Timezone WIB (Asia/Jakarta, UTC+7) agar presisi di semua environment (Docker, Cloud, Local)
+try:
+    from zoneinfo import ZoneInfo
+    WIB = ZoneInfo("Asia/Jakarta")
+except Exception:
+    WIB = datetime.timezone(datetime.timedelta(hours=7))
+
+def get_wib_now():
+    """Mengembalikan waktu saat ini dalam zona waktu WIB (Asia/Jakarta, UTC+7)."""
+    return datetime.datetime.now(WIB)
+
 GEMINI_API_KEYS_STR = os.getenv("GEMINI_API_KEYS", os.getenv("GEMINI_API_KEY", "")).strip()
 AVAILABLE_API_KEYS = [k.strip() for k in GEMINI_API_KEYS_STR.split(",") if k.strip()]
 
@@ -209,7 +220,7 @@ def cek_jadwal_lab_tertentu(nama_lab: str = None, tanggal_YYYY_MM_DD: str = None
     - kampus: 'Kobar' atau 'Thehok'. Khusus Lab 1.5 selalu gunakan 'Kobar'.
     """
     if not tanggal_YYYY_MM_DD:
-        tanggal_YYYY_MM_DD = datetime.datetime.now().strftime("%Y-%m-%d")
+        tanggal_YYYY_MM_DD = get_wib_now().strftime("%Y-%m-%d")
         
     clean_lab, target_kampus = normalize_lab_and_kampus(nama_lab, kampus)
     if not clean_lab:
@@ -278,7 +289,7 @@ def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
     if not clean_room:
         return "Ruangan belum ditentukan. Sebutkan nama lab/ruangan yang ingin dicek."
     
-    now = datetime.datetime.now()
+    now = get_wib_now()
     today_str = now.strftime("%Y-%m-%d")
     now_min = now.hour * 60 + now.minute
     _sync_if_needed(today_str)
@@ -378,7 +389,7 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
     if not clean_room:
         return "Sebutkan nama lab atau ruangan yang ingin dicek statusnya."
         
-    now = datetime.datetime.now()
+    now = get_wib_now()
     today_str = now.strftime("%Y-%m-%d")
     now_min = now.hour * 60 + now.minute
     _sync_if_needed(today_str)
@@ -470,7 +481,7 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
 def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None):
     """Mengecek jadwal seluruh lab di kampus tertentu (kobar / thehok) pada tanggal tertentu."""
     if not tanggal_YYYY_MM_DD:
-        tanggal_YYYY_MM_DD = datetime.datetime.now().strftime("%Y-%m-%d")
+        tanggal_YYYY_MM_DD = get_wib_now().strftime("%Y-%m-%d")
     _sync_if_needed(tanggal_YYYY_MM_DD)
     tgl_indo = format_tanggal_indo(tanggal_YYYY_MM_DD)
     try:
@@ -513,7 +524,7 @@ def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None):
 def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None):
     """Mengecek daftar lab yang kosong di kampus tertentu pada tanggal tertentu. Mengembalikan rentang waktu lab tersebut nganggur."""
     if not tanggal_YYYY_MM_DD:
-        tanggal_YYYY_MM_DD = datetime.datetime.now().strftime("%Y-%m-%d")
+        tanggal_YYYY_MM_DD = get_wib_now().strftime("%Y-%m-%d")
     _sync_if_needed(tanggal_YYYY_MM_DD)
     tgl_indo = format_tanggal_indo(tanggal_YYYY_MM_DD)
     try:
@@ -577,7 +588,7 @@ def cari_posisi_dosen(nama_dosen: str):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        today_str = get_wib_now().strftime("%Y-%m-%d")
         _sync_if_needed(today_str)
         cursor.execute('''
             SELECT r.nama_ruangan, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
@@ -613,7 +624,7 @@ def get_info_mase():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        today_str = get_wib_now().strftime("%Y-%m-%d")
         cursor.execute('SELECT tipe_notif, pesan FROM notifikasi_lab WHERE tanggal = %s ORDER BY id ASC', (today_str,))
         notifs = cursor.fetchall()
         if not notifs:
@@ -1188,7 +1199,7 @@ def get_or_create_chat_session(sender, nama_aslab, nama_ruangan, kampus):
 Lawan bicaramu: Aslab '{nama_aslab}' ({nama_ruangan} {kampus}).
 Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab, statistik lab, info kurikulum mata kuliah.
 Selalu gunakan tools/functions untuk mengambil data, jangan pernah mengarang data.
-Tanggal acuan: {datetime.datetime.now().strftime('%Y-%m-%d')} ({format_tanggal_indo(datetime.datetime.now())}).
+Tanggal acuan: {get_wib_now().strftime('%Y-%m-%d')} ({format_tanggal_indo(get_wib_now())}).
 
 ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
 1. Jawab se-singkat, se-padat, dan se-efisien mungkin. Langsung ke inti data/jawaban tanpa basa-basi pembuka, perkenalan, atau penutup.
@@ -1277,7 +1288,7 @@ INDONESIAN_MONTHS = {
 }
 
 def extract_date_or_today(text_clean):
-    now = datetime.datetime.now()
+    now = get_wib_now()
     if 'besok' in text_clean:
         return (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     if 'kemarin' in text_clean:
@@ -1812,7 +1823,7 @@ def handle_incoming_message(sender, text):
 # =========================================================================================
 
 def check_lab_schedules():
-    now = datetime.datetime.now()
+    now = get_wib_now()
     current_date = now.strftime("%Y-%m-%d")
     current_total_min = now.hour * 60 + now.minute
     
@@ -1857,29 +1868,34 @@ def check_lab_schedules():
             for i in range(len(scheds) - 1):
                 curr, nxt = scheds[i], scheds[i+1]
                 gap = nxt['start_min'] - curr['end_min']
-                if gap >= 90:
+                if gap >= 45:
                     closings.append(curr)
                     openings.append(nxt)
             closings.append(scheds[-1])
             
             for cls in openings:
                 diff_buka = cls['start_min'] - current_total_min
-                # Notifikasi aslab: 30 menit dan 15 menit sebelum kelas
-                if diff_buka in (30, 15):
-                    notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{diff_buka}"
-                    if notif_key not in sent_notifications:
-                        h, m = cls['start_min'] // 60, cls['start_min'] % 60
-                        msg = f"*Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {diff_buka} menit mas."
-                        if send_wa_message(no_wa, msg): sent_notifications.add(notif_key)
+                # Notifikasi aslab: 30 menit dan 15 menit sebelum kelas dengan window toleransi
+                for target_diff in (30, 15):
+                    if target_diff - 1 <= diff_buka <= target_diff:
+                        notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
+                        if notif_key not in sent_notifications:
+                            h, m = cls['start_min'] // 60, cls['start_min'] % 60
+                            msg = f"*Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {target_diff} menit mas."
+                            if send_wa_message(no_wa, msg):
+                                sent_notifications.add(notif_key)
             
             for cls in closings:
                 diff_tutup = cls['end_min'] - current_total_min
-                if diff_tutup in (30, 15):
-                    notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{diff_tutup}"
-                    if notif_key not in sent_notifications:
-                        eh, em = cls['end_min'] // 60, cls['end_min'] % 60
-                        msg = f"*Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {diff_tutup} menit mas."
-                        if send_wa_message(no_wa, msg): sent_notifications.add(notif_key)
+                # Notifikasi aslab: 30 menit dan 15 menit sebelum selesai kelas dengan window toleransi
+                for target_diff in (30, 15):
+                    if target_diff - 1 <= diff_tutup <= target_diff:
+                        notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
+                        if notif_key not in sent_notifications:
+                            eh, em = cls['end_min'] // 60, cls['end_min'] % 60
+                            msg = f"*Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {target_diff} menit mas."
+                            if send_wa_message(no_wa, msg):
+                                sent_notifications.add(notif_key)
     except Exception as e:
         print(f"Error checking lab schedules for WA: {e}")
     finally:
@@ -1941,13 +1957,19 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
             conn.close()
 
 async def wa_notifier_loop():
-    print("WA Notifier Loop Started. (Automatic notifications ENABLED)")
+    print("WA Notifier Loop Started. (Automatic notifications ENABLED - Timezone: Asia/Jakarta)")
     while True:
-        check_lab_schedules() # fitur ini DIAKTIFKAN kembali secara permanen.
-        now = datetime.datetime.now()
+        try:
+            check_lab_schedules() # fitur ini DIAKTIFKAN kembali secara permanen.
+        except Exception as loop_err:
+            print(f"[WA Notifier Error in loop] {loop_err}")
+            
+        now = get_wib_now()
         # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak
         today_prefix = now.strftime("%Y-%m-%d")
         stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix)}
         sent_notifications.difference_update(stale_keys)
         sleep_seconds = 60 - now.second
+        if sleep_seconds <= 0:
+            sleep_seconds = 60
         await asyncio.sleep(sleep_seconds)
