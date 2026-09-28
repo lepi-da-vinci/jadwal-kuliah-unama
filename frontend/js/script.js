@@ -2207,7 +2207,122 @@ function applyFilters() {
   if (typeof updateChangesHubData === 'function') updateChangesHubData();
 }
 
+// ─── 00:00 Midnight Rollover & Room Status Evaluator ───
+let lastKnownSystemDateStr = (function() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+})();
+
+function checkMidnightDateRollover() {
+  const now = new Date();
+  const currentToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  if (!lastKnownSystemDateStr) {
+    lastKnownSystemDateStr = currentToday;
+    return;
+  }
+
+  if (currentToday !== lastKnownSystemDateStr) {
+    const previousDate = lastKnownSystemDateStr;
+    lastKnownSystemDateStr = currentToday;
+    console.log(`[00:00 Rollover] Berganti hari dari ${previousDate} ke ${currentToday}. Mereset ke jadwal hari baru.`);
+
+    const mainTanggal = document.getElementById('filter-tanggal');
+    const wasTrackingToday = !mainTanggal || !mainTanggal.value || mainTanggal.value === previousDate;
+
+    if (wasTrackingToday) {
+      if (mainTanggal) {
+        mainTanggal.value = currentToday;
+        if (mainTanggal._flatpickr) mainTanggal._flatpickr.setDate(currentToday, false);
+      }
+      const fsTanggal = document.getElementById('fs-filter-tanggal');
+      if (fsTanggal) {
+        fsTanggal.value = currentToday;
+        if (fsTanggal._flatpickr) fsTanggal._flatpickr.setDate(currentToday, false);
+      }
+      const ftInput = document.getElementById('fitur-filter-tanggal');
+      if (ftInput) {
+        ftInput.value = currentToday;
+        if (ftInput._flatpickr) ftInput._flatpickr.setDate(currentToday, false);
+      }
+
+      if (typeof handleSelectedDateChange === 'function') {
+        handleSelectedDateChange(currentToday);
+      } else {
+        if (typeof applyFilters === 'function') applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+      }
+    } else {
+      if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+    }
+  }
+}
+
+// Cek pergantian hari 00:00 setiap 10 detik secara presisi
+setInterval(checkMidnightDateRollover, 10000);
+
+function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime) {
+  // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
+  const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
+
+  let isOccupied = false;
+  let hasFutureClass = false;
+  let activeClass = null;
+  let nextClass = null;
+
+  if (isToday) {
+    for (const s of validPhysicalClasses) {
+      if (currentTime >= s.start && currentTime <= s.end) {
+        isOccupied = true;
+        activeClass = s;
+        break;
+      } else if (currentTime < s.start) {
+        hasFutureClass = true;
+        if (!nextClass) nextClass = s;
+      }
+    }
+  }
+
+  let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
+  let text = 'Kosong';
+  let jamText = '';
+
+  if (isOccupied) {
+    state = 'occupied';
+    text = activeClass.nama;
+    jamText = activeClass.jam;
+  } else if (hasFutureClass) {
+    state = 'waiting';
+    text = 'Jeda';
+    const isNight = nextClass.start >= 17 * 60;
+    jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+  } else if (isToday && validPhysicalClasses.length > 0) {
+    // Seluruh kelas fisik hari ini di ruangan ini telah selesai (berwarna ungu seharian s/d 00:00 ganti hari)
+    state = 'finished';
+    text = 'Selesai';
+    jamText = '';
+  } else if (!isToday && activeDate < currentDayStr && validPhysicalClasses.length > 0) {
+    // Tanggal lampau: semua kelas fisik telah selesai
+    state = 'finished';
+    text = 'Selesai';
+    jamText = '';
+  } else if (!isToday && activeDate > currentDayStr && (schedules || []).length > 0) {
+    // Tanggal masa depan: terjadwal
+    state = 'scheduled';
+    text = 'Terjadwal';
+    jamText = `(${schedules.length} Jadwal)`;
+  } else {
+    state = 'empty';
+    text = 'Kosong';
+    jamText = '';
+  }
+
+  return { state, text, jamText };
+}
+
 function updateActiveLabPanel() {
+  checkMidnightDateRollover();
+
   const labPanel = document.getElementById('active-lab-list');
   const roomPanel = document.getElementById('active-room-list');
   const labPanelContainer = document.getElementById('active-lab-panel');
@@ -2319,49 +2434,8 @@ function updateActiveLabPanel() {
     let schedules = (roomSchedules[roomKey] || []).slice();
     schedules.sort((a, b) => a.start - b.start);
 
-    let isOccupied = false;
-    let hasFutureClass = false;
-    let activeClass = null;
-    let nextClass = null;
-
-    if (isToday) {
-      for (const s of schedules) {
-        if (s.metode === 'CC' || s.metode === 'OL') continue;
-        if (currentTime >= s.start && currentTime <= s.end) {
-          isOccupied = true;
-          activeClass = s;
-          break;
-        } else if (currentTime < s.start) {
-          hasFutureClass = true;
-          if (!nextClass) nextClass = s;
-        }
-      }
-    }
-
-    let state = 'empty'; // empty (red), waiting (orange), occupied (green), scheduled (blue)
-    let text = 'Kosong';
-    let jamText = '';
-
-    if (isOccupied) {
-      state = 'occupied';
-      text = activeClass.nama;
-      jamText = activeClass.jam;
-    } else if (hasFutureClass) {
-      state = 'waiting';
-      text = 'Jeda';
-      const isNight = nextClass.start >= 17 * 60;
-      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    } else if (!isToday && schedules.length > 0) {
-      state = 'scheduled';
-      text = 'Terjadwal';
-      jamText = `(${schedules.length} Jadwal)`;
-    } else {
-      state = 'empty';
-      text = 'Kosong';
-      jamText = '';
-    }
-
-    targetDict[cleanName] = { state, text, jamText };
+    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime);
+    targetDict[cleanName] = statusObj;
   });
 
   // Handle rooms that are in schedule but not in allRuanganData (e.g., specific regular rooms)
@@ -2385,49 +2459,8 @@ function updateActiveLabPanel() {
 
     schedules.sort((a, b) => a.start - b.start);
 
-    let isOccupied = false;
-    let hasFutureClass = false;
-    let activeClass = null;
-    let nextClass = null;
-
-    if (isToday) {
-      for (const s of schedules) {
-        if (s.metode === 'CC' || s.metode === 'OL') continue;
-        if (currentTime >= s.start && currentTime <= s.end) {
-          isOccupied = true;
-          activeClass = s;
-          break;
-        } else if (currentTime < s.start) {
-          hasFutureClass = true;
-          if (!nextClass) nextClass = s;
-        }
-      }
-    }
-
-    let state = 'empty';
-    let text = 'Kosong';
-    let jamText = '';
-
-    if (isOccupied) {
-      state = 'occupied';
-      text = activeClass.nama;
-      jamText = activeClass.jam;
-    } else if (hasFutureClass) {
-      state = 'waiting';
-      text = 'Jeda';
-      const isNight = nextClass.start >= 17 * 60;
-      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    } else if (!isToday && schedules.length > 0) {
-      state = 'scheduled';
-      text = 'Terjadwal';
-      jamText = `(${schedules.length} Jadwal)`;
-    } else {
-      state = 'empty';
-      text = 'Kosong';
-      jamText = '';
-    }
-
-    targetDict[cleanName] = { state, text, jamText };
+    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime);
+    targetDict[cleanName] = statusObj;
   });
 
   // Live warnings for both Labor and Ruang Kelas
@@ -2492,10 +2525,18 @@ function updateActiveLabPanel() {
     let html = '<div class="lab-grid">';
     for (const room of sortedRooms) {
       const data = dict[room];
+      let statusDisplay = 'Kosong';
+      if (data.state === 'empty') {
+        statusDisplay = 'Kosong';
+      } else if (data.state === 'finished') {
+        statusDisplay = 'Selesai' + (data.jamText ? ' ' + escapeHtml(data.jamText) : '');
+      } else {
+        statusDisplay = escapeHtml(data.text) + (data.jamText ? ' ' + escapeHtml(data.jamText) : '');
+      }
       html += `
               <div class="lab-card ${data.state}" onclick="showRoomDetail('${escapeHtml(room)}', '${kampusStr}')">
                 <div class="lab-name">${formatRoomNameHtml(room)}</div>
-                <div class="lab-status">${data.state === 'empty' ? 'Kosong' : escapeHtml(data.text) + ' ' + escapeHtml(data.jamText)}</div>
+                <div class="lab-status">${statusDisplay}</div>
               </div>
             `;
     }
@@ -4679,8 +4720,14 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           liveBadgeHtml = `<span class="badge" style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Akan Datang</span>`;
         } else {
           cardStatusClass = 'finished';
-          liveBadgeHtml = `<span class="badge" style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Selesai</span>`;
+          liveBadgeHtml = `<span class="badge finished" style="background: rgba(139, 92, 246, 0.15); color: var(--badge-finished, #8b5cf6); font-weight: 700; border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Selesai</span>`;
         }
+      } else if (activeDate < currentDayStr) {
+        cardStatusClass = 'finished';
+        liveBadgeHtml = `<span class="badge finished" style="background: rgba(139, 92, 246, 0.15); color: var(--badge-finished, #8b5cf6); font-weight: 700; border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Selesai</span>`;
+      } else if (activeDate > currentDayStr) {
+        cardStatusClass = 'upcoming';
+        liveBadgeHtml = `<span class="badge scheduled" style="background: rgba(59, 130, 246, 0.15); color: var(--badge-ol, #3b82f6); font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Terjadwal</span>`;
       }
 
       // 3. Metode Pembelajaran Badge

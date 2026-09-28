@@ -431,7 +431,7 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
    - Menyaring `allJadwal` berdasarkan seluruh kombinasi dropdown yang aktif.
 5. **Penyuntikan DOM (Rendering)**:
    - `renderTable()`: Mengisi tabel jadwal utama dengan badge warna dan tombol Google Calendar.
-   - `renderActiveLabCards()`: Memperbarui kartu status ruangan (merah, kuning, hijau, biru).
+   - `renderActiveLabCards()` / `renderBlocks()`: Memperbarui kartu status ruangan real-time (🟢 Hijau = Dipakai, 🟡 Kuning = Jeda, 🔴 Merah = Kosong, 🔵 Biru = Terjadwal, 🟣 Ungu = Selesai).
    - `updateRoomFinder()`: Menghitung ulang ketersediaan ruang kosong di modal Room Finder.
 
 ---
@@ -447,6 +447,40 @@ Bagian ini menjelaskan siklus hidup data (*Data Lifecycle*) dari saat diambil da
    - **Selesai Kelas**: Peringatan untuk mengunci lab saat waktu selesai tercapai.
 4. **Eksekusi Bot WhatsApp**:
    - Pada saat yang bersamaan, daemon `backend/wa_notifier.py` mengirim pesan notifikasi resmi melalui WhatsApp Gateway Baileys langsung ke nomor handphone Asisten Lab yang bersangkutan.
+
+---
+
+### 4.6 Alur Status Penggunaan Ruangan & Siklus Pergantian Hari (00:00 Midnight Rollover)
+
+Sistem memantau kondisi seluruh ruangan (Laboratorium Komputer & Ruang Kelas Teori Kampus Thehok dan Kobar) secara *real-time*. State machine penentuan status ruangan dikendalikan oleh fungsi `evaluateRoomCardStatus()` dan didukung oleh mekanisme *Midnight Rollover* otomatis.
+
+#### 1. Mesin Status Ruangan (*Room State Machine*)
+Setiap ruangan dievaluasi berdasarkan jadwal fisik valid hari ini (`metode !== 'CC'` dan `metode !== 'OL'`):
+
+| Status | Warna Indikator | CSS Class | Kondisi Pemicu | Tampilan Label Kartu |
+| :--- | :--- | :--- | :--- | :--- |
+| **Dipakai** | 🟢 Hijau Solid (`#10b981`) | `.lab-card.occupied` | Waktu sekarang berada dalam rentang sesi perkuliahan aktif (`currentTime >= start && currentTime <= end`). | `[Nama Mata Kuliah] [Jam Mulai]` (cth: *Pemrograman Android 10:15*) |
+| **Jeda** | 🟡 Kuning Solid (`#f59e0b`) | `.lab-card.waiting` | Tidak ada kelas aktif sekarang, tetapi masih ada kelas fisik berikutnya yang akan berlangsung hari ini (`currentTime < nextClass.start`). | `Jeda (Buka: [Jam Mulai])` atau `Jeda (Malam: [Jam Mulai])` |
+| **Selesai** | 🟣 Ungu Solid (`#8b5cf6`) | `.lab-card.finished` | Ruangan memiliki jadwal fisik hari ini, dan **seluruh sesi perkuliahan hari ini telah selesai** (`currentTime > lastClass.end`). Bertahan warna ungu seharian penuh sampai pergantian hari pukul 00:00. Juga aktif jika pengguna melihat tanggal masa lalu yang memiliki jadwal fisik. | `Selesai` |
+| **Terjadwal** | 🔵 Biru Solid (`#3b82f6`) | `.lab-card.scheduled` | Pengguna memilih/melihat tanggal masa depan (`activeDate > currentDayStr`) yang memiliki jadwal perkuliahan terdaftar. | `Terjadwal ([N] Jadwal)` |
+| **Kosong** | 🔴 Merah Solid (`#ef4444`) | `.lab-card.empty` | Ruangan tidak memiliki jadwal perkuliahan fisik tercatat pada tanggal yang dipilih (atau seluruh jadwal berstatus Batal/Cancel). | `Kosong` |
+
+#### 2. Siklus Reset Otomatis Tengah Malam (00:00 Midnight Rollover)
+Agar PC Server Lab yang beroperasi 24/7 maupun browser display kampus tidak perlu di-refresh manual oleh staf:
+1. **Pendeteksi Perubahan Tanggal Presisi (`checkMidnightDateRollover`)**:
+   - Interval khusus berjalan di latar belakang setiap 10 detik dan membandingkan tanggal sistem hari ini (`getTodayLocalDateStr()`) dengan variabel status `lastKnownSystemDateStr`.
+2. **Pemicu Pergantian Hari Pukul 00:00:00**:
+   - Begitu jam melewati tengah malam (`00:00:00` WIB) dan tanggal berubah (misal dari `2026-09-28` ke `2026-09-29`):
+     - Variabel `lastKnownSystemDateStr` diperbarui ke tanggal baru.
+     - Nilai elemen tanggal `#filter-tanggal` dan *flatpickr* otomatis dimutakhirkan ke tanggal hari baru.
+     - Fungsi `handleSelectedDateChange(currentToday)` dipicu secara otomatis untuk menarik/menyinkronkan jadwal hari baru dari BAAK/database.
+3. **Reset Status Kartu Ruangan**:
+   - Status ungu (`finished`) dari hari kemarin **otomatis ter-reset bersih**.
+   - Sistem langsung mengevaluasi status baru hari tersebut:
+     - Ruangan yang memiliki jadwal kuliah pagi (misal sesi 08:00) langsung bertransisi ke status **Jeda (Kuning)** dengan keterangan jam buka pagi.
+     - Ruangan tanpa jadwal di hari baru bertransisi ke status **Kosong (Merah)**.
+   - Ketika waktu jam kuliah tiba (08:00), ruangan otomatis berubah menjadi **Dipakai (Hijau)**.
+   - Ketika seluruh perkuliahan selesai sore/malam hari, ruangan kembali berubah menjadi **Selesai (Ungu)** hingga tengah malam berikutnya.
 
 ---
 

@@ -8,11 +8,13 @@ Sistem web komprehensif untuk memantau jadwal perkuliahan dan penggunaan labor B
 
 1. **Dashboard Interaktif & Modern (Claymorphism UI)**
    - Tampilan bersih, elegan, responsif (*Mobile & Desktop Friendly*), dilengkapi tema **Dark Mode** dan **Light Mode**.
-   - **Status Penggunaan Ruangan Realtime:** Memisahkan panel Labor dan Ruang Kelas, dengan indikator warna:
-     - 🟢 **Dipakai:** Kelas Tatap Muka (TM) sedang berlangsung.
-     - 🟠 **Jeda:** Ada jeda kosong antar jam perkuliahan di ruangan tersebut.
-     - 🔴 **Kosong:** Tidak ada perkuliahan pada jam saat ini.
-     - 🔵 **Terjadwal:** Ruangan memiliki jadwal kuliah pada hari tersebut.
+   - **Status Penggunaan Ruangan Realtime:** Memisahkan panel Labor dan Ruang Kelas, dengan 5 indikator warna:
+     - 🟢 **Dipakai:** Kelas Tatap Muka (TM) sedang aktif berlangsung.
+     - 🟡 **Jeda:** Sedang dalam jeda istirahat sebelum kelas sesi berikutnya di hari ini.
+     - 🟣 **Selesai:** Seluruh sesi kelas hari ini telah selesai (berwarna ungu seharian s/d pergantian hari 00:00).
+     - 🔵 **Terjadwal:** Ruangan memiliki jadwal kuliah pada tanggal masa depan yang dipilih.
+     - 🔴 **Kosong:** Tidak ada sesi perkuliahan fisik tercatat pada hari tersebut.
+     - 🔄 **00:00 Midnight Rollover:** Deteksi pergantian hari otomatis setiap tengah malam untuk me-reset ruangan ke jadwal hari baru tanpa perlu refresh manual.
 
 2. **Mode Full Screen Khusus Layar Lab / TV Monitor**
    - Mode layar penuh (*Fullscreen Display*) yang dilengkapi **Jam Digital Realtime**, tanggal otomatis, tombol Filter Popup Cepat, serta tombol **Info Mase** di bagian atas.

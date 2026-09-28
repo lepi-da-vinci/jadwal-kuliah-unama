@@ -35,7 +35,7 @@
   --lab-empty-bg: #fee2e2;
   --lab-waiting-bg: #fef3c7;
   --lab-scheduled-bg: #dbeafe;
-  --lab-finished-bg: #ede9fe;
+  --lab-finished-bg: #8b5cf6;
 
   --panel-lab-bg: #f1f5f9;
   --panel-lab-border: rgba(148, 163, 184, 0.25);
@@ -1140,8 +1140,8 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 .lab-card.empty { background: var(--badge-cc); }
 .lab-card.waiting { background: var(--badge-wa); }
 .lab-card.scheduled { background: var(--badge-ol); }
-.lab-card.finished { background: var(--lab-finished-bg, #8b5cf6); color: #fff; }
-[data-theme="dark"] .lab-card.finished { background: var(--lab-finished-bg, #7c3aed); color: #fff; }
+.lab-card.finished { background: var(--badge-finished, #8b5cf6); color: #fff; }
+[data-theme="dark"] .lab-card.finished { background: #7c3aed; color: #fff; }
 
 /* --- Notification Items Redesign --- */
 /* --- Notification Items Redesign --- */
