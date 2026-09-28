@@ -11901,7 +11901,53 @@ function renderAllStats(data) {
   if (currentStatsViewMode === 'donut') renderDonutStats();
   else if (currentStatsViewMode === 'card') renderMatrixCards();
   else if (currentStatsViewMode === 'table') renderFullTableKelas();
+
+  if (typeof initStatsTableDragToScroll === 'function') {
+    initStatsTableDragToScroll();
+  }
 }
+
+/**
+ * Memungkinkan tabel statistik dan container chart dapat digeser ke samping (horizontal scroll)
+ * baik melalui sentuhan alami pada HP maupun klik-dan-tarik (drag-to-scroll) dengan mouse.
+ */
+function initStatsTableDragToScroll() {
+  const wrappers = document.querySelectorAll('.stats-table-wrapper, .stats-prodi-dist-container');
+  wrappers.forEach(wrapper => {
+    if (wrapper.dataset.dragScrollInit === 'true') return;
+    wrapper.dataset.dragScrollInit = 'true';
+
+    let isDown = false;
+    let startX = 0;
+    let scrollLeft = 0;
+
+    wrapper.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button, a, input, select, [role="button"]')) return;
+      isDown = true;
+      wrapper.classList.add('table-dragging');
+      startX = e.pageX - wrapper.offsetLeft;
+      scrollLeft = wrapper.scrollLeft;
+    });
+
+    const stopDrag = () => {
+      if (!isDown) return;
+      isDown = false;
+      wrapper.classList.remove('table-dragging');
+    };
+
+    wrapper.addEventListener('mouseleave', stopDrag);
+    wrapper.addEventListener('mouseup', stopDrag);
+
+    wrapper.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - wrapper.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      wrapper.scrollLeft = scrollLeft - walk;
+    });
+  });
+}
+window.initStatsTableDragToScroll = initStatsTableDragToScroll;
 
 function renderLabStatsTab(labStats) {
   const summary = labStats.summary || {};
@@ -13329,6 +13375,9 @@ function renderStatsView() {
     renderStatsMatrixCards();
   } else if (currentStatsViewMode === 'table') {
     renderStatsFullTable();
+  }
+  if (typeof initStatsTableDragToScroll === 'function') {
+    initStatsTableDragToScroll();
   }
 }
 
