@@ -899,8 +899,18 @@
         <!-- MODAL: NOTIFIKASI LAB & RUANGAN POPUP -->
           <!-- ==================== MODAL NOTIFIKASI LAB & RUANGAN ==================== -->
   <div id="lab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Notifikasi Ruangan">
-    <div class="modal-box">
-      <div class="modal-icon" style="color: var(--primary);">
+    <div class="modal-box lab-modal-box">
+      <!-- Drag Handle Zone untuk Swipe-to-Dismiss di HP & Desktop -->
+      <div class="modal-drag-handle-zone" id="lab-notif-drag-handle" role="button" tabindex="0" aria-label="Tutup Notifikasi (Tarik ke bawah atau klik)" title="Tarik ke bawah atau klik untuk menutup">
+        <div class="modal-drag-handle-bar"></div>
+        <div class="modal-drag-hint-pill" id="lab-notif-drag-hint">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+          <span class="hint-text">Tarik ke bawah untuk menutup</span>
+        </div>
+      </div>
+      <div class="modal-icon" id="lab-modal-icon" style="color: var(--primary);">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -912,6 +922,7 @@
       <button class="modal-btn" id="modal-close-btn">Oke, Gas!</button>
     </div>
   </div>
+
 
       </div>
 

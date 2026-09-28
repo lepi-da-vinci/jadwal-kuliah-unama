@@ -3344,30 +3344,57 @@ async function exitAdminMode(notifyBackend = true) {
   }
 }
 
-function closeSettingModal(keepAdminSession = false) {
+let isClosingSettingModal = false;
+function closeSettingModal(keepAdminSession = false, skipAnimation = false) {
   const testModal = document.getElementById('test-wa-modal');
-  if (testModal) {
+  if (!testModal) return;
+
+  if (!testModal.classList.contains('open')) {
+    testModal.style.removeProperty('background-color');
+    testModal.style.removeProperty('transition');
+    return;
+  }
+
+  const modalBox = testModal.querySelector('.setting-modal-box') || testModal.querySelector('.modal-box');
+
+  const finalizeClose = () => {
     testModal.classList.remove('open');
-    testModal.style.backgroundColor = '';
-    testModal.style.transition = '';
-    const modalBox = testModal.querySelector('.modal-box');
+    testModal.style.removeProperty('background-color');
+    testModal.style.removeProperty('transition');
     if (modalBox) {
-      modalBox.style.transform = '';
-      modalBox.style.transition = '';
-      modalBox.style.willChange = '';
+      modalBox.style.removeProperty('transform');
+      modalBox.style.removeProperty('transition');
+      modalBox.style.removeProperty('will-change');
+      modalBox.style.removeProperty('opacity');
+      modalBox.style.removeProperty('animation');
+      modalBox.classList.remove('dragging');
     }
-  }
+    isClosingSettingModal = false;
 
-  if (!keepAdminSession && !isTestingPopupNotif) {
-    exitAdminMode();
-  }
+    if (!keepAdminSession && !isTestingPopupNotif) {
+      exitAdminMode();
+    }
 
-  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('setting');
-  if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
+    if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('setting');
+    if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
+    if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
+  };
+
+  if (!skipAnimation && modalBox && !isClosingSettingModal) {
+    isClosingSettingModal = true;
+    modalBox.style.setProperty('transition', 'transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.22s ease', 'important');
+    modalBox.style.setProperty('transform', 'translateY(115%) scale(0.95)', 'important');
+    testModal.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+    testModal.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+
+    setTimeout(finalizeClose, 240);
+  } else {
+    finalizeClose();
+  }
 }
 
 /**
- * Fitur Gesture Tarik / Swipe-to-Dismiss untuk Modal Setting (Bottom Sheet di HP)
+ * Fitur Gesture Tarik / Swipe-to-Dismiss untuk Modal Setting (Bottom Sheet di HP & Desktop)
  * Memungkinkan user menahan dan menarik handle bar di atas setting naik (elastis) atau turun ke bawah untuk menutup modal.
  */
 function initSettingModalDragToDismiss() {
@@ -3393,23 +3420,25 @@ function initSettingModalDragToDismiss() {
 
   function resetBoxStyles(animate = true) {
     if (animate) {
-      modalBox.style.transition = 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)';
-      modalOverlay.style.transition = 'background-color 0.28s ease';
+      modalBox.style.setProperty('transition', 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.28s ease', 'important');
       if (pillBar) {
-        pillBar.style.transition = 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, box-shadow 0.25s ease';
+        pillBar.style.setProperty('transition', 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, box-shadow 0.25s ease', 'important');
       }
     } else {
-      modalBox.style.transition = 'none';
-      modalOverlay.style.transition = 'none';
-      if (pillBar) pillBar.style.transition = 'none';
+      modalBox.style.removeProperty('transition');
+      modalOverlay.style.removeProperty('transition');
+      if (pillBar) pillBar.style.removeProperty('transition');
     }
-    modalBox.style.transform = '';
-    modalOverlay.style.backgroundColor = '';
+    modalBox.style.removeProperty('transform');
+    modalBox.style.removeProperty('animation');
+    modalBox.classList.remove('dragging');
+    modalOverlay.style.removeProperty('background-color');
     dragHandle.classList.remove('dragging');
     if (pillBar) {
-      pillBar.style.width = '';
-      pillBar.style.backgroundColor = '';
-      pillBar.style.boxShadow = '';
+      pillBar.style.removeProperty('width');
+      pillBar.style.removeProperty('background-color');
+      pillBar.style.removeProperty('box-shadow');
     }
     if (hintPill) {
       hintPill.classList.remove('ready-to-close');
@@ -3420,9 +3449,9 @@ function initSettingModalDragToDismiss() {
 
     if (animate) {
       setTimeout(() => {
-        modalBox.style.transition = '';
-        modalOverlay.style.transition = '';
-        if (pillBar) pillBar.style.transition = '';
+        modalBox.style.removeProperty('transition');
+        modalOverlay.style.removeProperty('transition');
+        if (pillBar) pillBar.style.removeProperty('transition');
       }, 300);
     }
   }
@@ -3438,10 +3467,12 @@ function initSettingModalDragToDismiss() {
     currentY = clientY;
     startTime = Date.now();
 
-    modalBox.style.transition = 'none';
-    modalOverlay.style.transition = 'none';
-    modalBox.style.willChange = 'transform';
-    if (pillBar) pillBar.style.transition = 'none';
+    modalBox.classList.add('dragging');
+    modalBox.style.setProperty('animation', 'none', 'important');
+    modalBox.style.setProperty('transition', 'none', 'important');
+    modalOverlay.style.setProperty('transition', 'none', 'important');
+    modalBox.style.setProperty('will-change', 'transform', 'important');
+    if (pillBar) pillBar.style.setProperty('transition', 'none', 'important');
 
     dragHandle.classList.add('dragging');
     if (hintPill) hintPill.classList.remove('ready-to-close');
@@ -3449,8 +3480,11 @@ function initSettingModalDragToDismiss() {
     return true;
   }
 
-  function handleMove(clientY) {
+  function handleMove(clientY, e) {
     if (!isDragging) return;
+    if (e && e.cancelable) {
+      try { e.preventDefault(); } catch (_) {}
+    }
     currentY = clientY;
     const deltaY = currentY - startY;
 
@@ -3458,17 +3492,17 @@ function initSettingModalDragToDismiss() {
       // Tarik ke bawah (mengikuti jari secara real-time + efek depth scale)
       const ratio = Math.min(deltaY / 75, 1);
       const scale = 1 - Math.min(deltaY / 1500, 0.035);
-      modalBox.style.transform = `translateY(${deltaY}px) scale(${scale})`;
+      modalBox.style.setProperty('transform', `translateY(${deltaY}px) scale(${scale})`, 'important');
 
       const progress = Math.min(deltaY / 400, 1);
       const alpha = Math.max(0.1, 0.6 * (1 - progress * 0.75));
-      modalOverlay.style.backgroundColor = `rgba(15, 23, 42, ${alpha})`;
+      modalOverlay.style.setProperty('background-color', `rgba(15, 23, 42, ${alpha})`, 'important');
 
       // Animasi dinamis pada garis / bar handle
       if (pillBar) {
         const dynamicWidth = Math.min(74, 48 + ratio * 24);
-        pillBar.style.width = `${dynamicWidth}px`;
-        pillBar.style.backgroundColor = 'var(--primary, #8b7cf6)';
+        pillBar.style.setProperty('width', `${dynamicWidth}px`, 'important');
+        pillBar.style.setProperty('background-color', 'var(--primary, #8b7cf6)', 'important');
       }
 
       // Animasi badge status
@@ -3476,20 +3510,20 @@ function initSettingModalDragToDismiss() {
         if (hintPill && !hintPill.classList.contains('ready-to-close')) {
           hintPill.classList.add('ready-to-close');
           if (hintText) hintText.innerText = 'Lepas untuk menutup';
-          if (pillBar) pillBar.style.boxShadow = '0 0 16px rgba(139, 124, 246, 0.8)';
+          if (pillBar) pillBar.style.setProperty('box-shadow', '0 0 16px rgba(139, 124, 246, 0.8)', 'important');
         }
       } else {
         if (hintPill && hintPill.classList.contains('ready-to-close')) {
           hintPill.classList.remove('ready-to-close');
           if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
-          if (pillBar) pillBar.style.boxShadow = '';
+          if (pillBar) pillBar.style.removeProperty('box-shadow');
         }
       }
     } else {
       // Tarik ke atas (efek karet / elastis rubber-band)
       const damped = Math.max(-28, deltaY * 0.22);
-      modalBox.style.transform = `translateY(${damped}px)`;
-      if (pillBar) pillBar.style.width = '42px';
+      modalBox.style.setProperty('transform', `translateY(${damped}px)`, 'important');
+      if (pillBar) pillBar.style.setProperty('width', '42px', 'important');
       if (hintPill) hintPill.classList.remove('ready-to-close');
     }
   }
@@ -3497,7 +3531,7 @@ function initSettingModalDragToDismiss() {
   function handleEnd(target) {
     if (!isDragging) return;
     isDragging = false;
-    modalBox.style.willChange = '';
+    modalBox.style.removeProperty('will-change');
     dragHandle.classList.remove('dragging');
 
     const deltaY = currentY - startY;
@@ -3509,13 +3543,13 @@ function initSettingModalDragToDismiss() {
 
     if (isSwipeDown || isTapOnHandle) {
       // Meluncur ke bawah menutup modal
-      modalBox.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease';
-      modalOverlay.style.transition = 'background-color 0.22s ease';
-      modalBox.style.transform = 'translateY(115%) scale(0.95)';
-      modalOverlay.style.backgroundColor = 'rgba(15, 23, 42, 0)';
+      modalBox.style.setProperty('transition', 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+      modalBox.style.setProperty('transform', 'translateY(115%) scale(0.95)', 'important');
+      modalOverlay.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
 
       setTimeout(() => {
-        closeSettingModal(false);
+        closeSettingModal(false, true);
         resetBoxStyles(false);
       }, 230);
     } else {
@@ -3527,58 +3561,60 @@ function initSettingModalDragToDismiss() {
   const targets = [dragHandle];
   const modalIcon = document.getElementById('wa-modal-icon');
   if (modalIcon) targets.push(modalIcon);
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) targets.push(modalTitle);
 
-  if (window.PointerEvent) {
-    targets.forEach(el => {
-      el.style.touchAction = 'none';
-      el.addEventListener('pointerdown', (e) => {
-        if (e.button !== undefined && e.button !== 0) return;
-        if (!handleStart(e.clientY, e.pointerId, e.target)) return;
-        try {
-          el.setPointerCapture(e.pointerId);
-        } catch (_) {}
-      });
-      el.addEventListener('pointermove', (e) => {
-        if (!isDragging || e.pointerId !== activePointerId) return;
-        handleMove(e.clientY);
-      });
-      const onPointerUp = (e) => {
-        if (!isDragging || (activePointerId !== null && e.pointerId !== activePointerId)) return;
-        try {
-          if (el.hasPointerCapture(e.pointerId)) {
-            el.releasePointerCapture(e.pointerId);
-          }
-        } catch (_) {}
-        activePointerId = null;
-        handleEnd(e.target);
+  targets.forEach(el => {
+    el.style.touchAction = 'none';
+
+    // Pointer events (Modern Desktop Mouse + Touch Mobile)
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (!handleStart(e.clientY, e.pointerId, e.target)) return;
+
+      const onWindowPointerMove = (moveEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && moveEvt.pointerId !== activePointerId) return;
+        handleMove(moveEvt.clientY, moveEvt);
       };
-      el.addEventListener('pointerup', onPointerUp);
-      el.addEventListener('pointercancel', onPointerUp);
+
+      const onWindowPointerUp = (upEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && upEvt.pointerId !== activePointerId) return;
+        window.removeEventListener('pointermove', onWindowPointerMove);
+        window.removeEventListener('pointerup', onWindowPointerUp);
+        window.removeEventListener('pointercancel', onWindowPointerUp);
+        activePointerId = null;
+        handleEnd(upEvt.target);
+      };
+
+      window.addEventListener('pointermove', onWindowPointerMove, { passive: false });
+      window.addEventListener('pointerup', onWindowPointerUp);
+      window.addEventListener('pointercancel', onWindowPointerUp);
     });
-  } else {
-    // Touch fallback untuk browser lama
-    targets.forEach(el => {
-      el.addEventListener('touchstart', (e) => {
-        if (e.touches && e.touches.length === 1) {
-          handleStart(e.touches[0].clientY, 'touch', e.target);
-        }
-      }, { passive: true });
-      el.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches && e.touches.length === 1) {
-          handleMove(e.touches[0].clientY);
-        }
-      }, { passive: true });
-      el.addEventListener('touchend', (e) => {
-        if (isDragging) handleEnd(e.target);
-      }, { passive: true });
-      el.addEventListener('touchcancel', () => {
-        if (isDragging) {
-          resetBoxStyles(true);
-          isDragging = false;
-        }
-      }, { passive: true });
-    });
-  }
+
+    // Touch events fallback untuk browser mobile lama / Safari WebKit
+    el.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      if (!handleStart(e.touches[0].clientY, 'touch', e.target)) return;
+
+      const onWindowTouchMove = (moveEvt) => {
+        if (!isDragging || !moveEvt.touches || moveEvt.touches.length !== 1) return;
+        handleMove(moveEvt.touches[0].clientY, moveEvt);
+      };
+
+      const onWindowTouchEnd = (endEvt) => {
+        window.removeEventListener('touchmove', onWindowTouchMove);
+        window.removeEventListener('touchend', onWindowTouchEnd);
+        window.removeEventListener('touchcancel', onWindowTouchEnd);
+        handleEnd(endEvt.target);
+      };
+
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+      window.addEventListener('touchend', onWindowTouchEnd);
+      window.addEventListener('touchcancel', onWindowTouchEnd);
+    }, { passive: false });
+  });
 
   // Aksesibilitas Keyboard pada drag handle
   dragHandle.addEventListener('keydown', (e) => {
@@ -7284,16 +7320,36 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000); // 10 menit dalam milidetik
 
-// ─── Modal Logic ───
+// ─── Modal Logic & Animasi Tutup / Swipe-to-Dismiss Notifikasi ───
 const modal = document.getElementById('lab-modal');
 const modalBody = document.getElementById('lab-modal-body');
 const modalCloseBtn = document.getElementById('modal-close-btn');
 let alarmInterval = null;
 let autoCloseTimeout = null;
+let isClosingLabModal = false;
 
 function openModal(isRepeat = false) {
-  modal.classList.add('open');
+  if (!modal) return;
+  isClosingLabModal = false;
+  const modalBox = modal.querySelector('.modal-box');
+  if (modalBox) {
+    modalBox.style.removeProperty('transform');
+    modalBox.style.removeProperty('opacity');
+    modalBox.style.removeProperty('transition');
+    modalBox.style.removeProperty('animation');
+    modalBox.classList.remove('dragging');
+  }
+  modal.style.removeProperty('background-color');
+  modal.style.removeProperty('backdrop-filter');
+  modal.style.removeProperty('transition');
+
   modal.style.display = 'flex';
+  modal.classList.add('open');
+
+  if (typeof initLabModalDragToDismiss === 'function') {
+    initLabModalDragToDismiss();
+  }
+
   if (typeof pushModalHistory === 'function') pushModalHistory('lab-modal');
   if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
   playNotificationSound();
@@ -7314,11 +7370,9 @@ function openModal(isRepeat = false) {
   modalCloseBtn.focus();
 }
 
-function closeModal() {
-  modal.classList.remove('open');
-  modal.style.display = 'none';
-  if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('lab-modal');
-  if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
+function closeModal(skipAnimation = false) {
+  if (!modal) return;
+
   if (alarmInterval) {
     clearInterval(alarmInterval);
     alarmInterval = null;
@@ -7328,11 +7382,267 @@ function closeModal() {
     autoCloseTimeout = null;
   }
   isTestingPopupNotif = false;
+
+  const modalBox = modal.querySelector('.modal-box');
+  const finalizeClose = () => {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+    modal.style.removeProperty('background-color');
+    modal.style.removeProperty('backdrop-filter');
+    modal.style.removeProperty('transition');
+    if (modalBox) {
+      modalBox.style.removeProperty('transform');
+      modalBox.style.removeProperty('opacity');
+      modalBox.style.removeProperty('transition');
+      modalBox.style.removeProperty('animation');
+      modalBox.classList.remove('dragging');
+    }
+    isClosingLabModal = false;
+    if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('lab-modal');
+    if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
+  };
+
+  if (!skipAnimation && modalBox && modal.classList.contains('open') && !isClosingLabModal) {
+    isClosingLabModal = true;
+    modalBox.style.setProperty('transition', 'transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.22s ease', 'important');
+    modalBox.style.setProperty('transform', 'translateY(120%) scale(0.92)', 'important');
+    modalBox.style.setProperty('opacity', '0', 'important');
+    modal.style.setProperty('transition', 'background-color 0.24s ease, backdrop-filter 0.24s ease', 'important');
+    modal.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+    modal.style.setProperty('backdrop-filter', 'none', 'important');
+
+    setTimeout(finalizeClose, 260);
+  } else {
+    finalizeClose();
+  }
 }
 
-modalCloseBtn.addEventListener('click', closeModal);
-modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+/**
+ * Fitur Gesture Tarik / Swipe-to-Dismiss untuk Modal Notifikasi Lab & Ruangan
+ */
+function initLabModalDragToDismiss() {
+  const modalOverlay = document.getElementById('lab-modal');
+  if (!modalOverlay) return;
+
+  const modalBox = modalOverlay.querySelector('.modal-box');
+  const dragHandle = document.getElementById('lab-notif-drag-handle');
+  if (!modalBox || !dragHandle) return;
+
+  if (dragHandle.dataset.dragInitialized === 'true') return;
+  dragHandle.dataset.dragInitialized = 'true';
+
+  let isDragging = false;
+  let startY = 0;
+  let currentY = 0;
+  let startTime = 0;
+  let activePointerId = null;
+
+  const pillBar = dragHandle.querySelector('.modal-drag-handle-bar');
+  const hintPill = document.getElementById('lab-notif-drag-hint');
+  const hintText = hintPill ? hintPill.querySelector('.hint-text') : null;
+
+  function resetBoxStyles(animate = true) {
+    if (animate) {
+      modalBox.style.setProperty('transition', 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.28s ease', 'important');
+      if (pillBar) {
+        pillBar.style.setProperty('transition', 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, box-shadow 0.25s ease', 'important');
+      }
+    } else {
+      modalBox.style.removeProperty('transition');
+      modalOverlay.style.removeProperty('transition');
+      if (pillBar) pillBar.style.removeProperty('transition');
+    }
+    modalBox.style.removeProperty('transform');
+    modalBox.style.removeProperty('animation');
+    modalBox.classList.remove('dragging');
+    modalOverlay.style.removeProperty('background-color');
+    dragHandle.classList.remove('dragging');
+    if (pillBar) {
+      pillBar.style.removeProperty('width');
+      pillBar.style.removeProperty('background-color');
+      pillBar.style.removeProperty('box-shadow');
+    }
+    if (hintPill) {
+      hintPill.classList.remove('ready-to-close');
+    }
+    if (hintText) {
+      hintText.innerText = 'Tarik ke bawah untuk menutup';
+    }
+
+    if (animate) {
+      setTimeout(() => {
+        modalBox.style.removeProperty('transition');
+        modalOverlay.style.removeProperty('transition');
+        if (pillBar) pillBar.style.removeProperty('transition');
+      }, 300);
+    }
+  }
+
+  function handleStart(clientY, pointerId, target) {
+    if (target && target.closest('button, input, select, a, [role="button"]:not(#lab-notif-drag-handle)')) {
+      return false;
+    }
+
+    isDragging = true;
+    activePointerId = pointerId;
+    startY = clientY;
+    currentY = clientY;
+    startTime = Date.now();
+
+    modalBox.classList.add('dragging');
+    modalBox.style.setProperty('animation', 'none', 'important');
+    modalBox.style.setProperty('transition', 'none', 'important');
+    modalOverlay.style.setProperty('transition', 'none', 'important');
+    modalBox.style.setProperty('will-change', 'transform', 'important');
+    if (pillBar) pillBar.style.setProperty('transition', 'none', 'important');
+
+    dragHandle.classList.add('dragging');
+    if (hintPill) hintPill.classList.remove('ready-to-close');
+    if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+    return true;
+  }
+
+  function handleMove(clientY, e) {
+    if (!isDragging) return;
+    if (e && e.cancelable) {
+      try { e.preventDefault(); } catch (_) {}
+    }
+    currentY = clientY;
+    const deltaY = currentY - startY;
+
+    if (deltaY > 0) {
+      const ratio = Math.min(deltaY / 70, 1);
+      const scale = 1 - Math.min(deltaY / 1500, 0.035);
+      modalBox.style.setProperty('transform', `translateY(${deltaY}px) scale(${scale})`, 'important');
+
+      const progress = Math.min(deltaY / 350, 1);
+      const alpha = Math.max(0.1, 0.7 * (1 - progress * 0.75));
+      modalOverlay.style.setProperty('background-color', `rgba(15, 23, 42, ${alpha})`, 'important');
+
+      if (pillBar) {
+        const dynamicWidth = Math.min(74, 48 + ratio * 24);
+        pillBar.style.setProperty('width', `${dynamicWidth}px`, 'important');
+        pillBar.style.setProperty('background-color', 'var(--primary, #8b7cf6)', 'important');
+      }
+
+      if (deltaY >= 65) {
+        if (hintPill && !hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.add('ready-to-close');
+          if (hintText) hintText.innerText = 'Lepas untuk menutup';
+          if (pillBar) pillBar.style.setProperty('box-shadow', '0 0 16px rgba(139, 124, 246, 0.8)', 'important');
+        }
+      } else {
+        if (hintPill && hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.remove('ready-to-close');
+          if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+          if (pillBar) pillBar.style.removeProperty('box-shadow');
+        }
+      }
+    } else {
+      const damped = Math.max(-28, deltaY * 0.22);
+      modalBox.style.setProperty('transform', `translateY(${damped}px)`, 'important');
+      if (pillBar) pillBar.style.setProperty('width', '42px', 'important');
+      if (hintPill) hintPill.classList.remove('ready-to-close');
+    }
+  }
+
+  function handleEnd(target) {
+    if (!isDragging) return;
+    isDragging = false;
+    modalBox.style.removeProperty('will-change');
+    dragHandle.classList.remove('dragging');
+
+    const deltaY = currentY - startY;
+    const dt = Math.max(Date.now() - startTime, 1);
+    const velocity = deltaY / dt;
+
+    const isTapOnHandle = Math.abs(deltaY) < 8 && dt < 280 && Boolean(target && target.closest('#lab-notif-drag-handle'));
+    const isSwipeDown = deltaY > 65 || (deltaY > 20 && velocity > 0.3);
+
+    if (isSwipeDown || isTapOnHandle) {
+      modalBox.style.setProperty('transition', 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+      modalBox.style.setProperty('transform', 'translateY(120%) scale(0.92)', 'important');
+      modalOverlay.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+
+      setTimeout(() => {
+        closeModal(true);
+        resetBoxStyles(false);
+      }, 230);
+    } else {
+      resetBoxStyles(true);
+    }
+  }
+
+  const targets = [dragHandle];
+  const modalIcon = document.getElementById('lab-modal-icon');
+  if (modalIcon) targets.push(modalIcon);
+  const modalTitle = document.getElementById('lab-modal-title');
+  if (modalTitle) targets.push(modalTitle);
+
+  targets.forEach(el => {
+    el.style.touchAction = 'none';
+
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (!handleStart(e.clientY, e.pointerId, e.target)) return;
+
+      const onWindowPointerMove = (moveEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && moveEvt.pointerId !== activePointerId) return;
+        handleMove(moveEvt.clientY, moveEvt);
+      };
+
+      const onWindowPointerUp = (upEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && upEvt.pointerId !== activePointerId) return;
+        window.removeEventListener('pointermove', onWindowPointerMove);
+        window.removeEventListener('pointerup', onWindowPointerUp);
+        window.removeEventListener('pointercancel', onWindowPointerUp);
+        activePointerId = null;
+        handleEnd(upEvt.target);
+      };
+
+      window.addEventListener('pointermove', onWindowPointerMove, { passive: false });
+      window.addEventListener('pointerup', onWindowPointerUp);
+      window.addEventListener('pointercancel', onWindowPointerUp);
+    });
+
+    el.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      if (!handleStart(e.touches[0].clientY, 'touch', e.target)) return;
+
+      const onWindowTouchMove = (moveEvt) => {
+        if (!isDragging || !moveEvt.touches || moveEvt.touches.length !== 1) return;
+        handleMove(moveEvt.touches[0].clientY, moveEvt);
+      };
+
+      const onWindowTouchEnd = (endEvt) => {
+        window.removeEventListener('touchmove', onWindowTouchMove);
+        window.removeEventListener('touchend', onWindowTouchEnd);
+        window.removeEventListener('touchcancel', onWindowTouchEnd);
+        handleEnd(endEvt.target);
+      };
+
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+      window.addEventListener('touchend', onWindowTouchEnd);
+      window.addEventListener('touchcancel', onWindowTouchEnd);
+    }, { passive: false });
+  });
+
+  dragHandle.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      closeModal(false);
+    }
+  });
+}
+window.initLabModalDragToDismiss = initLabModalDragToDismiss;
+
+modalCloseBtn.addEventListener('click', () => closeModal(false));
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(false); });
 
 // ─── Notification Sound ───
 function playNotificationSound() {

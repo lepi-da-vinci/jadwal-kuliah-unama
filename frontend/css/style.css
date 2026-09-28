@@ -1397,6 +1397,12 @@ body.modal-open {
   max-width: 840px;
 }
 /* Drag Handle Zone untuk Bottom Sheet & Modal Swipe-to-Dismiss */
+.modal-drag-handle-zone,
+.modal-drag-handle-zone * {
+  touch-action: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
 .modal-drag-handle-zone {
   display: flex;
   flex-direction: column;
@@ -1404,9 +1410,6 @@ body.modal-open {
   padding: 8px 0 6px 0;
   margin: -6px 0 4px 0;
   cursor: grab;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
   justify-content: center;
   align-items: center;
   flex-shrink: 0;
@@ -1417,6 +1420,12 @@ body.modal-open {
 }
 .modal-drag-handle-zone:active {
   cursor: grabbing;
+}
+.modal-box.dragging,
+.setting-modal-box.dragging,
+.lab-modal-box.dragging {
+  animation: none !important;
+  transition: none !important;
 }
 .modal-drag-handle-bar {
   width: 48px;
@@ -5900,10 +5909,9 @@ body.semester-explorer-active #semester-explorer-container {
   #modal-fs-filter .modal-box,
   #room-detail-modal .modal-box,
   #modal-fs-info .modal-box,
-  #lab-modal .modal-box,
   .setting-modal-box,
   .db-clear-modal-box,
-  .modal-box {
+  .modal-box:not(#lab-modal .modal-box):not(.lab-modal-box) {
     width: 100% !important;
     max-width: 100% !important;
     max-height: calc(88vh - env(safe-area-inset-bottom)) !important;
@@ -5916,8 +5924,55 @@ body.semester-explorer-active #semester-explorer-container {
     box-sizing: border-box !important;
     overflow: hidden !important;
     box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45) !important;
-    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
     z-index: 100001 !important;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     MODAL NOTIFIKASI LAB & RUANGAN (POPUP PERINGATAN MOBILE)
+     Tampil proporsional & terpusat di layar HP, tidak tenggelam di paling bawah
+     ══════════════════════════════════════════════════════════════ */
+  #lab-modal {
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px !important;
+  }
+  #lab-modal .modal-box,
+  .lab-modal-box {
+    width: min(440px, calc(100% - 24px)) !important;
+    max-width: 440px !important;
+    margin: auto !important;
+    border-radius: 26px !important;
+    padding: 12px 18px calc(18px + env(safe-area-inset-bottom, 0px)) 18px !important;
+    max-height: calc(85vh - env(safe-area-inset-bottom, 0px)) !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+    animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+  #lab-modal .modal-icon {
+    width: 48px !important;
+    height: 48px !important;
+    margin: 2px auto 8px auto !important;
+  }
+  #lab-modal .modal-icon svg {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  #lab-modal-title {
+    font-size: 1.15rem !important;
+    margin-bottom: 10px !important;
+  }
+  #lab-modal-body {
+    max-height: 50vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin-bottom: 14px !important;
+  }
+  #lab-modal .modal-btn {
+    width: 100% !important;
+    margin-top: 4px !important;
+    padding: 12px !important;
+    font-size: 1rem !important;
+    border-radius: 14px !important;
   }
 
   /* ══════════════════════════════════════════════════════════════
