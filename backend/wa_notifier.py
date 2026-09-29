@@ -1247,7 +1247,7 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
    JANGAN PERNAH bertanya balik "Mau lihat jadwal lab yang mana?".
    LANGSUNG panggil tool untuk mengecek jadwal ruangan yang dipegang aslab tersebut ('{nama_ruangan}').
    Sesuaikan jawaban dengan tepat sesuai konteks pertanyaan. Jika aslab secara spesifik meminta ruangan/lab lain (misal "jadwal lab 2.11" atau "ruang 3.4"), baru cek ruangan yang diminta tersebut.
-   - ATURAN KHUSUS LAB 1.5: Di UNAMA, 'Labor 1.5' HANYA berada di KAMPUS KOBAR. Jika ditanya jadwal lab 1.5, status lab 1.5, atau kelas berikutnya di 1.5, WAJIB arahkan ke Kampus Kobar (gunakan parameter `kampus='Kobar'`). JANGAN PERNAH menggabungkan atau menampilkan data kampus Thehok untuk Lab 1.5 kecuali pengguna secara eksplisit meminta 'Thehok'.
+   - ATURAN KHUSUS LAB 1.5: Di UNAMA, 'Labor 1.5' terdaftar di DUA kampus, yaitu Kampus Kobar dan Kampus Thehok. Jika pengguna menanyakan Lab 1.5 tanpa menyebutkan kampus, cek keduanya atau sesuaikan dengan kampus pengguna. Jika pengguna menyebut '1.5 kobar' atau '1.5 thehok', arahkan ke kampus tersebut.
 8. KELAS BERIKUTNYA & STATUS LAB REAL-TIME:
    - Jika ditanya "kelas berikutnya", "habis ini kelas apa", "setelah ini ada kelas apa", panggil tool `kelas_berikutnya(nama_ruangan='{nama_ruangan}')`.
    - Jika ditanya status lab ("lagi dipakai dak?", "status lab sekarang", "kondisi lab"), panggil tool `status_lab_sekarang(nama_ruangan='{nama_ruangan}')`.
@@ -1419,35 +1419,34 @@ def fallback_python_handler(sender, text, aslab):
         current_sender_context.sender = sender
         return update_profil_aslab(ruangan_baru=new_room)
 
-    # 3. Cek Menu / Sapaan Umum (Bahasa Slang Santai Khas Anak Lab)
+    # 3. Cek Menu / Sapaan Umum
     if not has_room:
         menu_teks = (
-            f"Halo {nama}! Kamu aktif sebagai *Admin / Viewer* bot jadwal (Pantau Bebas Tanpa Lab Khusus & Tanpa Notifikasi Lab).\n\n"
-            f"Nih menu & fitur yang bisa kamu cek:\n\n"
-            f"1. Jadwal Lab Tertentu (Ketik nomor lab, misal: '1.5 kobar', '1.5 thehok', '1.8', '2.11')\n"
-            f"2. Kelas Berikutnya (Ketik: 'habis ini 1.8' atau 'habis ini 1.5 kobar')\n"
-            f"3. Status Real-time Lab (Ketik: 'status 1.8' atau 'status 1.5 thehok')\n"
-            f"4. Jadwal Semua Lab (Ketik: '4' atau 'jadwal semua kobar' / 'jadwal semua thehok')\n"
-            f"5. Cek Lab Kosong (Ketik: '5' atau 'lab kosong kobar' / 'lab kosong thehok')\n"
-            f"6. Cari Posisi Dosen (Ketik: '6' atau nama dosen, misal: 'pak reza')\n"
-            f"7. Info Mase (Ketik: '7' - pengumuman lab hari ini)\n"
-            f"8. Link Web & Barcode Server (Ketik: '8')\n"
-            f"9. Statistik Lab (Ketik: 'statistik 1.8')\n\n"
-            f"Ketik nomor menu atau langsung tanyakan jadwal lab/dosen yang mau dicek!"
+            "Menu Admin / Viewer:\n\n"
+            "1. Jadwal lab (contoh: 1.5 kobar, 1.8, 2.11)\n"
+            "2. Kelas berikutnya (contoh: habis ini 1.8)\n"
+            "3. Status real-time lab (contoh: status 1.8)\n"
+            "4. Jadwal semua lab (ketik 4 atau jadwal semua kobar/thehok)\n"
+            "5. Cek lab kosong (ketik 5 atau lab kosong kobar/thehok)\n"
+            "6. Cari posisi dosen (ketik 6 atau nama dosen)\n"
+            "7. Info hari ini (ketik 7)\n"
+            "8. Link web & server (ketik 8)\n"
+            "9. Statistik lab (contoh: statistik 1.8)\n\n"
+            "Ketik nomor menu atau langsung tanyakan jadwal yang mau dicek mas."
         )
     else:
         menu_teks = (
-            f"Halo mase {nama}! Nih menu dan informasi yang bisa kamu cek:\n\n"
+            f"Halo mas {nama}. Nih menu yang bisa dicek:\n\n"
             f"1. Jadwal {label_ruang}\n"
-            f"2. Kelas Berikutnya (Habis ini kelas ape?)\n"
-            f"3. Status Real-time {label_ruang} (Lagi dipake/kosong?)\n"
-            f"4. Jadwal Semua Lab ({kampus_default})\n"
-            f"5. Cek Lab Kosong ({kampus_default})\n"
-            f"6. Cari Posisi Dosen (Lagi ngajar dimana?)\n"
-            f"7. Info Mase\n"
-            f"8. Link Web & Barcode Server\n"
-            f"9. Statistik Lab (Total jam & utilisasi semester ini)\n\n"
-            f"Ketik nomor 1 s/d 9 atau langsung ketik pertanyaannya ya (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
+            f"2. Kelas berikutnya\n"
+            f"3. Status real-time {label_ruang}\n"
+            f"4. Jadwal semua lab ({kampus_default})\n"
+            f"5. Cek lab kosong ({kampus_default})\n"
+            f"6. Cari posisi dosen\n"
+            f"7. Info hari ini\n"
+            f"8. Link web & server\n"
+            f"9. Statistik lab {label_ruang}\n\n"
+            f"Ketik nomor 1 s/d 9 atau langsung tanyakan jadwal yang mau dicek mas."
         )
 
     if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
@@ -1554,31 +1553,25 @@ def fallback_python_handler(sender, text, aslab):
             k_target = aslab.get('kampus')
         return cek_jadwal_lab_tertentu(room_no, target_date, kampus=k_target)
 
-    # 14. Default Fallback: Menu Slang Ramah
+    # 14. Default Fallback
     if not has_room:
         return (
-            f"Waduh {nama}, bot belum paham nih.\n"
-            f"Karena mase aktif sebagai *Admin/Viewer* tanpa lab khusus, silakan pilih menu atau ketik langsung lab yang mau dicek:\n\n"
-            f"• Ketik nomor lab (misal: *1.5 kobar*, *1.5 thehok*, *1.8*)\n"
-            f"• Ketik *4* untuk Jadwal Semua Lab\n"
-            f"• Ketik *5* untuk Cek Lab Kosong\n"
-            f"• Ketik nama dosen (misal: *pak reza*)\n"
-            f"• Ketik *menu* untuk melihat semua menu"
+            "Perintah belum dikenal mas.\n"
+            "Ketik nomor lab (misal: 1.5 kobar, 1.8), ketik 4 untuk semua lab, ketik nama dosen, atau ketik inpo untuk melihat menu."
         )
 
     return (
-        f"Waduh mas, bot belum paham nih.\n"
-        f"Pilih nomor menu di bawah atau ketik langsung ya:\n\n"
+        f"Perintah belum dikenal mas.\n\n"
         f"1. Jadwal {label_ruang}\n"
-        f"2. Kelas Berikutnya\n"
-        f"3. Status Real-time {label_ruang}\n"
-        f"4. Jadwal Semua Lab ({kampus_default})\n"
-        f"5. Cek Lab Kosong ({kampus_default})\n"
-        f"6. Cari Posisi Dosen\n"
-        f"7. Info Mase\n"
-        f"8. Link Web & Barcode Server\n"
-        f"9. Statistik Lab {label_ruang}\n\n"
-        f"Ketik nomor 1 s/d 9 atau langsung ketik ae!"
+        f"2. Kelas berikutnya\n"
+        f"3. Status real-time {label_ruang}\n"
+        f"4. Jadwal semua lab ({kampus_default})\n"
+        f"5. Cek lab kosong ({kampus_default})\n"
+        f"6. Cari posisi dosen\n"
+        f"7. Info hari ini\n"
+        f"8. Link server\n"
+        f"9. Statistik lab {label_ruang}\n\n"
+        f"Ketik nomor 1 s/d 9 atau ketik inpo untuk bantuan."
     )
 
 
@@ -1600,7 +1593,7 @@ def handle_incoming_message(sender, text):
     if no_wa.startswith('0'): no_wa = '62' + no_wa[1:]
 
     # 1. Perintah Tautkan Nomor / Link Akun (Sangat berguna untuk akun WhatsApp dengan format privasi @lid)
-    match_link = re.search(r'^(?:!link|!taut|!nomor|link|taut|nomor)\s+(\+?62\d+|08\d+)', text_clean)
+    match_link = re.search(r'^(?:!link|!taut|!nomor)\s+(\+?62\d+|08\d+)', text_clean)
     if match_link:
         raw_phone = match_link.group(1)
         clean_phone = re.sub(r'\D', '', raw_phone)
@@ -1628,21 +1621,13 @@ def handle_incoming_message(sender, text):
                 conn.commit()
                 log_chatbot("SUCCESS", f"Akun {sender} berhasil ditautkan ke Aslab {target_aslab['nama_aslab']} (HP: {clean_phone})", "AUTH")
                 send_wa_typing(sender, 'composing')
-                lab_info = f"{target_aslab['nama_ruangan']} ({target_aslab['kampus']})" if target_aslab.get('nama_ruangan') else "Admin/Viewer"
-                return (
-                    f"✅ *Akun Berhasil Ditautkan!*\n\n"
-                    f"Halo mase *{target_aslab['nama_aslab']}*! Akun WhatsApp kamu sekarang resmi terhubung ke data Aslab {lab_info}.\n\n"
-                    f"Silakan ketik *menu* atau langsung tanyakan jadwal lab kamu ya!"
-                )
+                return f"Akun berhasil ditautkan ke data {target_aslab['nama_aslab']}. Silakan ketik inpo untuk mulai ngobrol."
             else:
                 log_chatbot("WARN", f"Penautan gagal untuk {sender}: Nomor {clean_phone} tidak ditemukan di database asisten_lab", "AUTH")
-                return (
-                    f"❌ Nomor *{clean_phone}* belum terdaftar di database Aslab UNAMA.\n\n"
-                    f"Pastikan nomor yang kamu masukkan sama persis dengan yang didaftarkan Admin, atau ketik *!inpo* untuk mendaftar baru."
-                )
+                return f"Nomor {clean_phone} tidak terdaftar di sistem. Ketik !inpo untuk mendaftar."
         except Exception as e:
             log_chatbot("ERROR", f"Error saat proses linking akun {sender}: {e}", "AUTH")
-            return "Maaf, terjadi kendala teknis saat menautkan akun. Silakan coba sebentar lagi."
+            return "Maaf, terjadi kendala saat menautkan akun. Coba sebentar lagi."
         finally:
             if 'conn' in locals() and conn.is_connected():
                 cursor.close()
@@ -1677,18 +1662,10 @@ def handle_incoming_message(sender, text):
             conn.commit()
             log_chatbot("SUCCESS", f"Akun {sender} berhasil login sebagai Admin/Viewer (Tanpa Lab Khusus & Tanpa Notif)", "AUTH")
             send_wa_typing(sender, 'composing')
-            
-            return (
-                "👑 *Login Admin / Viewer Berhasil!*\n\n"
-                "Halo Mase! Akun WhatsApp kamu sekarang aktif sebagai *Admin / Viewer* bot jadwal:\n"
-                "✨ *Tanpa perlu daftar nama & lab*\n"
-                "✨ *Bisa cek jadwal seluruh lab (Thehok & Kobar)*\n"
-                "🔕 *Bebas dari notifikasi buka/tutup lab otomatis* (karena tidak memegang lab tertentu)\n\n"
-                "Ketik *menu* untuk melihat daftar fitur, atau langsung tanyakan jadwal lab yang mau dicek (contoh: *'1.5 kobar'*, *'1.5 thehok'*, *'1.8'*, *'lab kosong'*, *'pak reza'*)."
-            )
+            return "Login berhasil mas. Silakan ketik inpo untuk lebih detail."
         except Exception as e:
             log_chatbot("ERROR", f"Error saat login admin {sender}: {e}", "AUTH")
-            return "Maaf, terjadi kendala teknis saat login admin. Silakan coba sebentar lagi."
+            return "Maaf, terjadi kendala saat login admin. Coba sebentar lagi."
         finally:
             if 'conn' in locals() and conn.is_connected():
                 cursor.close()
@@ -1954,40 +1931,20 @@ def handle_incoming_message(sender, text):
                         return f"Token salah mas. Sisa percobaan: {sisa}.\n\nKetik *minta token lagi* buat minta token baru, atau *daftar ulang* kalau mau ubah data."
 
         # Jika sender BELUM ada di registration_states:
-        # Pemicu pendaftaran mandiri
+        # Syarat wajib: Chat pertama dari nomor tidak terdaftar HARUS diawali '!inpo' atau '!info'
         is_secret_cmd = (
-            text_clean in ["!inpo", "!info", "!daftar", "inpo", "info", "daftar"] or 
+            text_clean == "!inpo" or 
+            text_clean == "!info" or 
             text_clean.startswith("!inpo") or 
-            text_clean.startswith("!info") or
-            text_clean.startswith("daftar aslab")
+            text_clean.startswith("!info")
         )
         if is_secret_cmd:
             send_wa_typing(sender, 'composing')
             registration_states[sender] = {"step": 1, "failures": 0}
-            return "Halo mas! Akun WhatsApp ini belum terdaftar. Mau daftar jadi Aslab? Siapa namanya mas?"
+            return "siapa mas?"
 
-        # Pemicu sapaan umum atau query jadwal dari nomor yang belum terdaftar:
-        is_common_query = (
-            text_clean in ["p", "oi", "halo", "hai", "menu", "bantuan", "help", "?", "jadwal", "cek"] or
-            re.search(r'^\s*[1-9]\b', text_clean) or
-            re.search(r'\b(jadwal|lab|ruang|kelas|dosen|status)\b', text_clean)
-        )
-        if is_common_query:
-            log_chatbot("INFO", f"Mengirim panduan penautan/registrasi ke nomor belum terdaftar: {sender}", "AUTH")
-            return (
-                "Halo! Akun WhatsApp kamu belum terhubung dengan data Asisten Lab UNAMA di bot ini.\n\n"
-                "👉 *Jika ingin masuk langsung sebagai Admin / Viewer* (tanpa daftar nama & lab, tanpa notifikasi lab):\n"
-                "Ketik: *!admin* atau *!login*\n\n"
-                "👉 *Jika nomor HP kamu sudah didaftarkan Admin*, ketik:\n"
-                "*!link 08xxxxxxxxxx* (ganti dengan nomor HP aslimu)\n"
-                "agar akun ini langsung terhubung tanpa daftar ulang.\n\n"
-                "👉 *Jika kamu aslab baru dan ingin mendaftar mandiri*, ketik:\n"
-                "*!inpo*\n\n"
-                "👉 *Catatan:* Sistem bot ini dikhususkan untuk operasional asisten laboratorium UNAMA."
-            )
-
-        # Jika pesan acak dari orang asing / non-aslab -> abaikan (bot tidak bersuara)
-        log_chatbot("WARN", f"Diabaikan: Nomor {sender} belum terdaftar dan bukan perintah aslab: '{text}'", "AUTH")
+        # Jika tanpa kata kunci untuk pesan pertama dari nomor tidak terdaftar -> abaikan (bot tidak bersuara)
+        log_chatbot("WARN", f"Diabaikan: Nomor {sender} belum terdaftar dan tidak memakai kata kunci: '{text}'", "AUTH")
         return None
 
     # Jika TERDAFTAR
