@@ -155,7 +155,7 @@ def get_sender_aslab(sender=None):
         cursor.execute('''
             SELECT a.id_aslab, a.nama_aslab, r.id_ruangan, r.nama_ruangan, r.kampus
             FROM asisten_lab a
-            JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
             WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
         ''', (no_wa, sender, sender))
         res = cursor.fetchone()
@@ -235,12 +235,6 @@ def normalize_lab_and_kampus(nama_ruangan: str = None, kampus: str = None):
     elif "thehok" in raw_str.lower() or "tehok" in raw_str.lower():
         kampus = "Thehok"
         raw_str = re.sub(r'\b(thehok|tehok)\b', '', raw_str, flags=re.I).strip()
-        
-    # Aturan Khusus UNAMA: Labor 1.5 secara eksklusif hanya ada di Kampus Kobar
-    # Jika query mencari '1.5' tanpa menyebut Thehok secara eksplisit, WAJIB arahkan ke Kobar
-    if re.search(r'\b1\.5\b', raw_str):
-        if not kampus or kampus.lower() != "thehok":
-            kampus = "Kobar"
     elif not kampus and sender_aslab and sender_aslab.get('kampus'):
         kampus = sender_aslab.get('kampus')
         
@@ -1388,9 +1382,17 @@ def fallback_python_handler(sender, text, aslab):
     global aslab_session_states
     text_clean = text.strip().lower()
     nama = aslab.get('nama_aslab', 'mas')
-    ruang = f"{aslab.get('nama_ruangan', '')} ({aslab.get('kampus', '')})"
-    kampus_default = aslab.get('kampus') or 'Kobar'
-    label_ruang = ruang if any(ruang.lower().startswith(p) for p in ["lab", "labor", "ruang"]) else f"Lab {ruang}"
+    nama = aslab.get('nama_aslab') or 'Mase'
+    has_room = bool(aslab.get('nama_ruangan'))
+    nama_r = aslab.get('nama_ruangan', '')
+    kampus_r = aslab.get('kampus', '')
+    kampus_default = kampus_r or 'Kobar'
+    
+    if has_room:
+        ruang = f"{nama_r} ({kampus_r})"
+        label_ruang = ruang if any(ruang.lower().startswith(p) for p in ["lab", "labor", "ruang"]) else f"Lab {ruang}"
+    else:
+        label_ruang = "Lab Tertentu (misal: 1.5, 1.8)"
     
     # 1. Cek Pembatalan
     if any(w in text_clean for w in ["batal", "cancel", "stop", "dak jadi", "gak jadi", "santai"]):
@@ -1418,19 +1420,35 @@ def fallback_python_handler(sender, text, aslab):
         return update_profil_aslab(ruangan_baru=new_room)
 
     # 3. Cek Menu / Sapaan Umum (Bahasa Slang Santai Khas Anak Lab)
-    menu_teks = (
-        f"Halo mase {nama}! Nih menu dan informasi yang bisa kamu cek:\n\n"
-        f"1. Jadwal {label_ruang}\n"
-        f"2. Kelas Berikutnya (Habis ini kelas ape?)\n"
-        f"3. Status Real-time {label_ruang} (Lagi dipake/kosong?)\n"
-        f"4. Jadwal Semua Lab ({kampus_default})\n"
-        f"5. Cek Lab Kosong ({kampus_default})\n"
-        f"6. Cari Posisi Dosen (Lagi ngajar dimana?)\n"
-        f"7. Info Mase\n"
-        f"8. Link Web & Barcode Server\n"
-        f"9. Statistik Lab (Total jam & utilisasi semester ini)\n\n"
-        f"Ketik nomor 1 s/d 9 atau langsung ketik pertanyaannya ya (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
-    )
+    if not has_room:
+        menu_teks = (
+            f"Halo {nama}! Kamu aktif sebagai *Admin / Viewer* bot jadwal (Pantau Bebas Tanpa Lab Khusus & Tanpa Notifikasi Lab).\n\n"
+            f"Nih menu & fitur yang bisa kamu cek:\n\n"
+            f"1. Jadwal Lab Tertentu (Ketik nomor lab, misal: '1.5 kobar', '1.5 thehok', '1.8', '2.11')\n"
+            f"2. Kelas Berikutnya (Ketik: 'habis ini 1.8' atau 'habis ini 1.5 kobar')\n"
+            f"3. Status Real-time Lab (Ketik: 'status 1.8' atau 'status 1.5 thehok')\n"
+            f"4. Jadwal Semua Lab (Ketik: '4' atau 'jadwal semua kobar' / 'jadwal semua thehok')\n"
+            f"5. Cek Lab Kosong (Ketik: '5' atau 'lab kosong kobar' / 'lab kosong thehok')\n"
+            f"6. Cari Posisi Dosen (Ketik: '6' atau nama dosen, misal: 'pak reza')\n"
+            f"7. Info Mase (Ketik: '7' - pengumuman lab hari ini)\n"
+            f"8. Link Web & Barcode Server (Ketik: '8')\n"
+            f"9. Statistik Lab (Ketik: 'statistik 1.8')\n\n"
+            f"Ketik nomor menu atau langsung tanyakan jadwal lab/dosen yang mau dicek!"
+        )
+    else:
+        menu_teks = (
+            f"Halo mase {nama}! Nih menu dan informasi yang bisa kamu cek:\n\n"
+            f"1. Jadwal {label_ruang}\n"
+            f"2. Kelas Berikutnya (Habis ini kelas ape?)\n"
+            f"3. Status Real-time {label_ruang} (Lagi dipake/kosong?)\n"
+            f"4. Jadwal Semua Lab ({kampus_default})\n"
+            f"5. Cek Lab Kosong ({kampus_default})\n"
+            f"6. Cari Posisi Dosen (Lagi ngajar dimana?)\n"
+            f"7. Info Mase\n"
+            f"8. Link Web & Barcode Server\n"
+            f"9. Statistik Lab (Total jam & utilisasi semester ini)\n\n"
+            f"Ketik nomor 1 s/d 9 atau langsung ketik pertanyaannya ya (misal: 'habis ini', 'status', 'statistik', '1.8', 'pak andi')."
+        )
 
     if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
         re.search(r'\b(menu|inpo|infoo|inpoo)\b', text_clean)):
@@ -1452,16 +1470,35 @@ def fallback_python_handler(sender, text, aslab):
             is_opsi_1 = True
 
     if is_opsi_1:
+        if not has_room:
+            return (
+                "Mase terdaftar sebagai *Admin/Viewer* tanpa lab khusus.\n"
+                "Sebutkan nomor lab yang ingin dicek ya, contoh:\n"
+                "• *1.5 kobar* atau *1.5 thehok*\n"
+                "• *1.8*\n"
+                "• *2.11*\n"
+                "• Atau ketik *4* untuk jadwal semua lab."
+            )
         target_date = extract_date_or_today(text_clean)
         return cek_jadwal_lab_tertentu(aslab['nama_ruangan'], target_date)
 
     # 5. Opsi 2: Kelas Berikutnya
     if text_clean == "2" or any(k in text_clean for k in ["kelas berikutnya", "next class", "habis ini", "setelah ini", "kelas selanjutnya", "kuliah berikutnya", "berikutnya", "habis ini apa"]):
-        return kelas_berikutnya(aslab['nama_ruangan'])
+        match_r = re.search(r'\b(\d+\.\d+)\b', text_clean)
+        k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
+        target_room = match_r.group(1) if match_r else aslab.get('nama_ruangan')
+        if not target_room:
+            return "Sebutkan nama lab yang ingin dicek kelas berikutnya ya mas (contoh: *habis ini 1.8* atau *habis ini 1.5 kobar*)."
+        return kelas_berikutnya(target_room, kampus=k_target)
 
     # 6. Opsi 3: Status Real-time Lab
     if text_clean == "3" or any(k in text_clean for k in ["status", "status lab", "lagi dipake", "lagi dipakai", "kondisi lab", "lab kosong dak", "dipakai", "status ruangan"]):
-        return status_lab_sekarang(aslab['nama_ruangan'])
+        match_r = re.search(r'\b(\d+\.\d+)\b', text_clean)
+        k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
+        target_room = match_r.group(1) if match_r else aslab.get('nama_ruangan')
+        if not target_room:
+            return "Sebutkan nama lab yang ingin dicek statusnya ya mas (contoh: *status 1.8* atau *status 1.5 thehok*)."
+        return status_lab_sekarang(target_room, kampus=k_target)
 
     # 7. Opsi 4: Jadwal Semua Lab (misal '4', '4 besok', '4 lusa', 'jadwal semua besok')
     if (text_clean == "4" or 
@@ -1499,9 +1536,13 @@ def fallback_python_handler(sender, text, aslab):
 
     # 12. Opsi 9: Statistik Lab Sendiri
     if text_clean == "9" or any(w in text_clean for w in ["statistik", "stat", "utilisasi", "rekap lab"]):
+        match_r = re.search(r'\b(\d+\.\d+)\b', text_clean)
+        target_room = match_r.group(1) if match_r else aslab.get('nama_ruangan')
+        if not target_room:
+            return "Sebutkan nama lab yang ingin dicek statistiknya ya mas (contoh: *statistik 1.8* atau *statistik 1.5*)."
         current_sender_context.sender = sender
-        stat_res = get_statistik_lab_saya(aslab['nama_ruangan'])
-        return f"Yo mase {nama}, nih rekap statistik lab kamu:\n\n{stat_res}"
+        stat_res = get_statistik_lab_saya(target_room)
+        return f"Yo mase {nama}, nih rekap statistik lab {target_room}:\n\n{stat_res}"
 
     # 13. Cek Ruangan Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4", "lab 1.5")
     match_room = re.search(r'\b(?:lab\s*|ruang\s*)?(\d+\.\d+)\b', text_clean)
@@ -1509,13 +1550,22 @@ def fallback_python_handler(sender, text, aslab):
         room_no = match_room.group(1)
         target_date = extract_date_or_today(text_clean)
         k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
-        if room_no == "1.5" and (not k_target or k_target.lower() != "thehok"):
-            k_target = "Kobar"
-        elif not k_target and aslab.get('kampus'):
+        if not k_target and aslab.get('kampus'):
             k_target = aslab.get('kampus')
         return cek_jadwal_lab_tertentu(room_no, target_date, kampus=k_target)
 
     # 14. Default Fallback: Menu Slang Ramah
+    if not has_room:
+        return (
+            f"Waduh {nama}, bot belum paham nih.\n"
+            f"Karena mase aktif sebagai *Admin/Viewer* tanpa lab khusus, silakan pilih menu atau ketik langsung lab yang mau dicek:\n\n"
+            f"• Ketik nomor lab (misal: *1.5 kobar*, *1.5 thehok*, *1.8*)\n"
+            f"• Ketik *4* untuk Jadwal Semua Lab\n"
+            f"• Ketik *5* untuk Cek Lab Kosong\n"
+            f"• Ketik nama dosen (misal: *pak reza*)\n"
+            f"• Ketik *menu* untuk melihat semua menu"
+        )
+
     return (
         f"Waduh mas, bot belum paham nih.\n"
         f"Pilih nomor menu di bawah atau ketik langsung ya:\n\n"
@@ -1565,7 +1615,7 @@ def handle_incoming_message(sender, text):
             cursor.execute('''
                 SELECT a.id_aslab, a.nama_aslab, r.nama_ruangan, r.kampus
                 FROM asisten_lab a
-                JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+                LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
                 WHERE a.no_wa = %s OR a.no_wa = %s
             ''', (clean_phone, f"{clean_phone}@s.whatsapp.net"))
             target_aslab = cursor.fetchone()
@@ -1578,9 +1628,10 @@ def handle_incoming_message(sender, text):
                 conn.commit()
                 log_chatbot("SUCCESS", f"Akun {sender} berhasil ditautkan ke Aslab {target_aslab['nama_aslab']} (HP: {clean_phone})", "AUTH")
                 send_wa_typing(sender, 'composing')
+                lab_info = f"{target_aslab['nama_ruangan']} ({target_aslab['kampus']})" if target_aslab.get('nama_ruangan') else "Admin/Viewer"
                 return (
                     f"✅ *Akun Berhasil Ditautkan!*\n\n"
-                    f"Halo mase *{target_aslab['nama_aslab']}*! Akun WhatsApp kamu sekarang resmi terhubung ke data Aslab {target_aslab['nama_ruangan']} ({target_aslab['kampus']}).\n\n"
+                    f"Halo mase *{target_aslab['nama_aslab']}*! Akun WhatsApp kamu sekarang resmi terhubung ke data Aslab {lab_info}.\n\n"
                     f"Silakan ketik *menu* atau langsung tanyakan jadwal lab kamu ya!"
                 )
             else:
@@ -1597,6 +1648,52 @@ def handle_incoming_message(sender, text):
                 cursor.close()
                 conn.close()
 
+    # 2. Login Admin / Viewer Tanpa Perlu Daftar (Tanpa Nama & Tanpa Lab Khusus)
+    # Pengguna ini bisa memantau semua jadwal tanpa terikat satu lab dan TIDAK akan mendapat notifikasi lab otomatis
+    is_admin_cmd = bool(re.search(r'^(?:!admin|!login\s*admin|!login|!masuk|!pantau|!tamu|!viewer|!guest)\b', text_clean))
+    if is_admin_cmd:
+        try:
+            conn = scraper.get_db()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('''
+                SELECT a.id_aslab, a.nama_aslab, a.no_wa, a.wa_lid, a.id_ruangan 
+                FROM asisten_lab a
+                WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
+            ''', (no_wa, sender, sender))
+            existing_admin = cursor.fetchone()
+            
+            wa_lid_val = sender if '@lid' in sender else None
+            if existing_admin:
+                cursor.execute('''
+                    UPDATE asisten_lab 
+                    SET nama_aslab = %s, id_ruangan = NULL, wa_lid = COALESCE(%s, wa_lid)
+                    WHERE id_aslab = %s
+                ''', ('Admin', wa_lid_val, existing_admin['id_aslab']))
+            else:
+                cursor.execute('''
+                    INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid)
+                    VALUES (%s, %s, NULL, %s)
+                ''', ('Admin', no_wa or sender, wa_lid_val))
+            conn.commit()
+            log_chatbot("SUCCESS", f"Akun {sender} berhasil login sebagai Admin/Viewer (Tanpa Lab Khusus & Tanpa Notif)", "AUTH")
+            send_wa_typing(sender, 'composing')
+            
+            return (
+                "👑 *Login Admin / Viewer Berhasil!*\n\n"
+                "Halo Mase! Akun WhatsApp kamu sekarang aktif sebagai *Admin / Viewer* bot jadwal:\n"
+                "✨ *Tanpa perlu daftar nama & lab*\n"
+                "✨ *Bisa cek jadwal seluruh lab (Thehok & Kobar)*\n"
+                "🔕 *Bebas dari notifikasi buka/tutup lab otomatis* (karena tidak memegang lab tertentu)\n\n"
+                "Ketik *menu* untuk melihat daftar fitur, atau langsung tanyakan jadwal lab yang mau dicek (contoh: *'1.5 kobar'*, *'1.5 thehok'*, *'1.8'*, *'lab kosong'*, *'pak reza'*)."
+            )
+        except Exception as e:
+            log_chatbot("ERROR", f"Error saat login admin {sender}: {e}", "AUTH")
+            return "Maaf, terjadi kendala teknis saat login admin. Silakan coba sebentar lagi."
+        finally:
+            if 'conn' in locals() and conn.is_connected():
+                cursor.close()
+                conn.close()
+
     # Cek DB apakah terdaftar
     try:
         conn = scraper.get_db()
@@ -1604,7 +1701,7 @@ def handle_incoming_message(sender, text):
         cursor.execute('''
             SELECT a.id_aslab, a.nama_aslab, r.id_ruangan, r.nama_ruangan, r.kampus 
             FROM asisten_lab a
-            JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
             WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
         ''', (no_wa, sender, sender))
         aslab = cursor.fetchone()
@@ -1723,20 +1820,22 @@ def handle_incoming_message(sender, text):
                 kampus_kunci = "kobar" if "kobar" in text_clean else ("thehok" if "thehok" in text_clean else "")
                 if match_ruang:
                     no_ruang = match_ruang.group(0)
-                    if no_ruang == "1.5" and not kampus_kunci:
-                        kampus_kunci = "kobar"
                     try:
                         conn = scraper.get_db()
                         cursor = conn.cursor(dictionary=True, buffered=True)
                         if kampus_kunci:
-                            cursor.execute("SELECT id_ruangan, nama_ruangan FROM ruangan WHERE nama_ruangan LIKE %s AND LOWER(kampus) LIKE %s", (f"%{no_ruang}%", f"%{kampus_kunci}%"))
+                            cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s AND LOWER(kampus) LIKE %s", (f"%{no_ruang}%", f"%{kampus_kunci}%"))
                         else:
-                            cursor.execute("SELECT id_ruangan, nama_ruangan FROM ruangan WHERE nama_ruangan LIKE %s", (f"%{no_ruang}%",))
+                            cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s", (f"%{no_ruang}%",))
                         ruang_list = cursor.fetchall()
+                        if len(ruang_list) > 1 and not kampus_kunci:
+                            pilihan = " dan ".join([f"{r['nama_ruangan']} ({r['kampus']})" for r in ruang_list])
+                            return f"Lab {no_ruang} terdaftar di dua kampus mas: {pilihan}.\nSebutkan kampusnya juga ya (contoh: *lab {no_ruang} kobar* atau *lab {no_ruang} thehok*)."
                         if ruang_list:
                             ruang = ruang_list[0]
                             state["id_ruangan"] = ruang['id_ruangan']
                             state["nama_ruangan"] = ruang['nama_ruangan']
+                            state["kampus"] = ruang.get('kampus')
                             token = str(random.randint(1000, 9999))
                             state["token"] = token
                             state["step"] = 3
@@ -1877,12 +1976,14 @@ def handle_incoming_message(sender, text):
             log_chatbot("INFO", f"Mengirim panduan penautan/registrasi ke nomor belum terdaftar: {sender}", "AUTH")
             return (
                 "Halo! Akun WhatsApp kamu belum terhubung dengan data Asisten Lab UNAMA di bot ini.\n\n"
+                "👉 *Jika ingin masuk langsung sebagai Admin / Viewer* (tanpa daftar nama & lab, tanpa notifikasi lab):\n"
+                "Ketik: *!admin* atau *!login*\n\n"
                 "👉 *Jika nomor HP kamu sudah didaftarkan Admin*, ketik:\n"
                 "*!link 08xxxxxxxxxx* (ganti dengan nomor HP aslimu)\n"
                 "agar akun ini langsung terhubung tanpa daftar ulang.\n\n"
                 "👉 *Jika kamu aslab baru dan ingin mendaftar mandiri*, ketik:\n"
                 "*!inpo*\n\n"
-                "👉 *Catatan:* Sistem bot ini dikhususkan untuk asisten laboratorium UNAMA."
+                "👉 *Catatan:* Sistem bot ini dikhususkan untuk operasional asisten laboratorium UNAMA."
             )
 
         # Jika pesan acak dari orang asing / non-aslab -> abaikan (bot tidak bersuara)
@@ -1890,7 +1991,8 @@ def handle_incoming_message(sender, text):
         return None
 
     # Jika TERDAFTAR
-    log_chatbot("INFO", f"Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})", "AUTH")
+    lab_ket = f"({aslab['nama_ruangan']} {aslab['kampus']})" if aslab.get('nama_ruangan') else "(Admin/Viewer - Bebas Notif)"
+    log_chatbot("INFO", f"Dikenali sebagai: {aslab['nama_aslab']} {lab_ket}", "AUTH")
     send_wa_typing(sender, 'composing')
     current_sender_context.sender = sender
     
