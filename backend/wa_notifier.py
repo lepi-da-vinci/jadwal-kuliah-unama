@@ -139,7 +139,32 @@ def send_wa_typing(target, state='composing'):
 # =================== GEMINI AI TOOLS ===================
 current_sender_context = threading.local()
 
+_schema_migrated = False
+def ensure_db_schema():
+    global _schema_migrated
+    if _schema_migrated:
+        return
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        for col_sql in [
+            "ALTER TABLE asisten_lab ADD COLUMN wa_lid VARCHAR(100) NULL",
+            "ALTER TABLE asisten_lab ADD COLUMN role VARCHAR(20) DEFAULT 'aslab'",
+            "ALTER TABLE asisten_lab ADD COLUMN kampus_tugas VARCHAR(50) NULL"
+        ]:
+            try:
+                cursor.execute(col_sql)
+                conn.commit()
+            except Exception:
+                pass
+        cursor.close()
+        conn.close()
+        _schema_migrated = True
+    except Exception:
+        pass
+
 def get_db_connection():
+    ensure_db_schema()
     return scraper.get_db()
 
 def get_sender_aslab(sender=None):
@@ -153,7 +178,7 @@ def get_sender_aslab(sender=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT a.id_aslab, a.nama_aslab, r.id_ruangan, r.nama_ruangan, r.kampus
+            SELECT a.id_aslab, a.nama_aslab, a.role, a.kampus_tugas, r.id_ruangan, r.nama_ruangan, r.kampus
             FROM asisten_lab a
             LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
             WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
@@ -652,22 +677,316 @@ def cari_posisi_dosen(nama_dosen: str):
             cursor.close()
             conn.close()
 
-def get_info_mase():
-    """Mengambil pengumuman/informasi terbaru hari ini untuk aslab."""
+def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
+    """Mengambil pengumuman dan informasi penting hari ini yang terstruktur rapi untuk aslab dan asmot."""
+    try:
+        if not role or not kampus:
+            sender_aslab = get_sender_aslab()
+            if sender_aslab:
+                role = role or sender_aslab.get('role')
+                kampus = kampus or sender_aslab.get('kampus_tugas') or sender_aslab.get('kampus')
+                lab_saya = lab_saya or sender_aslab.get('nama_ruangan')
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        now = get_wib_now()
+        today_str = now.strftime("%Y-%m-%d")
+        tgl_indo = format_tanggal_indo(now)
+
+        # Cek semester aktif
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        sem_row = cursor.fetchone()
+        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+
+        # 1. Ambil notifikasi dari notifikasi_lab
+        cursor.execute('SELECT tipe_notif, pesan FROM notifikasi_lab WHERE tanggal = %s AND semester = %s ORDER BY id ASC', (today_str, sem_target))
+        notifs = cursor.fetchall()
+
+        # 2. Ambil kelas OL dan CC hari ini dari jadwal
+        query_ol_cc = """
+            SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, j.metode_pembelajaran, j.status_jadwal
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE j.tanggal = %s AND j.semester = %s
+              AND (j.metode_pembelajaran = 'OL' OR j.status_jadwal IN ('CC', 'Batal'))
+            ORDER BY r.kampus, r.nama_ruangan, j.jam
+        """
+        cursor.execute(query_ol_cc, (today_str, sem_target))
+        ol_cc_classes = cursor.fetchall()
+
+        perubahan_list = []
+        tambahan_list = []
+        jeda_list = []
+
+        for n in notifs:
+            t = n['tipe_notif']
+            p = n['pesan']
+            if t == 'PERUBAHAN':
+                perubahan_list.append(p)
+            elif t == 'TAMBAHAN':
+                tambahan_list.append(p)
+            elif t == 'JEDA':
+                jeda_list.append(p)
+
+        if not perubahan_list and not tambahan_list and not jeda_list and not ol_cc_classes:
+            return (
+                f"*INFO MASE - UPDATE HARI INI*\n"
+                f"_{tgl_indo} • {sem_target}_\n"
+                f"------------------------------\n\n"
+                f"_Semua jadwal perkuliahan hari ini terpantau normal dan sesuai jadwal utama._\n"
+                f"_Tidak ada laporan perubahan ruang, pembatalan kelas, maupun kelas tambahan._\n\n"
+                f"• Operasional Kobar: s/d 17.00 WIB\n"
+                f"• Operasional Thehok: s/d 21.00 WIB"
+            )
+
+        title_role = "OPERASIONAL ASMOT" if role == 'asmot' else "UPDATE HARI INI"
+        msg = f"*INFO MASE - {title_role}*\n_{tgl_indo} • {sem_target}_\n------------------------------\n"
+
+        if perubahan_list:
+            msg += "\n*PERUBAHAN JADWAL:*\n"
+            for p in perubahan_list[:8]:
+                msg += f"• {p}\n"
+
+        if ol_cc_classes:
+            label_ol_cc = "TIDAK PERLU HIDUPKAN AC (ONLINE / BATAL):" if role == 'asmot' else "KELAS ONLINE / BATAL (RUANGAN TUTUP):"
+            msg += f"\n*{label_ol_cc}*\n"
+            for c in ol_cc_classes[:10]:
+                tot_sec = int(c['jam'].total_seconds()) if hasattr(c['jam'], 'total_seconds') else 0
+                jam_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                alasan = "Kelas Online" if c['metode_pembelajaran'] == 'OL' else "Dosen Batal/Cancel"
+                note_ac = " (AC jangan dihidupkan)" if role == 'asmot' else " (Ruangan tidak perlu dibuka)"
+                msg += f"• *{c['nama_ruangan']} ({c['kampus']}):* Jam {jam_str} - {c['nama_mk']} ({c['kelas']}) -> _{alasan}{note_ac}_\n"
+
+        if tambahan_list:
+            msg += "\n*KELAS TAMBAHAN / PENGGANTI:*\n"
+            for p in tambahan_list[:8]:
+                msg += f"• {p}\n"
+
+        if jeda_list:
+            label_jeda = "JEDA PANJANG (AC WAJIB DIMATIKAN):" if role == 'asmot' else "JEDA PANJANG RUANGAN:"
+            msg += f"\n*{label_jeda}*\n"
+            for p in jeda_list[:8]:
+                msg += f"• {p}\n"
+
+        msg += "\n------------------------------\n"
+        if role == 'asmot':
+            msg += "_Ketik 1 untuk cek semua kelas yang sedang aktif saat ini._"
+        else:
+            msg += "_Ketik nomor lab atau ketik menu untuk bantuan operasional._"
+
+        return msg
+    except Exception as e:
+        return f"Error mengambil Info Mase: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
+    """Mengecek semua kelas tatap muka yang sedang berlangsung saat ini untuk asmot."""
+    now = get_wib_now()
+    today_str = now.strftime("%Y-%m-%d")
+    current_min = now.hour * 60 + now.minute
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        today_str = get_wib_now().strftime("%Y-%m-%d")
-        cursor.execute('SELECT tipe_notif, pesan FROM notifikasi_lab WHERE tanggal = %s ORDER BY id ASC', (today_str,))
-        notifs = cursor.fetchall()
-        if not notifs:
-            return "Belum ada informasi terbaru untuk hari ini."
-        msg = "Info Mase:\n"
-        for n in notifs:
-            msg += f"- {n['tipe_notif']}: {n['pesan']}\n"
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        sem_row = cursor.fetchone()
+        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+
+        sql = """
+            SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.tanggal = %s AND j.semester = %s
+              AND j.metode_pembelajaran = 'TM'
+              AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+        """
+        params = [today_str, sem_target]
+        if kampus_tugas and kampus_tugas.lower() != 'semua':
+            sql += " AND LOWER(r.kampus) = LOWER(%s)"
+            params.append(kampus_tugas)
+        sql += " ORDER BY r.nama_ruangan, j.jam"
+
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        
+        aktif = []
+        for r in rows:
+            sm = int(r['jam'].total_seconds()) // 60
+            dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
+            em = sm + dur
+            if sm <= current_min <= em:
+                aktif.append((r, sm, em))
+
+        if not aktif:
+            return (
+                f"*KELAS AKTIF SAAT INI ({kampus_tugas})*\n"
+                f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
+                f"------------------------------\n\n"
+                f"_Saat ini tidak ada kelas tatap muka yang sedang berlangsung._\n"
+                f"_Semua AC kelas di {kampus_tugas} seharusnya dalam kondisi MATI._"
+            )
+
+        msg = (
+            f"*DAFTAR KELAS AKTIF SAAT INI ({kampus_tugas})*\n"
+            f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
+            f"------------------------------\n\n"
+        )
+        for r, sm, em in aktif:
+            jam_mulai = f"{sm//60:02d}:{sm%60:02d}"
+            jam_selesai = f"{em//60:02d}:{em%60:02d}"
+            dosen = r.get('nama_dosen') or '-'
+            msg += f"• *{r['nama_ruangan']} ({r['kampus']}):*\n  _{r['nama_mk']} ({r['kelas']})_\n  Jam: {jam_mulai} - {jam_selesai} WIB | Dosen: {dosen}\n\n"
+
+        msg += "------------------------------\n_Catatan: AC di seluruh ruangan aktif di atas wajib dalam kondisi HIDUP._"
         return msg
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error cek kelas aktif: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
+    """Mengecek kelas tatap muka yang akan dimulai dalam 45 menit ke depan untuk persiapan menyalakan AC."""
+    now = get_wib_now()
+    today_str = now.strftime("%Y-%m-%d")
+    current_min = now.hour * 60 + now.minute
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        sem_row = cursor.fetchone()
+        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+
+        sql = """
+            SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, d.nama_dosen
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.tanggal = %s AND j.semester = %s
+              AND j.metode_pembelajaran = 'TM'
+              AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+        """
+        params = [today_str, sem_target]
+        if kampus_tugas and kampus_tugas.lower() != 'semua':
+            sql += " AND LOWER(r.kampus) = LOWER(%s)"
+            params.append(kampus_tugas)
+        sql += " ORDER BY j.jam, r.nama_ruangan"
+
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        
+        mau_mulai = []
+        for r in rows:
+            sm = int(r['jam'].total_seconds()) // 60
+            diff = sm - current_min
+            if 0 < diff <= 45:
+                mau_mulai.append((r, sm, diff))
+
+        if not mau_mulai:
+            return (
+                f"*PERSIAPAN AC: KELAS AKAN MULAI ({kampus_tugas})*\n"
+                f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
+                f"------------------------------\n\n"
+                f"_Tidak ada kelas yang akan mulai dalam 45 menit ke depan._"
+            )
+
+        msg = (
+            f"*PERSIAPAN AC: KELAS AKAN MULAI ({kampus_tugas})*\n"
+            f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
+            f"------------------------------\n\n"
+        )
+        for r, sm, diff in mau_mulai:
+            jam_mulai = f"{sm//60:02d}:{sm%60:02d}"
+            msg += f"• *{r['nama_ruangan']} ({r['kampus']}):* Jam {jam_mulai} WIB (_{diff} menit lagi_)\n  MK: {r['nama_mk']} ({r['kelas']})\n\n"
+
+        msg += "------------------------------\n_Mohon segera HIDUPKAN AC ruangan di atas sebelum mahasiswa masuk._"
+        return msg
+    except Exception as e:
+        return f"Error cek kelas mau mulai: {e}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
+    """Mengecek kelas yang baru saja selesai atau sebentar lagi selesai tanpa kelas lanjutan untuk persiapan mematikan AC."""
+    now = get_wib_now()
+    today_str = now.strftime("%Y-%m-%d")
+    current_min = now.hour * 60 + now.minute
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        sem_row = cursor.fetchone()
+        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+
+        sql = """
+            SELECT j.jam, r.id_ruangan, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE j.tanggal = %s AND j.semester = %s
+              AND j.metode_pembelajaran = 'TM'
+              AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+        """
+        params = [today_str, sem_target]
+        if kampus_tugas and kampus_tugas.lower() != 'semua':
+            sql += " AND LOWER(r.kampus) = LOWER(%s)"
+            params.append(kampus_tugas)
+        sql += " ORDER BY r.nama_ruangan, j.jam"
+
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        
+        room_map = {}
+        for r in rows:
+            rid = r['id_ruangan']
+            if rid not in room_map:
+                room_map[rid] = []
+            sm = int(r['jam'].total_seconds()) // 60
+            dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
+            em = sm + dur
+            room_map[rid].append({'row': r, 'sm': sm, 'em': em})
+
+        selesai_list = []
+        for rid, items in room_map.items():
+            items = sorted(items, key=lambda x: x['sm'])
+            for i, it in enumerate(items):
+                diff = it['em'] - current_min
+                if -30 <= diff <= 30:
+                    next_has_class = False
+                    if i + 1 < len(items):
+                        gap = items[i+1]['sm'] - it['em']
+                        if gap < 45:
+                            next_has_class = True
+                    if not next_has_class:
+                        selesai_list.append((it['row'], it['em'], diff))
+
+        if not selesai_list:
+            return (
+                f"*PERSIAPAN MATIKAN AC ({kampus_tugas})*\n"
+                f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
+                f"------------------------------\n\n"
+                f"_Tidak ada kelas yang baru saja / sebentar lagi selesai tanpa kelas lanjutan._"
+            )
+
+        msg = (
+            f"*PERSIAPAN MATIKAN AC ({kampus_tugas})*\n"
+            f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
+            f"------------------------------\n\n"
+        )
+        for r, em, diff in selesai_list:
+            jam_selesai = f"{em//60:02d}:{em%60:02d}"
+            ket_waktu = f"selesai {abs(diff)} menit lalu" if diff < 0 else (f"selesai dalam {diff} menit" if diff > 0 else "selesai sekarang")
+            msg += f"• *{r['nama_ruangan']} ({r['kampus']}):* Jam {jam_selesai} WIB (_{ket_waktu}_)\n  MK: {r['nama_mk']} ({r['kelas']})\n\n"
+
+        msg += "------------------------------\n_Ruangan di atas tidak memiliki kelas lanjutan. Mohon pastikan AC segera DIMATIKAN._"
+        return msg
+    except Exception as e:
+        return f"Error cek kelas selesai: {e}"
     finally:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
@@ -1381,8 +1700,9 @@ def extract_date_or_today(text_clean):
 def fallback_python_handler(sender, text, aslab):
     global aslab_session_states
     text_clean = text.strip().lower()
-    nama = aslab.get('nama_aslab', 'mas')
-    nama = aslab.get('nama_aslab') or 'Mase'
+    nama = aslab.get('nama_aslab') or 'mas'
+    role = aslab.get('role') or ('admin' if not aslab.get('id_ruangan') and not aslab.get('kampus_tugas') else 'aslab')
+    kampus_asmot = aslab.get('kampus_tugas') or 'Kobar'
     has_room = bool(aslab.get('nama_ruangan'))
     nama_r = aslab.get('nama_ruangan', '')
     kampus_r = aslab.get('kampus', '')
@@ -1398,7 +1718,7 @@ def fallback_python_handler(sender, text, aslab):
     if any(w in text_clean for w in ["batal", "cancel", "stop", "dak jadi", "gak jadi", "santai"]):
         if sender in aslab_session_states:
             del aslab_session_states[sender]
-        return f"Sip mase {nama}, dibatalin yaa. Selow wae!"
+        return f"Sip mas {nama}, dibatalin yaa. Selow wae!"
 
     # 2. Cek State Interaktif Aslab sebelumnya
     if sender in aslab_session_states:
@@ -1420,7 +1740,22 @@ def fallback_python_handler(sender, text, aslab):
         return update_profil_aslab(ruangan_baru=new_room)
 
     # 3. Cek Menu / Sapaan Umum
-    if not has_room:
+    if role == 'asmot':
+        menu_teks = (
+            f"*MENU OPERASIONAL ASMOT (KONTROL AC & RUANGAN)*\n"
+            f"_Petugas: {nama} • Kampus: {kampus_asmot}_\n"
+            f"------------------------------\n\n"
+            f"*1.* *Cek Kelas Aktif Sekarang* (AC wajib hidup)\n"
+            f"*2.* *Cek Kelas Mau Mulai* (persiapan hidupkan AC)\n"
+            f"*3.* *Cek Kelas Selesai* (persiapan matikan AC)\n"
+            f"*4.* *Jadwal Seluruh Ruangan Hari Ini* ({kampus_asmot})\n"
+            f"*5.* *Cek Ruangan Kosong* ({kampus_asmot})\n"
+            f"*6.* *Cari Posisi Dosen* (ketik: 'pak reza')\n"
+            f"*7.* *Info Mase* (laporan perubahan & kelas online/batal)\n"
+            f"*8.* *Link Web & Server*\n\n"
+            f"_Ketik nomor menu (1-8) atau langsung tanyakan ruangan/jadwal mas._"
+        )
+    elif not has_room:
         menu_teks = (
             "Menu Admin / Viewer:\n\n"
             "1. Jadwal lab (contoh: 1.5 kobar, 1.8, 2.11)\n"
@@ -1455,9 +1790,12 @@ def fallback_python_handler(sender, text, aslab):
 
     has_specific_room = bool(re.search(r'\b\d+\.\d+\b', text_clean))
     
-    # 4. Opsi 1: Jadwal Lab Sendiri (bisa: '1', '1 besok', '1 kemarin', '1 lusa', '1 senin', '1 tgl 28', 'jadwal besok', 'besok', dll.)
+    # 4. Opsi 1
+    if role == 'asmot' and (text_clean == "1" or any(k in text_clean for k in ["kelas aktif", "ac hidup", "aktif sekarang", "sedang aktif", "ac nyala"])):
+        return asmot_cek_kelas_aktif(kampus_asmot)
+
     is_opsi_1 = False
-    if not has_specific_room:
+    if not has_specific_room and role != 'asmot':
         if (text_clean == "1" or 
             re.search(r'^\s*1\b', text_clean) or
             any(k in text_clean for k in ["jadwal saya", "jadwal sendiri", "lab saya", "ruang saya", "jadwal lab", "jadwal hari ini", "jadwal besok", "jadwal kemarin", "jadwal lusa"]) or
@@ -1481,7 +1819,10 @@ def fallback_python_handler(sender, text, aslab):
         target_date = extract_date_or_today(text_clean)
         return cek_jadwal_lab_tertentu(aslab['nama_ruangan'], target_date)
 
-    # 5. Opsi 2: Kelas Berikutnya
+    # 5. Opsi 2
+    if role == 'asmot' and (text_clean == "2" or any(k in text_clean for k in ["kelas mau mulai", "mau mulai", "akan mulai", "persiapan ac", "hidupkan ac", "sebentar lagi"])):
+        return asmot_cek_kelas_mau_mulai(kampus_asmot)
+
     if text_clean == "2" or any(k in text_clean for k in ["kelas berikutnya", "next class", "habis ini", "setelah ini", "kelas selanjutnya", "kuliah berikutnya", "berikutnya", "habis ini apa"]):
         match_r = re.search(r'\b(\d+\.\d+)\b', text_clean)
         k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
@@ -1490,7 +1831,10 @@ def fallback_python_handler(sender, text, aslab):
             return "Sebutkan nama lab yang ingin dicek kelas berikutnya ya mas (contoh: *habis ini 1.8* atau *habis ini 1.5 kobar*)."
         return kelas_berikutnya(target_room, kampus=k_target)
 
-    # 6. Opsi 3: Status Real-time Lab
+    # 6. Opsi 3
+    if role == 'asmot' and (text_clean == "3" or any(k in text_clean for k in ["kelas selesai", "selesai", "matikan ac", "ac mati", "sudah selesai", "padam"])):
+        return asmot_cek_kelas_selesai(kampus_asmot)
+
     if text_clean == "3" or any(k in text_clean for k in ["status", "status lab", "lagi dipake", "lagi dipakai", "kondisi lab", "lab kosong dak", "dipakai", "status ruangan"]):
         match_r = re.search(r'\b(\d+\.\d+)\b', text_clean)
         k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
@@ -1502,17 +1846,17 @@ def fallback_python_handler(sender, text, aslab):
     # 7. Opsi 4: Jadwal Semua Lab (misal '4', '4 besok', '4 lusa', 'jadwal semua besok')
     if (text_clean == "4" or 
         re.search(r'^\s*4\b', text_clean) or 
-        any(text_clean.startswith(k) for k in ["jadwal semua", "semua lab", "jadwal kobar", "jadwal thehok"])):
+        any(text_clean.startswith(k) for k in ["jadwal semua", "semua lab", "jadwal kobar", "jadwal thehok", "semua ruangan", "jadwal ruangan"])):
         target_date = extract_date_or_today(text_clean)
-        k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else kampus_default)
+        k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else (kampus_asmot if role == 'asmot' else kampus_default))
         return cek_semua_lab_kampus(k, target_date)
 
     # 8. Opsi 5: Cek Lab Kosong (misal '5', '5 besok', '5 lusa', 'lab kosong besok')
     if (text_clean == "5" or 
         re.search(r'^\s*5\b', text_clean) or 
-        any(text_clean.startswith(k) for k in ["lab kosong", "cek lab kosong", "kosong"])):
+        any(text_clean.startswith(k) for k in ["lab kosong", "cek lab kosong", "kosong", "ruangan kosong", "cek ruangan kosong"])):
         target_date = extract_date_or_today(text_clean)
-        k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else kampus_default)
+        k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else (kampus_asmot if role == 'asmot' else kampus_default))
         return cek_lab_kosong(k, target_date)
 
     # 9. Opsi 6: Cari Posisi Dosen
@@ -1523,11 +1867,13 @@ def fallback_python_handler(sender, text, aslab):
                     query_dosen = text[len(pfx):].strip()
                     return cari_posisi_dosen(query_dosen)
         aslab_session_states[sender] = {"step": "cari_dosen"}
-        return "Siap mase! Masukkan nama dosen yang dicari (misal: 'Reza' atau 'Pak Reza'):"
+        return "Siap mas! Masukkan nama dosen yang dicari (misal: 'Reza' atau 'Pak Reza'):"
 
     # 10. Opsi 7: Info Mase
     if text_clean == "7" or any(text_clean.startswith(k) for k in ["info mase", "inpo mase", "pengumuman", "info hari ini", "inpo hari ini"]):
-        return get_info_mase()
+        if role == 'asmot':
+            return get_info_mase(role='asmot', kampus=kampus_asmot)
+        return get_info_mase(role='aslab', lab_saya=aslab.get('nama_ruangan'))
 
     # 11. Opsi 8: Link Server / Ngrok / Web / Barcode
     if text_clean == "8" or any(k in text_clean for k in ["link", "ngrok", "server", "web", "barcode", "qr", "tunnel", "cloudflare"]):
@@ -1541,7 +1887,7 @@ def fallback_python_handler(sender, text, aslab):
             return "Sebutkan nama lab yang ingin dicek statistiknya ya mas (contoh: *statistik 1.8* atau *statistik 1.5*)."
         current_sender_context.sender = sender
         stat_res = get_statistik_lab_saya(target_room)
-        return f"Yo mase {nama}, nih rekap statistik lab {target_room}:\n\n{stat_res}"
+        return f"Nih rekap statistik lab {target_room} untuk mas {nama}:\n\n{stat_res}"
 
     # 13. Cek Ruangan Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4", "lab 1.5")
     match_room = re.search(r'\b(?:lab\s*|ruang\s*)?(\d+\.\d+)\b', text_clean)
@@ -1551,9 +1897,24 @@ def fallback_python_handler(sender, text, aslab):
         k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
         if not k_target and aslab.get('kampus'):
             k_target = aslab.get('kampus')
+        elif not k_target and role == 'asmot':
+            k_target = kampus_asmot
         return cek_jadwal_lab_tertentu(room_no, target_date, kampus=k_target)
 
     # 14. Default Fallback
+    if role == 'asmot':
+        return (
+            f"Perintah belum dikenal mas.\n\n"
+            f"*1.* Cek Kelas Aktif (AC Hidup)\n"
+            f"*2.* Cek Kelas Mau Mulai (Persiapan AC)\n"
+            f"*3.* Cek Kelas Selesai (Matikan AC)\n"
+            f"*4.* Jadwal Seluruh Ruangan ({kampus_asmot})\n"
+            f"*5.* Cek Ruangan Kosong\n"
+            f"*6.* Cari Dosen\n"
+            f"*7.* Info Mase\n\n"
+            f"_Ketik nomor 1 s/d 7 atau ketik inpo untuk melihat menu._"
+        )
+
     if not has_room:
         return (
             "Perintah belum dikenal mas.\n"
@@ -1676,7 +2037,7 @@ def handle_incoming_message(sender, text):
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT a.id_aslab, a.nama_aslab, r.id_ruangan, r.nama_ruangan, r.kampus 
+            SELECT a.id_aslab, a.nama_aslab, a.role, a.kampus_tugas, r.id_ruangan, r.nama_ruangan, r.kampus 
             FROM asisten_lab a
             LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
             WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
@@ -1705,13 +2066,18 @@ def handle_incoming_message(sender, text):
             
             # 1b. DAFTAR ULANG / RESET KE AWAL
             if any(kw in text_clean for kw in ["daftar ulang", "daftar lagi", "ulang", "ulang mas", "ulang mase", "mulai lagi", "reset", "tcih daftar"]):
-                registration_states[sender] = {"step": 1, "failures": 0}
-                return "Sesi direset mas. Siapa namanya?"
+                registration_states[sender] = {"step": "pilih_role", "failures": 0}
+                return (
+                    "*PILIH ROLE PENDAFTARAN*\n\n"
+                    "*1.* Aslab (Asisten Laboratorium)\n"
+                    "*2.* Asmot (Pengelola AC & Fasilitas Kelas)\n\n"
+                    "_Ketik 1 atau 2 untuk melanjutkan._"
+                )
                 
             # 1c. MINTA / KIRIM TOKEN LAGI
             if any(kw in text_clean for kw in ["minta token lagi", "kirim token lagi", "kirim ulang token", "token lagi", "minta token", "resend token", "resend", "ulang token", "kirim lagi", "minta kode lagi"]):
                 if step != 3:
-                    return "Belum sampai tahap token mas. Lengkapi nama dan lab dulu ya.\n(Ketik *daftar ulang* jika mau mulai dari awal)"
+                    return "Belum sampai tahap token mas. Lengkapi data pendaftaran dulu ya.\n(Ketik *daftar ulang* jika mau mulai dari awal)"
                 
                 new_token = str(random.randint(1000, 9999))
                 state["token"] = new_token
@@ -1732,16 +2098,22 @@ def handle_incoming_message(sender, text):
                     
                     if aslab_lain:
                         target_wa = aslab_lain['wa_lid'] or aslab_lain['no_wa']
-                        pesan_token = f"Ada aslab ({state['nama_aslab']} - {state['nama_ruangan']}) minta token baru. Tokennya: *{new_token}*"
+                        label_target = state.get('nama_ruangan') or f"Kampus {state.get('kampus_tugas', '')}"
+                        pesan_token = f"Ada asisten ({state['nama_aslab']} - {label_target}) minta token baru. Tokennya: *{new_token}*"
                         send_wa_message(target_wa, pesan_token)
-                        return f"Token baru sudah dikirim ke {aslab_lain['nama_aslab']}. Silakan minta ke dia dan balas ke sini ya mas.\n\n(Ketik *daftar ulang* jika salah data lab/nama, atau *batal* untuk batalkan)"
+                        return f"Token baru sudah dikirim ke {aslab_lain['nama_aslab']}. Silakan minta ke dia dan balas ke sini ya mas.\n\n(Ketik *daftar ulang* jika salah data, atau *batal* untuk batalkan)"
                     else:
+                        role_val = state.get("role", "aslab")
+                        kampus_tugas_val = state.get("kampus_tugas")
+                        id_ruang_val = state.get("id_ruangan")
                         cursor.execute("""
-                            INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid) 
-                            VALUES (%s, %s, %s, %s)
-                        """, (state['nama_aslab'], state['no_wa'], state['id_ruangan'], sender if '@lid' in sender else None))
+                            INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid, role, kampus_tugas) 
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (state['nama_aslab'], state['no_wa'], id_ruang_val, sender if '@lid' in sender else None, role_val, kampus_tugas_val))
                         conn.commit()
                         del registration_states[sender]
+                        if role_val == 'asmot':
+                            return f"*Pendaftaran Asmot Berhasil!*\nHalo mas {state['nama_aslab']} (Asmot Kampus {kampus_tugas_val}). Silakan ketik inpo untuk melihat menu operasional AC dan kelas."
                         return f"Pendaftaran berhasil mas {state['nama_aslab']} ({state['nama_ruangan']}). Silakan ketik inpo untuk ngobrol."
                 except Exception as e:
                     print(f"Error resend token: {e}")
@@ -1752,7 +2124,145 @@ def handle_incoming_message(sender, text):
                         conn.close()
 
             # 2. LANGKAH-LANGKAH REGISTRASI BERTAHAP
-            if step == 1:
+            # 2.0 Pilih Role (Aslab vs Asmot)
+            if step == "pilih_role":
+                if text_clean in ["1", "aslab", "lab", "labor"] or "aslab" in text_clean:
+                    state["role"] = "aslab"
+                    state["step"] = 1
+                    state["failures"] = 0
+                    return "Siapa nama panggilan kamu mas?"
+                elif text_clean in ["2", "asmot", "mot", "motoris", "ac"] or "asmot" in text_clean:
+                    state["role"] = "asmot"
+                    state["step"] = "asmot_nama"
+                    state["failures"] = 0
+                    return "Siapa nama panggilan kamu mas?"
+                else:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Pendaftaran dibatalkan. Ketik !inpo untuk mulai lagi."
+                    return "Pilihan belum sesuai mas. Ketik *1* untuk Aslab atau *2* untuk Asmot.\n(Ketik *batal* untuk batalkan)"
+
+            # 2.1 Jalur Asmot
+            elif step == "asmot_nama":
+                nama_asmot = text.strip()
+                if len(nama_asmot) < 2 or len(nama_asmot) > 50:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Dibatalkan karena nama tidak valid. Ketik !inpo untuk mulai lagi."
+                    return "Namanya kependekan mas. Sebutin nama panggilan yang bener dong."
+                state["nama_aslab"] = nama_asmot
+                state["failures"] = 0
+                is_lid = '@lid' in sender or not no_wa or len(no_wa) < 9
+                if is_lid:
+                    state["step"] = "asmot_phone"
+                    return f"Oke mas {nama_asmot}, nomor WA aslinya berapa? (contoh: 081234567890)"
+                else:
+                    state["no_wa"] = no_wa
+                    state["step"] = "asmot_kampus"
+                    return (
+                        f"Oke mas {nama_asmot}, bertugas memegang kelas di kampus mana?\n\n"
+                        f"*A.* Kampus Kobar\n"
+                        f"*B.* Kampus Thehok\n"
+                        f"*C.* Kobar & Thehok (Semua Kampus)\n\n"
+                        f"_Ketik A, B, atau C (atau sebutkan nama kampusnya)._"
+                    )
+
+            elif step == "asmot_phone":
+                clean_phone = re.sub(r'\D', '', text)
+                if clean_phone.startswith('0'):
+                    clean_phone = '62' + clean_phone[1:]
+                elif clean_phone.startswith('8'):
+                    clean_phone = '62' + clean_phone
+                    
+                if len(clean_phone) < 10 or len(clean_phone) > 15:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Dibatalkan karena nomor WA tidak valid. Ketik !inpo untuk mengulang."
+                    return "Nomor WA kurang pas mas. Masukkan nomor HP aktif (contoh: 081234567890):"
+                
+                state["no_wa"] = clean_phone
+                state["step"] = "asmot_kampus"
+                state["failures"] = 0
+                return (
+                    f"Bertugas memegang kelas di kampus mana mas?\n\n"
+                    f"*A.* Kampus Kobar\n"
+                    f"*B.* Kampus Thehok\n"
+                    f"*C.* Kobar & Thehok (Semua Kampus)\n\n"
+                    f"_Ketik A, B, atau C (atau sebutkan nama kampusnya)._"
+                )
+
+            elif step == "asmot_kampus":
+                t_clean = text_clean
+                kampus_pilihan = None
+                if t_clean in ["a", "kobar"] or ("kobar" in t_clean and "thehok" not in t_clean and "tehok" not in t_clean):
+                    kampus_pilihan = "Kobar"
+                elif t_clean in ["b", "thehok", "tehok"] or (("thehok" in t_clean or "tehok" in t_clean) and "kobar" not in t_clean):
+                    kampus_pilihan = "Thehok"
+                elif t_clean in ["c", "semua", "dua", "keduanya"] or ("kobar" in t_clean and ("thehok" in t_clean or "tehok" in t_clean)):
+                    kampus_pilihan = "Semua"
+
+                if not kampus_pilihan:
+                    state["failures"] = state.get("failures", 0) + 1
+                    if state["failures"] >= 4:
+                        del registration_states[sender]
+                        return "Format kampus tidak sesuai. Ketik !inpo untuk mulai lagi."
+                    return "Pilihan belum pas mas. Ketik *A* untuk Kobar, *B* untuk Thehok, atau *C* untuk Kobar & Thehok."
+
+                state["kampus_tugas"] = kampus_pilihan
+                state["id_ruangan"] = None
+                state["nama_ruangan"] = f"Semua Kelas ({kampus_pilihan})"
+                token = str(random.randint(1000, 9999))
+                state["token"] = token
+                state["step"] = 3
+                state["failures"] = 0
+                state["token_failures"] = 0
+
+                try:
+                    conn = scraper.get_db()
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute("""
+                        SELECT id_aslab, nama_aslab, no_wa, wa_lid 
+                        FROM asisten_lab 
+                        WHERE no_wa IS NOT NULL AND no_wa != '' 
+                          AND no_wa != %s 
+                          AND (wa_lid IS NULL OR wa_lid != %s) 
+                        ORDER BY RAND() LIMIT 1
+                    """, (state.get("no_wa"), sender))
+                    aslab_lain = cursor.fetchone()
+                    if aslab_lain:
+                        target_wa = aslab_lain['wa_lid'] or aslab_lain['no_wa']
+                        pesan_token = f"*VERIFIKASI ASMOT BARU*\nAda asmot ({state['nama_aslab']} - Kampus {kampus_pilihan}) ingin mendaftar. Jika benar, kasih token ini: *{token}*"
+                        send_wa_message(target_wa, pesan_token)
+                        return (
+                            f"Token 4 digit sudah dikirim ke {aslab_lain['nama_aslab']}.\n"
+                            f"Silakan minta tokennya ke dia dan balas ke sini ya mas.\n\n"
+                            f"_(Ketik *minta token lagi* jika belum dapat, atau *daftar ulang* jika ada salah data)_"
+                        )
+                    else:
+                        wa_lid_final = sender if '@lid' in sender else None
+                        cursor.execute("""
+                            INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid, role, kampus_tugas) 
+                            VALUES (%s, %s, NULL, %s, 'asmot', %s)
+                        """, (state['nama_aslab'], state['no_wa'], wa_lid_final, kampus_pilihan))
+                        conn.commit()
+                        del registration_states[sender]
+                        return (
+                            f"*Pendaftaran Asmot Berhasil!*\n"
+                            f"Halo mas {state['nama_aslab']} (Asmot Kampus {kampus_pilihan}). Sekarang kamu sudah terdaftar resmi, silakan ketik *inpo* untuk melihat menu operasional AC dan kelas."
+                        )
+                except Exception as e:
+                    print(f"Error asmot registration: {e}")
+                    return "Ada kendala sistem saat pendaftaran. Coba ulangi lagi ya mas."
+                finally:
+                    if 'conn' in locals() and conn.is_connected():
+                        cursor.close()
+                        conn.close()
+
+            # 2.2 Jalur Aslab
+            elif step == 1:
                 nama_aslab = text.strip()
                 if len(nama_aslab) < 2 or len(nama_aslab) > 50:
                     state["failures"] = state.get("failures", 0) + 1
@@ -1836,8 +2346,8 @@ def handle_incoming_message(sender, text):
                                 return f"Token 4 digit sudah dikirim ke {aslab_lain['nama_aslab']}. Silakan minta tokennya ke dia dan balas ke sini ya mas.\n\n(Ketik *minta token lagi* jika belum dapat, atau *daftar ulang* jika ada salah data)"
                             else:
                                 cursor.execute("""
-                                    INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid) 
-                                    VALUES (%s, %s, %s, %s)
+                                    INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid, role) 
+                                    VALUES (%s, %s, %s, %s, 'aslab')
                                 """, (state['nama_aslab'], state['no_wa'], state['id_ruangan'], sender if '@lid' in sender else None))
                                 conn.commit()
                                 del registration_states[sender]
@@ -1870,26 +2380,34 @@ def handle_incoming_message(sender, text):
                         cursor = conn.cursor(dictionary=True)
                         no_wa_final = state.get("no_wa") or no_wa
                         wa_lid_final = sender if '@lid' in sender else None
+                        role_final = state.get("role", "aslab")
+                        kampus_tugas_final = state.get("kampus_tugas")
+                        id_ruang_final = state.get("id_ruangan")
                         
                         cursor.execute("SELECT id_aslab FROM asisten_lab WHERE no_wa = %s", (no_wa_final,))
                         existing = cursor.fetchone()
                         if existing:
                             cursor.execute("""
                                 UPDATE asisten_lab 
-                                SET nama_aslab = %s, id_ruangan = %s, wa_lid = %s 
+                                SET nama_aslab = %s, id_ruangan = %s, wa_lid = %s, role = %s, kampus_tugas = %s 
                                 WHERE id_aslab = %s
-                            """, (state['nama_aslab'], state['id_ruangan'], wa_lid_final, existing['id_aslab']))
+                            """, (state['nama_aslab'], id_ruang_final, wa_lid_final, role_final, kampus_tugas_final, existing['id_aslab']))
                         else:
                             cursor.execute("""
-                                INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid) 
-                                VALUES (%s, %s, %s, %s)
-                            """, (state['nama_aslab'], no_wa_final, state['id_ruangan'], wa_lid_final))
+                                INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan, wa_lid, role, kampus_tugas) 
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                            """, (state['nama_aslab'], no_wa_final, id_ruang_final, wa_lid_final, role_final, kampus_tugas_final))
                             
                         conn.commit()
                         del registration_states[sender]
+                        if role_final == 'asmot':
+                            return (
+                                f"*Pendaftaran Asmot Berhasil!*\n"
+                                f"Halo mas {state['nama_aslab']} (Asmot Kampus {kampus_tugas_final}). Sekarang kamu sudah terdaftar resmi, silakan ketik *inpo* untuk melihat menu operasional AC dan kelas."
+                            )
                         return f"Pendaftaran berhasil mas {state['nama_aslab']} ({state['nama_ruangan']}). Sekarang sudah terdaftar resmi, silakan tanya info jadwal ke saya ya."
                     except Exception as e:
-                        print(f"Error insert aslab: {e}")
+                        print(f"Error insert aslab/asmot: {e}")
                         return "Ada kendala simpan nomor mas. Coba ketik *daftar ulang* ya."
                     finally:
                         if 'conn' in locals() and conn.is_connected():
@@ -1916,7 +2434,8 @@ def handle_incoming_message(sender, text):
                             aslab_lain = cursor.fetchone()
                             if aslab_lain:
                                 target_wa = aslab_lain['wa_lid'] or aslab_lain['no_wa']
-                                send_wa_message(target_wa, f"Token baru untuk ({state['nama_aslab']} - {state['nama_ruangan']}): *{new_token}*")
+                                label_target = state.get('nama_ruangan') or f"Kampus {state.get('kampus_tugas', '')}"
+                                send_wa_message(target_wa, f"Token baru untuk ({state['nama_aslab']} - {label_target}): *{new_token}*")
                                 return f"Token salah terus mas. Token baru sudah dikirim ke {aslab_lain['nama_aslab']}. Silakan minta lagi ke dia ya, atau ketik *daftar ulang* kalau mau mulai dari awal."
                         except Exception:
                             pass
@@ -1940,15 +2459,27 @@ def handle_incoming_message(sender, text):
         )
         if is_secret_cmd:
             send_wa_typing(sender, 'composing')
-            registration_states[sender] = {"step": 1, "failures": 0}
-            return "siapa mas?"
+            registration_states[sender] = {"step": "pilih_role", "failures": 0}
+            return (
+                "*SISTEM INFORMASI OPERASIONAL JADWAL KAMPUS UNAMA*\n"
+                "_Bot ini membantu operasional aslab dan asmot dalam memantau jadwal perkuliahan, ruangan, dan fasilitas kelas._\n\n"
+                "Silakan pilih role pendaftaran:\n"
+                "*1.* Aslab (Asisten Laboratorium)\n"
+                "*2.* Asmot (Pengelola AC & Fasilitas Kelas)\n\n"
+                "_Ketik 1 atau 2 untuk melanjutkan._"
+            )
 
         # Jika tanpa kata kunci untuk pesan pertama dari nomor tidak terdaftar -> abaikan (bot tidak bersuara)
         log_chatbot("WARN", f"Diabaikan: Nomor {sender} belum terdaftar dan tidak memakai kata kunci: '{text}'", "AUTH")
         return None
 
     # Jika TERDAFTAR
-    lab_ket = f"({aslab['nama_ruangan']} {aslab['kampus']})" if aslab.get('nama_ruangan') else "(Admin/Viewer - Bebas Notif)"
+    if aslab.get('role') == 'asmot':
+        lab_ket = f"(Asmot Kampus {aslab.get('kampus_tugas', 'Kobar')})"
+    elif aslab.get('nama_ruangan'):
+        lab_ket = f"({aslab['nama_ruangan']} {aslab['kampus']})"
+    else:
+        lab_ket = "(Admin/Viewer - Bebas Notif)"
     log_chatbot("INFO", f"Dikenali sebagai: {aslab['nama_aslab']} {lab_ket}", "AUTH")
     send_wa_typing(sender, 'composing')
     current_sender_context.sender = sender
@@ -1965,13 +2496,16 @@ def handle_incoming_message(sender, text):
         # 3. Permintaan Link server / tunnel / barcode
         if any(k in cmd_text for k in ["link", "server", "web", "ngrok", "barcode", "tunnel", "cloudflare"]):
             return True
-        # 4. Operasional spesifik
+        # 4. Operasional spesifik (Aslab & Asmot)
         ops_kw = [
             "kelas berikutnya", "next class", "habis ini", "setelah ini", "kelas selanjutnya",
             "status", "status lab", "lagi dipake", "lagi dipakai", "kondisi lab",
             "semua lab", "jadwal semua", "lab kosong", "cek lab kosong",
             "posisi dosen", "cari dosen", "info mase", "inpo mase",
-            "statistik", "utilisasi", "batal", "cancel"
+            "statistik", "utilisasi", "batal", "cancel",
+            "kelas aktif", "ac hidup", "aktif sekarang", "sedang aktif", "ac nyala",
+            "kelas mau mulai", "mau mulai", "akan mulai", "persiapan ac", "hidupkan ac",
+            "kelas selesai", "matikan ac", "ac mati", "sudah selesai"
         ]
         if any(k in cmd_text for k in ops_kw):
             return True
@@ -2033,34 +2567,55 @@ def check_lab_schedules():
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
+        # 1. Ambil data Aslab
         cursor.execute("""
-            SELECT a.no_wa, r.id_ruangan, r.nama_ruangan, r.kampus AS lokasi_kampus 
+            SELECT a.no_wa, a.wa_lid, r.id_ruangan, r.nama_ruangan, r.kampus AS lokasi_kampus 
             FROM asisten_lab a 
             JOIN ruangan r ON a.id_ruangan = r.id_ruangan
-            WHERE a.no_wa IS NOT NULL 
-              AND a.no_wa != '' 
-              AND a.no_wa NOT LIKE '%@lid%' 
-              AND a.no_wa NOT LIKE '%lid%'
+            WHERE (a.role = 'aslab' OR a.role IS NULL)
+              AND ((a.no_wa IS NOT NULL AND a.no_wa != '') OR (a.wa_lid IS NOT NULL AND a.wa_lid != ''))
         """)
-        aslab_data = {row['id_ruangan']: {'no_wa': row['no_wa'], 'nama_ruangan': row['nama_ruangan'], 'lokasi_kampus': row['lokasi_kampus']} for row in cursor.fetchall()}
+        aslab_data = {row['id_ruangan']: {'no_wa': row['wa_lid'] or row['no_wa'], 'nama_ruangan': row['nama_ruangan'], 'lokasi_kampus': row['lokasi_kampus']} for row in cursor.fetchall()}
+
+        # 2. Ambil data Asmot
+        cursor.execute("""
+            SELECT a.id_aslab, a.nama_aslab, a.no_wa, a.wa_lid, a.kampus_tugas
+            FROM asisten_lab a
+            WHERE a.role = 'asmot'
+              AND ((a.no_wa IS NOT NULL AND a.no_wa != '') OR (a.wa_lid IS NOT NULL AND a.wa_lid != ''))
+        """)
+        asmot_data = cursor.fetchall()
         
-        if not aslab_data: return
+        if not aslab_data and not asmot_data:
+            return
             
-        cursor.execute("SELECT j.jam, r.id_ruangan, j.nama_mk FROM jadwal j JOIN ruangan r ON j.id_ruangan = r.id_ruangan WHERE j.tanggal = %s AND j.metode_pembelajaran NOT IN ('CC', 'OL') AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL) ORDER BY r.id_ruangan, j.jam", (current_date,))
+        cursor.execute("""
+            SELECT j.jam, r.id_ruangan, r.nama_ruangan, r.kampus, j.nama_mk 
+            FROM jadwal j 
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan 
+            WHERE j.tanggal = %s 
+              AND j.metode_pembelajaran NOT IN ('CC', 'OL') 
+              AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL) 
+            ORDER BY r.id_ruangan, j.jam
+        """, (current_date,))
         schedules = cursor.fetchall()
         
-        lab_schedules = {}
+        # Kelompokkan jadwal per ruangan
+        room_schedules = {}
+        room_meta = {}
         for row in schedules:
             id_ruangan = row['id_ruangan']
-            if id_ruangan in aslab_data:
-                # BUG-01 FIX: inisialisasi list terlebih dahulu sebelum append
-                if id_ruangan not in lab_schedules:
-                    lab_schedules[id_ruangan] = []
-                start_min = int(row['jam'].total_seconds()) // 60
-                dur = scraper.get_class_duration(row['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
-                lab_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + dur})
+            room_meta[id_ruangan] = {'nama_ruangan': row['nama_ruangan'], 'kampus': row['kampus']}
+            if id_ruangan not in room_schedules:
+                room_schedules[id_ruangan] = []
+            start_min = int(row['jam'].total_seconds()) // 60
+            dur = scraper.get_class_duration(row['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
+            room_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + dur})
         
-        for id_room, scheds in lab_schedules.items():
+        # --- A. NOTIFIKASI UNTUK ASLAB (LAB KHUSUS) ---
+        for id_room, scheds in room_schedules.items():
+            if id_room not in aslab_data:
+                continue
             no_wa = aslab_data[id_room]['no_wa']
             room_name_full = f"{aslab_data[id_room]['nama_ruangan']} ({aslab_data[id_room]['lokasi_kampus']})"
             scheds = sorted(scheds, key=lambda x: x['start_min'])
@@ -2078,7 +2633,6 @@ def check_lab_schedules():
             
             for cls in openings:
                 diff_buka = cls['start_min'] - current_total_min
-                # Notifikasi aslab: 30 menit dan 15 menit sebelum kelas dengan window toleransi
                 for target_diff in (30, 15):
                     if target_diff - 1 <= diff_buka <= target_diff:
                         notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
@@ -2090,7 +2644,6 @@ def check_lab_schedules():
             
             for cls in closings:
                 diff_tutup = cls['end_min'] - current_total_min
-                # Notifikasi aslab: 30 menit dan 15 menit sebelum selesai kelas dengan window toleransi
                 for target_diff in (30, 15):
                     if target_diff - 1 <= diff_tutup <= target_diff:
                         notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
@@ -2098,6 +2651,82 @@ def check_lab_schedules():
                             eh, em = cls['end_min'] // 60, cls['end_min'] % 60
                             msg = f"*Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {target_diff} menit mas."
                             if send_wa_message(no_wa, msg):
+                                sent_notifications.add(notif_key)
+
+        # --- B. NOTIFIKASI UNTUK ASMOT (PENGELOLA AC SELURUH KELAS) ---
+        if asmot_data:
+            for id_room, scheds in room_schedules.items():
+                r_info = room_meta.get(id_room)
+                if not r_info:
+                    continue
+                r_kampus = r_info['kampus']
+                r_nama = r_info['nama_ruangan']
+                scheds = sorted(scheds, key=lambda x: x['start_min'])
+
+                # Cari asmot yang bertugas di kampus ruangan ini
+                target_asmots = []
+                for asm in asmot_data:
+                    k_tugas = asm.get('kampus_tugas') or 'Kobar'
+                    if k_tugas.lower() == 'semua' or k_tugas.lower() == r_kampus.lower():
+                        target_asmots.append(asm['wa_lid'] or asm['no_wa'])
+
+                if not target_asmots:
+                    continue
+
+                openings_asmot = [scheds[0]]
+                closings_asmot = []
+                for i in range(len(scheds) - 1):
+                    curr, nxt = scheds[i], scheds[i+1]
+                    gap = nxt['start_min'] - curr['end_min']
+                    if gap >= 45:
+                        closings_asmot.append(curr)
+                        openings_asmot.append(nxt)
+                closings_asmot.append(scheds[-1])
+
+                # 1. Pengingat Hidupkan AC (20 menit sebelum kelas)
+                for cls in openings_asmot:
+                    diff_buka = cls['start_min'] - current_total_min
+                    if 19 <= diff_buka <= 20:
+                        notif_key = f"{current_date}_{id_room}_asmot_ac_on_{cls['start_min']}"
+                        if notif_key not in sent_notifications:
+                            h, m = cls['start_min'] // 60, cls['start_min'] % 60
+                            msg_asmot = (
+                                f"*PENGINGAT HIDUPKAN AC*\n"
+                                f"_{r_nama} ({r_kampus})_\n"
+                                f"------------------------------\n"
+                                f"• *Kelas:* {cls['nama_mk']}\n"
+                                f"• *Mulai Jam:* {h:02d}:{m:02d} WIB\n"
+                                f"• *Waktu:* _Kelas dimulai dalam 20 menit_\n\n"
+                                f"_Mohon pastikan AC ruangan sudah dihidupkan._"
+                            )
+                            terkirim = False
+                            for target_wa in target_asmots:
+                                if send_wa_message(target_wa, msg_asmot):
+                                    terkirim = True
+                            if terkirim:
+                                sent_notifications.add(notif_key)
+
+                # 2. Pengingat Matikan AC (saat kelas selesai dan tidak ada kelas lanjutan)
+                for cls in closings_asmot:
+                    diff_tutup = cls['end_min'] - current_total_min
+                    if 0 <= diff_tutup <= 5:
+                        notif_key = f"{current_date}_{id_room}_asmot_ac_off_{cls['end_min']}"
+                        if notif_key not in sent_notifications:
+                            eh, em = cls['end_min'] // 60, cls['end_min'] % 60
+                            msg_asmot = (
+                                f"*PENGINGAT MATIKAN AC*\n"
+                                f"_{r_nama} ({r_kampus})_\n"
+                                f"------------------------------\n"
+                                f"• *Kelas:* {cls['nama_mk']}\n"
+                                f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
+                                f"• *Kondisi:* _Tidak ada kelas lanjutan di ruangan ini_\n\n"
+                                f"_Mohon matikan AC ruangan untuk menghemat listrik._"
+                            )
+                            terkirim = False
+                            for target_wa in target_asmots:
+                                if send_wa_message(target_wa, msg_asmot):
+                                    terkirim = True
+                            if terkirim:
                                 sent_notifications.add(notif_key)
     except Exception as e:
         print(f"Error checking lab schedules for WA: {e}")

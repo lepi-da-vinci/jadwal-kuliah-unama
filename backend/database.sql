@@ -72,12 +72,15 @@ CREATE TABLE IF NOT EXISTS notifikasi_lab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 7. Tabel Master Asisten Lab
+-- 7. Tabel Master Asisten Lab & Asmot
 CREATE TABLE IF NOT EXISTS asisten_lab (
     id_aslab INT AUTO_INCREMENT PRIMARY KEY,
     nama_aslab VARCHAR(150) NOT NULL,
     no_wa VARCHAR(50) NOT NULL,
-    id_ruangan INT,
+    id_ruangan INT NULL,
+    wa_lid VARCHAR(100) NULL,
+    role ENUM('aslab', 'asmot', 'admin') DEFAULT 'aslab',
+    kampus_tugas VARCHAR(50) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_ruangan) REFERENCES ruangan(id_ruangan) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

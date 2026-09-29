@@ -200,6 +200,14 @@ def init_db_schema():
             cursor.execute("ALTER TABLE asisten_lab ADD COLUMN wa_lid VARCHAR(100) NULL")
         except Exception:
             pass
+        try:
+            cursor.execute("ALTER TABLE asisten_lab ADD COLUMN role VARCHAR(20) DEFAULT 'aslab'")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE asisten_lab ADD COLUMN kampus_tugas VARCHAR(50) NULL")
+        except Exception:
+            pass
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (
