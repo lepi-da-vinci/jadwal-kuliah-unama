@@ -2417,15 +2417,40 @@ class WebhookRequest(BaseModel):
 @app.post("/api/webhook/wa")
 def wa_webhook(req: WebhookRequest, valid: bool = Depends(verify_bot_secret)):
     """Menerima pesan masuk dari WA Bot (Node.js) dengan proteksi Secret Token"""
+    wa_notifier.log_chatbot("INFO", f"Webhook menerima pesan dari {req.sender}: '{req.text}'", "WEBHOOK")
     try:
         response_msg = wa_notifier.handle_incoming_message(req.sender, req.text)
         if response_msg:
             # Kirim balasan
             wa_notifier.send_wa_message(req.sender, response_msg)
+        else:
+            wa_notifier.log_chatbot("INFO", f"Tidak ada pesan balasan yang dihasilkan untuk {req.sender} (mungkin diabaikan atau tamu)", "WEBHOOK")
+    except Exception as e:
+        wa_notifier.log_chatbot("ERROR", f"Exception pada wa_webhook saat memproses pesan dari {req.sender}: {e}", "WEBHOOK")
     finally:
         # Pastikan status mengetik dihentikan agar tidak menggantung di WA
         wa_notifier.send_wa_typing(req.sender, 'paused')
     return {"status": "ok"}
+
+@app.get("/api/admin/chatbot-logs")
+def get_chatbot_logs(lines: int = 150):
+    """Membaca isi file logs/chatbot.log untuk memantau performa dan diagnosa error chatbot secara langsung."""
+    log_path = os.path.join("logs", "chatbot.log")
+    if not os.path.exists(log_path):
+        return {"status": "ok", "total_lines": 0, "logs": [], "message": "Belum ada log chatbot yang tercatat."}
+    
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            all_lines = f.readlines()
+            tail_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        return {
+            "status": "ok",
+            "total_lines": len(all_lines),
+            "returned_lines": len(tail_lines),
+            "logs": [l.rstrip("\r\n") for l in tail_lines]
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Gagal membaca file log: {e}"}
 
 @app.get("/api/cek_kosong")
 async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):

@@ -37,6 +37,44 @@ GEMINI_API_KEYS_STR = os.getenv("GEMINI_API_KEYS", os.getenv("GEMINI_API_KEY", "
 AVAILABLE_API_KEYS = [k.strip() for k in GEMINI_API_KEYS_STR.split(",") if k.strip()]
 
 ai_lock = threading.Lock()
+log_file_lock = threading.Lock()
+
+# Direktori dan file log khusus chatbot Docker
+LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs"))
+os.makedirs(LOG_DIR, exist_ok=True)
+CHATBOT_LOG_FILE = os.path.join(LOG_DIR, "chatbot.log")
+
+def log_chatbot(level: str, message: str, component: str = "BACKEND"):
+    """
+    Menulis log chatbot ke file logs/chatbot.log dan console stdout secara thread-safe.
+    Format terpadu: [YYYY-MM-DD HH:MM:SS WIB] [LEVEL] [COMPONENT] Message
+    """
+    timestamp = get_wib_now().strftime("%Y-%m-%d %H:%M:%S WIB")
+    log_line = f"[{timestamp}] [{level.upper()}] [{component}] {message}\n"
+    
+    # Cetak ke console stdout agar tetap muncul di docker logs
+    print(f"[{component}] {level.upper()}: {message}")
+    
+    # Tulis ke file logs/chatbot.log
+    try:
+        with log_file_lock:
+            # Rotasi jika ukuran > 10MB
+            if os.path.exists(CHATBOT_LOG_FILE) and os.path.getsize(CHATBOT_LOG_FILE) > 10 * 1024 * 1024:
+                backup_path = CHATBOT_LOG_FILE + ".1"
+                if os.path.exists(backup_path):
+                    try:
+                        os.remove(backup_path)
+                    except Exception:
+                        pass
+                try:
+                    os.rename(CHATBOT_LOG_FILE, backup_path)
+                except Exception:
+                    pass
+                    
+            with open(CHATBOT_LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(log_line)
+    except Exception as e:
+        print(f"[LOGGER ERROR] Gagal menulis ke {CHATBOT_LOG_FILE}: {e}")
 
 # State pendaftaran bot
 registration_states = {}
@@ -49,7 +87,9 @@ def is_duplicate_message(sender, text):
     text_clean = str(text).strip().lower()
     cache_key = f"{sender}:{text_clean}"
     if cache_key in message_cache:
-        if now - message_cache[cache_key] < 5:
+        elapsed = now - message_cache[cache_key]
+        if elapsed < 2:
+            log_chatbot("WARN", f"Pesan duplikat dari {sender} dalam jeda {elapsed:.2f}s diabaikan (anti-flood/double webhook): '{text}'", "ANTI-SPAM")
             return True
     message_cache[cache_key] = now
     
@@ -62,7 +102,6 @@ def is_duplicate_message(sender, text):
 # Basic old functions
 def send_wa_message(no_wa, pesan):
     try:
-        import os
         url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
         headers = {
@@ -70,21 +109,21 @@ def send_wa_message(no_wa, pesan):
             'x-bot-secret': secret
         }
         data = {'target': no_wa, 'message': pesan}
-        response = requests.post(url, headers=headers, json=data, timeout=10)
+        log_chatbot("INFO", f"Mengirim permintaan kirim pesan ke Gateway WA ({url}) -> Target: {no_wa} (Panjang: {len(pesan)} chars)", "WA-SENDER")
+        response = requests.post(url, headers=headers, json=data, timeout=12)
         if response.status_code == 200:
-            print(f"[WA TERKIRIM] Ke: {no_wa}")
+            log_chatbot("SUCCESS", f"Pesan berhasil terkirim ke {no_wa} via Gateway WA", "WA-SENDER")
             return True
         else:
-            print(f"[WA GAGAL] Ke: {no_wa} | {response.text}")
+            log_chatbot("ERROR", f"Gateway WA gagal mengirim ke {no_wa} | HTTP {response.status_code}: {response.text}", "WA-SENDER")
             return False
     except Exception as e:
-        print(f"[WA ERROR] {e!s}")
+        log_chatbot("ERROR", f"Exception saat kirim pesan ke {no_wa} via {url}: {e}", "WA-SENDER")
         return False
 
 def send_wa_typing(target, state='composing'):
-    """Mengirim sinyal animasi 'sedang mengetik' (composing) ke WhatsApp penerima"""
+    """Mengirim sinyal animasi 'sedang mengetik' (composing) atau 'paused' ke WhatsApp penerima"""
     try:
-        import os
         base_send_url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         url = os.getenv("WA_BOT_TYPING_URL", base_send_url.replace('/send', '/typing'))
         secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
@@ -1499,16 +1538,64 @@ def handle_incoming_message(sender, text):
     
     # Batasi panjang input maksimal 1000 karakter (Anti Flood/Buffer Exhaustion)
     text = str(text or "")[:1000]
-    print(f"\n[WA INCOMING] Pesan dari {sender}: {text}")
     text_clean = text.strip().lower()
+    log_chatbot("INFO", f"Pesan masuk dari {sender}: '{text}'", "HANDLER")
     
     # 1. Anti-spam / debouncing
     if is_duplicate_message(sender, text_clean):
-        print(f"[WA INCOMING] Pesan duplikat dari {sender}, diabaikan.")
+        log_chatbot("WARN", f"Pesan duplikat dari {sender} diabaikan (anti-spam).", "HANDLER")
         return None
         
     no_wa = re.sub(r'\D', '', sender)
     if no_wa.startswith('0'): no_wa = '62' + no_wa[1:]
+
+    # 1. Perintah Tautkan Nomor / Link Akun (Sangat berguna untuk akun WhatsApp dengan format privasi @lid)
+    match_link = re.search(r'^(?:!link|!taut|!nomor|link|taut|nomor)\s+(\+?62\d+|08\d+)', text_clean)
+    if match_link:
+        raw_phone = match_link.group(1)
+        clean_phone = re.sub(r'\D', '', raw_phone)
+        if clean_phone.startswith('0'):
+            clean_phone = '62' + clean_phone[1:]
+        elif clean_phone.startswith('8'):
+            clean_phone = '62' + clean_phone
+            
+        try:
+            conn = scraper.get_db()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute('''
+                SELECT a.id_aslab, a.nama_aslab, r.nama_ruangan, r.kampus
+                FROM asisten_lab a
+                JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+                WHERE a.no_wa = %s OR a.no_wa = %s
+            ''', (clean_phone, f"{clean_phone}@s.whatsapp.net"))
+            target_aslab = cursor.fetchone()
+            if target_aslab:
+                cursor.execute('''
+                    UPDATE asisten_lab
+                    SET wa_lid = %s
+                    WHERE id_aslab = %s
+                ''', (sender, target_aslab['id_aslab']))
+                conn.commit()
+                log_chatbot("SUCCESS", f"Akun {sender} berhasil ditautkan ke Aslab {target_aslab['nama_aslab']} (HP: {clean_phone})", "AUTH")
+                send_wa_typing(sender, 'composing')
+                return (
+                    f"✅ *Akun Berhasil Ditautkan!*\n\n"
+                    f"Halo mase *{target_aslab['nama_aslab']}*! Akun WhatsApp kamu sekarang resmi terhubung ke data Aslab {target_aslab['nama_ruangan']} ({target_aslab['kampus']}).\n\n"
+                    f"Silakan ketik *menu* atau langsung tanyakan jadwal lab kamu ya!"
+                )
+            else:
+                log_chatbot("WARN", f"Penautan gagal untuk {sender}: Nomor {clean_phone} tidak ditemukan di database asisten_lab", "AUTH")
+                return (
+                    f"❌ Nomor *{clean_phone}* belum terdaftar di database Aslab UNAMA.\n\n"
+                    f"Pastikan nomor yang kamu masukkan sama persis dengan yang didaftarkan Admin, atau ketik *!inpo* untuk mendaftar baru."
+                )
+        except Exception as e:
+            log_chatbot("ERROR", f"Error saat proses linking akun {sender}: {e}", "AUTH")
+            return "Maaf, terjadi kendala teknis saat menautkan akun. Silakan coba sebentar lagi."
+        finally:
+            if 'conn' in locals() and conn.is_connected():
+                cursor.close()
+                conn.close()
 
     # Cek DB apakah terdaftar
     try:
@@ -1522,7 +1609,7 @@ def handle_incoming_message(sender, text):
         ''', (no_wa, sender, sender))
         aslab = cursor.fetchone()
     except Exception as e:
-        print(e)
+        log_chatbot("ERROR", f"Database error saat memeriksa asisten_lab untuk {sender}: {e}", "DATABASE")
         return None
     finally:
         if 'conn' in locals() and conn.is_connected():
@@ -1768,24 +1855,42 @@ def handle_incoming_message(sender, text):
                         return f"Token salah mas. Sisa percobaan: {sisa}.\n\nKetik *minta token lagi* buat minta token baru, atau *daftar ulang* kalau mau ubah data."
 
         # Jika sender BELUM ada di registration_states:
-        # Syarat wajib: Chat pertama dari nomor tidak terdaftar HARUS diawali '!inpo' atau '!info'
+        # Pemicu pendaftaran mandiri
         is_secret_cmd = (
-            text_clean == "!inpo" or 
-            text_clean == "!info" or 
+            text_clean in ["!inpo", "!info", "!daftar", "inpo", "info", "daftar"] or 
             text_clean.startswith("!inpo") or 
-            text_clean.startswith("!info")
+            text_clean.startswith("!info") or
+            text_clean.startswith("daftar aslab")
         )
         if is_secret_cmd:
             send_wa_typing(sender, 'composing')
             registration_states[sender] = {"step": 1, "failures": 0}
-            return "siapa mas?"
+            return "Halo mas! Akun WhatsApp ini belum terdaftar. Mau daftar jadi Aslab? Siapa namanya mas?"
 
-        # Jika tanpa tanda '!' atau pesan acak dari orang asing -> abaikan (bot tidak bersuara)
-        print(f"[WA INCOMING] Diabaikan: Nomor belum terdaftar dan tidak memakai kode '!inpo' / '!info': {sender} ({text})")
+        # Pemicu sapaan umum atau query jadwal dari nomor yang belum terdaftar:
+        is_common_query = (
+            text_clean in ["p", "oi", "halo", "hai", "menu", "bantuan", "help", "?", "jadwal", "cek"] or
+            re.search(r'^\s*[1-9]\b', text_clean) or
+            re.search(r'\b(jadwal|lab|ruang|kelas|dosen|status)\b', text_clean)
+        )
+        if is_common_query:
+            log_chatbot("INFO", f"Mengirim panduan penautan/registrasi ke nomor belum terdaftar: {sender}", "AUTH")
+            return (
+                "Halo! Akun WhatsApp kamu belum terhubung dengan data Asisten Lab UNAMA di bot ini.\n\n"
+                "👉 *Jika nomor HP kamu sudah didaftarkan Admin*, ketik:\n"
+                "*!link 08xxxxxxxxxx* (ganti dengan nomor HP aslimu)\n"
+                "agar akun ini langsung terhubung tanpa daftar ulang.\n\n"
+                "👉 *Jika kamu aslab baru dan ingin mendaftar mandiri*, ketik:\n"
+                "*!inpo*\n\n"
+                "👉 *Catatan:* Sistem bot ini dikhususkan untuk asisten laboratorium UNAMA."
+            )
+
+        # Jika pesan acak dari orang asing / non-aslab -> abaikan (bot tidak bersuara)
+        log_chatbot("WARN", f"Diabaikan: Nomor {sender} belum terdaftar dan bukan perintah aslab: '{text}'", "AUTH")
         return None
 
     # Jika TERDAFTAR
-    print(f"[WA INCOMING] Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})")
+    log_chatbot("INFO", f"Dikenali sebagai Aslab: {aslab['nama_aslab']} ({aslab['nama_ruangan']} {aslab['kampus']})", "AUTH")
     send_wa_typing(sender, 'composing')
     current_sender_context.sender = sender
     
@@ -1822,35 +1927,38 @@ def handle_incoming_message(sender, text):
     # 1. FAST-PATH: Jika pesan berupa shortcut menu atau nomor, langsung proses via Python engine (0.01s)
     # Dijamin tidak akan pernah timeout, tidak akan salah menyapa, dan responsif seketika.
     if sender in aslab_session_states or is_quick_command(text_clean):
-        print(f"[FAST-PATH] Memproses shortcut/menu '{text_clean}' secara instan untuk {aslab['nama_aslab']}.")
+        log_chatbot("INFO", f"FAST-PATH: Memproses shortcut/menu '{text_clean}' secara instan untuk {aslab['nama_aslab']}", "ROUTER")
         return fallback_python_handler(sender, text, aslab)
 
     # 2. NATURAL LANGUAGE / OBROLAN BEBAS: Gunakan Gemini AI
     if is_gemini_available():
         try:
+            log_chatbot("INFO", f"Mengirim query bebas '{text}' ke Gemini AI untuk {aslab['nama_aslab']}...", "GEMINI")
             session_data = get_or_create_chat_session(sender, aslab['nama_aslab'], aslab['nama_ruangan'], aslab['kampus'])
             chat = session_data['chat']
             api_key = session_data['api_key']
             
+            t0 = time.time()
             with ai_lock:
                 if api_key:
                     genai.configure(api_key=api_key, transport='rest')
                 response = chat.send_message(text, request_options={'timeout': 8})
+            durasi = time.time() - t0
                 
             if response and response.text:
+                log_chatbot("SUCCESS", f"Gemini AI merespon dalam {durasi:.2f}s ({len(response.text)} chars)", "GEMINI")
                 return response.text
             else:
-                print("[GEMINI] Respon kosong atau terfilter, beralih ke Python engine.")
+                log_chatbot("WARN", f"Gemini AI respon kosong atau terfilter dalam {durasi:.2f}s. Beralih ke fallback Python.", "GEMINI")
                 return fallback_python_handler(sender, text, aslab)
         except Exception as e:
             err_str = str(e).lower()
-            print(f"[GEMINI AI ERROR]: {e}")
+            log_chatbot("ERROR", f"Gemini AI exception: {e}. Beralih otomatis ke fallback Python.", "GEMINI")
             if any(term in err_str for term in ["429", "quota", "resourceexhausted", "resource_exhausted", "ratelimit", "rate limit", "token", "timed out", "timeout"]):
                 mark_gemini_exhausted(180) # Cooldown 3 menit sebelum mencoba AI lagi
-            print("[DYNAMIC SWITCH] Beralih otomatis ke engine Python.")
             return fallback_python_handler(sender, text, aslab)
     else:
-        print(f"[WA ENGINE] Mode Python aktif untuk {aslab['nama_aslab']}.")
+        log_chatbot("INFO", f"Mode Python aktif (AI unavailable/cooldown) untuk {aslab['nama_aslab']}", "ROUTER")
         return fallback_python_handler(sender, text, aslab)
 
 

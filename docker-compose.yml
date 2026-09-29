@@ -30,6 +30,7 @@ services:
       # Persist WhatsApp login sessions
       - ./wa-bot/baileys_auth_info:/app/baileys_auth_info
       - ./wa-bot/server.js:/app/server.js
+      - ./logs:/app/logs
 
   backend:
     build: 
@@ -46,6 +47,7 @@ services:
     environment:
       - TZ=Asia/Jakarta
       - DB_HOST=db
+      - DB_PORT=3306
       - DB_USER=root
       - DB_PASSWORD=
       - DB_NAME=db_jadwal_kuliah
