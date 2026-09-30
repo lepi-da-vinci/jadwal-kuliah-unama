@@ -4913,16 +4913,28 @@ document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {
           <div style="text-align: left;">
             <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary); padding: 8px 12px; border-radius: 4px; font-size: 0.85em; color: var(--primary); margin-bottom: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              <span>UJI COBA / SIMULASI NOTIFIKASI RUANGAN</span>
+              <span>SIMULASI NOTIFIKASI POP-UP PINTAR</span>
             </div>
-            <p style="margin-bottom: 6px; font-weight: 600; color: var(--primary);">Labor segera mulai:</p>
-            <ul style="padding-left: 18px; margin: 0 0 10px 0; display: flex; flex-direction: column; gap: 6px;">
-              <li><b>Labor 1.4 (Thehok)</b> <span class="notif-cat-badge labor">Labor</span> buat matkul <b>Pemrograman Web II (03PS4)</b> (Mulai 08:00) - <i style="color:var(--badge-cc);">Buka dalam 15 menit!</i></li>
-            </ul>
-            <p style="margin-bottom: 6px; font-weight: 600; color: #10b981;">Ruang Kelas segera mulai:</p>
-            <ul style="padding-left: 18px; margin: 0; display: flex; flex-direction: column; gap: 6px;">
-              <li><b>R. 2.18 (Kobar)</b> <span class="notif-cat-badge kelas">Kelas</span> buat matkul <b>Perencanaan Bisnis (03PM6)</b> (Mulai 08:00) - <i style="color:var(--badge-jeda);">Buka dalam 30 menit!</i></li>
-            </ul>
+            
+            <div style="margin-bottom: 12px;">
+              <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#10b981; margin-bottom:6px;">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                <span>Buka Ruangan & Hidupkan AC (Persiapan):</span>
+              </div>
+              <ul style="padding-left: 18px; margin: 0; display: flex; flex-direction: column; gap: 6px;">
+                <li><b>Labor 1.4 (Thehok)</b> <span class="notif-cat-badge labor">Labor</span> - <b>Pemrograman Web II</b> (03PS4) Mulai 08:00 WIB<br><i style="color:#10b981; font-size:0.88em;">Mulai dalam 15 menit, mohon siapkan ruangan & hidupkan AC.</i></li>
+              </ul>
+            </div>
+
+            <div style="margin-top: 10px;">
+              <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#f59e0b; margin-bottom:6px;">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>Tutup Ruangan & Matikan AC (Selesai):</span>
+              </div>
+              <ul style="padding-left: 18px; margin: 0; display: flex; flex-direction: column; gap: 6px;">
+                <li><b>R. 2.10 (Kobar)</b> <span class="notif-cat-badge kelas">Kelas</span> - <b>Data Mining</b> (07PTP) Selesai 12:30 WIB<br><i style="color:#f59e0b; font-size:0.88em;">Kelas terakhir hari ini (ruangan selesai digunakan). Mohon matikan AC & pastikan ruangan kosong.</i></li>
+              </ul>
+            </div>
           </div>
         `;
   }
@@ -7672,9 +7684,12 @@ function playDefaultTone() {
 }
 
 // ─── Room & Lab Check (Notifikasi Mulai Ruangan/Labor) ───
+// ─── Room & Lab Check (Notifikasi Pintar Ruangan, Labor & AC) ───
 const notifiedLabAlarmKeys = new Set();
 
 function checkLabNotifications() {
+  if (!allJadwal || allJadwal.length === 0) return;
+
   const now = new Date();
   const currentTotalMin = now.getHours() * 60 + now.getMinutes();
   const year = now.getFullYear();
@@ -7682,73 +7697,215 @@ function checkLabNotifications() {
   const day = String(now.getDate()).padStart(2, '0');
   const currentDayStr = `${year}-${month}-${day}`;
 
-  let firstClasses = {};
+  // 1. Kelompokkan jadwal tatap muka hari ini per ruangan
+  const roomScheduleMap = {};
   allJadwal.forEach(item => {
-    if (item.tanggal === currentDayStr && item.metode_pembelajaran !== 'CC' && item.metode_pembelajaran !== 'OL' && item.jam && item.nama_ruangan) {
-      const parts = item.jam.split(':');
-      const startTotalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    if (item.tanggal === currentDayStr && !isOnlineOrCancelled(item) && item.jam && item.nama_ruangan) {
+      const startMin = parseTimeToMinutes(item.jam);
+      if (startMin === null) return;
+      const dur = getClassDuration(item);
+      const endMin = startMin + dur;
 
-      // Hanya cek kelas yang belum lewat waktu mulainya
-      if (startTotalMin >= currentTotalMin) {
-        if (!firstClasses[item.nama_ruangan] || startTotalMin < firstClasses[item.nama_ruangan].startTotalMin) {
-          firstClasses[item.nama_ruangan] = {
-            nama_mk: item.nama_mk,
-            jam: item.jam,
-            startTotalMin,
-            isLab: isLab(item.nama_ruangan)
-          };
-        }
+      if (!roomScheduleMap[item.nama_ruangan]) {
+        roomScheduleMap[item.nama_ruangan] = [];
       }
+      roomScheduleMap[item.nama_ruangan].push({
+        nama_ruangan: item.nama_ruangan,
+        nama_mk: item.nama_mk || 'Mata Kuliah',
+        kelas: item.kelas || '',
+        jam: item.jam,
+        startMin,
+        endMin,
+        dur,
+        isLab: isLab(item.nama_ruangan),
+        kampus: item.kampus || ''
+      });
     }
   });
 
-  let labToNotify = [];
-  let kelasToNotify = [];
-  for (const [ruang, dataClass] of Object.entries(firstClasses)) {
-    const diffMin = dataClass.startTotalMin - currentTotalMin;
-    // Notifikasi aslab: 90 menit (pukul 06:30 untuk kelas jam 08:00), 30 menit, dan 15 menit
-    if (diffMin === 90 || diffMin === 30 || diffMin === 15) {
-      const alarmKey = `${currentDayStr}_${ruang}_${dataClass.jam}_${diffMin}`;
-      if (!notifiedLabAlarmKeys.has(alarmKey)) {
-        notifiedLabAlarmKeys.add(alarmKey);
-        const badgeHTML = dataClass.isLab ? '<span class="notif-cat-badge labor">Labor</span>' : '<span class="notif-cat-badge kelas">Kelas</span>';
-        let itemMsg = '';
-        if (diffMin === 90) {
-          itemMsg = `<b>${ruang}</b> ${badgeHTML} untuk matkul <b>${dataClass.nama_mk}</b> (Mulai ${dataClass.jam}) - <i style="color:var(--primary);">Pukul 06:30: Harap persiapkan dan buka lab sebelum mulai kelas!</i>`;
-        } else {
-          itemMsg = `<b>${ruang}</b> ${badgeHTML} untuk matkul <b>${dataClass.nama_mk}</b> (Mulai ${dataClass.jam}) - <i style="color:var(--primary);">Buka dalam ${diffMin} menit!</i>`;
+  const bukaToNotify = [];
+  const tutupToNotify = [];
+
+  for (const [ruang, rawScheds] of Object.entries(roomScheduleMap)) {
+    const scheds = rawScheds.slice().sort((a, b) => a.startMin - b.startMin);
+    if (scheds.length === 0) continue;
+
+    // A. Identifikasi pembukaan (openings) dan penutupan (closings)
+    // Kelas pembuka: kelas pertama hari ini, atau kelas setelah jeda > 60 menit
+    const openings = [scheds[0]];
+    const closings = [];
+
+    for (let i = 0; i < scheds.length - 1; i++) {
+      const curr = scheds[i];
+      const nxt = scheds[i + 1];
+      const gap = nxt.startMin - curr.endMin;
+      if (gap > 60) {
+        closings.push({ cls: curr, tipe: 'JEDA', gap, nxt });
+        openings.push(nxt);
+      }
+    }
+    // Kelas terakhir hari ini
+    closings.push({ cls: scheds[scheds.length - 1], tipe: 'SELESAI', gap: 0, nxt: null });
+
+    // 1. Pemicu Buka Lab / Hidupkan AC (15 - 20 menit sebelum kelas)
+    for (const cls of openings) {
+      const diffBuka = cls.startMin - currentTotalMin;
+      if (diffBuka >= 15 && diffBuka <= 20) {
+        const alarmKey = `${currentDayStr}_${ruang}_buka_${cls.startMin}`;
+        if (!notifiedLabAlarmKeys.has(alarmKey)) {
+          notifiedLabAlarmKeys.add(alarmKey);
+          const badgeHTML = cls.isLab 
+            ? '<span class="notif-cat-badge labor">Labor</span>' 
+            : '<span class="notif-cat-badge kelas">Kelas</span>';
+          bukaToNotify.push({
+            ruang,
+            isLab: cls.isLab,
+            badgeHTML,
+            nama_mk: cls.nama_mk,
+            kelas: cls.kelas,
+            jam: cls.jam,
+            diffBuka
+          });
         }
-        if (dataClass.isLab) {
-          labToNotify.push(itemMsg);
-        } else {
-          kelasToNotify.push(itemMsg);
+      }
+    }
+
+    // 2. Pemicu Tutup Lab / Matikan AC (0 - 5 menit setelah kelas selesai)
+    for (const item of closings) {
+      const cls = item.cls;
+      const diffTutup = currentTotalMin - cls.endMin;
+      if (diffTutup >= 0 && diffTutup <= 5) {
+        const alarmKey = `${currentDayStr}_${ruang}_tutup_${cls.endMin}`;
+        if (!notifiedLabAlarmKeys.has(alarmKey)) {
+          notifiedLabAlarmKeys.add(alarmKey);
+          const badgeHTML = cls.isLab 
+            ? '<span class="notif-cat-badge labor">Labor</span>' 
+            : '<span class="notif-cat-badge kelas">Kelas</span>';
+          const jamSelesaiStr = `${String(Math.floor(cls.endMin / 60)).padStart(2, '0')}:${String(cls.endMin % 60).padStart(2, '0')}`;
+          
+          let infoKondisi = '';
+          if (item.tipe === 'JEDA') {
+            const nextJamStr = `${String(Math.floor(item.nxt.startMin / 60)).padStart(2, '0')}:${String(item.nxt.startMin % 60).padStart(2, '0')}`;
+            infoKondisi = `Jeda kosong ${item.gap} menit (kelas berikutnya jam ${nextJamStr} WIB)`;
+          } else {
+            infoKondisi = `Kelas terakhir hari ini (ruangan selesai digunakan)`;
+          }
+
+          tutupToNotify.push({
+            ruang,
+            isLab: cls.isLab,
+            badgeHTML,
+            nama_mk: cls.nama_mk,
+            kelas: cls.kelas,
+            jamSelesai: jamSelesaiStr,
+            tipe: item.tipe,
+            infoKondisi
+          });
         }
       }
     }
   }
 
-  if (labToNotify.length > 0 || kelasToNotify.length > 0) {
-    let contentHTML = '';
-    const modalTitle = document.getElementById('lab-modal-title');
+  // 3. Pemicu Perubahan Jadwal Mendadak (Info Mase)
+  const perubahanToNotify = [];
+  if (Array.isArray(latestNotifikasiLabData)) {
+    latestNotifikasiLabData.forEach(n => {
+      const tgl = n.tanggal || '';
+      if (tgl === currentDayStr && (n.tipe_notif === 'PERUBAHAN' || n.tipe_notif === 'TAMBAHAN')) {
+        const alarmKey = `${currentDayStr}_infomase_${n.id || n.pesan}`;
+        if (!notifiedLabAlarmKeys.has(alarmKey)) {
+          notifiedLabAlarmKeys.add(alarmKey);
+          perubahanToNotify.push(n);
+        }
+      }
+    });
+  }
 
-    if (labToNotify.length > 0 && kelasToNotify.length === 0) {
-      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Labor';
-      contentHTML += '<p style="font-weight:600; margin-bottom:8px;">Buka labor sekarang, praktikum segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
-    } else if (kelasToNotify.length > 0 && labToNotify.length === 0) {
-      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Ruang Kelas';
-      contentHTML += '<p style="font-weight:600; margin-bottom:8px;">Persiapkan ruang kelas, perkuliahan segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + kelasToNotify.map(k => `<li>${k}</li>`).join('') + '</ul>';
+  // Jika ada notifikasi penting yang terpicu
+  if (bukaToNotify.length > 0 || tutupToNotify.length > 0 || perubahanToNotify.length > 0) {
+    const modalTitle = document.getElementById('lab-modal-title');
+    const modalBody = document.getElementById('lab-modal-body');
+    const modalIcon = document.getElementById('lab-modal-icon');
+
+    let titleText = 'Pemberitahuan Operasional Ruangan';
+    if (bukaToNotify.length > 0 && tutupToNotify.length === 0 && perubahanToNotify.length === 0) {
+      titleText = 'Persiapan Buka Ruangan / Hidupkan AC';
+      if (modalIcon) modalIcon.style.color = '#10b981';
+    } else if (tutupToNotify.length > 0 && bukaToNotify.length === 0 && perubahanToNotify.length === 0) {
+      titleText = 'Pengingat Tutup Ruangan / Matikan AC';
+      if (modalIcon) modalIcon.style.color = '#f59e0b';
+    } else if (perubahanToNotify.length > 0 && bukaToNotify.length === 0 && tutupToNotify.length === 0) {
+      titleText = 'Info Mase: Perubahan Jadwal Hari Ini';
+      if (modalIcon) modalIcon.style.color = '#ef4444';
     } else {
-      if (modalTitle) modalTitle.textContent = 'Pemberitahuan Ruangan & Labor';
-      if (labToNotify.length > 0) {
-        contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:var(--primary);">Labor segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + labToNotify.map(l => `<li>${l}</li>`).join('') + '</ul>';
-      }
-      if (kelasToNotify.length > 0) {
-        contentHTML += '<p style="font-weight:600; margin-bottom:6px; color:#10b981;">Ruang Kelas segera mulai:</p><ul style="padding-left:18px; margin:0 0 10px 0; display:flex; flex-direction:column; gap:6px;">' + kelasToNotify.map(k => `<li>${k}</li>`).join('') + '</ul>';
-      }
+      titleText = 'Pemberitahuan Ruangan & Info Mase';
+      if (modalIcon) modalIcon.style.color = 'var(--primary)';
+    }
+    if (modalTitle) modalTitle.textContent = titleText;
+
+    let contentHTML = '';
+
+    // Bagian 1: Perubahan Jadwal Mendadak (Info Mase)
+    if (perubahanToNotify.length > 0) {
+      contentHTML += `
+        <div style="margin-bottom: 14px; background: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444; border-radius: 6px; padding: 10px 12px; text-align: left;">
+          <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#ef4444; margin-bottom:6px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            <span>Perubahan Jadwal Mendadak (Info Mase):</span>
+          </div>
+          <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:6px; font-size:0.9em;">
+      `;
+      perubahanToNotify.forEach(p => {
+        contentHTML += `<li><strong>${escapeHtml(p.tipe_notif)}:</strong> ${escapeHtml(p.pesan)}</li>`;
+      });
+      contentHTML += `</ul></div>`;
     }
 
-    modalBody.innerHTML = contentHTML;
-    openModal(true); // Ulangi alarm untuk notifikasi asli
+    // Bagian 2: Buka Ruangan / Lab & Hidupkan AC
+    if (bukaToNotify.length > 0) {
+      contentHTML += `
+        <div style="margin-bottom: 12px; text-align: left;">
+          <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#10b981; margin-bottom:6px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+            <span>Buka Ruangan & Hidupkan AC (${bukaToNotify.length}):</span>
+          </div>
+          <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:8px;">
+      `;
+      bukaToNotify.forEach(b => {
+        contentHTML += `
+          <li>
+            <b>${escapeHtml(b.ruang)}</b> ${b.badgeHTML} - <b>${escapeHtml(b.nama_mk)}</b> (${escapeHtml(b.kelas)}) Mulai ${b.jam} WIB
+            <br><i style="color:#10b981; font-size:0.88em;">Mulai dalam ${b.diffBuka} menit, mohon siapkan ruangan & hidupkan AC.</i>
+          </li>
+        `;
+      });
+      contentHTML += `</ul></div>`;
+    }
+
+    // Bagian 3: Tutup Ruangan / Lab & Matikan AC
+    if (tutupToNotify.length > 0) {
+      contentHTML += `
+        <div style="margin-top: 10px; text-align: left;">
+          <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#f59e0b; margin-bottom:6px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Tutup Ruangan & Matikan AC (${tutupToNotify.length}):</span>
+          </div>
+          <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:8px;">
+      `;
+      tutupToNotify.forEach(t => {
+        const actionLabel = t.isLab ? 'kunci lab & matikan AC' : 'matikan AC & pastikan ruangan kosong';
+        contentHTML += `
+          <li>
+            <b>${escapeHtml(t.ruang)}</b> ${t.badgeHTML} - <b>${escapeHtml(t.nama_mk)}</b> (${escapeHtml(t.kelas)}) Selesai ${t.jamSelesai} WIB
+            <br><i style="color:#f59e0b; font-size:0.88em;">${escapeHtml(t.infoKondisi)}. Mohon ${actionLabel}.</i>
+          </li>
+        `;
+      });
+      contentHTML += `</ul></div>`;
+    }
+
+    if (modalBody) modalBody.innerHTML = contentHTML;
+    openModal(true);
   }
 }
 
