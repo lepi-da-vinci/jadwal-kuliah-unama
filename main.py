@@ -607,7 +607,7 @@ def get_semua_jadwal(semester: str = None):
         if not target_sem:
             target_sem = scraper.get_active_semester(conn, cursor)
             
-        # ─── KOMPARASI & AUTO-ENRICHMENT DENGAN JADWAL_PERMANENT ───
+        # ─── AUTO-RECOVERY DENGAN JADWAL_PERMANENT (HANYA JIKA TABEL JADWAL KOSONG) ───
         scraper.ensure_permanent_table_exists(cursor)
         cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
         cnt_active = cursor.fetchone()['cnt']
@@ -616,8 +616,8 @@ def get_semua_jadwal(semester: str = None):
         
         is_enriched = False
         missing_count = 0
-        if cnt_active < cnt_perm:
-            # Pulihkan data yang hilang dari jadwal_permanent ke jadwal aktif secara otomatis
+        if cnt_active == 0 and cnt_perm > 0:
+            # Pulihkan data HANYA jika tabel jadwal utama benar-benar kosong (misal sehabis reset)
             heal_query = '''
                 INSERT IGNORE INTO jadwal (
                     tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
@@ -625,21 +625,14 @@ def get_semua_jadwal(semester: str = None):
                 SELECT 
                     jp.tanggal, jp.hari, jp.jam, jp.id_dosen, jp.kode_mk, jp.nama_mk, jp.kelas, jp.id_ruangan, jp.status_jadwal, jp.metode_pembelajaran, jp.semester
                 FROM jadwal_permanent jp
-                LEFT JOIN jadwal j ON (
-                    j.tanggal = jp.tanggal AND j.jam = jp.jam 
-                    AND COALESCE(j.id_ruangan, 0) = COALESCE(jp.id_ruangan, 0)
-                    AND COALESCE(j.kelas, '') = COALESCE(jp.kelas, '')
-                    AND COALESCE(j.kode_mk, '') = COALESCE(jp.kode_mk, '')
-                    AND j.semester = jp.semester
-                )
-                WHERE jp.semester = %s AND j.id_jadwal IS NULL
+                WHERE jp.semester = %s AND jp.tanggal IS NOT NULL
             '''
             cursor.execute(heal_query, (target_sem,))
             conn.commit()
             missing_count = cursor.rowcount
             if missing_count > 0:
                 is_enriched = True
-                print(f"[Auto-Enrichment] Berhasil melengkapi {missing_count} jadwal dari arsip permanen untuk semester {target_sem}.")
+                print(f"[Initial-Restore] Berhasil memulihkan {missing_count} jadwal dari arsip permanen untuk semester {target_sem} karena tabel jadwal kosong.")
 
         query = '''
             SELECT 

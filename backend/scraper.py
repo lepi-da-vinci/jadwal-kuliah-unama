@@ -1528,13 +1528,20 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             if detected_events:
                 dispatch_schedule_change_alerts(conn, cursor, detected_events)
 
-            # Pastikan seluruh data temp terarsip permanen sebelum dipindahkan ke jadwal aktif
-            sync_temp_to_permanent(conn, cursor, sem_final)
-
             # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA dieksekusi jika data baru valid dan ada)
+            # Selaraskan tabel jadwal utama dengan data BAAK terkini
             cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             cursor.execute("""
                 INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
+                SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_temp WHERE tanggal = %s AND semester = %s
+            """, (t_date, sem_final))
+
+            # Selaraskan juga arsip permanen untuk tanggal ini agar ruangan lama yang berubah tidak tersisa sebagai duplikat
+            ensure_permanent_table_exists(cursor)
+            cursor.execute("DELETE FROM jadwal_permanent WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
+            cursor.execute("""
+                INSERT INTO jadwal_permanent (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
                 SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
                 FROM jadwal_temp WHERE tanggal = %s AND semester = %s
             """, (t_date, sem_final))
