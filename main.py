@@ -356,6 +356,55 @@ def get_server_urls(refresh: bool = False):
         "updated_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
 
+@app.get("/api/server-link/status")
+def get_server_link_status():
+    """Mengembalikan status link server publik saat ini, link sebelumnya di DB, dan riwayat pergantian link"""
+    try:
+        current_url = wa_notifier.detect_current_public_url()
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        wa_notifier.init_server_link_tables(cursor)
+        conn.commit()
+
+        cursor.execute("SELECT * FROM server_link_config ORDER BY id DESC LIMIT 1")
+        cfg = cursor.fetchone()
+
+        cursor.execute("SELECT * FROM server_link_history ORDER BY id DESC LIMIT 10")
+        history = cursor.fetchall()
+        for h in history:
+            if h.get('created_at'):
+                h['created_at'] = h['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "status": "success",
+            "current_detected_url": current_url,
+            "saved_config": {
+                "current_url": cfg.get('current_url') if cfg else None,
+                "previous_url": cfg.get('previous_url') if cfg else None,
+                "last_checked_at": cfg.get('last_checked_at').strftime('%Y-%m-%d %H:%M:%S') if cfg and cfg.get('last_checked_at') else None,
+                "last_notified_at": cfg.get('last_notified_at').strftime('%Y-%m-%d %H:%M:%S') if cfg and cfg.get('last_notified_at') else None,
+            } if cfg else None,
+            "history": history
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/server-link/broadcast")
+def trigger_server_link_broadcast(admin: str = Depends(verify_admin_token)):
+    """Memicu pengiriman siaran link server terbaru ke seluruh kontak Aslab/Asmot/Admin via WA (memerlukan token Admin)"""
+    try:
+        res = wa_notifier.check_and_broadcast_server_url_change(force_broadcast=True)
+        return {
+            "status": "success",
+            "result": res
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 
 
 class SemesterActiveRequest(BaseModel):

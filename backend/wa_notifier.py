@@ -1314,54 +1314,233 @@ def get_perubahan_kurikulum(prodi: str = None):
             cursor.close()
             conn.close()
 
-def get_ngrok_link():
-    """Mendapatkan link server aktif (Cloudflare Tunnel atau Ngrok) saat ini dan info scan QR di monitor."""
-    # 1. Cek apakah ada URL Publik di .env (misal domain custom Cloudflare)
+def init_server_link_tables(cursor):
+    """Membuat tabel pemantau link server jika belum ada di database."""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS server_link_config (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            current_url VARCHAR(255) NOT NULL,
+            previous_url VARCHAR(255) NULL,
+            last_checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            last_notified_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS server_link_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            url_lama VARCHAR(255) NULL,
+            url_baru VARCHAR(255) NOT NULL,
+            sumber_tunnel VARCHAR(50) DEFAULT 'Cloudflare',
+            total_kontak_dikirim INT DEFAULT 0,
+            catatan VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """)
+
+def detect_current_public_url():
+    """
+    Mendeteksi URL publik server yang sedang aktif dari berbagai sumber:
+    1. Environment variable SERVER_PUBLIC_URL / CLOUDFLARE_URL
+    2. Cloudflare quick tunnel log (tunnel_logs/tunnel.log)
+    3. last_tunnel.txt
+    4. Ngrok local API / last_ngrok.txt
+    """
+    # 1. Domain kustom / URL dari .env
     env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
     if env_url and env_url.startswith("http"):
-        return f"Link Server Web Jadwal: {env_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+        return env_url.rstrip("/")
 
-    # 2. Cek live tunnel_logs/tunnel.log
-    for lp in ["tunnel_logs/tunnel.log", "/var/log/cloudflared/tunnel.log", "/app/tunnel_logs/tunnel.log", "tunnel.log"]:
+    # 2. Live Cloudflare Quick Tunnel dari tunnel_logs/tunnel.log
+    log_paths = [
+        "tunnel_logs/tunnel.log",
+        "/var/log/cloudflared/tunnel.log",
+        "/app/tunnel_logs/tunnel.log",
+        "tunnel.log"
+    ]
+    for lp in log_paths:
         if os.path.exists(lp):
             try:
                 with open(lp, "r", encoding="utf-8", errors="ignore") as f:
                     matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', f.read())
                     if matches:
-                        return f"Link Server Cloudflare: {matches[-1]}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+                        cf_url = matches[-1].rstrip("/")
+                        try:
+                            with open("last_tunnel.txt", "w", encoding="utf-8") as tf:
+                                tf.write(cf_url)
+                        except Exception:
+                            pass
+                        return cf_url
             except Exception:
                 pass
 
-    # 2b. Cek file last_tunnel.txt jika ada
+    # 2b. Fallback ke last_tunnel.txt
     if os.path.exists("last_tunnel.txt"):
         try:
-            with open("last_tunnel.txt", "r") as f:
-                saved_url = f.read().strip()
-                if saved_url.startswith("http"):
-                    return f"Link Server Cloudflare: {saved_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+            with open("last_tunnel.txt", "r", encoding="utf-8") as f:
+                saved = f.read().strip()
+                if saved.startswith("http"):
+                    return saved.rstrip("/")
         except Exception:
             pass
 
-    # 3. Cek API Ngrok lokal jika sedang memakai ngrok
+    # 3. Ngrok API
     try:
-        response = requests.get("http://localhost:4040/api/tunnels", timeout=2)
-        if response.status_code == 200:
-            tunnels = response.json().get('tunnels', [])
-            for tunnel in tunnels:
-                if tunnel['public_url'].startswith("https"):
-                    return f"Link Server Ngrok: {tunnel['public_url']}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+        r = requests.get("http://localhost:4040/api/tunnels", timeout=1)
+        if r.status_code == 200:
+            for t in r.json().get('tunnels', []):
+                pub = t.get('public_url', '')
+                if pub.startswith("https"):
+                    return pub.rstrip("/")
     except Exception:
         pass
 
     if os.path.exists("last_ngrok.txt"):
         try:
-            with open("last_ngrok.txt", "r") as f:
-                saved_url = f.read().strip()
-                if saved_url.startswith("http"):
-                    return f"Link Server Ngrok: {saved_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
+            with open("last_ngrok.txt", "r", encoding="utf-8") as f:
+                saved = f.read().strip()
+                if saved.startswith("http"):
+                    return saved.rstrip("/")
         except Exception:
             pass
 
+    return None
+
+def check_and_broadcast_server_url_change(force_broadcast: bool = False):
+    """
+    Membandingkan URL publik server saat ini dengan yang tercatat di database MySQL.
+    Jika link berganti (misal mati lampu & tunnel baru terbentuk) atau force_broadcast=True:
+    1. Catat ke server_link_config dan server_link_history.
+    2. Kirim notifikasi otomatis WhatsApp ke seluruh Aslab, Asmot, dan Admin terdaftar.
+    """
+    current_url = detect_current_public_url()
+    if not current_url:
+        return {"status": "skipped", "message": "Link publik belum tersedia (tunnel belum siap)."}
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        init_server_link_tables(cursor)
+        conn.commit()
+
+        cursor.execute("SELECT id, current_url, previous_url FROM server_link_config ORDER BY id DESC LIMIT 1")
+        last_cfg = cursor.fetchone()
+
+        now_wib = get_wib_now()
+        waktu_str = format_tanggal_indo(now_wib.date()) + f" pukul {now_wib.strftime('%H:%M')} WIB"
+
+        is_new = False
+        prev_url = None
+
+        if not last_cfg:
+            # Belum ada konfigurasi awal: Simpan record pertama
+            cursor.execute("""
+                INSERT INTO server_link_config (current_url, previous_url, last_notified_at)
+                VALUES (%s, NULL, %s)
+            """, (current_url, now_wib if force_broadcast else None))
+            cursor.execute("""
+                INSERT INTO server_link_history (url_lama, url_baru, sumber_tunnel, catatan)
+                VALUES (NULL, %s, 'Cloudflare', 'Inisialisasi link server awal')
+            """, (current_url,))
+            conn.commit()
+            if not force_broadcast:
+                print(f"[Server Link Monitor] Inisialisasi link server awal tersimpan di DB: {current_url}")
+                return {"status": "initialized", "current_url": current_url}
+            is_new = True
+        else:
+            prev_url = (last_cfg.get('current_url') or '').strip().rstrip("/")
+            if prev_url != current_url or force_broadcast:
+                is_new = True
+                cfg_id = last_cfg['id']
+                cursor.execute("""
+                    UPDATE server_link_config
+                    SET previous_url = %s, current_url = %s, last_notified_at = %s
+                    WHERE id = %s
+                """, (prev_url, current_url, now_wib, cfg_id))
+                cursor.execute("""
+                    INSERT INTO server_link_history (url_lama, url_baru, sumber_tunnel, catatan)
+                    VALUES (%s, %s, 'Cloudflare', 'Terdeteksi pergantian link otomatis')
+                """, (prev_url, current_url))
+                conn.commit()
+                print(f"[Server Link Monitor] Link server berganti! Dari: {prev_url} -> Menjadi: {current_url}")
+
+        if not is_new:
+            # Tidak ada perubahan link
+            cursor.execute("UPDATE server_link_config SET last_checked_at = CURRENT_TIMESTAMP WHERE id = %s", (last_cfg['id'],))
+            conn.commit()
+            return {"status": "unchanged", "current_url": current_url}
+
+        # LINK BERGANTI: Kirim notifikasi WA ke seluruh kontak terdaftar di asisten_lab
+        cursor.execute("""
+            SELECT id_aslab, nama_aslab, no_wa, role, kampus_tugas 
+            FROM asisten_lab 
+            WHERE no_wa IS NOT NULL AND no_wa != '' AND no_wa != '-'
+        """)
+        recipients = cursor.fetchall()
+
+        sent_count = 0
+        for rec in recipients:
+            clean_wa = re.sub(r'[^0-9]', '', str(rec['no_wa']))
+            if clean_wa.startswith('08'):
+                clean_wa = '628' + clean_wa[2:]
+            elif clean_wa.startswith('8'):
+                clean_wa = '628' + clean_wa[1:]
+
+            if len(clean_wa) < 9:
+                continue
+
+            nama = rec.get('nama_aslab') or 'Asisten'
+            role = (rec.get('role') or 'aslab').upper()
+
+            old_info = f"\n*Link Sebelumnya:*\n~{prev_url}~\n" if prev_url else ""
+            pesan_wa = (
+                f"*PEMBERITAHUAN SERVER JADWAL UNAMA*\n"
+                f"_Pembaruan Link Akses Web Otomatis_\n\n"
+                f"Halo *{nama}* ({role}), server jadwal kuliah baru saja online / restart (sebelumnya mati lampu atau koneksi terputus).\n\n"
+                f"*Link Server Baru:*\n"
+                f"{current_url}\n"
+                f"{old_info}\n"
+                f"*Waktu Pembaruan:*\n"
+                f"{waktu_str}\n\n"
+                f"_Silakan klik link di atas untuk membuka web jadwal kuliah UNAMA dari HP._"
+            )
+
+            try:
+                sukses = send_wa_message(clean_wa, pesan_wa)
+                if sukses:
+                    sent_count += 1
+                    time.sleep(1.5)  # Jeda aman antar pesan WA
+            except Exception as e_send:
+                print(f"[Server Link WA Error] Gagal kirim ke {clean_wa}: {e_send}")
+
+        # Update total terkirim di riwayat terakhir
+        cursor.execute("""
+            UPDATE server_link_history 
+            SET total_kontak_dikirim = %s 
+            WHERE url_baru = %s 
+            ORDER BY id DESC LIMIT 1
+        """, (sent_count, current_url))
+        conn.commit()
+
+        print(f"[Server Link Monitor] Sukses mengirim notifikasi link server baru ke {sent_count} kontak.")
+        return {
+            "status": "broadcasted",
+            "url_lama": prev_url,
+            "url_baru": current_url,
+            "total_sent": sent_count
+        }
+    except Exception as e:
+        print(f"[Server Link Monitor Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_ngrok_link():
+    """Mendapatkan link server aktif saat ini dan info scan QR di monitor."""
+    pub_url = detect_current_public_url()
+    if pub_url:
+        return f"Link Server Web Jadwal: {pub_url}\n\n*Tips:* Kamu juga bisa langsung scan *Barcode / QR Code* di layar monitor ruang Aslab untuk membuka website di HP!"
     return "Server saat ini berjalan lokal di http://127.0.0.1:8000 (atau scan Barcode QR di layar monitor ruang Aslab)."
 
 def update_profil_aslab(nama_panggilan_baru: str = None, ruangan_baru: str = None):
@@ -2789,12 +2968,18 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
             conn.close()
 
 async def wa_notifier_loop():
-    print("WA Notifier Loop Started. (Automatic notifications ENABLED - Timezone: Asia/Jakarta)")
+    print("WA Notifier Loop Started. (Automatic notifications & Server Link Monitor ENABLED - Timezone: Asia/Jakarta)")
     while True:
         try:
             check_lab_schedules() # fitur ini DIAKTIFKAN kembali secara permanen.
         except Exception as loop_err:
             print(f"[WA Notifier Error in loop] {loop_err}")
+
+        try:
+            # Otomatis pantau apakah link Cloudflare Tunnel / Server berganti (misal sehabis mati lampu)
+            check_and_broadcast_server_url_change()
+        except Exception as link_err:
+            print(f"[Server Link Checker Error] {link_err}")
             
         now = get_wib_now()
         # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak

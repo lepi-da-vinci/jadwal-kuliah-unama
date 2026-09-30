@@ -152,3 +152,25 @@ CREATE TABLE IF NOT EXISTS kurikulum_perubahan (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_perubahan_prodi (prodi)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 12. Tabel Pemantau Link Server & Tunnel (Deteksi Otomatis Pergantian Link saat Mati Lampu)
+CREATE TABLE IF NOT EXISTS server_link_config (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    current_url VARCHAR(255) NOT NULL,
+    previous_url VARCHAR(255) NULL,
+    last_checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_notified_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 13. Tabel Riwayat Perubahan Link Server & Log Pengiriman WA
+CREATE TABLE IF NOT EXISTS server_link_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    url_lama VARCHAR(255) NULL,
+    url_baru VARCHAR(255) NOT NULL,
+    sumber_tunnel VARCHAR(50) DEFAULT 'Cloudflare',
+    total_kontak_dikirim INT DEFAULT 0,
+    catatan VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
