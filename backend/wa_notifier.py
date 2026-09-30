@@ -862,7 +862,7 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
         sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
 
         sql = """
-            SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, d.nama_dosen
+            SELECT j.jam, r.id_ruangan, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, d.nama_dosen
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
@@ -874,17 +874,34 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
         if kampus_tugas and kampus_tugas.lower() != 'semua':
             sql += " AND LOWER(r.kampus) = LOWER(%s)"
             params.append(kampus_tugas)
-        sql += " ORDER BY j.jam, r.nama_ruangan"
+        sql += " ORDER BY r.nama_ruangan, j.jam"
 
         cursor.execute(sql, params)
         rows = cursor.fetchall()
         
-        mau_mulai = []
+        room_map = {}
         for r in rows:
+            rid = r['id_ruangan']
+            if rid not in room_map:
+                room_map[rid] = []
             sm = int(r['jam'].total_seconds()) // 60
-            diff = sm - current_min
-            if 0 < diff <= 45:
-                mau_mulai.append((r, sm, diff))
+            dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
+            em = sm + dur
+            room_map[rid].append({'row': r, 'sm': sm, 'em': em})
+
+        mau_mulai = []
+        for rid, items in room_map.items():
+            items = sorted(items, key=lambda x: x['sm'])
+            for i, it in enumerate(items):
+                diff = it['sm'] - current_min
+                if 0 < diff <= 45:
+                    status_ac = "Perlu HIDUPKAN AC"
+                    if i > 0:
+                        prev = items[i-1]
+                        gap_prev = it['sm'] - prev['em']
+                        if gap_prev <= 60:
+                            status_ac = "AC standby dari kelas sebelumnya"
+                    mau_mulai.append((it['row'], it['sm'], diff, status_ac))
 
         if not mau_mulai:
             return (
@@ -899,11 +916,15 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
             f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
             f"------------------------------\n\n"
         )
-        for r, sm, diff in mau_mulai:
+        for r, sm, diff, status_ac in mau_mulai:
             jam_mulai = f"{sm//60:02d}:{sm%60:02d}"
-            msg += f"• *{r['nama_ruangan']} ({r['kampus']}):* Jam {jam_mulai} WIB (_{diff} menit lagi_)\n  MK: {r['nama_mk']} ({r['kelas']})\n\n"
+            msg += (
+                f"• *{r['nama_ruangan']} ({r['kampus']}):* Jam {jam_mulai} WIB (_{diff} menit lagi_)\n"
+                f"  MK: {r['nama_mk']} ({r['kelas']})\n"
+                f"  Status: _{status_ac}_\n\n"
+            )
 
-        msg += "------------------------------\n_Mohon segera HIDUPKAN AC ruangan di atas sebelum mahasiswa masuk._"
+        msg += "------------------------------\n_Mohon segera HIDUPKAN AC ruangan yang membutuhkan sebelum mahasiswa masuk._"
         return msg
     except Exception as e:
         return f"Error cek kelas mau mulai: {e}"
@@ -913,7 +934,7 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
             conn.close()
 
 def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
-    """Mengecek kelas yang baru saja selesai atau sebentar lagi selesai tanpa kelas lanjutan untuk persiapan mematikan AC."""
+    """Mengecek kelas yang baru saja selesai atau sebentar lagi selesai tanpa kelas lanjutan (atau jeda panjang) untuk persiapan mematikan AC."""
     now = get_wib_now()
     today_str = now.strftime("%Y-%m-%d")
     current_min = now.hour * 60 + now.minute
@@ -956,21 +977,42 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
             items = sorted(items, key=lambda x: x['sm'])
             for i, it in enumerate(items):
                 diff = it['em'] - current_min
+                # Cek kelas yang selesai dalam rentang -30 s/d +30 menit
                 if -30 <= diff <= 30:
-                    next_has_class = False
-                    if i + 1 < len(items):
-                        gap = items[i+1]['sm'] - it['em']
-                        if gap < 45:
-                            next_has_class = True
-                    if not next_has_class:
-                        selesai_list.append((it['row'], it['em'], diff))
+                    is_last = (i + 1 >= len(items))
+                    if is_last:
+                        selesai_list.append({
+                            'row': it['row'],
+                            'em': it['em'],
+                            'diff': diff,
+                            'tipe': 'TERAKHIR',
+                            'info': 'Kelas terakhir hari ini (ruangan selesai)'
+                        })
+                    else:
+                        nxt_item = items[i+1]
+                        gap = nxt_item['sm'] - it['em']
+                        if gap > 60:
+                            nxt_jam = f"{nxt_item['sm']//60:02d}:{nxt_item['sm']%60:02d}"
+                            selesai_list.append({
+                                'row': it['row'],
+                                'em': it['em'],
+                                'diff': diff,
+                                'tipe': 'JEDA',
+                                'gap': gap,
+                                'nxt_jam': nxt_jam,
+                                'nxt_mk': nxt_item['row']['nama_mk'],
+                                'info': f"Jeda kosong {gap} mnt (lanjut jam {nxt_jam})"
+                            })
+                        else:
+                            # gap <= 60 menit: Masih ada kelas lanjutan segera, AC jangan dimatikan!
+                            pass
 
         if not selesai_list:
             return (
                 f"*PERSIAPAN MATIKAN AC ({kampus_tugas})*\n"
                 f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
                 f"------------------------------\n\n"
-                f"_Tidak ada kelas yang baru saja / sebentar lagi selesai tanpa kelas lanjutan._"
+                f"_Tidak ada kelas yang selesai tanpa kelas lanjutan (seluruh ruangan masih berlanjut ke sesi berikutnya)._"
             )
 
         msg = (
@@ -978,12 +1020,19 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
             f"_{format_tanggal_indo(now)} • Jam {now.strftime('%H:%M')} WIB_\n"
             f"------------------------------\n\n"
         )
-        for r, em, diff in selesai_list:
+        for s in selesai_list:
+            r = s['row']
+            em = s['em']
+            diff = s['diff']
             jam_selesai = f"{em//60:02d}:{em%60:02d}"
             ket_waktu = f"selesai {abs(diff)} menit lalu" if diff < 0 else (f"selesai dalam {diff} menit" if diff > 0 else "selesai sekarang")
-            msg += f"• *{r['nama_ruangan']} ({r['kampus']}):* Jam {jam_selesai} WIB (_{ket_waktu}_)\n  MK: {r['nama_mk']} ({r['kelas']})\n\n"
+            msg += (
+                f"• *{r['nama_ruangan']} ({r['kampus']}):* Jam {jam_selesai} WIB (_{ket_waktu}_)\n"
+                f"  MK: {r['nama_mk']} ({r['kelas']})\n"
+                f"  Status: _{s['info']}_\n\n"
+            )
 
-        msg += "------------------------------\n_Ruangan di atas tidak memiliki kelas lanjutan. Mohon pastikan AC segera DIMATIKAN._"
+        msg += "------------------------------\n_Mohon pastikan AC dimatikan untuk ruangan dengan status selesai / jeda kosong._"
         return msg
     except Exception as e:
         return f"Error cek kelas selesai: {e}"
@@ -2805,7 +2854,7 @@ def check_lab_schedules():
             for i in range(len(scheds) - 1):
                 curr, nxt = scheds[i], scheds[i+1]
                 gap = nxt['start_min'] - curr['end_min']
-                if gap >= 45:
+                if gap > 60:
                     closings.append(curr)
                     openings.append(nxt)
             closings.append(scheds[-1])
@@ -2857,10 +2906,16 @@ def check_lab_schedules():
                 for i in range(len(scheds) - 1):
                     curr, nxt = scheds[i], scheds[i+1]
                     gap = nxt['start_min'] - curr['end_min']
-                    if gap >= 45:
-                        closings_asmot.append(curr)
+                    if gap > 60:
+                        # Jeda panjang (> 60 menit): AC dimatikan sementara, lalu dinyalakan lagi sebelum kelas berikutnya
+                        closings_asmot.append({'cls': curr, 'tipe': 'JEDA', 'gap': gap, 'nxt': nxt})
                         openings_asmot.append(nxt)
-                closings_asmot.append(scheds[-1])
+                    else:
+                        # gap <= 60 menit: Masih ada kelas lanjutan segera, AC jangan dimatikan!
+                        pass
+
+                # Kelas terakhir hari ini di ruangan tersebut
+                closings_asmot.append({'cls': scheds[-1], 'tipe': 'SELESAI', 'gap': 0, 'nxt': None})
 
                 # 1. Pengingat Hidupkan AC (20 menit sebelum kelas)
                 for cls in openings_asmot:
@@ -2885,22 +2940,37 @@ def check_lab_schedules():
                             if terkirim:
                                 sent_notifications.add(notif_key)
 
-                # 2. Pengingat Matikan AC (saat kelas selesai dan tidak ada kelas lanjutan)
-                for cls in closings_asmot:
+                # 2. Pengingat Matikan AC (hanya saat jeda panjang atau kelas terakhir hari ini)
+                for item in closings_asmot:
+                    cls = item['cls']
                     diff_tutup = cls['end_min'] - current_total_min
                     if 0 <= diff_tutup <= 5:
                         notif_key = f"{current_date}_{id_room}_asmot_ac_off_{cls['end_min']}"
                         if notif_key not in sent_notifications:
                             eh, em = cls['end_min'] // 60, cls['end_min'] % 60
-                            msg_asmot = (
-                                f"*PENGINGAT MATIKAN AC*\n"
-                                f"_{r_nama} ({r_kampus})_\n"
-                                f"------------------------------\n"
-                                f"• *Kelas:* {cls['nama_mk']}\n"
-                                f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
-                                f"• *Kondisi:* _Tidak ada kelas lanjutan di ruangan ini_\n\n"
-                                f"_Mohon matikan AC ruangan untuk menghemat listrik._"
-                            )
+                            if item['tipe'] == 'JEDA':
+                                nxt_cls = item['nxt']
+                                nh, nm = nxt_cls['start_min'] // 60, nxt_cls['start_min'] % 60
+                                msg_asmot = (
+                                    f"*PENGINGAT MATIKAN AC (JEDA KOSONG)*\n"
+                                    f"_{r_nama} ({r_kampus})_\n"
+                                    f"------------------------------\n"
+                                    f"• *Kelas:* {cls['nama_mk']}\n"
+                                    f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
+                                    f"• *Kondisi:* _Jeda kosong {item['gap']} menit_\n"
+                                    f"• *Kelas Lanjutan:* {nxt_cls['nama_mk']} (Mulai jam {nh:02d}:{nm:02d} WIB)\n\n"
+                                    f"_Mohon matikan AC sementara untuk menghemat listrik._"
+                                )
+                            else:
+                                msg_asmot = (
+                                    f"*PENGINGAT MATIKAN AC (SELESAI HARIAN)*\n"
+                                    f"_{r_nama} ({r_kampus})_\n"
+                                    f"------------------------------\n"
+                                    f"• *Kelas:* {cls['nama_mk']}\n"
+                                    f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
+                                    f"• *Kondisi:* _Kelas terakhir hari ini (ruangan selesai digunakan)_\n\n"
+                                    f"_Mohon pastikan AC dan fasilitas ruangan dimatikan._"
+                                )
                             terkirim = False
                             for target_wa in target_asmots:
                                 if send_wa_message(target_wa, msg_asmot):
