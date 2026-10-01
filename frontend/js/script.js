@@ -102,23 +102,66 @@ function formatHighlightedInfoMaseBody(pesanText) {
   // Escape HTML first to prevent XSS
   clean = escapeHtml(clean);
 
-  // Highlight Ruangan (e.g. R. 4.2 (Thehok), Labor 1.5 (Kobar))
-  clean = clean.replace(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)/gi, '<span class="im-hl-room">$1</span>');
-  // Highlight Jam (e.g. jam 14:45, 14:45 WIB, 10:15 s/d 12:30)
-  clean = clean.replace(/\b(?:jam\s+)?(\d{1,2}[:.]\d{2}(?:\s*(?:s\/d|-)\s*\d{1,2}[:.]\d{2})?(?:\s*WIB)?)\b/gi, '<span class="im-hl-time">Jam $1</span>');
-  // Highlight Kelas (e.g. (04PSP))
-  clean = clean.replace(/\(([0-9]{2}[A-Za-z0-9]{2,5})\)/g, '(<span class="im-hl-class">$1</span>)');
-  // Highlight Status
-  clean = clean.replace(/\b(ONLINE\s*\([A-Za-z0-9]+\)|ONLINE|DARING)/gi, '<span class="im-hl-ol">$1</span>');
-  clean = clean.replace(/\b(DIBATALKAN\s*\([A-Za-z0-9]+\)|BATAL|CANCEL)/gi, '<span class="im-hl-batal">$1</span>');
-  clean = clean.replace(/\b(TATAP MUKA\s*\([A-Za-z0-9]+\)|TATAP MUKA)/gi, '<span class="im-hl-tm">$1</span>');
-  clean = clean.replace(/\b(PINDAH RUANGAN|dipindahkan MASUK ke|dipindahkan KELUAR dari)/gi, '<span class="im-hl-pindah">$1</span>');
-  clean = clean.replace(/\b(Kelas TAMBAHAN|TAMBAHAN)/gi, '<span class="im-badge im-badge-tambah" style="padding:1px 6px; font-size:0.8em;">$1</span>');
-  clean = clean.replace(/\b(JEDA PANJANG|JEDA SINGKAT|JEDA)/gi, '<span class="im-badge im-badge-jeda" style="padding:1px 6px; font-size:0.8em;">$1</span>');
-  // Highlight Action notes
-  clean = clean.replace(/\b(Ruangan kosong|Lab tidak digunakan|Lab kosong|AC wajib dimatikan|AC jangan dihidupkan)\b/gi, '<span class="im-hl-note">$1</span>');
-  // Bold MK prefix
-  clean = clean.replace(/^Kelas\s+([^<(]+?)(?=\s*\(|<span)/i, '<span class="im-mk-name">Kelas $1</span>');
+  const tokens = [];
+  function addToken(html) {
+    const placeholder = `___TOKEN_${tokens.length}___`;
+    tokens.push(html);
+    return placeholder;
+  }
+
+  // 1. Highlight Ruangan (Prioritas 1: tangkap seluruh nama ruangan beserta kampus dan amankan agar tidak tertimpa jam)
+  clean = clean.replace(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)/gi, (m, p1) => {
+    return addToken(`<span class="im-hl-room">${p1}</span>`);
+  });
+
+  // 2. Highlight Status Perubahan & Badges
+  clean = clean.replace(/\b(ONLINE\s*\([A-Za-z0-9]+\)|ONLINE|DARING)/gi, (m, p1) => {
+    return addToken(`<span class="im-hl-ol">${p1}</span>`);
+  });
+  clean = clean.replace(/\b(DIBATALKAN\s*\([A-Za-z0-9]+\)|BATAL|CANCEL)/gi, (m, p1) => {
+    return addToken(`<span class="im-hl-batal">${p1}</span>`);
+  });
+  clean = clean.replace(/\b(TATAP MUKA\s*\([A-Za-z0-9]+\)|TATAP MUKA)/gi, (m, p1) => {
+    return addToken(`<span class="im-hl-tm">${p1}</span>`);
+  });
+  clean = clean.replace(/\b(PINDAH RUANGAN|dipindahkan MASUK ke|dipindahkan KELUAR dari)/gi, (m, p1) => {
+    return addToken(`<span class="im-hl-pindah">${p1}</span>`);
+  });
+  clean = clean.replace(/\b(Kelas TAMBAHAN|TAMBAHAN)/gi, (m, p1) => {
+    return addToken(`<span class="im-badge im-badge-tambah" style="padding:1px 6px; font-size:0.8em;">${p1}</span>`);
+  });
+  clean = clean.replace(/\b(JEDA PANJANG|JEDA SINGKAT|JEDA)/gi, (m, p1) => {
+    return addToken(`<span class="im-badge im-badge-jeda" style="padding:1px 6px; font-size:0.8em;">${p1}</span>`);
+  });
+
+  // 3. Highlight Jam (HANYA jam yang menggunakan format waktu valid HH:MM)
+  clean = clean.replace(/\b(?:(jam|pada)\s+)?(\d{1,2}:\d{2}(?:\s*(?:s\/d|-)\s*\d{1,2}:\d{2})?(?:\s*WIB)?)\b/gi, (m, prefix, timeStr) => {
+    const fullText = prefix ? `${prefix} ${timeStr}` : timeStr;
+    return addToken(`<span class="im-hl-time">${fullText}</span>`);
+  });
+  clean = clean.replace(/\b(jam|pada)\s+(\d{1,2}\.\d{2}(?:\s*(?:s\/d|-)\s*\d{1,2}\.\d{2})?(?:\s*WIB)?)\b/gi, (m, prefix, timeStr) => {
+    return addToken(`<span class="im-hl-time">${prefix} ${timeStr}</span>`);
+  });
+
+  // 4. Highlight Kode Kelas (e.g. (01PW1), (04PSP), (03MB1))
+  clean = clean.replace(/\(\s*([0-9]{2}[A-Za-z0-9]{2,5})\s*\)/g, (m, kls) => {
+    return `(<span class="im-hl-class">${kls}</span>)`;
+  });
+
+  // 5. Highlight Action Notes
+  clean = clean.replace(/\b(Ruangan kosong|Lab tidak digunakan|Lab kosong|AC wajib dimatikan|AC jangan dihidupkan|Ruangan digunakan sesuai jadwal)\b/gi, (m, p1) => {
+    return addToken(`<span class="im-hl-note">${p1}</span>`);
+  });
+
+  // 6. Highlight MK Name
+  clean = clean.replace(/^Kelas\s+([^<(]+?)(?=\s*\(|___TOKEN_)/i, (m, mkName) => {
+    return `<span class="im-mk-name">Kelas ${mkName.trim()}</span> `;
+  });
+
+  // 7. Kembalikan seluruh token HTML yang telah diamankan
+  for (let i = 0; i < tokens.length; i++) {
+    clean = clean.replace(`___TOKEN_${i}___`, tokens[i]);
+  }
 
   return clean;
 }
@@ -2882,22 +2925,31 @@ let currentRuangWarnings = [];
 function getRoomFromNotification(pesan = '') {
   if (!pesan) return '';
   const p = String(pesan).trim();
-  // 1. Format JEDA: "JEDA ...: R. 4.9 (Thehok) kosong ..." atau "JEDA ...: Ruang R. 4.9 (Thehok) kosong ..."
+  // 1. Format JEDA: "JEDA ...: R. 4.9 (Thehok) kosong ..." atau "JEDA ...: Ruang 2.17 (Kobar) kosong ..."
   const jedaMatch = p.match(/JEDA(?:\s+[A-Z]+)?(?:\s*\([^)]*\))?:\s*(?:Ruang\s+)?([^\n\r:]+?)\s+kosong/i);
-  if (jedaMatch) return jedaMatch[1].trim();
+  if (jedaMatch) return formatRoomName(jedaMatch[1].trim());
 
   // 2. Format PINDAH RUANGAN:
   // "... dipindahkan MASUK ke R. 3.2 (Thehok) (sebelumnya di R. 2.1 (Kobar)). Dosen: ..."
   const pindahMasuk = p.match(/dipindahkan\s+MASUK\s+ke\s+([^\n\r,]+?)(?:\s*\(sebelumnya|\.\s+[A-Z]|\.$|$)/i);
-  if (pindahMasuk) return pindahMasuk[1].trim();
+  if (pindahMasuk) return formatRoomName(pindahMasuk[1].trim());
 
   // "... dipindahkan KELUAR dari R. 2.1 (Kobar) ke R. 3.2 (Thehok)."
   const pindahKeluar = p.match(/dipindahkan\s+KELUAR\s+dari\s+([^\n\r,]+?)\s+ke\s+/i);
-  if (pindahKeluar) return pindahKeluar[1].trim();
+  if (pindahKeluar) return formatRoomName(pindahKeluar[1].trim());
 
-  // 3. Format TAMBAHAN / PERUBAHAN: "... di R. 4.9 (Thehok) pada ..." atau "... di Labor 1.3 (Thehok) dialihkan ..."
-  const diMatch = p.match(/\bdi\s+([^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.\s+[A-Z]|\.$)/i);
-  if (diMatch) return diMatch[1].trim();
+  // 3. Format Ruangan dengan prefix spesifik (R., Ruang, Labor, Lab) setelah kata 'di' atau 'ke'
+  // Ini menghindari salah tangkap kata 'di' pada nama mata kuliah seperti "Inovasi Sistem Informasi di Organisasi dan Masyarakat"
+  const roomExplicitMatch = p.match(/\b(?:di|ke)\s+((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)/i);
+  if (roomExplicitMatch) return formatRoomName(roomExplicitMatch[1].trim());
+
+  // 4. Jika ada pola nama ruangan baku di dalam teks:
+  const roomPatternMatch = p.match(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)/i);
+  if (roomPatternMatch) return formatRoomName(roomPatternMatch[1].trim());
+
+  // 5. Fallback jika diawali kata ruangan (R., Ruang, Labor, Lab, S2, Cisco)
+  const diMatch = p.match(/\b(?:di|ke)\s+((?:R\.|Ruang|Labor|Lab|S2|Cisco)[^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.\s+[A-Z]|\.$)/i);
+  if (diMatch) return formatRoomName(diMatch[1].trim());
 
   return '';
 }
@@ -2939,6 +2991,11 @@ function parseRoomAndCampus(raw = '') {
   if (campMatch) {
     campus = campMatch[1];
     s = s.replace(/\s*\((Thehok|Kobar)\)/i, '').trim();
+  }
+  // Amankan nama ruangan agar tidak memuat teks judul MK di depannya jika ada
+  const roomCleanMatch = s.match(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+|S2\b[^\n\r]*|Cisco\b[^\n\r]*)/i);
+  if (roomCleanMatch) {
+    s = roomCleanMatch[1].trim();
   }
   // Bersihkan prefix "Ruang " sebelum "R.", "Labor", "Lab", atau "Ruang"
   s = s.replace(/^(?:Ruang\s+)+(?=R\b|R\.|Labor|Lab|Ruang)/i, '')
@@ -4916,13 +4973,22 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     filterTanggal.value = customDate;
   }
 
+  // Failsafe sanitasi jika roomName memuat teks judul mata kuliah di depannya
+  const roomOnlyMatch = String(roomName).match(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+|S2\b[^\n\r]*|Cisco\b[^\n\r]*)/i);
+  if (roomOnlyMatch) {
+    roomName = roomOnlyMatch[1].trim();
+  }
+
   const getCleanRoom = (str) => {
     if (!str) return '';
-    return formatRoomName(str, false)
+    let s = formatRoomName(str, false)
       .replace(/\s*\(Kampus\s+(?:Thehok|Kobar)\)/gi, '')
       .replace(/\s*\((?:Thehok|Kobar)\)/gi, '')
       .replace(/\s*\(.*?\)/gi, '')
-      .trim().toLowerCase();
+      .trim();
+    const m = s.match(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+|S2\b[^\n\r]*|Cisco\b[^\n\r]*)/i);
+    if (m) s = m[1].trim();
+    return s.toLowerCase();
   };
 
   const cleanTargetRoom = getCleanRoom(roomName);

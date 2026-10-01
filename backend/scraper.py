@@ -698,7 +698,14 @@ def extract_room_from_notification(pesan: str) -> str:
     m = re.search(r'dipindahkan\s+KELUAR\s+dari\s+([^\n\r,]+?)\s+ke\s+', p, re.I)
     if m:
         return format_room_clean(m.group(1).strip())
-    m = re.search(r'\bdi\s+([^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.\s+[A-Z]|\.$)', p, re.I)
+    # Format ruangan spesifik setelah kata 'di' atau 'ke' (mencegah salah tangkap kata 'di' pada nama mata kuliah)
+    m = re.search(r'\b(?:di|ke)\s+((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)', p, re.I)
+    if m:
+        return format_room_clean(m.group(1).strip())
+    m = re.search(r'\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)', p, re.I)
+    if m:
+        return format_room_clean(m.group(1).strip())
+    m = re.search(r'\bdi\s+((?:R\.|Ruang|Labor|Lab|S2|Cisco)[^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.\s+[A-Z]|\.$)', p, re.I)
     if m:
         return format_room_clean(m.group(1).strip())
     return ""
