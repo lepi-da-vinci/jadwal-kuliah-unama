@@ -52,12 +52,12 @@ function formatRoomName(rawName, isMobile = null) {
 
   // 1. Bersihkan kata 'Kampus' dari kurung atau teks: misal (Kampus Thehok) -> (Thehok)
   name = name.replace(/\(Kampus\s+(Thehok|Kobar)\)/gi, '($1)')
-             .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
-             .replace(/\bKampus\s+UNAMA\b/gi, 'UNAMA');
+    .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
+    .replace(/\bKampus\s+UNAMA\b/gi, 'UNAMA');
 
   // Bersihkan prefix 'Ruang' atau 'R.' berlebih agar tidak terjadi "Ruang R." atau "R. Labor"
   name = name.replace(/\b(?:Ruang|R\.)\s+(?=R\b|R\.|Labor|Lab|Ruang)/gi, '')
-             .replace(/\bRuang\s+(\d)/gi, 'R. $1');
+    .replace(/\bRuang\s+(\d)/gi, 'R. $1');
 
   // 2. Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
   if (!name.toLowerCase().includes('b3.4')) {
@@ -66,15 +66,15 @@ function formatRoomName(rawName, isMobile = null) {
 
   // 3. Gedung Pasca diganti menjadi 'S2' agar lebih simpel
   name = name.replace(/\b(?:Gedung|Gd\.?)\s+Pasca(?:sarjana)?\b/gi, 'S2')
-             .replace(/\bPasca(?:sarjana)?\b/gi, 'S2');
+    .replace(/\bPasca(?:sarjana)?\b/gi, 'S2');
 
   // 4. Persingkat sebutan labor jadi lab kalau mode HP, desktop tetap labor
   if (isMobile) {
     name = name.replace(/\bLaboratorium\b/gi, 'Lab')
-               .replace(/\bLabor\b/gi, 'Lab');
+      .replace(/\bLabor\b/gi, 'Lab');
   } else {
     name = name.replace(/\bLab\s+(\d)/gi, 'Labor $1')
-               .replace(/\bLaboratorium\b/gi, 'Labor');
+      .replace(/\bLaboratorium\b/gi, 'Labor');
   }
 
   return name;
@@ -89,6 +89,219 @@ function formatRoomNameHtml(rawName) {
   return `<span class="title-desktop">${escapeHtml(desk)}</span><span class="title-mobile">${escapeHtml(mob)}</span>`;
 }
 window.formatRoomNameHtml = formatRoomNameHtml;
+
+// ─── Info Mase Highlighting & Card Renderer Helpers ───
+function formatHighlightedInfoMaseBody(pesanText) {
+  if (!pesanText) return '';
+  let clean = String(pesanText)
+    .replace(/^PERUBAHAN:\s*/i, '')
+    .replace(/^PERUBAHAN STATUS:\s*/i, '')
+    .replace(/^STATUS:\s*/i, '')
+    .trim();
+
+  // Escape HTML first to prevent XSS
+  clean = escapeHtml(clean);
+
+  // Highlight Ruangan (e.g. R. 4.2 (Thehok), Labor 1.5 (Kobar))
+  clean = clean.replace(/\b((?:R\.\s*|Ruang\s*|Labor\s*|Lab\s*)\d+\.\d+(?:\s*\((?:Thehok|Kobar)\))?)/gi, '<span class="im-hl-room">$1</span>');
+  // Highlight Jam (e.g. jam 14:45, 14:45 WIB, 10:15 s/d 12:30)
+  clean = clean.replace(/\b(?:jam\s+)?(\d{1,2}[:.]\d{2}(?:\s*(?:s\/d|-)\s*\d{1,2}[:.]\d{2})?(?:\s*WIB)?)\b/gi, '<span class="im-hl-time">Jam $1</span>');
+  // Highlight Kelas (e.g. (04PSP))
+  clean = clean.replace(/\(([0-9]{2}[A-Za-z0-9]{2,5})\)/g, '(<span class="im-hl-class">$1</span>)');
+  // Highlight Status
+  clean = clean.replace(/\b(ONLINE\s*\([A-Za-z0-9]+\)|ONLINE|DARING)/gi, '<span class="im-hl-ol">$1</span>');
+  clean = clean.replace(/\b(DIBATALKAN\s*\([A-Za-z0-9]+\)|BATAL|CANCEL)/gi, '<span class="im-hl-batal">$1</span>');
+  clean = clean.replace(/\b(TATAP MUKA\s*\([A-Za-z0-9]+\)|TATAP MUKA)/gi, '<span class="im-hl-tm">$1</span>');
+  clean = clean.replace(/\b(PINDAH RUANGAN|dipindahkan MASUK ke|dipindahkan KELUAR dari)/gi, '<span class="im-hl-pindah">$1</span>');
+  clean = clean.replace(/\b(Kelas TAMBAHAN|TAMBAHAN)/gi, '<span class="im-badge im-badge-tambah" style="padding:1px 6px; font-size:0.8em;">$1</span>');
+  clean = clean.replace(/\b(JEDA PANJANG|JEDA SINGKAT|JEDA)/gi, '<span class="im-badge im-badge-jeda" style="padding:1px 6px; font-size:0.8em;">$1</span>');
+  // Highlight Action notes
+  clean = clean.replace(/\b(Ruangan kosong|Lab tidak digunakan|Lab kosong|AC wajib dimatikan|AC jangan dihidupkan)\b/gi, '<span class="im-hl-note">$1</span>');
+  // Bold MK prefix
+  clean = clean.replace(/^Kelas\s+([^<(]+?)(?=\s*\(|<span)/i, '<span class="im-mk-name">Kelas $1</span>');
+
+  return clean;
+}
+window.formatHighlightedInfoMaseBody = formatHighlightedInfoMaseBody;
+
+function renderHighlightedInfoMaseCard(n) {
+  const rawMsg = (n.pesan || '')
+    .replace(/^PERUBAHAN:\s*/i, '')
+    .replace(/^PERUBAHAN STATUS:\s*/i, '')
+    .trim();
+  const tipeNotif = (n.tipe_notif || '').toUpperCase();
+
+  const rawRoomInfo = n.ruangan || getRoomFromNotification(n.pesan);
+  const { room: parsedRoom, campus: parsedCampus } = parseRoomAndCampus(rawRoomInfo);
+  const notifDate = n.tanggal || (document.getElementById('filter-tanggal')?.value || '');
+  const clickAttr = parsedRoom
+    ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date);}" role="button" tabindex="0"`
+    : '';
+
+  // 1. Try matching Pattern 1: Perubahan Status (Online / Batal / TM)
+  // Contoh: Kelas Inovasi Sistem Informasi (04PSP) jam 14:45 di R. 4.2 (Thehok) dialihkan ke ONLINE (OL). Ruangan kosong.
+  const m1 = rawMsg.match(/^Kelas\s+(.+?)\s*\(([^)]+)\)\s*(?:jam\s*(\d{1,2}:\d{2})|pada\s*(\d{1,2}:\d{2}))\s*di\s+([A-Za-z0-9\.\s]+(?:\([^)]+\))?)\s+(dialihkan ke ONLINE \(OL\)|DIBATALKAN \(CC\)|kembali TATAP MUKA \(TM\)|[^\.]+?)\.\s*(.*)/i);
+  if (m1) {
+    const mk = m1[1].trim();
+    const kls = m1[2].trim();
+    const jam = (m1[3] || m1[4]).trim();
+    const ruang = m1[5].trim();
+    const statusText = m1[6].trim();
+    const note = m1[7].trim();
+
+    let badgeClass = 'im-badge-ol';
+    let cardType = 'im-type-ol';
+    let badgeLabel = 'ONLINE (OL)';
+
+    if (/batal|cancel|cc/i.test(statusText)) {
+      badgeClass = 'im-badge-batal';
+      cardType = 'im-type-batal';
+      badgeLabel = 'DIBATALKAN (CC)';
+    } else if (/tatap\s*muka|tm/i.test(statusText)) {
+      badgeClass = 'im-badge-tm';
+      cardType = 'im-type-tm';
+      badgeLabel = 'TATAP MUKA (TM)';
+    }
+
+    return `
+      <div class="im-card ${cardType}" ${clickAttr} title="${parsedRoom ? `Klik untuk melihat jadwal ruangan ${escapeHtml(parsedRoom)}` : ''}">
+        <div class="im-card-header">
+          <span class="im-badge ${badgeClass}">${badgeLabel}</span>
+          <span class="im-tag-room">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            ${escapeHtml(ruang)}
+          </span>
+        </div>
+        <div class="im-card-body">
+          <div style="margin-bottom: 4px;">
+            <span class="im-mk-name">${escapeHtml(mk)}</span>
+            <span class="im-tag-class">${escapeHtml(kls)}</span>
+          </div>
+          <div class="im-meta-row">
+            <span class="im-tag-time">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+              Jam ${escapeHtml(jam)} WIB
+            </span>
+            ${note ? `<span class="im-note im-note-alert">${escapeHtml(note)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 2. Try matching Pattern 2: Pindah Ruangan
+  const m2 = rawMsg.match(/^PINDAH RUANGAN:\s*Kelas\s+(.+?)\s*\(([^)]+)\)\s*jam\s*(\d{1,2}:\d{2})\s*(dipindahkan\s+(?:MASUK|KELUAR)[^.]+)\.\s*(.*)/i);
+  if (m2) {
+    const mk = m2[1].trim();
+    const kls = m2[2].trim();
+    const jam = m2[3].trim();
+    const pindahDesc = m2[4].trim();
+    const note = m2[5].trim();
+
+    return `
+      <div class="im-card im-type-pindah" ${clickAttr}>
+        <div class="im-card-header">
+          <span class="im-badge im-badge-pindah">PINDAH RUANGAN</span>
+          <span class="im-tag-time">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+            Jam ${escapeHtml(jam)} WIB
+          </span>
+        </div>
+        <div class="im-card-body">
+          <div style="margin-bottom: 4px;">
+            <span class="im-mk-name">${escapeHtml(mk)}</span>
+            <span class="im-tag-class">${escapeHtml(kls)}</span>
+          </div>
+          <div style="font-size:0.86em; color:var(--text-muted); margin-top:4px;">
+            ${escapeHtml(pindahDesc)}
+          </div>
+          ${note ? `<div style="font-size:0.82em; color:#64748b; margin-top:3px;">${escapeHtml(note)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  // 3. Try matching Pattern 3: Kelas Tambahan
+  const m3 = rawMsg.match(/^(?:Kelas\s+TAMBAHAN:\s*|TAMBAHAN:\s*)?(.+?)\s*\(([^)]+)\)\s*di\s+([A-Za-z0-9\.\s]+(?:\([^)]+\))?)\s*pada\s*(\d{1,2}:\d{2})\.\s*(.*)/i);
+  if (m3) {
+    const mk = m3[1].trim();
+    const kls = m3[2].trim();
+    const ruang = m3[3].trim();
+    const jam = m3[4].trim();
+    const note = m3[5].trim();
+
+    return `
+      <div class="im-card im-type-tambah" ${clickAttr}>
+        <div class="im-card-header">
+          <span class="im-badge im-badge-tambah">KELAS TAMBAHAN</span>
+          <span class="im-tag-room">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            ${escapeHtml(ruang)}
+          </span>
+        </div>
+        <div class="im-card-body">
+          <div style="margin-bottom: 4px;">
+            <span class="im-mk-name">${escapeHtml(mk)}</span>
+            <span class="im-tag-class">${escapeHtml(kls)}</span>
+          </div>
+          <div class="im-meta-row">
+            <span class="im-tag-time">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+              Jam ${escapeHtml(jam)} WIB
+            </span>
+            ${note ? `<span class="im-note">${escapeHtml(note)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 4. Try matching Pattern 4: Jeda Ruangan
+  const m4 = rawMsg.match(/^(?:JEDA:\s*)?([A-Za-z0-9\.\s]+(?:\([^)]+\))?)\s*jeda antara\s*(\d{1,2}:\d{2})\s*(?:s\/d|-)\s*(\d{1,2}:\d{2})\s*(?:\(([^)]+)\))?\.\s*(.*)/i);
+  if (m4) {
+    const ruang = m4[1].trim();
+    const jamStart = m4[2].trim();
+    const jamEnd = m4[3].trim();
+    const durasi = (m4[4] || '').trim();
+    const note = m4[5].trim();
+
+    return `
+      <div class="im-card im-type-jeda" ${clickAttr}>
+        <div class="im-card-header">
+          <span class="im-badge im-badge-jeda">JEDA RUANGAN ${durasi ? `(${escapeHtml(durasi)})` : ''}</span>
+          <span class="im-tag-room">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            ${escapeHtml(ruang)}
+          </span>
+        </div>
+        <div class="im-card-body">
+          <div class="im-meta-row" style="margin-top:0;">
+            <span class="im-tag-time">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+              ${escapeHtml(jamStart)} - ${escapeHtml(jamEnd)} WIB
+            </span>
+            ${note ? `<span class="im-note im-note-alert">${escapeHtml(note)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 5. Fallback Highlighted Card
+  const highlightedBody = formatHighlightedInfoMaseBody(rawMsg);
+  return `
+    <div class="im-card im-type-ol" ${clickAttr}>
+      <div class="im-card-header">
+        <span class="im-badge im-badge-ol">${escapeHtml(tipeNotif || 'INFO')}</span>
+        ${parsedRoom ? `<span class="im-tag-room">${escapeHtml(parsedRoom)}</span>` : ''}
+      </div>
+      <div class="im-card-body" style="font-size:0.9em; line-height:1.45;">
+        ${highlightedBody}
+      </div>
+    </div>
+  `;
+}
+window.renderHighlightedInfoMaseCard = renderHighlightedInfoMaseCard;
 
 
 function selectAslabItem(element, value) {
@@ -214,7 +427,7 @@ async function fetchAllRuangan() {
     const response = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
     const result = await response.json();
     if (result.status === 'success') {
-      allRuanganData = (result.data || []).sort((a, b) => 
+      allRuanganData = (result.data || []).sort((a, b) =>
         (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
       );
       updateActiveLabPanel();
@@ -341,15 +554,15 @@ function renderSemesterCardList() {
   container.innerHTML = allSemestersList.map(sem => {
     const isCurrentActive = (currentActiveSemester === sem.nama_semester);
     const countText = sem.total_jadwal ? `${Number(sem.total_jadwal).toLocaleString('id-ID')} Jadwal Tersimpan` : '0 Jadwal';
-    
+
     return `
       <div class="sem-modal-card ${isCurrentActive ? 'is-active' : ''}">
         <div class="sem-modal-card-info">
           <div class="sem-modal-card-header">
             <span class="sem-modal-card-title">${escapeHtml(sem.nama_semester)}</span>
-            ${isCurrentActive 
-              ? '<span class="sem-modal-badge active"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;"></span> Aktif di Dashboard</span>' 
-              : '<span class="sem-modal-badge idle">Tersedia di DB</span>'}
+            ${isCurrentActive
+        ? '<span class="sem-modal-badge active"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;"></span> Aktif di Dashboard</span>'
+        : '<span class="sem-modal-badge idle">Tersedia di DB</span>'}
           </div>
           <div class="sem-modal-card-subtitle">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
@@ -386,12 +599,12 @@ function renderSemesterCardList() {
   }).join('');
 }
 
-window.selectSemesterInModal = function(namaSemester) {
+window.selectSemesterInModal = function (namaSemester) {
   selectedSemesterTemp = namaSemester;
   renderSemesterCardList();
 };
 
-window.applySpecificSemester = async function(namaSemester) {
+window.applySpecificSemester = async function (namaSemester) {
   if (!namaSemester) return;
   selectedSemesterTemp = namaSemester;
   await applySelectedSemester();
@@ -410,7 +623,7 @@ let explorerFlatpickrInstance = null;
 let isExplorerAllDates = true;
 let explorerSearchTimeout = null;
 
-window.enterSemesterExplorerMode = async function(namaSemester) {
+window.enterSemesterExplorerMode = async function (namaSemester) {
   if (!namaSemester) {
     namaSemester = selectedSemesterTemp || currentActiveSemester || 'Ganjil 2026';
   }
@@ -453,12 +666,12 @@ window.enterSemesterExplorerMode = async function(namaSemester) {
   await loadSemesterExplorerData(namaSemester);
 };
 
-window.launchSelectedSemesterExplorer = function() {
+window.launchSelectedSemesterExplorer = function () {
   const target = selectedSemesterTemp || currentActiveSemester || 'Ganjil 2026';
   enterSemesterExplorerMode(target);
 };
 
-window.exitSemesterExplorerMode = function() {
+window.exitSemesterExplorerMode = function () {
   isSemesterExplorerMode = false;
   document.body.classList.remove('semester-explorer-active');
 
@@ -478,7 +691,7 @@ window.exitSemesterExplorerMode = function() {
   applyFilters();
 };
 
-window.switchExplorerSemester = function(namaSemester) {
+window.switchExplorerSemester = function (namaSemester) {
   if (!namaSemester || namaSemester === currentExplorerSemester) return;
   enterSemesterExplorerMode(namaSemester);
 };
@@ -526,7 +739,7 @@ function updateExplorerSemesterDropdown(currentSem) {
   }).join('');
 }
 
-window.selectExplorerSemesterSwitch = function(namaSemester) {
+window.selectExplorerSemesterSwitch = function (namaSemester) {
   const dropdown = document.getElementById('dropdown-sem-switch');
   if (dropdown) dropdown.classList.remove('open');
 
@@ -595,7 +808,7 @@ async function loadSemesterExplorerData(namaSemester) {
   applySemesterExplorerFilters();
 }
 
-window.selectSemesterExplorerOption = function(type, value, label, silent = false) {
+window.selectSemesterExplorerOption = function (type, value, label, silent = false) {
   const filterInput = document.getElementById(`sem-filter-${type}`);
   if (filterInput) filterInput.value = value;
 
@@ -623,7 +836,7 @@ window.selectSemesterExplorerOption = function(type, value, label, silent = fals
   }
 };
 
-window.filterSemesterDropdownList = function(inputEl, containerId) {
+window.filterSemesterDropdownList = function (inputEl, containerId) {
   const q = (inputEl.value || '').toLowerCase().trim();
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -738,7 +951,7 @@ function initExplorerDatePicker() {
       altFormat: "d F Y",
       enable: datesWithData.length > 0 ? datesWithData : undefined,
       locale: (typeof flatpickr.l10ns !== 'undefined' && flatpickr.l10ns.id) ? flatpickr.l10ns.id : undefined,
-      onChange: function(selectedDates, dateStr) {
+      onChange: function (selectedDates, dateStr) {
         if (dateStr) {
           isExplorerAllDates = false;
           const btnAll = document.getElementById('sem-btn-all-dates');
@@ -750,7 +963,7 @@ function initExplorerDatePicker() {
   }
 }
 
-window.toggleSemesterAllDates = function() {
+window.toggleSemesterAllDates = function () {
   isExplorerAllDates = true;
   const btnAll = document.getElementById('sem-btn-all-dates');
   if (btnAll) btnAll.classList.add('active-all');
@@ -764,7 +977,7 @@ window.toggleSemesterAllDates = function() {
   applySemesterExplorerFilters();
 };
 
-window.handleSemesterSearchInput = function() {
+window.handleSemesterSearchInput = function () {
   const input = document.getElementById('sem-search-keyword');
   const btnClear = document.getElementById('sem-search-clear');
   if (btnClear) {
@@ -777,7 +990,7 @@ window.handleSemesterSearchInput = function() {
   }, 200);
 };
 
-window.clearSemesterSearch = function() {
+window.clearSemesterSearch = function () {
   const input = document.getElementById('sem-search-keyword');
   if (input) input.value = '';
   const btnClear = document.getElementById('sem-search-clear');
@@ -785,7 +998,7 @@ window.clearSemesterSearch = function() {
   applySemesterExplorerFilters();
 };
 
-window.resetSemesterExplorerFilters = function() {
+window.resetSemesterExplorerFilters = function () {
   toggleSemesterAllDates();
 
   const dActive = document.querySelector('#items-sem-dosen .aslab-list-item[data-value="semua"] span')?.innerText || 'Semua Dosen';
@@ -807,7 +1020,7 @@ window.resetSemesterExplorerFilters = function() {
   clearSemesterSearch();
 };
 
-window.applySemesterExplorerFilters = function() {
+window.applySemesterExplorerFilters = function () {
   const tglInput = document.getElementById('sem-filter-tanggal');
   const fTanggal = (!isExplorerAllDates && tglInput) ? tglInput.value.trim() : '';
   const fDosen = document.getElementById('sem-filter-dosen')?.value || 'semua';
@@ -1069,7 +1282,7 @@ function renderSemesterExplorerMobileCards(items) {
   }).join('');
 }
 
-window.setSemExplorerView = function(view) {
+window.setSemExplorerView = function (view) {
   const btnCard = document.getElementById('sem-btn-view-card');
   const btnTable = document.getElementById('sem-btn-view-table');
   const cardsContainer = document.getElementById('sem-mobile-cards-container');
@@ -1159,7 +1372,7 @@ function renderExplorerPaginationControls(totalPages, startIdx, endIdx, total) {
   });
 }
 
-window.changeExplorerPageSize = function(size) {
+window.changeExplorerPageSize = function (size) {
   size = parseInt(size, 10);
   if (![25, 50, 100].includes(size)) size = 50;
   explorerPageSize = size;
@@ -1177,7 +1390,7 @@ window.changeExplorerPageSize = function(size) {
   renderSemesterExplorerTable();
 };
 
-window.changeExplorerPage = function(p) {
+window.changeExplorerPage = function (p) {
   explorerCurrentPage = p;
   renderSemesterExplorerTable();
   const container = document.querySelector('.sem-table-container');
@@ -1186,7 +1399,7 @@ window.changeExplorerPage = function(p) {
   }
 };
 
-window.exportSemesterExplorerExcel = function() {
+window.exportSemesterExplorerExcel = function () {
   if (!explorerFilteredJadwal || explorerFilteredJadwal.length === 0) {
     alert("Tidak ada data jadwal untuk diexport.");
     return;
@@ -1216,14 +1429,14 @@ window.exportSemesterExplorerExcel = function() {
   const link = document.createElement("a");
   link.setAttribute("href", url);
   const cleanName = (currentExplorerSemester || 'Semester').replace(/[^a-zA-Z0-9_-]/g, '_');
-  link.setAttribute("download", `Jadwal_${cleanName}_${new Date().toISOString().slice(0,10)}.csv`);
+  link.setAttribute("download", `Jadwal_${cleanName}_${new Date().toISOString().slice(0, 10)}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 };
 
 
-window.openSemesterModal = function() {
+window.openSemesterModal = function () {
   const testModal = document.getElementById('test-wa-modal');
   if (!testModal) return;
 
@@ -1254,7 +1467,7 @@ window.openSemesterModal = function() {
   fetchSemestersData();
 };
 
-window.closeSemesterModalToMenu = function() {
+window.closeSemesterModalToMenu = function () {
   const semView = document.getElementById('wa-modal-semester');
   const menuView = document.getElementById('wa-modal-menu');
   if (semView) semView.style.display = 'none';
@@ -1267,7 +1480,7 @@ window.closeSemesterModalToMenu = function() {
   }
 };
 
-window.applySelectedSemester = async function() {
+window.applySelectedSemester = async function () {
   if (!selectedSemesterTemp) {
     alert("Silakan pilih database semester terlebih dahulu.");
     return;
@@ -1337,7 +1550,7 @@ window.applySelectedSemester = async function() {
   }
 };
 
-window.addNewSemesterAction = async function() {
+window.addNewSemesterAction = async function () {
   const inputEl = document.getElementById('input-new-semester-name');
   if (!inputEl) return;
   const name = inputEl.value.trim();
@@ -1376,7 +1589,7 @@ window.addNewSemesterAction = async function() {
   }
 };
 
-window.deleteSemesterAction = async function(namaSemester) {
+window.deleteSemesterAction = async function (namaSemester) {
   let confirmed = false;
   if (typeof showModernConfirm === 'function') {
     confirmed = await showModernConfirm({
@@ -1573,6 +1786,16 @@ function extractProdiFromKelas(kelas) {
   return null;
 }
 
+function extractSemesterFromKelas(kelas) {
+  if (!kelas || typeof kelas !== 'string') return null;
+  const m = kelas.trim().match(/\d{2}[A-Za-z]{2}(\d+)/);
+  if (m) {
+    const num = parseInt(m[1], 10);
+    if (!isNaN(num)) return num;
+  }
+  return null;
+}
+
 const TWO_SKS_KEYWORDS = [
   'pemrograman mobile', 'basic computer', 'bahasa inggris', 'kecakapan antar personal',
   'kecakapan antar personil', 'matematika diskrit', 'kewarganegaraan', 'pend. kewarganegaraan',
@@ -1598,18 +1821,25 @@ function getSks(itemOrMk) {
   if (typeof itemOrMk === 'object' && typeof itemOrMk.sks === 'number' && itemOrMk.sks > 0) {
     return itemOrMk.sks;
   }
-  
+
   const namaMk = typeof itemOrMk === 'string' ? itemOrMk : (itemOrMk.nama_mk || '');
   const kelas = typeof itemOrMk === 'object' ? (itemOrMk.kelas || '') : '';
   if (!namaMk) return 3;
   const mk = namaMk.trim().toLowerCase();
   const prodi = extractProdiFromKelas(kelas);
+  const semNum = extractSemesterFromKelas(kelas);
 
   // 2. Cek kurikulum sks map jika sudah ter-fetch
   if (_clientCurriculumSksMap) {
+    // 2a. Cek prodi DAN semester angka mahasiswa (misal: 01PT7 -> Semester 7 -> Manajemen Proyek 3 SKS)
+    if (prodi && semNum !== null && _clientCurriculumSksMap.sem_map && _clientCurriculumSksMap.sem_map[`${mk}:::${prodi}:::${semNum}`]) {
+      return _clientCurriculumSksMap.sem_map[`${mk}:::${prodi}:::${semNum}`];
+    }
+    // 2b. Cek prodi umum
     if (prodi && _clientCurriculumSksMap.prodi_map && _clientCurriculumSksMap.prodi_map[`${mk}:::${prodi}`]) {
       return _clientCurriculumSksMap.prodi_map[`${mk}:::${prodi}`];
     }
+    // 2c. Cek nama umum
     if (_clientCurriculumSksMap.name_map && _clientCurriculumSksMap.name_map[mk]) {
       return _clientCurriculumSksMap.name_map[mk];
     }
@@ -1643,7 +1873,7 @@ function getClassDuration(itemOrMk) {
   if (typeof itemOrMk === 'object' && typeof itemOrMk.durasi_menit === 'number' && itemOrMk.durasi_menit > 0) {
     return itemOrMk.durasi_menit;
   }
-  
+
   // 2. Hitung durasi berdasarkan SKS (2 SKS = 90 menit, 3 SKS = 135 menit)
   const sks = getSks(itemOrMk);
   if (sks === 2) return 90;
@@ -1827,13 +2057,13 @@ function renderTable(data) {
     // Check conflict status & extra added class
     const itemKey = getScheduleUniqueKey(item, idx);
     const isOnlineItem = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
-    const hasRoomConflict = !isOnlineItem && window._currentScheduleConflicts && 
+    const hasRoomConflict = !isOnlineItem && window._currentScheduleConflicts &&
       (window._currentScheduleConflicts.roomConflicts.has(itemKey) ||
-       Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
-    const hasDosenConflict = window._currentScheduleConflicts && 
+        Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const hasDosenConflict = window._currentScheduleConflicts &&
       (window._currentScheduleConflicts.lecturerConflicts.has(itemKey) ||
-       Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
-    const isExtraAdded = window._currentExtraAddedClasses && 
+        Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const isExtraAdded = window._currentExtraAddedClasses &&
       window._currentExtraAddedClasses.some(x => (x.id && item.id && x.id === item.id) || (x.jam === item.jam && x.kelas === item.kelas && x.nama_mk === item.nama_mk));
 
     const row = document.createElement('tr');
@@ -1843,8 +2073,8 @@ function renderTable(data) {
 
     const safeItemJson = escapeHtml(JSON.stringify(item));
     const isNight = typeof isNightClass === 'function' && isNightClass(item);
-    const nightBadgeHtml = isNight 
-      ? `<span class="badge malam" style="font-size:0.72em; padding:2px 8px; margin-top:4px; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>` 
+    const nightBadgeHtml = isNight
+      ? `<span class="badge malam" style="font-size:0.72em; padding:2px 8px; margin-top:4px; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Malam</span>`
       : '';
 
     row.innerHTML = `
@@ -1909,15 +2139,15 @@ function renderMobileScheduleCards(data) {
 
     const itemKey = getScheduleUniqueKey(item, idx);
     const isOnlineItem = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
-    const hasRoomConflict = !isOnlineItem && window._currentScheduleConflicts && 
+    const hasRoomConflict = !isOnlineItem && window._currentScheduleConflicts &&
       (window._currentScheduleConflicts.roomConflicts.has(itemKey) ||
-       Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
-    const hasDosenConflict = window._currentScheduleConflicts && 
+        Array.from(window._currentScheduleConflicts.roomConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+    const hasDosenConflict = window._currentScheduleConflicts &&
       (window._currentScheduleConflicts.lecturerConflicts.has(itemKey) ||
-       Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
+        Array.from(window._currentScheduleConflicts.lecturerConflicts.keys()).some(k => k.includes(`${item.jam || ''}_${item.nama_mk || ''}_${item.nama_ruangan || ''}`)));
     const hasConflict = hasRoomConflict || hasDosenConflict;
     const isNight = typeof isNightClass === 'function' && isNightClass(item);
-    const isExtraAdded = window._currentExtraAddedClasses && 
+    const isExtraAdded = window._currentExtraAddedClasses &&
       window._currentExtraAddedClasses.some(x => (x.id && item.id && x.id === item.id) || (x.jam === item.jam && x.kelas === item.kelas && x.nama_mk === item.nama_mk));
 
     return `
@@ -1967,7 +2197,7 @@ function renderMobileScheduleCards(data) {
   }).join('');
 }
 
-window.setMobileScheduleView = function(view) {
+window.setMobileScheduleView = function (view) {
   const btnCard = document.getElementById('btn-view-card');
   const btnTable = document.getElementById('btn-view-table');
   const cardsContainer = document.getElementById('mobile-schedule-cards');
@@ -2119,7 +2349,7 @@ function applyFilters() {
   const conflictBadgeWrap = document.getElementById('conflict-badge-wrap');
   const conflictLabel = document.getElementById('conflict-warning-label');
   const conflictState = document.getElementById('conflict-filter-state');
-  
+
   const allConflictKeys = new Set([
     ...window._currentScheduleConflicts.roomConflicts.keys(),
     ...window._currentScheduleConflicts.lecturerConflicts.keys()
@@ -2208,7 +2438,7 @@ function applyFilters() {
 }
 
 // ─── 00:00 Midnight Rollover & Room Status Evaluator ───
-let lastKnownSystemDateStr = (function() {
+let lastKnownSystemDateStr = (function () {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 })();
@@ -2479,11 +2709,11 @@ function updateActiveLabPanel() {
         const h = Math.floor(lastClassEndTime / 60).toString().padStart(2, '0');
         const m = (lastClassEndTime % 60).toString().padStart(2, '0');
         const roomIsLab = isLab(room);
-        const titleText = roomIsLab 
-          ? `<span class="title-desktop">TUTUP LABOR</span><span class="title-mobile">TUTUP LAB</span> (${minsLeft} mnt lagi)` 
+        const titleText = roomIsLab
+          ? `<span class="title-desktop">TUTUP LABOR</span><span class="title-mobile">TUTUP LAB</span> (${minsLeft} mnt lagi)`
           : `SELESAI KELAS (${minsLeft} mnt lagi)`;
-        const badgeHTML = roomIsLab 
-          ? `<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>` 
+        const badgeHTML = roomIsLab
+          ? `<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>`
           : `<span class="notif-cat-badge kelas">Kelas</span>`;
 
         const roomCampus = formatCampusName(sample.kampus || getRoomCampus(room));
@@ -2519,7 +2749,7 @@ function updateActiveLabPanel() {
   if (fsWarnings) fsWarnings.innerHTML = warningsHTML;
 
   const renderBlocks = (dict, kampusStr) => {
-    const sortedRooms = Object.keys(dict).sort((a, b) => 
+    const sortedRooms = Object.keys(dict).sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
     );
     let html = '<div class="lab-grid">';
@@ -2674,7 +2904,7 @@ function parseRoomAndCampus(raw = '') {
   }
   // Bersihkan prefix "Ruang " sebelum "R.", "Labor", "Lab", atau "Ruang"
   s = s.replace(/^(?:Ruang\s+)+(?=R\b|R\.|Labor|Lab|Ruang)/i, '')
-       .replace(/^Ruang\s+(\d)/i, 'R. $1');
+    .replace(/^Ruang\s+(\d)/i, 'R. $1');
   return { room: s, campus: campus };
 }
 
@@ -2728,8 +2958,8 @@ function calculateClientSideGaps(targetDate) {
   const roomSchedules = {};
   allJadwal.forEach(item => {
     const isOnline = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
-    const isCancelled = (item.metode_pembelajaran || '').toUpperCase() === 'CC' || 
-                        (item.status_jadwal && item.status_jadwal.toLowerCase().includes('batal'));
+    const isCancelled = (item.metode_pembelajaran || '').toUpperCase() === 'CC' ||
+      (item.status_jadwal && item.status_jadwal.toLowerCase().includes('batal'));
     if (item.tanggal === targetDate && item.jam && item.nama_ruangan && !isOnline && !isCancelled) {
       const ruang = item.nama_ruangan;
       if (!roomSchedules[ruang]) roomSchedules[ruang] = [];
@@ -2750,7 +2980,7 @@ function calculateClientSideGaps(targetDate) {
   allJadwal.forEach(item => {
     const isOnline = (item.metode_pembelajaran || '').toUpperCase() === 'OL';
     const isCancelled = (item.metode_pembelajaran || '').toUpperCase() === 'CC' ||
-                        (item.status_jadwal && (item.status_jadwal.toLowerCase().includes('batal') || item.status_jadwal.toLowerCase().includes('cancel')));
+      (item.status_jadwal && (item.status_jadwal.toLowerCase().includes('batal') || item.status_jadwal.toLowerCase().includes('cancel')));
     if (item.tanggal === targetDate && item.jam && item.nama_ruangan && (isOnline || isCancelled)) {
       const ruang = item.nama_ruangan;
       if (!nonPhysRooms[ruang]) nonPhysRooms[ruang] = [];
@@ -2860,7 +3090,7 @@ function calculateClientSideGaps(targetDate) {
     // 2. JEDA ANTARA KELAS
     for (let i = 0; i < scheds.length - 1; i++) {
       const curr = scheds[i];
-      const nxt = scheds[i+1];
+      const nxt = scheds[i + 1];
       const gap = nxt.start - curr.end;
       if (gap >= 90) {
         const hours = Math.floor(gap / 60);
@@ -2994,13 +3224,13 @@ function renderInfoMaseNotifications(showPopup = false) {
 
   // Render live warnings according to active tab
   const activeWarnings = activeInfoMaseTab === 'ruang' ? currentRuangWarnings : currentLabWarnings;
-  
+
   // Filter live warnings based on active campus filter
   let filteredWarnings = activeWarnings;
   if (activeInfoMaseKampus !== 'semua') {
     filteredWarnings = activeWarnings.filter(wHtml => {
-       const lowHtml = wHtml.toLowerCase();
-       return lowHtml.includes(activeInfoMaseKampus);
+      const lowHtml = wHtml.toLowerCase();
+      return lowHtml.includes(activeInfoMaseKampus);
     });
   }
 
@@ -3029,8 +3259,8 @@ function renderInfoMaseNotifications(showPopup = false) {
   filtered.forEach(n => {
     let cls = '';
     const isLab = isLabNotification(n);
-    const categoryBadge = isLab 
-      ? '<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>' 
+    const categoryBadge = isLab
+      ? '<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>'
       : '<span class="notif-cat-badge kelas">Kelas</span>';
 
     if (n.tipe_notif === 'TAMBAHAN') {
@@ -3040,7 +3270,7 @@ function renderInfoMaseNotifications(showPopup = false) {
     } else if (n.tipe_notif === 'JEDA') {
       cls = 'jeda';
     }
-    
+
     let msgText = (n.pesan || '')
       .replace(/\(Kampus\s+(Thehok|Kobar)\)/gi, '($1)')
       .replace(/\bKampus\s+(Thehok|Kobar)\b/gi, '$1')
@@ -3070,7 +3300,7 @@ function renderInfoMaseNotifications(showPopup = false) {
     const { room: parsedRoom, campus: parsedCampus } = parseRoomAndCampus(rawRoomInfo);
     const notifDate = n.tanggal || (document.getElementById('filter-tanggal')?.value || '');
 
-    const clickAttr = parsedRoom 
+    const clickAttr = parsedRoom
       ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date);}" role="button" tabindex="0"`
       : '';
 
@@ -3083,9 +3313,11 @@ function renderInfoMaseNotifications(showPopup = false) {
       </span>
     ` : '';
 
+    const highlightedBody = formatHighlightedInfoMaseBody(msgText);
+
     // Fix Bug Visual: Semua tipe notif dimasukkan ke popupContent, bukan cuma TAMBAHAN
     if (showPopup) {
-      popupContent += `<div class="notif-item ${cls}" ${clickAttr}><strong>${n.tipe_notif}</strong><br>${cleanPesan}</div>`;
+      popupContent += `<div class="notif-item ${cls}" ${clickAttr}><strong>${n.tipe_notif}</strong><br>${highlightedBody}</div>`;
     }
 
     html += `
@@ -3097,7 +3329,7 @@ function renderInfoMaseNotifications(showPopup = false) {
           </div>
           ${actionBadge}
         </div>
-        <div>${cleanPesan}</div>
+        <div style="line-height:1.45;">${highlightedBody}</div>
       </div>
     `;
   });
@@ -3129,7 +3361,7 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
     notifData.forEach(item => {
       if (!item.tanggal) item.tanggal = tanggal;
     });
-    
+
     // Jika dari server belum ada notif jeda tapi jadwal ada, hitung otomatis dari client-side
     const hasServerGaps = notifData.some(n => n.tipe_notif === 'JEDA');
     if (!hasServerGaps) {
@@ -3319,7 +3551,7 @@ async function exitAdminMode(notifyBackend = true) {
           method: 'POST',
           headers: getAdminHeaders()
         });
-      } catch (err) {}
+      } catch (err) { }
     }
     setAdminToken(null);
     isAslabAdmin = false;
@@ -3327,7 +3559,7 @@ async function exitAdminMode(notifyBackend = true) {
       const res = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
       const json = await res.json();
       if (json.status === 'success') globalAslabData = json.data;
-    } catch (err) {}
+    } catch (err) { }
 
     const adminToggle = document.getElementById('admin-mode-toggle');
     if (adminToggle) {
@@ -3483,7 +3715,7 @@ function initSettingModalDragToDismiss() {
   function handleMove(clientY, e) {
     if (!isDragging) return;
     if (e && e.cancelable) {
-      try { e.preventDefault(); } catch (_) {}
+      try { e.preventDefault(); } catch (_) { }
     }
     currentY = clientY;
     const deltaY = currentY - startY;
@@ -3638,7 +3870,7 @@ function getAdminHeaders(customHeaders = {}) {
 async function requestAdminLogin() {
   const pass = await promptPassword("Masukkan password Admin untuk otentikasi Admin:");
   if (pass === null) return null; // Dibatalkan
-  
+
   const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:");
   if (pass2 === null) return null; // Dibatalkan
 
@@ -3675,7 +3907,7 @@ async function requestAdminLogin() {
 function renderAslabTable() {
   const tbody = document.getElementById('aslab-data-tbody');
   tbody.innerHTML = '';
-  
+
   let sortedAslab = [];
   if (globalAslabData && globalAslabData.length > 0) {
     sortedAslab = [...globalAslabData].sort((a, b) => {
@@ -3684,20 +3916,20 @@ function renderAslabTable() {
         if (item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) return 'kobar';
         return 'thehok'; // fallback
       };
-      
+
       const kampusA = getKampus(a);
       const kampusB = getKampus(b);
-      
+
       const ruangA = a.nama_ruangan || '';
       const ruangB = b.nama_ruangan || '';
-      
+
       const isLabA = isLab(ruangA);
       const isLabB = isLab(ruangB);
-      
+
       if (isLabA !== isLabB) return isLabA ? -1 : 1;
-      
+
       if (kampusA !== kampusB) return kampusA.includes('kobar') ? -1 : 1;
-      
+
       return ruangA.localeCompare(ruangB, undefined, { numeric: true, sensitivity: 'base' });
     });
   }
@@ -3712,7 +3944,7 @@ function renderAslabTable() {
     tbody.innerHTML = `<tr><td colspan="${isAslabAdmin ? 6 : 5}" style="padding: 15px; text-align: center; color: var(--text-muted);">Tidak ada data asisten lab.</td></tr>`;
     return;
   }
-  
+
   let html = '';
   filteredAslab.forEach((a, idx) => {
     let displayWa = a.no_wa || '-';
@@ -3720,7 +3952,7 @@ function renderAslabTable() {
     if (!isAslabAdmin && displayWa.length > 7) {
       displayWa = displayWa.substring(0, 5) + '****' + displayWa.substring(displayWa.length - 3);
     }
-    
+
     const adminColStyle = isAslabAdmin ? 'table-cell' : 'none';
     let actionHtml = `
       <td style="padding: 10px; text-align: center; display: ${adminColStyle};" class="admin-only-col">
@@ -3728,15 +3960,15 @@ function renderAslabTable() {
         <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deleteAslab(${a.id_aslab}, '${a.nama_aslab}')">Hapus</button>
       </td>
     `;
-    
+
     const getKampusDisplay = (item) => {
-        let val = item.kampus;
-        if (!val && item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) val = 'Kobar';
-        if (!val && item.nama_ruangan) val = 'Thehok';
-        if (!val) return '-';
-        return val.replace(/kampus\s+/gi, "").trim();
+      let val = item.kampus;
+      if (!val && item.nama_ruangan && item.nama_ruangan.toLowerCase().includes('kobar')) val = 'Kobar';
+      if (!val && item.nama_ruangan) val = 'Thehok';
+      if (!val) return '-';
+      return val.replace(/kampus\s+/gi, "").trim();
     };
-    
+
     const kampusDisplay = getKampusDisplay(a);
     const ruangDisplay = a.nama_ruangan ? formatRoomName(a.nama_ruangan, false) : '-';
 
@@ -3935,14 +4167,14 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
             method: 'POST',
             headers: getAdminHeaders()
           });
-        } catch (err) {}
+        } catch (err) { }
         setAdminToken(null);
         // Refresh data aslab menjadi nomor yang disensor
         try {
           const res = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
           const json = await res.json();
           if (json.status === 'success') globalAslabData = json.data;
-        } catch (err) {}
+        } catch (err) { }
         updateAdminUI();
       } else {
         testModal.classList.remove('open');
@@ -3955,7 +4187,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
             });
             const json = await res.json();
             if (json.status === 'success') globalAslabData = json.data;
-          } catch (err) {}
+          } catch (err) { }
           updateAdminUI();
         }
         testModal.classList.add('open');
@@ -4271,27 +4503,27 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       renderAslabTable();
     };
 
-    
+
     const dataRuanganView = document.getElementById('wa-modal-data-ruangan');
     const addRuanganView = document.getElementById('wa-modal-add-ruangan');
-    
+
     // Render Ruangan Table
     const renderRuanganTable = () => {
       const tbody = document.getElementById('ruangan-data-tbody');
-      
+
       let sortedRuangan = [];
       if (allRuanganData && allRuanganData.length > 0) {
         sortedRuangan = [...allRuanganData].sort((a, b) => {
           const isLabA = isLab(a.nama_ruangan);
           const isLabB = isLab(b.nama_ruangan);
-          
+
           if (isLabA !== isLabB) return isLabA ? -1 : 1;
-          
+
           const kampusA = a.kampus ? a.kampus.toLowerCase() : (a.nama_ruangan.toLowerCase().includes('kobar') ? 'kobar' : 'thehok');
           const kampusB = b.kampus ? b.kampus.toLowerCase() : (b.nama_ruangan.toLowerCase().includes('kobar') ? 'kobar' : 'thehok');
-          
+
           if (kampusA !== kampusB) return kampusA.includes('kobar') ? -1 : 1;
-          
+
           return a.nama_ruangan.localeCompare(b.nama_ruangan, undefined, { numeric: true, sensitivity: 'base' });
         });
       }
@@ -4300,7 +4532,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         tbody.innerHTML = `<tr><td colspan="${isAslabAdmin ? 4 : 3}" style="text-align:center; padding:15px;">Belum ada data Ruangan.</td></tr>`;
         return;
       }
-      
+
       let html = '';
       sortedRuangan.forEach((r, idx) => {
         const adminColStyle = isAslabAdmin ? 'table-cell' : 'none';
@@ -4318,7 +4550,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         `;
       });
       tbody.innerHTML = html;
-      
+
       // Bind Delete Ruangan
       document.querySelectorAll('.btn-delete-ruangan').forEach(btn => {
         btn.onclick = async (e) => {
@@ -4354,17 +4586,17 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         addView.style.display = 'none';
         dataRuanganView.style.display = 'flex';
         modalTitle.innerText = "Daftar Ruangan";
-        
+
         try {
           const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
           const dataRuangan = await resRuangan.json();
           if (dataRuangan.status === 'success') {
-            allRuanganData = (dataRuangan.data || []).sort((a, b) => 
+            allRuanganData = (dataRuangan.data || []).sort((a, b) =>
               (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
             );
           }
         } catch (err) { console.error(err); }
-        
+
         renderRuanganTable();
       };
     }
@@ -4396,11 +4628,11 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           alert("Harap isi nama ruangan!");
           return;
         }
-        
+
         const originalHtml = btnAddRuanganSubmit.innerHTML;
         btnAddRuanganSubmit.disabled = true;
         btnAddRuanganSubmit.innerHTML = 'Menyimpan...';
-        
+
         try {
           const res = await fetch(`${API_BASE_URL}/api/ruangan/add`, {
             method: 'POST',
@@ -4418,7 +4650,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         } catch (e) {
           alert("Terjadi kesalahan jaringan.");
         }
-        
+
         btnAddRuanganSubmit.disabled = false;
         btnAddRuanganSubmit.innerHTML = originalHtml;
       };
@@ -4439,11 +4671,11 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
         const dataRuangan = await resRuangan.json();
         if (dataRuangan.status === 'success') {
-          allRuanganData = (dataRuangan.data || []).sort((a, b) => 
+          allRuanganData = (dataRuangan.data || []).sort((a, b) =>
             (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
           );
         }
-      } catch (err) {}
+      } catch (err) { }
 
       const selectRuangan = document.getElementById('add-aslab-ruangan');
       populateSortedRuanganSelect(selectRuangan, "");
@@ -4691,8 +4923,8 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
   const subdescEl = document.getElementById('room-detail-subdesc');
   if (subdescEl) {
-    const hoursNote = isKobarRoom 
-      ? 'Operasional 08:00 - 17:00 (Kobar • Tidak ada kelas malam)' 
+    const hoursNote = isKobarRoom
+      ? 'Operasional 08:00 - 17:00 (Kobar • Tidak ada kelas malam)'
       : 'Operasional 08:00 - 21:00 (Thehok • Tersedia kelas malam mulai 17:00)';
     subdescEl.innerHTML = `Daftar perkuliahan tanggal ${formatTanggalIndo(activeDate)}<br><small style="color:var(--text-muted);font-weight:600;">${hoursNote}</small>`;
   }
@@ -4730,7 +4962,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         if (!isNaN(sh) && !isNaN(sm)) {
           startM = sh * 60 + sm;
           startTimeStr = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
-          
+
           if (parts.length >= 2 && parts[1].includes(':')) {
             const [eh, em] = parts[1].split(':').map(Number);
             if (!isNaN(eh) && !isNaN(em)) {
@@ -4786,8 +5018,8 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
       // Badge Kelas Malam (mulai jam 17:00 di Kampus Thehok)
       const isNight = typeof isNightClass === 'function' && isNightClass(s);
-      const nightBadge = isNight 
-        ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>` 
+      const nightBadge = isNight
+        ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>`
         : '';
 
       // 4. Status Perubahan BAAK (Tambahan, Perubahan, dll.)
@@ -4974,7 +5206,7 @@ async function fetchDbStats() {
           if (el) el.textContent = val;
         });
       };
-      
+
       // Grup 1: Jadwal Perkuliahan & Data Staging
       setVal(['cnt-clear-jadwal-total', 'cnt-backup-jadwal-total'], cntJadwalTotal);
       setVal(['cnt-sub-jadwal-all', 'cnt-sub-backup-jadwal-all'], cntJadwalTotal);
@@ -5221,84 +5453,84 @@ function initDbClearModalEvents() {
     if (e.target === modal) modal.classList.remove('open');
   });
 
-// ─── Custom Modern Confirmation & Alert Helper Functions ───
-function showModernConfirm({
-  title = "Konfirmasi Tindakan",
-  subtitle = "Data yang dipilih akan dihapus secara permanen.",
-  targets = [],
-  targetsLabel = null,
-  warningText = "Tindakan ini tidak dapat dibatalkan atau dikembalikan.",
-  okText = "Ya, Hapus Sekarang",
-  cancelText = "Batal",
-  isWipeAll = false,
-  isBackup = false
-}) {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('custom-confirm-modal');
-    if (!modal) {
-      return resolve(confirm(title + "\n\n" + subtitle));
-    }
-
-    const titleEl = document.getElementById('custom-confirm-title');
-    const subtitleEl = document.getElementById('custom-confirm-subtitle');
-    const targetsBoxEl = document.getElementById('custom-confirm-targets-box');
-    const targetsLabelEl = document.getElementById('custom-confirm-targets-label');
-    const warningTextEl = document.getElementById('custom-confirm-warning-text');
-    const warningBannerEl = document.getElementById('custom-confirm-warning-banner');
-    const bannerIconEl = document.getElementById('custom-confirm-banner-icon');
-    const okBtn = document.getElementById('custom-confirm-ok-btn');
-    const okLabel = document.getElementById('custom-confirm-ok-label');
-    const okIcon = document.getElementById('custom-confirm-ok-icon');
-    const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
-    const iconWrap = document.getElementById('custom-confirm-icon');
-    const headerWrap = document.getElementById('custom-confirm-header');
-
-    if (titleEl) {
-      titleEl.textContent = title;
-      if (isBackup) {
-        titleEl.style.color = '#10b981';
-      } else if (isWipeAll) {
-        titleEl.style.color = '#dc2626';
-      } else {
-        titleEl.style.color = 'var(--badge-cc)';
-      }
-    }
-    if (subtitleEl) subtitleEl.textContent = subtitle;
-    if (warningTextEl) warningTextEl.textContent = warningText;
-    if (okLabel) okLabel.textContent = okText;
-    if (cancelBtn) cancelBtn.textContent = cancelText;
-
-    if (isBackup) {
-      // === TEMA BACKUP DATABASE (EMERALD/HIJAU, RAMAH EKSPOR) ===
-      if (okBtn) {
-        okBtn.className = 'modal-btn btn-confirm-ok backup';
-      }
-      if (okIcon) {
-        okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
-      }
-      if (iconWrap) {
-        iconWrap.className = 'custom-confirm-icon-wrap backup';
-        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
-      }
-      if (headerWrap) {
-        headerWrap.style.background = 'rgba(16, 185, 129, 0.08)';
-        headerWrap.style.borderColor = 'rgba(16, 185, 129, 0.2)';
-      }
-      if (warningBannerEl) {
-        warningBannerEl.className = 'custom-confirm-warning-banner backup';
-      }
-      if (bannerIconEl) {
-        bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+  // ─── Custom Modern Confirmation & Alert Helper Functions ───
+  function showModernConfirm({
+    title = "Konfirmasi Tindakan",
+    subtitle = "Data yang dipilih akan dihapus secara permanen.",
+    targets = [],
+    targetsLabel = null,
+    warningText = "Tindakan ini tidak dapat dibatalkan atau dikembalikan.",
+    okText = "Ya, Hapus Sekarang",
+    cancelText = "Batal",
+    isWipeAll = false,
+    isBackup = false
+  }) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('custom-confirm-modal');
+      if (!modal) {
+        return resolve(confirm(title + "\n\n" + subtitle));
       }
 
-      if (targets && targets.length > 0) {
-        if (targetsLabelEl) {
-          targetsLabelEl.style.display = 'block';
-          targetsLabelEl.textContent = targetsLabel || "Target Data yang akan Diekspor (.SQL):";
+      const titleEl = document.getElementById('custom-confirm-title');
+      const subtitleEl = document.getElementById('custom-confirm-subtitle');
+      const targetsBoxEl = document.getElementById('custom-confirm-targets-box');
+      const targetsLabelEl = document.getElementById('custom-confirm-targets-label');
+      const warningTextEl = document.getElementById('custom-confirm-warning-text');
+      const warningBannerEl = document.getElementById('custom-confirm-warning-banner');
+      const bannerIconEl = document.getElementById('custom-confirm-banner-icon');
+      const okBtn = document.getElementById('custom-confirm-ok-btn');
+      const okLabel = document.getElementById('custom-confirm-ok-label');
+      const okIcon = document.getElementById('custom-confirm-ok-icon');
+      const cancelBtn = document.getElementById('custom-confirm-cancel-btn');
+      const iconWrap = document.getElementById('custom-confirm-icon');
+      const headerWrap = document.getElementById('custom-confirm-header');
+
+      if (titleEl) {
+        titleEl.textContent = title;
+        if (isBackup) {
+          titleEl.style.color = '#10b981';
+        } else if (isWipeAll) {
+          titleEl.style.color = '#dc2626';
+        } else {
+          titleEl.style.color = 'var(--badge-cc)';
         }
-        if (targetsBoxEl) {
-          targetsBoxEl.style.display = 'flex';
-          targetsBoxEl.innerHTML = targets.map(t => `
+      }
+      if (subtitleEl) subtitleEl.textContent = subtitle;
+      if (warningTextEl) warningTextEl.textContent = warningText;
+      if (okLabel) okLabel.textContent = okText;
+      if (cancelBtn) cancelBtn.textContent = cancelText;
+
+      if (isBackup) {
+        // === TEMA BACKUP DATABASE (EMERALD/HIJAU, RAMAH EKSPOR) ===
+        if (okBtn) {
+          okBtn.className = 'modal-btn btn-confirm-ok backup';
+        }
+        if (okIcon) {
+          okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+        }
+        if (iconWrap) {
+          iconWrap.className = 'custom-confirm-icon-wrap backup';
+          iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+        }
+        if (headerWrap) {
+          headerWrap.style.background = 'rgba(16, 185, 129, 0.08)';
+          headerWrap.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+        }
+        if (warningBannerEl) {
+          warningBannerEl.className = 'custom-confirm-warning-banner backup';
+        }
+        if (bannerIconEl) {
+          bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+        }
+
+        if (targets && targets.length > 0) {
+          if (targetsLabelEl) {
+            targetsLabelEl.style.display = 'block';
+            targetsLabelEl.textContent = targetsLabel || "Target Data yang akan Diekspor (.SQL):";
+          }
+          if (targetsBoxEl) {
+            targetsBoxEl.style.display = 'flex';
+            targetsBoxEl.innerHTML = targets.map(t => `
             <div class="custom-confirm-target-item backup">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -5306,68 +5538,68 @@ function showModernConfirm({
               <span>${escapeHtml(t)}</span>
             </div>
           `).join('');
+          }
+        } else {
+          if (targetsLabelEl) targetsLabelEl.style.display = 'none';
+          if (targetsBoxEl) targetsBoxEl.style.display = 'none';
         }
-      } else {
+
+      } else if (isWipeAll) {
+        // === TEMA DANGER WIPE ALL ===
+        if (okBtn) {
+          okBtn.className = 'modal-btn btn-confirm-ok wipe-all';
+        }
+        if (okIcon) {
+          okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+        }
+        if (iconWrap) {
+          iconWrap.className = 'custom-confirm-icon-wrap danger';
+          iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+        }
+        if (headerWrap) {
+          headerWrap.style.background = 'rgba(220, 38, 38, 0.12)';
+          headerWrap.style.borderColor = 'rgba(220, 38, 38, 0.25)';
+        }
+        if (warningBannerEl) {
+          warningBannerEl.className = 'custom-confirm-warning-banner';
+        }
+        if (bannerIconEl) {
+          bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+        }
         if (targetsLabelEl) targetsLabelEl.style.display = 'none';
         if (targetsBoxEl) targetsBoxEl.style.display = 'none';
-      }
 
-    } else if (isWipeAll) {
-      // === TEMA DANGER WIPE ALL ===
-      if (okBtn) {
-        okBtn.className = 'modal-btn btn-confirm-ok wipe-all';
-      }
-      if (okIcon) {
-        okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-      }
-      if (iconWrap) {
-        iconWrap.className = 'custom-confirm-icon-wrap danger';
-        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
-      }
-      if (headerWrap) {
-        headerWrap.style.background = 'rgba(220, 38, 38, 0.12)';
-        headerWrap.style.borderColor = 'rgba(220, 38, 38, 0.25)';
-      }
-      if (warningBannerEl) {
-        warningBannerEl.className = 'custom-confirm-warning-banner';
-      }
-      if (bannerIconEl) {
-        bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
-      }
-      if (targetsLabelEl) targetsLabelEl.style.display = 'none';
-      if (targetsBoxEl) targetsBoxEl.style.display = 'none';
-
-    } else {
-      // === TEMA STANDAR DANGER PEMBERSIHAN ===
-      if (okBtn) {
-        okBtn.className = 'modal-btn btn-confirm-ok danger';
-      }
-      if (okIcon) {
-        okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-      }
-      if (iconWrap) {
-        iconWrap.className = 'custom-confirm-icon-wrap danger';
-        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
-      }
-      if (headerWrap) {
-        headerWrap.style.background = 'rgba(239, 68, 68, 0.08)';
-        headerWrap.style.borderColor = 'rgba(239, 68, 68, 0.15)';
-      }
-      if (warningBannerEl) {
-        warningBannerEl.className = 'custom-confirm-warning-banner';
-      }
-      if (bannerIconEl) {
-        bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
-      }
-      
-      if (targets && targets.length > 0) {
-        if (targetsLabelEl) {
-          targetsLabelEl.style.display = 'block';
-          targetsLabelEl.textContent = targetsLabel || "Target Data yang akan Dihapus:";
+      } else {
+        // === TEMA STANDAR DANGER PEMBERSIHAN ===
+        if (okBtn) {
+          okBtn.className = 'modal-btn btn-confirm-ok danger';
         }
-        if (targetsBoxEl) {
-          targetsBoxEl.style.display = 'flex';
-          targetsBoxEl.innerHTML = targets.map(t => `
+        if (okIcon) {
+          okIcon.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+        }
+        if (iconWrap) {
+          iconWrap.className = 'custom-confirm-icon-wrap danger';
+          iconWrap.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+        }
+        if (headerWrap) {
+          headerWrap.style.background = 'rgba(239, 68, 68, 0.08)';
+          headerWrap.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+        }
+        if (warningBannerEl) {
+          warningBannerEl.className = 'custom-confirm-warning-banner';
+        }
+        if (bannerIconEl) {
+          bannerIconEl.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: var(--badge-cc);"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+        }
+
+        if (targets && targets.length > 0) {
+          if (targetsLabelEl) {
+            targetsLabelEl.style.display = 'block';
+            targetsLabelEl.textContent = targetsLabel || "Target Data yang akan Dihapus:";
+          }
+          if (targetsBoxEl) {
+            targetsBoxEl.style.display = 'flex';
+            targetsBoxEl.innerHTML = targets.map(t => `
             <div class="custom-confirm-target-item">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -5375,130 +5607,130 @@ function showModernConfirm({
               <span>${escapeHtml(t)}</span>
             </div>
           `).join('');
+          }
+        } else {
+          if (targetsLabelEl) targetsLabelEl.style.display = 'none';
+          if (targetsBoxEl) targetsBoxEl.style.display = 'none';
         }
-      } else {
-        if (targetsLabelEl) targetsLabelEl.style.display = 'none';
-        if (targetsBoxEl) targetsBoxEl.style.display = 'none';
       }
-    }
 
-    modal.classList.add('open');
+      modal.classList.add('open');
 
-    const cleanup = () => {
-      if (okBtn) okBtn.onclick = null;
-      if (cancelBtn) cancelBtn.onclick = null;
-      modal.onclick = null;
-      document.removeEventListener('keydown', keyHandler);
-      modal.classList.remove('open');
-    };
-
-    const keyHandler = (e) => {
-      if (e.key === 'Escape') {
-        cleanup();
-        resolve(false);
-      }
-    };
-
-    if (okBtn) {
-      okBtn.onclick = () => {
-        cleanup();
-        resolve(true);
+      const cleanup = () => {
+        if (okBtn) okBtn.onclick = null;
+        if (cancelBtn) cancelBtn.onclick = null;
+        modal.onclick = null;
+        document.removeEventListener('keydown', keyHandler);
+        modal.classList.remove('open');
       };
-    }
 
-    if (cancelBtn) {
-      cancelBtn.onclick = () => {
-        cleanup();
-        resolve(false);
+      const keyHandler = (e) => {
+        if (e.key === 'Escape') {
+          cleanup();
+          resolve(false);
+        }
       };
-    }
 
-    modal.onclick = (e) => {
-      if (e.target === modal) {
-        cleanup();
-        resolve(false);
+      if (okBtn) {
+        okBtn.onclick = () => {
+          cleanup();
+          resolve(true);
+        };
       }
-    };
 
-    document.addEventListener('keydown', keyHandler);
-  });
-}
+      if (cancelBtn) {
+        cancelBtn.onclick = () => {
+          cleanup();
+          resolve(false);
+        };
+      }
 
-function showModernAlert({
-  title = "Informasi",
-  message = "",
-  type = "success",
-  buttonText = "Selesai"
-}) {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('custom-alert-modal');
-    if (!modal) {
-      alert(title + "\n\n" + message);
-      return resolve();
-    }
+      modal.onclick = (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(false);
+        }
+      };
 
-    const titleEl = document.getElementById('custom-alert-title');
-    const msgEl = document.getElementById('custom-alert-message');
-    const closeBtn = document.getElementById('custom-alert-close-btn');
-    const iconWrap = document.getElementById('custom-alert-icon');
+      document.addEventListener('keydown', keyHandler);
+    });
+  }
 
-    if (titleEl) titleEl.textContent = title;
-    if (msgEl) {
-      msgEl.innerHTML = message.replace(/\n/g, '<br>');
-    }
-    if (closeBtn) closeBtn.textContent = buttonText;
+  function showModernAlert({
+    title = "Informasi",
+    message = "",
+    type = "success",
+    buttonText = "Selesai"
+  }) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('custom-alert-modal');
+      if (!modal) {
+        alert(title + "\n\n" + message);
+        return resolve();
+      }
 
-    if (iconWrap) {
-      if (type === 'success') {
-        iconWrap.className = 'custom-confirm-icon-wrap success';
-        iconWrap.innerHTML = `
+      const titleEl = document.getElementById('custom-alert-title');
+      const msgEl = document.getElementById('custom-alert-message');
+      const closeBtn = document.getElementById('custom-alert-close-btn');
+      const iconWrap = document.getElementById('custom-alert-icon');
+
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) {
+        msgEl.innerHTML = message.replace(/\n/g, '<br>');
+      }
+      if (closeBtn) closeBtn.textContent = buttonText;
+
+      if (iconWrap) {
+        if (type === 'success') {
+          iconWrap.className = 'custom-confirm-icon-wrap success';
+          iconWrap.innerHTML = `
           <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>`;
-      } else if (type === 'error') {
-        iconWrap.className = 'custom-confirm-icon-wrap danger';
-        iconWrap.innerHTML = `
+        } else if (type === 'error') {
+          iconWrap.className = 'custom-confirm-icon-wrap danger';
+          iconWrap.innerHTML = `
           <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="15" y1="9" x2="9" y2="15"></line>
             <line x1="9" y1="9" x2="15" y2="15"></line>
           </svg>`;
-      } else {
-        iconWrap.className = 'custom-confirm-icon-wrap warning';
-        iconWrap.innerHTML = `
+        } else {
+          iconWrap.className = 'custom-confirm-icon-wrap warning';
+          iconWrap.innerHTML = `
           <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
             <line x1="12" y1="9" x2="12" y2="13"></line>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>`;
+        }
       }
-    }
 
-    modal.classList.add('open');
+      modal.classList.add('open');
 
-    const cleanup = () => {
-      if (closeBtn) closeBtn.onclick = null;
-      modal.onclick = null;
-      document.removeEventListener('keydown', keyHandler);
-      modal.classList.remove('open');
-      resolve();
-    };
+      const cleanup = () => {
+        if (closeBtn) closeBtn.onclick = null;
+        modal.onclick = null;
+        document.removeEventListener('keydown', keyHandler);
+        modal.classList.remove('open');
+        resolve();
+      };
 
-    const keyHandler = (e) => {
-      if (e.key === 'Escape' || e.key === 'Enter') {
-        cleanup();
-      }
-    };
+      const keyHandler = (e) => {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+          cleanup();
+        }
+      };
 
-    if (closeBtn) closeBtn.onclick = cleanup;
-    modal.onclick = (e) => {
-      if (e.target === modal) cleanup();
-    };
-    document.addEventListener('keydown', keyHandler);
-  });
-}
-window.showModernConfirm = showModernConfirm;
-window.showModernAlert = showModernAlert;
+      if (closeBtn) closeBtn.onclick = cleanup;
+      modal.onclick = (e) => {
+        if (e.target === modal) cleanup();
+      };
+      document.addEventListener('keydown', keyHandler);
+    });
+  }
+  window.showModernConfirm = showModernConfirm;
+  window.showModernAlert = showModernAlert;
 
   const submitBtn = document.getElementById('db-clear-submit-btn');
   if (submitBtn) {
@@ -6012,7 +6244,7 @@ function initDbBackupModalEvents() {
       throw new Error(`Server returned status ${response.status}: ${errText}`);
     }
 
-    let filename = `backup_jadwal_unama_${new Date().toISOString().slice(0,10)}.sql`;
+    let filename = `backup_jadwal_unama_${new Date().toISOString().slice(0, 10)}.sql`;
     const xFilename = response.headers.get('X-Backup-Filename');
     const disp = response.headers.get('Content-Disposition');
     if (xFilename) {
@@ -6030,7 +6262,7 @@ function initDbBackupModalEvents() {
     a.setAttribute('download', filename);
     document.body.appendChild(a);
     a.click();
-    
+
     // Tunda pelepasan URL agar download manager browser (Chromium/Firefox) tidak membatalkan proses unduhan
     setTimeout(() => {
       a.remove();
@@ -6688,10 +6920,10 @@ function renderRoomFinderResults() {
 
   const ft = (filterTanggal && filterTanggal.value) ? filterTanggal.value : '';
   const activeDate = ft || new Date().toISOString().slice(0, 10);
-  const activeClasses = allJadwal.filter(j => 
-    j.tanggal === activeDate && 
-    (j.metode_pembelajaran || '').toUpperCase() !== 'CC' && 
-    (j.metode_pembelajaran || '').toUpperCase() !== 'OL' && 
+  const activeClasses = allJadwal.filter(j =>
+    j.tanggal === activeDate &&
+    (j.metode_pembelajaran || '').toUpperCase() !== 'CC' &&
+    (j.metode_pembelajaran || '').toUpperCase() !== 'OL' &&
     (!j.status_jadwal || !j.status_jadwal.toLowerCase().includes('batal'))
   );
 
@@ -6723,7 +6955,7 @@ function renderRoomFinderResults() {
   }
 
   const roomResults = rooms.map(r => {
-    const roomClasses = activeClasses.filter(c => 
+    const roomClasses = activeClasses.filter(c =>
       (c.nama_ruangan || '').trim().toLowerCase() === (r.nama_ruangan || '').trim().toLowerCase()
     );
 
@@ -6978,18 +7210,18 @@ function updateChangesHubData() {
 
   // 2. Tambahan
   const notifItems = window._currentNotifData || [];
-  const tambahanNotifs = notifItems.filter(n => 
-    (n.kategori && n.kategori.toLowerCase() === 'tambahan') || 
+  const tambahanNotifs = notifItems.filter(n =>
+    (n.kategori && n.kategori.toLowerCase() === 'tambahan') ||
     (n.pesan && (n.pesan.toLowerCase().includes('tambahan') || n.pesan.toLowerCase().includes('pengganti')))
   );
-  const tambahanJadwal = allJadwal.filter(j => 
-    j.tanggal === ft && j.status_jadwal && 
+  const tambahanJadwal = allJadwal.filter(j =>
+    j.tanggal === ft && j.status_jadwal &&
     (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))
   );
 
   // 3. Perubahan
-  const perubahanNotifs = notifItems.filter(n => 
-    (n.kategori && n.kategori.toLowerCase() === 'perubahan') || 
+  const perubahanNotifs = notifItems.filter(n =>
+    (n.kategori && n.kategori.toLowerCase() === 'perubahan') ||
     (n.pesan && (n.pesan.toLowerCase().includes('perubahan') || n.pesan.toLowerCase().includes('pindah') || n.pesan.toLowerCase().includes('geser')))
   );
 
@@ -7110,7 +7342,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
 
   // Filter search
   if (query) {
-    filtered = filtered.filter(i => 
+    filtered = filtered.filter(i =>
       i.title.toLowerCase().includes(query) ||
       i.dosen.toLowerCase().includes(query) ||
       i.ruangan.toLowerCase().includes(query) ||
@@ -7137,11 +7369,10 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
     <div class="hub-change-item type-${item.type}">
       <div style="flex: 1;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
-          <span class="db-mini-badge ${
-            item.type === 'batal' ? 'badge-red' : 
-            item.type === 'tambahan' ? 'badge-green' : 
-            item.type === 'perubahan' ? 'badge-purple' : 'badge-amber'
-          }">${escapeHtml(item.tag)}</span>
+          <span class="db-mini-badge ${item.type === 'batal' ? 'badge-red' :
+      item.type === 'tambahan' ? 'badge-green' :
+        item.type === 'perubahan' ? 'badge-purple' : 'badge-amber'
+    }">${escapeHtml(item.tag)}</span>
           <span style="font-weight: 700; font-size: 0.85em; color: var(--text);">${escapeHtml(item.jam)}</span>
           <span style="font-size: 0.78em; color: var(--text-muted);">• ${escapeHtml(item.ruangan)}</span>
         </div>
@@ -7195,7 +7426,7 @@ function showAutoSwitchToast(targetSemester, dateStr) {
     toast.className = 'auto-switch-toast';
     document.body.appendChild(toast);
   }
-  
+
   let formattedDate = dateStr;
   try {
     const parts = dateStr.split('-');
@@ -7204,7 +7435,7 @@ function showAutoSwitchToast(targetSemester, dateStr) {
       const options = { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' };
       formattedDate = dt.toLocaleDateString('id-ID', options);
     }
-  } catch (e) {}
+  } catch (e) { }
 
   toast.innerHTML = `
     <div class="auto-switch-toast-content">
@@ -7228,9 +7459,9 @@ function showAutoSwitchToast(targetSemester, dateStr) {
       </button>
     </div>
   `;
-  
+
   toast.classList.add('show');
-  
+
   if (window._autoSwitchToastTimeout) clearTimeout(window._autoSwitchToastTimeout);
   window._autoSwitchToastTimeout = setTimeout(() => {
     toast.classList.remove('show');
@@ -7254,7 +7485,7 @@ async function handleSelectedDateChange(dateStr) {
 
   // 1. Cek apakah tanggal ini sudah ada di dalam jadwal semester aktif yang sedang dimuat (allJadwal)
   const existsInCurrent = allJadwal && allJadwal.length > 0 && allJadwal.some(j => j.tanggal === dateStr);
-  
+
   if (existsInCurrent) {
     // Tanggal sudah cocok dengan database aktif saat ini
     updateRuanganFilterOptions();
@@ -7270,24 +7501,24 @@ async function handleSelectedDateChange(dateStr) {
     try {
       const res = await fetch(`${API_BASE_URL}/api/semesters/resolve-date?tanggal=${encodeURIComponent(dateStr)}&auto_switch=true&_t=${Date.now()}`);
       const json = await res.json();
-      
+
       if (json.status === 'success' && json.is_different && json.matched_semester) {
         isAutoSwitchingSemester = true;
         const targetSemester = json.matched_semester;
-        
+
         // Tampilkan notifikasi auto-switch yang elegan
         showAutoSwitchToast(targetSemester, dateStr);
-        
+
         // Update display semester aktif
         currentActiveSemester = targetSemester;
         updateSemesterDisplay(targetSemester);
-        
+
         // Reload allJadwal untuk semester baru
         showSkeleton();
         const semParam = `&semester=${encodeURIComponent(targetSemester)}`;
         const response = await fetch(`${API_BASE_URL}/api/jadwal?_t=${Date.now()}${semParam}`);
         const data = await response.json();
-        
+
         if (data.status === 'success') {
           allJadwal = (data.data || []).map(item => {
             if (item.nama_ruangan) item.nama_ruangan = item.nama_ruangan.trim();
@@ -7295,19 +7526,19 @@ async function handleSelectedDateChange(dateStr) {
           });
           populateFilters();
         }
-        
+
         // Pastikan tanggal tetap terpilih
         if (mainTanggal) mainTanggal.value = dateStr;
-        
+
         updateRuanganFilterOptions();
         applyFilters();
         if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
         fetchNotifikasiLab(dateStr, false);
         syncData(dateStr);
-        
+
         // Update tampilan modal card di background
         fetchSemestersData();
-        
+
         isAutoSwitchingSemester = false;
         return;
       }
@@ -7526,7 +7757,7 @@ function initLabModalDragToDismiss() {
   function handleMove(clientY, e) {
     if (!isDragging) return;
     if (e && e.cancelable) {
-      try { e.preventDefault(); } catch (_) {}
+      try { e.preventDefault(); } catch (_) { }
     }
     currentY = clientY;
     const deltaY = currentY - startY;
@@ -7762,8 +7993,8 @@ function checkLabNotifications() {
         const alarmKey = `${currentDayStr}_${ruang}_buka_${cls.startMin}`;
         if (!notifiedLabAlarmKeys.has(alarmKey)) {
           notifiedLabAlarmKeys.add(alarmKey);
-          const badgeHTML = cls.isLab 
-            ? '<span class="notif-cat-badge labor">Labor</span>' 
+          const badgeHTML = cls.isLab
+            ? '<span class="notif-cat-badge labor">Labor</span>'
             : '<span class="notif-cat-badge kelas">Kelas</span>';
           bukaToNotify.push({
             ruang,
@@ -7786,11 +8017,11 @@ function checkLabNotifications() {
         const alarmKey = `${currentDayStr}_${ruang}_tutup_${cls.endMin}`;
         if (!notifiedLabAlarmKeys.has(alarmKey)) {
           notifiedLabAlarmKeys.add(alarmKey);
-          const badgeHTML = cls.isLab 
-            ? '<span class="notif-cat-badge labor">Labor</span>' 
+          const badgeHTML = cls.isLab
+            ? '<span class="notif-cat-badge labor">Labor</span>'
             : '<span class="notif-cat-badge kelas">Kelas</span>';
           const jamSelesaiStr = `${String(Math.floor(cls.endMin / 60)).padStart(2, '0')}:${String(cls.endMin % 60).padStart(2, '0')}`;
-          
+
           let infoKondisi = '';
           if (item.tipe === 'JEDA') {
             const nextJamStr = `${String(Math.floor(item.nxt.startMin / 60)).padStart(2, '0')}:${String(item.nxt.startMin % 60).padStart(2, '0')}`;
@@ -7856,65 +8087,111 @@ function checkLabNotifications() {
     // Bagian 1: Perubahan Jadwal Mendadak (Info Mase)
     if (perubahanToNotify.length > 0) {
       contentHTML += `
-        <div style="margin-bottom: 14px; background: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444; border-radius: 6px; padding: 10px 12px; text-align: left;">
-          <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#ef4444; margin-bottom:6px;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-            <span>Perubahan Jadwal Mendadak (Info Mase):</span>
+        <div style="margin-bottom: 14px; text-align: left;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:6px; font-weight:800; font-size:0.94em; color:#ef4444;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              <span>Perubahan Jadwal Mendadak (Info Mase):</span>
+            </div>
+            <span style="font-size:0.75em; font-weight:750; color:#ef4444; background:rgba(239, 68, 68, 0.12); padding:2px 8px; border-radius:12px;">${perubahanToNotify.length} Info</span>
           </div>
-          <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:6px; font-size:0.9em;">
+          <div class="im-card-list">
       `;
       perubahanToNotify.forEach(p => {
-        contentHTML += `<li><strong>${escapeHtml(p.tipe_notif)}:</strong> ${escapeHtml(p.pesan)}</li>`;
+        contentHTML += renderHighlightedInfoMaseCard(p);
       });
-      contentHTML += `</ul></div>`;
+      contentHTML += `</div></div>`;
     }
 
     // Bagian 2: Buka Ruangan / Lab & Hidupkan AC
     if (bukaToNotify.length > 0) {
       contentHTML += `
         <div style="margin-bottom: 12px; text-align: left;">
-          <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#10b981; margin-bottom:6px;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
-            <span>Buka Ruangan & Hidupkan AC (${bukaToNotify.length}):</span>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:6px; font-weight:800; font-size:0.94em; color:#10b981;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+              <span>Buka Ruangan & Hidupkan AC (${bukaToNotify.length}):</span>
+            </div>
+            <span style="font-size:0.75em; font-weight:750; color:#10b981; background:rgba(16, 185, 129, 0.12); padding:2px 8px; border-radius:12px;">Persiapan</span>
           </div>
-          <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:8px;">
+          <div class="im-card-list">
       `;
       bukaToNotify.forEach(b => {
         contentHTML += `
-          <li>
-            <b>${escapeHtml(b.ruang)}</b> ${b.badgeHTML} - <b>${escapeHtml(b.nama_mk)}</b> (${escapeHtml(b.kelas)}) Mulai ${b.jam} WIB
-            <br><i style="color:#10b981; font-size:0.88em;">Mulai dalam ${b.diffBuka} menit, mohon siapkan ruangan & hidupkan AC.</i>
-          </li>
+          <div class="im-card im-type-tm">
+            <div class="im-card-header">
+              <span class="im-badge im-badge-tm">BUKA & HIDUPKAN AC</span>
+              <span class="im-tag-room">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                ${escapeHtml(b.ruang)}
+              </span>
+            </div>
+            <div class="im-card-body">
+              <div style="margin-bottom: 4px;">
+                <span class="im-mk-name">${escapeHtml(b.nama_mk)}</span>
+                <span class="im-tag-class">${escapeHtml(b.kelas)}</span>
+              </div>
+              <div class="im-meta-row">
+                <span class="im-tag-time">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                  Mulai ${escapeHtml(b.jam)} WIB
+                </span>
+                <span class="im-note" style="color:#059669; font-weight:700;">Mulai dalam ${escapeHtml(String(b.diffBuka))} menit</span>
+              </div>
+            </div>
+          </div>
         `;
       });
-      contentHTML += `</ul></div>`;
+      contentHTML += `</div></div>`;
     }
 
     // Bagian 3: Tutup Ruangan / Lab & Matikan AC
     if (tutupToNotify.length > 0) {
       contentHTML += `
         <div style="margin-top: 10px; text-align: left;">
-          <div style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.92em; color:#f59e0b; margin-bottom:6px;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            <span>Tutup Ruangan & Matikan AC (${tutupToNotify.length}):</span>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:6px; font-weight:800; font-size:0.94em; color:#f59e0b;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <span>Tutup Ruangan & Matikan AC (${tutupToNotify.length}):</span>
+            </div>
+            <span style="font-size:0.75em; font-weight:750; color:#f59e0b; background:rgba(245, 158, 11, 0.12); padding:2px 8px; border-radius:12px;">Selesai</span>
           </div>
-          <ul style="padding-left:18px; margin:0; display:flex; flex-direction:column; gap:8px;">
+          <div class="im-card-list">
       `;
       tutupToNotify.forEach(t => {
-        const actionLabel = t.isLab ? 'kunci lab & matikan AC' : 'matikan AC & pastikan ruangan kosong';
+        const actionLabel = t.isLab ? 'Kunci lab & matikan AC' : 'Matikan AC & pastikan ruangan kosong';
         contentHTML += `
-          <li>
-            <b>${escapeHtml(t.ruang)}</b> ${t.badgeHTML} - <b>${escapeHtml(t.nama_mk)}</b> (${escapeHtml(t.kelas)}) Selesai ${t.jamSelesai} WIB
-            <br><i style="color:#f59e0b; font-size:0.88em;">${escapeHtml(t.infoKondisi)}. Mohon ${actionLabel}.</i>
-          </li>
+          <div class="im-card im-type-jeda">
+            <div class="im-card-header">
+              <span class="im-badge im-badge-jeda">SELESAI KELAS</span>
+              <span class="im-tag-room">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                ${escapeHtml(t.ruang)}
+              </span>
+            </div>
+            <div class="im-card-body">
+              <div style="margin-bottom: 4px;">
+                <span class="im-mk-name">${escapeHtml(t.nama_mk)}</span>
+                <span class="im-tag-class">${escapeHtml(t.kelas)}</span>
+              </div>
+              <div class="im-meta-row">
+                <span class="im-tag-time">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                  Selesai ${escapeHtml(t.jamSelesai)} WIB
+                </span>
+                <span class="im-note im-note-alert" style="color:#d97706; background:rgba(245, 158, 11, 0.1);">${escapeHtml(actionLabel)}</span>
+              </div>
+            </div>
+          </div>
         `;
       });
-      contentHTML += `</ul></div>`;
+      contentHTML += `</div></div>`;
     }
 
     if (modalBody) modalBody.innerHTML = contentHTML;
     openModal(true);
   }
+  openModal(true);
 }
 
 setInterval(checkLabNotifications, 60000);
@@ -8327,20 +8604,20 @@ function updateInfoLainBadges() {
 
   // 2. Tambahan
   const notifItems = window._currentNotifData || [];
-  const tambahanNotifs = notifItems.filter(n => 
-    (n.kategori && n.kategori.toLowerCase() === 'tambahan') || 
+  const tambahanNotifs = notifItems.filter(n =>
+    (n.kategori && n.kategori.toLowerCase() === 'tambahan') ||
     (n.pesan && (n.pesan.toLowerCase().includes('tambahan') || n.pesan.toLowerCase().includes('pengganti')))
   );
-  const tambahanJadwal = allJadwal.filter(j => 
-    j.tanggal === ft && j.status_jadwal && 
+  const tambahanJadwal = allJadwal.filter(j =>
+    j.tanggal === ft && j.status_jadwal &&
     (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))
   );
   const extraClasses = window._currentExtraAddedClasses || [];
   const totalTambahan = tambahanNotifs.length + tambahanJadwal.length + extraClasses.length;
 
   // 3. Perubahan
-  const perubahanNotifs = notifItems.filter(n => 
-    (n.kategori && n.kategori.toLowerCase() === 'perubahan') || 
+  const perubahanNotifs = notifItems.filter(n =>
+    (n.kategori && n.kategori.toLowerCase() === 'perubahan') ||
     (n.pesan && (n.pesan.toLowerCase().includes('perubahan') || n.pesan.toLowerCase().includes('pindah') || n.pesan.toLowerCase().includes('geser')))
   );
 
@@ -8425,10 +8702,10 @@ function renderFiturRooms() {
     }
   });
 
-  const activeScheds = allJadwal.filter(j => 
-    j.tanggal === targetDate && 
-    (j.metode_pembelajaran || '').toUpperCase() !== 'CC' && 
-    (j.metode_pembelajaran || '').toUpperCase() !== 'OL' && 
+  const activeScheds = allJadwal.filter(j =>
+    j.tanggal === targetDate &&
+    (j.metode_pembelajaran || '').toUpperCase() !== 'CC' &&
+    (j.metode_pembelajaran || '').toUpperCase() !== 'OL' &&
     (!j.status_jadwal || !j.status_jadwal.toLowerCase().includes('batal'))
   );
   const now = new Date();
@@ -8625,23 +8902,23 @@ function renderFiturRooms() {
           </div>
 
           <div class="room-card-status-detail">
-            ${r.statusType === 'full-free' 
-              ? `<div class="room-free-banner">
+            ${r.statusType === 'full-free'
+        ? `<div class="room-free-banner">
                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                    <span>${r.isKobar ? 'Bebas digunakan (08:00 - 17:00 • Kobar tutup jam 17:00)' : 'Bebas digunakan sepanjang hari (08:00 - 21:00)'}</span>
-                 </div>` 
-              : r.statusType === 'has-gaps' 
-                ? `<div class="room-gaps-block">
+                 </div>`
+        : r.statusType === 'has-gaps'
+          ? `<div class="room-gaps-block">
                      <div class="room-gaps-title">Jam kosong yang tersedia:</div>
                      <div class="room-gaps-chips">
                        ${r.gapsInfo.map(g => `<span class="info-time-chip">${escapeHtml(g)}</span>`).join('')}
                      </div>
                    </div>`
-                : `<div class="room-busy-banner">
+          : `<div class="room-busy-banner">
                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
                      <span>${r.isKobar ? 'Jadwal penuh s/d jam 17:00 (Kelas terakhir selesai).' : 'Jadwal penuh untuk seluruh sesi perkuliahan.'}</span>
                    </div>`
-            }
+      }
           </div>
         </div>
 
@@ -8766,7 +9043,7 @@ function renderChangesHubList(activeTab = 'all', searchQuery = '') {
 
   // Filter Query Search
   if (query) {
-    filtered = filtered.filter(i => 
+    filtered = filtered.filter(i =>
       i.title.toLowerCase().includes(query) ||
       i.dosen.toLowerCase().includes(query) ||
       i.ruangan.toLowerCase().includes(query) ||
@@ -9766,10 +10043,10 @@ setInterval(async () => {
       isModalOpen = true;
     }
   });
-  
+
   const testWaModal = document.getElementById('test-wa-modal');
   if (testWaModal && (testWaModal.classList.contains('open') || testWaModal.style.display === 'flex' || testWaModal.style.display === 'block')) {
-      isModalOpen = true;
+    isModalOpen = true;
   }
 
   if (isModalOpen) return;
@@ -9789,7 +10066,7 @@ setInterval(async () => {
     const resRuangan = await fetch(`${API_BASE_URL}/api/ruangan?_t=${Date.now()}`);
     const dataRuangan = await resRuangan.json();
     if (dataRuangan.status === 'success') {
-      allRuanganData = (dataRuangan.data || []).sort((a, b) => 
+      allRuanganData = (dataRuangan.data || []).sort((a, b) =>
         (a.nama_ruangan || '').localeCompare(b.nama_ruangan || '', undefined, { numeric: true, sensitivity: 'base' })
       );
     }
@@ -10005,22 +10282,22 @@ function getCurrentlySelectedSemester() {
 
 async function getSpotlightDataForSemester(targetSemester) {
   if (!targetSemester) targetSemester = getCurrentlySelectedSemester();
-  
+
   if (spotlightScheduleCache.has(targetSemester)) {
     const cached = spotlightScheduleCache.get(targetSemester);
     if (Array.isArray(cached) && cached.length > 0) return cached;
   }
-  
+
   if (targetSemester === currentActiveSemester && Array.isArray(allJadwal) && allJadwal.length > 0) {
     spotlightScheduleCache.set(targetSemester, allJadwal);
     return allJadwal;
   }
-  
+
   if (targetSemester === currentExplorerSemester && Array.isArray(explorerAllJadwal) && explorerAllJadwal.length > 0) {
     spotlightScheduleCache.set(targetSemester, explorerAllJadwal);
     return explorerAllJadwal;
   }
-  
+
   try {
     const res = await fetch(`${API_BASE_URL}/api/jadwal?semester=${encodeURIComponent(targetSemester)}&_t=${Date.now()}`);
     const json = await res.json();
@@ -10043,24 +10320,24 @@ function updateSpotlightSemesterUI() {
   const labelEl = document.getElementById('spotlight-sem-label');
   const footerSemText = document.getElementById('spotlight-footer-sem-text');
   const input = document.getElementById('spotlight-input');
-  
+
   if (labelEl) labelEl.textContent = sem;
   if (footerSemText) footerSemText.textContent = `Semester: ${sem}`;
   if (input) input.placeholder = `Cari kelas (04PT4), dosen, mata kuliah, ruangan di ${sem}...`;
-  
+
   renderSpotlightSemesterDropdownList();
 }
 
 function renderSpotlightSemesterDropdownList() {
   const container = document.getElementById('spotlight-sem-dropdown-list');
   if (!container) return;
-  
+
   const list = (Array.isArray(allSemestersList) && allSemestersList.length > 0)
     ? allSemestersList
     : [{ nama_semester: 'Ganjil 2026', total_jadwal: 14144 }, { nama_semester: 'Genap 2025', total_jadwal: 11063 }];
-  
+
   const currentSem = spotlightCurrentSemester || getCurrentlySelectedSemester();
-  
+
   container.innerHTML = list.map(s => {
     const isActive = s.nama_semester === currentSem;
     const count = s.total_jadwal ? `${Number(s.total_jadwal).toLocaleString('id-ID')} Jadwal` : '';
@@ -10101,20 +10378,20 @@ async function selectSpotlightSemester(namaSemester) {
   const menu = document.getElementById('spotlight-sem-dropdown');
   if (menu) menu.classList.remove('open');
   if (!namaSemester) return;
-  
+
   spotlightCurrentSemester = namaSemester;
   updateSpotlightSemesterUI();
-  
+
   const input = document.getElementById('spotlight-input');
   const currentVal = input ? input.value.trim().toLowerCase() : '';
-  
+
   await ensureSpotlightDataAndRender(currentVal);
 }
 
 async function ensureSpotlightDataAndRender(query) {
   const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
   let cachedData = spotlightScheduleCache.get(sem);
-  
+
   if (!cachedData || cachedData.length === 0) {
     const container = document.getElementById('spotlight-results');
     if (container) {
@@ -10128,7 +10405,7 @@ async function ensureSpotlightDataAndRender(query) {
     }
     cachedData = await getSpotlightDataForSemester(sem);
   }
-  
+
   renderSpotlightResults(query);
 }
 
@@ -10149,14 +10426,14 @@ function openSpotlightModal() {
     input.value = '';
     spotlightActiveCategory = 'all';
     spotlightActiveIndex = 0;
-    
+
     // Automatically synchronize with current selected semester
     spotlightCurrentSemester = getCurrentlySelectedSemester();
     updateSpotlightSemesterUI();
     updateSpotlightCategoryTabs();
-    
+
     ensureSpotlightDataAndRender('');
-    
+
     if (typeof pushModalHistory === 'function') pushModalHistory('spotlight');
     if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
     setTimeout(() => {
@@ -10170,7 +10447,7 @@ function handleSpotlightInput(val) {
   const clearBtn = document.getElementById('spotlight-clear-btn');
   if (clearBtn) clearBtn.style.display = val ? 'inline-flex' : 'none';
   spotlightActiveIndex = 0;
-  
+
   const sem = spotlightCurrentSemester || getCurrentlySelectedSemester();
   const cached = spotlightScheduleCache.get(sem);
   if (!cached || cached.length === 0) {
@@ -10391,7 +10668,7 @@ function renderSpotlightResults(query) {
   const cat = spotlightActiveCategory;
   const cleanQ = (query || '').replace(/\s+/g, '').toLowerCase();
   const looksLikeClassCode = cleanQ && (
-    /^\d{2}[a-z]{2}[0-9a-z]?$/i.test(cleanQ) || 
+    /^\d{2}[a-z]{2}[0-9a-z]?$/i.test(cleanQ) ||
     (cleanQ.length >= 3 && /^\d+[a-z]+/i.test(cleanQ))
   );
 
@@ -11272,7 +11549,7 @@ async function openTvMode() {
   overlay.style.display = 'flex';
 
   if (document.documentElement.requestFullscreen) {
-    document.documentElement.requestFullscreen().catch(() => {});
+    document.documentElement.requestFullscreen().catch(() => { });
   } else if (document.documentElement.webkitRequestFullscreen) {
     document.documentElement.webkitRequestFullscreen();
   }
@@ -11374,11 +11651,11 @@ function closeTvMode(exitFullscreen = true) {
   const fsElem = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
   if (exitFullscreen && fsElem) {
     try {
-      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => { });
       else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
       else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
       else if (document.msExitFullscreen) document.msExitFullscreen();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (tvClockTimer) { clearInterval(tvClockTimer); tvClockTimer = null; }
@@ -11682,7 +11959,7 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
       const delay = Math.min(idx * 0.05, 1.0);
       return createTvRowHtml(item).replace('class="tv-schedule-row', `style="animation-delay: ${delay}s;" class="tv-schedule-row`);
     }).join('');
-    
+
     startTvRollingTicker();
   }
 }
@@ -11790,7 +12067,7 @@ async function enterStatsMode(namaSemester) {
   if (!allSemestersList || allSemestersList.length === 0) {
     try {
       await fetchSemestersData();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   updateStatsSemesterDropdown(namaSemester);
@@ -11962,7 +12239,7 @@ function renderDonutStats() {
   // 1. Donut Metode Pembelajaran (TM vs OL vs CC)
   const wrapMetode = document.getElementById('donut-metode-svg-wrap');
   const legendMetode = document.getElementById('donut-metode-legend');
-  
+
   // Ambil rasio metode dari backend summary atau lab_stats summary
   const rasioObj = s.metode_rasio || lb.summary?.metode_rasio || {};
   const totalSesi = rasioObj.total_sesi ?? lb.summary?.total_sesi ?? 0;
@@ -12313,15 +12590,15 @@ function renderDetailKelasTimeline(targetDay) {
         </div>
         <div class="daily-schedule-list">
           ${daySlots.map(s => {
-            const isLab = s.is_lab;
-            const roomLabel = isLab ? `Labor: ${escapeHtml(s.nama_ruangan)}` : `Ruang: ${escapeHtml(s.nama_ruangan)}`;
-            const roomClass = isLab ? 'sched-room-badge is-lab' : 'sched-room-badge';
+      const isLab = s.is_lab;
+      const roomLabel = isLab ? `Labor: ${escapeHtml(s.nama_ruangan)}` : `Ruang: ${escapeHtml(s.nama_ruangan)}`;
+      const roomClass = isLab ? 'sched-room-badge is-lab' : 'sched-room-badge';
 
-            let methodBadge = '<span class="m-pill m-tm">Tatap Muka</span>';
-            if (s.ol > 0 && s.tm === 0) methodBadge = '<span class="m-pill m-ol">Online</span>';
-            else if (s.cc > 0 && s.tm === 0) methodBadge = '<span class="m-pill m-cc">Dibatalkan</span>';
+      let methodBadge = '<span class="m-pill m-tm">Tatap Muka</span>';
+      if (s.ol > 0 && s.tm === 0) methodBadge = '<span class="m-pill m-ol">Online</span>';
+      else if (s.cc > 0 && s.tm === 0) methodBadge = '<span class="m-pill m-cc">Dibatalkan</span>';
 
-            return `
+      return `
               <div class="schedule-card-item">
                 <div class="sched-time-col">
                   <span class="sched-time-main">${escapeHtml(s.waktu)}</span>
@@ -12348,7 +12625,7 @@ function renderDetailKelasTimeline(targetDay) {
                 </div>
               </div>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
     `;
@@ -13042,7 +13319,7 @@ function syncMobileNavActiveState() {
   const settingModal = document.getElementById('test-wa-modal');
 
   if ((spotlightBackdrop && spotlightBackdrop.classList.contains('open')) ||
-      (spotlightDetail && spotlightDetail.classList.contains('open'))) {
+    (spotlightDetail && spotlightDetail.classList.contains('open'))) {
     document.getElementById('mobile-nav-search')?.classList.add('active');
   } else if (settingModal && settingModal.classList.contains('open')) {
     document.getElementById('mobile-nav-setting')?.classList.add('active');
@@ -13343,7 +13620,7 @@ function updateKurikulumSelectorUI() {
 
 function switchKurikulumTab(tabName) {
   currentKurikulumTab = tabName;
-  
+
   // Tab buttons
   document.querySelectorAll('.kurikulum-tabs-nav .stats-tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.id === `tab-btn-kuri-${tabName}`);
@@ -13493,7 +13770,7 @@ function filterKurikulumSemesterList() {
 
   const searchInput = document.getElementById('kuri-search-input');
   const searchVal = (searchInput ? searchInput.value : '').trim().toLowerCase();
-  
+
   const btnClear = document.getElementById('kuri-search-clear');
   if (btnClear) btnClear.style.display = searchVal ? 'block' : 'none';
 
@@ -13687,7 +13964,7 @@ var currentDetailKelasCode = null;
 var currentDetailKelasFilterDay = 'ALL';
 var currentDetailKelasJadwal = [];
 
-window.filterRoomTable = function(type) {
+window.filterRoomTable = function (type) {
   currentRoomFilter = type || 'all';
   document.querySelectorAll('#group-filter-room .stats-subfilter-btn').forEach(btn => {
     btn.classList.remove('active');
@@ -13709,19 +13986,19 @@ window.filterRoomTable = function(type) {
 function safeEscapeStats(str) {
   if (str === null || str === undefined) return '';
   if (typeof escapeHtml === 'function') return escapeHtml(String(str));
-  return String(str).replace(/[&<>"']/g, function(c) {
+  return String(str).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
 
-window.closeSettingAndOpenStatsMode = function() {
+window.closeSettingAndOpenStatsMode = function () {
   const testModal = document.getElementById('test-wa-modal');
   if (testModal) testModal.classList.remove('open');
   if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
   enterStatsMode();
 };
 
-window.enterStatsMode = async function(namaSemester) {
+window.enterStatsMode = async function (namaSemester) {
   if (!namaSemester) {
     namaSemester = selectedSemesterTemp || currentActiveSemester || 'Ganjil 2026';
   }
@@ -13767,7 +14044,7 @@ window.enterStatsMode = async function(namaSemester) {
   await loadStatisticsData(namaSemester);
 };
 
-window.exitStatsMode = function() {
+window.exitStatsMode = function () {
   isStatsExplorerMode = false;
   document.body.classList.remove('stats-explorer-active');
 
@@ -13786,12 +14063,12 @@ window.exitStatsMode = function() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
-window.switchStatsSemester = function(namaSemester) {
+window.switchStatsSemester = function (namaSemester) {
   if (!namaSemester || namaSemester === currentStatsSemester) return;
   enterStatsMode(namaSemester);
 };
 
-window.selectStatsSemesterSwitch = function(namaSemester) {
+window.selectStatsSemesterSwitch = function (namaSemester) {
   const dropdown = document.getElementById('dropdown-stats-sem-switch');
   if (dropdown) dropdown.classList.remove('open');
 
@@ -13842,7 +14119,7 @@ function updateStatsSemesterDropdown(currentSem) {
   }).join('');
 }
 
-window.loadStatisticsData = async function(namaSemester) {
+window.loadStatisticsData = async function (namaSemester) {
   try {
     const res = await fetch(`${API_BASE_URL}/api/statistics?semester=${encodeURIComponent(namaSemester)}&_t=${Date.now()}`);
     const json = await res.json();
@@ -13903,7 +14180,7 @@ function renderStatsView() {
   }
 }
 
-window.switchStatsTab = function(tabName) {
+window.switchStatsTab = function (tabName) {
   currentStatsTab = tabName;
 
   document.querySelectorAll('.stats-category-tabs .stats-tab-btn').forEach(btn => {
@@ -13921,7 +14198,7 @@ window.switchStatsTab = function(tabName) {
   renderStatsView();
 };
 
-window.setStatsViewMode = function(modeName) {
+window.setStatsViewMode = function (modeName) {
   currentStatsViewMode = modeName;
 
   document.querySelectorAll('.stats-view-mode-group .stats-mode-pill-btn').forEach(btn => {
@@ -13941,7 +14218,7 @@ window.setStatsViewMode = function(modeName) {
   renderStatsView();
 };
 
-window.printOrExportStats = function() {
+window.printOrExportStats = function () {
   window.print();
 };
 
@@ -14055,8 +14332,8 @@ function renderLabStats() {
     const isTop = idx === 0;
     const isLab = lb.tipe === 'Labor' || lb.tipe === 'Laboratorium';
     const tipeBadge = `<span class="badge-type-${isLab ? 'lab' : 'kelas'}">${isLab ? 'Labor' : 'Ruang Kelas'}</span>`;
-    const campusBadge = lb.kampus && lb.kampus.toLowerCase().includes('thehok') 
-      ? '<span class="badge-campus-tag campus-thehok">Thehok</span>' 
+    const campusBadge = lb.kampus && lb.kampus.toLowerCase().includes('thehok')
+      ? '<span class="badge-campus-tag campus-thehok">Thehok</span>'
       : '<span class="badge-campus-tag campus-kobar">Kobar</span>';
     const cleanRoomName = safeEscapeStats(lb.nama_ruangan).replace(/\s*\((Thehok|Kobar|Kampus.*?)\)/gi, '').trim();
 
@@ -14403,8 +14680,8 @@ function renderMatrixCardsLab(container) {
   container.innerHTML = rankings.map((lb, idx) => {
     const isTop = idx === 0;
     const isThehok = lb.kampus && lb.kampus.toLowerCase().includes('thehok');
-    const campusBadge = isThehok 
-      ? '<span class="badge-campus-tag campus-thehok">Kampus Thehok</span>' 
+    const campusBadge = isThehok
+      ? '<span class="badge-campus-tag campus-thehok">Kampus Thehok</span>'
       : '<span class="badge-campus-tag campus-kobar">Kampus Kobar</span>';
     const isLab = lb.tipe === 'Labor' || lb.tipe === 'Laboratorium';
     const tipeBadge = `<span class="badge-type-${isLab ? 'lab' : 'kelas'}">${isLab ? 'Labor' : 'Ruang Kelas'}</span>`;
@@ -14598,7 +14875,7 @@ function renderStatsFullTable() {
   filterStatsTableData('');
 }
 
-window.filterStatsTableData = function(searchQuery) {
+window.filterStatsTableData = function (searchQuery) {
   const tbody = document.getElementById('tbody-mode-full-kelas');
   if (!tbody) return;
 
@@ -14643,7 +14920,7 @@ window.filterStatsTableData = function(searchQuery) {
 };
 
 // ==================== SUB-VIEW: DETAIL KELAS PERKULIAHAN ====================
-window.openDetailKelas = async function(kodeKelas) {
+window.openDetailKelas = async function (kodeKelas) {
   if (!kodeKelas) return;
   currentDetailKelasCode = kodeKelas;
   currentDetailKelasFilterDay = 'ALL';
@@ -14690,7 +14967,7 @@ window.openDetailKelas = async function(kodeKelas) {
   }
 };
 
-window.exitDetailKelas = function() {
+window.exitDetailKelas = function () {
   const detailView = document.getElementById('stats-detail-kelas-container');
   if (detailView) detailView.style.display = 'none';
 
@@ -14740,7 +15017,7 @@ function renderDetailKelasData() {
   renderDetailKelasTimeline();
 }
 
-window.filterDetailKelasDay = function(dayName) {
+window.filterDetailKelasDay = function (dayName) {
   currentDetailKelasFilterDay = dayName;
 
   document.querySelectorAll('#dk-day-filter-buttons .day-pill-btn').forEach(btn => {
@@ -14804,12 +15081,12 @@ function renderDetailKelasTimeline() {
         </div>
         <div class="timeline-sessions-grid">
           ${sessions.map(s => {
-            const met = (s.metode_pembelajaran || 'TM').toUpperCase();
-            let badgeMet = '<span class="badge-method-tm">Tatap Muka (TM)</span>';
-            if (met === 'OL') badgeMet = '<span class="badge-method-ol">Online (OL)</span>';
-            else if (met === 'CC') badgeMet = '<span class="badge-method-cc">Dibatalkan (CC)</span>';
+      const met = (s.metode_pembelajaran || 'TM').toUpperCase();
+      let badgeMet = '<span class="badge-method-tm">Tatap Muka (TM)</span>';
+      if (met === 'OL') badgeMet = '<span class="badge-method-ol">Online (OL)</span>';
+      else if (met === 'CC') badgeMet = '<span class="badge-method-cc">Dibatalkan (CC)</span>';
 
-            return `
+      return `
               <div class="timeline-session-card">
                 <div class="session-card-header">
                   <div class="session-time-wrap">
@@ -14839,7 +15116,7 @@ function renderDetailKelasTimeline() {
                 </div>
               </div>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
     `;

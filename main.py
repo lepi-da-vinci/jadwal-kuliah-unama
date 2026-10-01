@@ -1037,9 +1037,9 @@ def get_statistics(semester: str = None):
 
             metode = (r.get("metode_pembelajaran") or "TM").upper()
             status_low = (r.get("status_jadwal") or "").lower()
-            if "cancel" in status_low or "batal" in status_low or "cc" in status_low:
+            if re.search(r'\b(?:cc|cancel|batal)\b', status_low):
                 metode = "CC"
-            elif "online" in status_low or "daring" in status_low or "ol" in status_low:
+            elif re.search(r'\b(?:ol|online|daring)\b', status_low):
                 metode = "OL"
             elif metode not in ["TM", "OL", "CC"]:
                 metode = "TM"
@@ -1437,10 +1437,12 @@ def get_sks_map():
     try:
         cache = scraper.load_curriculum_sks_cache()
         prodi_map = {f"{k[0]}:::{k[1]}": v for k, v in cache.get('prodi', {}).items()}
+        sem_map = {f"{k[0]}:::{k[1]}:::{k[2]}": v for k, v in cache.get('sem', {}).items()}
         return {
             "status": "success",
             "name_map": cache.get('name', {}),
             "prodi_map": prodi_map,
+            "sem_map": sem_map,
             "two_sks_patterns": scraper.TWO_SKS_PATTERNS
         }
     except Exception as e:
@@ -2802,10 +2804,10 @@ def get_detail_kelas(kelas: str, semester: str = None):
 
             metode = (r.get("metode_pembelajaran") or "TM").upper()
             status_low = (r.get("status_jadwal") or "").lower()
-            if "cancel" in status_low or "batal" in status_low or "cc" in status_low:
+            if re.search(r'\b(?:cc|cancel|batal)\b', status_low):
                 metode = "CC"
                 cc_count += 1
-            elif "online" in status_low or "daring" in status_low or "ol" in status_low:
+            elif re.search(r'\b(?:ol|online|daring)\b', status_low):
                 metode = "OL"
                 ol_count += 1
             else:

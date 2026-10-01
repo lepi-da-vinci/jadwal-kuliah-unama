@@ -484,10 +484,10 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
         # 4. Parsing Kolom STATUS (TM, OL, CC)
         status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
         status_lower = status_raw.lower()
-        if "cc" in status_lower or "cancel" in status_lower or "batal" in status_lower:
+        if re.search(r'\b(?:cc|cancel|batal)\b', status_lower):
             status_jadwal = "Cancel"
             metode = "CC"
-        elif "ol" in status_lower or "online" in status_lower or "daring" in status_lower:
+        elif re.search(r'\b(?:ol|online|daring)\b', status_lower):
             status_jadwal = "Online"
             metode = "OL"
         else:
@@ -517,6 +517,7 @@ _curriculum_sks_cache = None
 def load_curriculum_sks_cache(conn=None):
     """Memuat pemetaan SKS kurikulum dari database ke memori untuk lookup super cepat."""
     global _curriculum_sks_cache
+    cache_sem = {}
     cache_prodi = {}
     cache_name = {}
     close_at_end = False
@@ -525,13 +526,21 @@ def load_curriculum_sks_cache(conn=None):
             conn = get_db()
             close_at_end = True
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT prodi, nama_mk, sks FROM kurikulum_mata_kuliah")
+        cursor.execute("SELECT prodi, nama_mk, sks, semester_angka FROM kurikulum_mata_kuliah")
         for row in cursor.fetchall():
             p = (row.get('prodi') or '').strip().upper()
             nm = (row.get('nama_mk') or '').strip().lower()
             sks = int(row.get('sks') or 3)
-            cache_prodi[(nm, p)] = sks
-            if nm not in cache_name:
+            sem_angka = row.get('semester_angka')
+            if sem_angka is not None:
+                try:
+                    cache_sem[(nm, p, int(sem_angka))] = sks
+                except (ValueError, TypeError):
+                    pass
+            # Prefer higher SKS (e.g. 3 SKS over 2 SKS) for general prodi lookup if conflicting
+            if (nm, p) not in cache_prodi or sks >= 3:
+                cache_prodi[(nm, p)] = sks
+            if nm not in cache_name or sks >= 3:
                 cache_name[nm] = sks
         cursor.close()
     except Exception as e:
@@ -541,6 +550,7 @@ def load_curriculum_sks_cache(conn=None):
             conn.close()
             
     _curriculum_sks_cache = {
+        'sem': cache_sem,
         'prodi': cache_prodi,
         'name': cache_name
     }
@@ -559,6 +569,18 @@ def extract_prodi_from_kelas(kelas: str) -> str | None:
         if c in ('M', 'W'): return 'MANAJEMEN'
         if c == 'A': return 'AKUNTANSI'
         if c == 'B': return 'BISNIS'
+    return None
+
+def extract_semester_from_kelas(kelas: str) -> int | None:
+    """Mengekstrak semester mahasiswa dari kode kelas (contoh: 01PT7 -> 7, 02PS4 -> 4, 05SK6 -> 6)."""
+    if not kelas or not isinstance(kelas, str):
+        return None
+    m = re.search(r'\d{2}[A-Za-z]{2}(\d+)', kelas.strip())
+    if m:
+        try:
+            return int(m.group(1))
+        except (ValueError, TypeError):
+            pass
     return None
 
 TWO_SKS_PATTERNS = [
@@ -591,12 +613,16 @@ def get_class_sks(nama_mk: str, kelas: str = None) -> int:
         load_curriculum_sks_cache()
         
     prodi = extract_prodi_from_kelas(kelas)
+    sem_num = extract_semester_from_kelas(kelas)
     if _curriculum_sks_cache:
-        # Cek kurikulum spesifik prodi terlebih dahulu
-        if prodi and (nm, prodi) in _curriculum_sks_cache['prodi']:
+        # 1. Cek kurikulum spesifik prodi DAN semester angka mahasiswa (misal: Manajemen Proyek 01PT7 -> Semester 7 -> 3 SKS)
+        if prodi and sem_num is not None and (nm, prodi, sem_num) in _curriculum_sks_cache.get('sem', {}):
+            return _curriculum_sks_cache['sem'][(nm, prodi, sem_num)]
+        # 2. Cek kurikulum spesifik prodi
+        if prodi and (nm, prodi) in _curriculum_sks_cache.get('prodi', {}):
             return _curriculum_sks_cache['prodi'][(nm, prodi)]
-        # Cek kurikulum nama umum
-        if nm in _curriculum_sks_cache['name']:
+        # 3. Cek kurikulum nama umum
+        if nm in _curriculum_sks_cache.get('name', {}):
             return _curriculum_sks_cache['name'][nm]
             
     # Pola kata kunci mata kuliah 2 SKS umum (lintas prodi)
@@ -712,45 +738,11 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             'jam': jam_str, 'nama_mk': nama_mk, 'start': start_min, 'end': end_min
         })
             
-    for room, scheds in room_schedules.items():
-        if not scheds:
-            continue
-        scheds = sorted(scheds, key=lambda x: x['start'])
-        clean_room = format_room_clean(room)
-        is_lab_room = is_lab(clean_room)
-        
-        # 1. Jeda Pagi: Jika kelas tatap muka pertama mulai >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
-        first_cls = scheds[0]
-        if first_cls['start'] - 480 >= 90:
-            gap = first_cls['start'] - 480
-            hours = gap // 60
-            mins = gap % 60
-            dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
-            tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
-            lab_note = f" (Buka Lab {first_cls['jam']})" if is_lab_room else ""
-            pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong 08:00 - {first_cls['jam']}{lab_note}."
-            cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+    # Track generated gap intervals per room to prevent duplicate notifications:
+    # clean_room -> list of dict: {'start': int, 'end': int, 'has_note': bool, 'pesan': str}
+    recorded_gaps = collections.defaultdict(list)
 
-        # 2. Jeda Antar Kelas
-        for i in range(len(scheds) - 1):
-            curr = scheds[i]
-            nxt = scheds[i+1]
-            gap = nxt['start'] - curr['end']
-            if gap >= 90:
-                hours = gap // 60
-                mins = gap % 60
-                dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
-                tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
-                
-                # Format end time of current class
-                eh = curr['end'] // 60
-                em = curr['end'] % 60
-                end_str = f"{eh:02d}:{em:02d}"
-                
-                pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {end_str} - {nxt['jam']}."
-                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
-
-    # Deteksi ruangan/lab yang memiliki kelas non-fisik (OL dan CC) di tanggal ini
+    # 1. Deteksi ruangan/lab yang memiliki kelas non-fisik (OL dan CC) di tanggal ini
     cursor.execute("""
         SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas, j.metode_pembelajaran, j.status_jadwal
         FROM jadwal j
@@ -812,7 +804,7 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             'lokasi': lokasi
         })
 
-    # 1. Generate JEDA untuk blok kelas OL / CC yang durasinya >= 90 menit
+    # Generate JEDA untuk blok kelas OL / CC yang durasinya >= 90 menit terlebih dahulu (lebih detail karena ada catatan alasan)
     for room, item_list in non_phys_by_room.items():
         item_list = sorted(item_list, key=lambda x: x['start'])
         
@@ -875,6 +867,67 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
                 """, (target_date, sem_final, pesan))
                 if not cursor.fetchone():
                     cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+                
+                recorded_gaps[clean_room].append({
+                    'start': b_start, 'end': b_end, 'has_note': True, 'pesan': pesan
+                })
+
+    # 2. Generate JEDA dari jadwal fisik (Jeda Pagi & Jeda Antar Kelas)
+    for room, scheds in room_schedules.items():
+        if not scheds:
+            continue
+        scheds = sorted(scheds, key=lambda x: x['start'])
+        clean_room = format_room_clean(room)
+        is_lab_room = is_lab(clean_room)
+        
+        # A. Jeda Pagi: Jika kelas tatap muka pertama mulai >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
+        first_cls = scheds[0]
+        if first_cls['start'] - 480 >= 90:
+            gap = first_cls['start'] - 480
+            hours = gap // 60
+            mins = gap % 60
+            dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+            tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
+            lab_note = f" (Buka Lab {first_cls['jam']})" if is_lab_room else ""
+            pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong 08:00 - {first_cls['jam']}{lab_note}."
+
+            already_covered = any(
+                not (first_cls['start'] <= rg['start'] or 480 >= rg['end'])
+                for rg in recorded_gaps.get(clean_room, [])
+            )
+            if not already_covered:
+                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+                recorded_gaps[clean_room].append({
+                    'start': 480, 'end': first_cls['start'], 'has_note': False, 'pesan': pesan
+                })
+
+        # B. Jeda Antar Kelas Fisik
+        for i in range(len(scheds) - 1):
+            curr = scheds[i]
+            nxt = scheds[i+1]
+            gap = nxt['start'] - curr['end']
+            if gap >= 90:
+                hours = gap // 60
+                mins = gap % 60
+                dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+                tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
+                
+                eh = curr['end'] // 60
+                em = curr['end'] % 60
+                end_str = f"{eh:02d}:{em:02d}"
+                
+                pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong {end_str} - {nxt['jam']}."
+
+                # Cek apakah interval ini sudah tercakup oleh notifikasi OL/CC yang lebih detail sebelumnya
+                already_covered = any(
+                    not (nxt['start'] <= rg['start'] or curr['end'] >= rg['end'])
+                    for rg in recorded_gaps.get(clean_room, [])
+                )
+                if not already_covered:
+                    cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+                    recorded_gaps[clean_room].append({
+                        'start': curr['end'], 'end': nxt['start'], 'has_note': False, 'pesan': pesan
+                    })
 
     conn.commit()
 
