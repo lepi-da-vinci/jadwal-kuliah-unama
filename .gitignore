@@ -13,3 +13,7 @@ tunnel_logs/*
 graphify-out/
 ide.md
 rekap_kurikulum_ti_si_sk_2024_2025.md
+database.db
+scratch/
+.ruff_cache/
+logs/
