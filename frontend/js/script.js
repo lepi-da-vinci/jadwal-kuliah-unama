@@ -2886,11 +2886,49 @@ function getRoomFromNotification(pesan = '') {
   const jedaMatch = p.match(/JEDA(?:\s+[A-Z]+)?(?:\s*\([^)]*\))?:\s*(?:Ruang\s+)?([^\n\r:]+?)\s+kosong/i);
   if (jedaMatch) return jedaMatch[1].trim();
 
-  // 2. Format TAMBAHAN / PERUBAHAN: "... di R. 4.9 (Thehok) pada ..." atau "... di Labor 1.3 (Thehok) dialihkan ..."
-  const diMatch = p.match(/\bdi\s+([^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.)/i);
+  // 2. Format PINDAH RUANGAN:
+  // "... dipindahkan MASUK ke R. 3.2 (Thehok) (sebelumnya di R. 2.1 (Kobar)). Dosen: ..."
+  const pindahMasuk = p.match(/dipindahkan\s+MASUK\s+ke\s+([^\n\r,]+?)(?:\s*\(sebelumnya|\.\s+[A-Z]|\.$|$)/i);
+  if (pindahMasuk) return pindahMasuk[1].trim();
+
+  // "... dipindahkan KELUAR dari R. 2.1 (Kobar) ke R. 3.2 (Thehok)."
+  const pindahKeluar = p.match(/dipindahkan\s+KELUAR\s+dari\s+([^\n\r,]+?)\s+ke\s+/i);
+  if (pindahKeluar) return pindahKeluar[1].trim();
+
+  // 3. Format TAMBAHAN / PERUBAHAN: "... di R. 4.9 (Thehok) pada ..." atau "... di Labor 1.3 (Thehok) dialihkan ..."
+  const diMatch = p.match(/\bdi\s+([^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.\s+[A-Z]|\.$)/i);
   if (diMatch) return diMatch[1].trim();
 
   return '';
+}
+
+function extractTimeFromNotification(pesan = '') {
+  if (!pesan) return null;
+  const match = pesan.match(/(?:jam|pada)\s+([0-2]?[0-9]:[0-5][0-9])/i) || pesan.match(/\b([0-2]?[0-9]:[0-5][0-9])\b/);
+  return match ? match[1] : null;
+}
+
+function deduplicateInfoMaseData(notifList) {
+  if (!Array.isArray(notifList)) return [];
+  const seenChangeRooms = new Set();
+  const result = [];
+  // Urutkan dari yang terbaru (id terbesar / urutan awal)
+  const sorted = notifList.slice().sort((a, b) => (b.id || 0) - (a.id || 0));
+  for (const n of sorted) {
+    if (n.tipe_notif === 'PERUBAHAN' || n.tipe_notif === 'TAMBAHAN') {
+      const rawRoom = n.ruangan || getRoomFromNotification(n.pesan);
+      const { room: parsedRoom } = parseRoomAndCampus(rawRoom);
+      const roomKey = (parsedRoom || '').trim().toLowerCase();
+      if (roomKey) {
+        if (seenChangeRooms.has(roomKey)) {
+          continue; // Lewati notifikasi lama untuk ruangan yang sama
+        }
+        seenChangeRooms.add(roomKey);
+      }
+    }
+    result.push(n);
+  }
+  return result;
 }
 
 function parseRoomAndCampus(raw = '') {
@@ -3114,7 +3152,9 @@ function calculateClientSideGaps(targetDate) {
 }
 
 function updateInfoMaseDynamicButtons(notifs = []) {
-  latestNotifikasiLabData = notifs;
+  const dedupedNotifs = deduplicateInfoMaseData(notifs);
+  latestNotifikasiLabData = dedupedNotifs;
+  notifs = dedupedNotifs;
   const toggleBtn = document.getElementById('toggle-notif-btn');
   const fsInfoBtn = document.getElementById('btn-fs-info-modal');
   const buttons = [toggleBtn, fsInfoBtn].filter(Boolean);
@@ -7924,6 +7964,31 @@ function playDefaultTone() {
 
 // ─── Room & Lab Check (Notifikasi Mulai Ruangan/Labor) ───
 // ─── Room & Lab Check (Notifikasi Pintar Ruangan, Labor & AC) ───
+function getNotifiedLabAlarmKeys() {
+  try {
+    const raw = localStorage.getItem('notified_lab_alarm_keys');
+    if (!raw) return new Set();
+    const data = JSON.parse(raw);
+    return new Set(Object.keys(data));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function saveNotifiedLabAlarmKey(key) {
+  try {
+    const raw = localStorage.getItem('notified_lab_alarm_keys');
+    const data = raw ? JSON.parse(raw) : {};
+    data[key] = Date.now();
+    // Simpan history alarm 2 hari agar tidak membengkak
+    const twoDaysAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    for (const k in data) {
+      if (data[k] < twoDaysAgo) delete data[k];
+    }
+    localStorage.setItem('notified_lab_alarm_keys', JSON.stringify(data));
+  } catch (e) {}
+}
+
 const notifiedLabAlarmKeys = new Set();
 
 function checkLabNotifications() {
@@ -7935,6 +8000,7 @@ function checkLabNotifications() {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   const currentDayStr = `${year}-${month}-${day}`;
+  const persistentAlarmKeys = getNotifiedLabAlarmKeys();
 
   // 1. Kelompokkan jadwal tatap muka hari ini per ruangan
   const roomScheduleMap = {};
@@ -7991,8 +8057,9 @@ function checkLabNotifications() {
       const diffBuka = cls.startMin - currentTotalMin;
       if (diffBuka >= 15 && diffBuka <= 20) {
         const alarmKey = `${currentDayStr}_${ruang}_buka_${cls.startMin}`;
-        if (!notifiedLabAlarmKeys.has(alarmKey)) {
+        if (!notifiedLabAlarmKeys.has(alarmKey) && !persistentAlarmKeys.has(alarmKey)) {
           notifiedLabAlarmKeys.add(alarmKey);
+          saveNotifiedLabAlarmKey(alarmKey);
           const badgeHTML = cls.isLab
             ? '<span class="notif-cat-badge labor">Labor</span>'
             : '<span class="notif-cat-badge kelas">Kelas</span>';
@@ -8015,8 +8082,9 @@ function checkLabNotifications() {
       const diffTutup = currentTotalMin - cls.endMin;
       if (diffTutup >= 0 && diffTutup <= 5) {
         const alarmKey = `${currentDayStr}_${ruang}_tutup_${cls.endMin}`;
-        if (!notifiedLabAlarmKeys.has(alarmKey)) {
+        if (!notifiedLabAlarmKeys.has(alarmKey) && !persistentAlarmKeys.has(alarmKey)) {
           notifiedLabAlarmKeys.add(alarmKey);
+          saveNotifiedLabAlarmKey(alarmKey);
           const badgeHTML = cls.isLab
             ? '<span class="notif-cat-badge labor">Labor</span>'
             : '<span class="notif-cat-badge kelas">Kelas</span>';
@@ -8046,16 +8114,50 @@ function checkLabNotifications() {
   }
 
   // 3. Pemicu Perubahan Jadwal Mendadak (Info Mase)
+  // Deduplikasi per ruangan agar notifikasi tidak menumpuk
   const perubahanToNotify = [];
   if (Array.isArray(latestNotifikasiLabData)) {
-    latestNotifikasiLabData.forEach(n => {
+    const dedupedChanges = deduplicateInfoMaseData(latestNotifikasiLabData);
+    dedupedChanges.forEach(n => {
       const tgl = n.tanggal || '';
       if (tgl === currentDayStr && (n.tipe_notif === 'PERUBAHAN' || n.tipe_notif === 'TAMBAHAN')) {
-        const alarmKey = `${currentDayStr}_infomase_${n.id || n.pesan}`;
-        if (!notifiedLabAlarmKeys.has(alarmKey)) {
-          notifiedLabAlarmKeys.add(alarmKey);
-          perubahanToNotify.push(n);
+        const rawRoom = n.ruangan || getRoomFromNotification(n.pesan);
+        const { room: parsedRoom } = parseRoomAndCampus(rawRoom);
+        const roomKey = (parsedRoom || '').trim().toLowerCase();
+        const alarmKey = `${currentDayStr}_infomase_${roomKey || 'gen'}_${n.id || n.pesan}`;
+
+        if (notifiedLabAlarmKeys.has(alarmKey) || persistentAlarmKeys.has(alarmKey)) {
+          return;
         }
+
+        // Cek apakah waktu kelas ini sudah kadaluarsa (sudah lewat jam selesai kelas)
+        const timeStr = extractTimeFromNotification(n.pesan);
+        if (timeStr) {
+          const startMin = parseTimeToMinutes(timeStr);
+          if (startMin !== null) {
+            // Asumsikan durasi kelas maksimal 120 menit. Jika sekarang sudah lewat jam selesai kelas, jangan munculkan popup alarm
+            const endMin = startMin + 120;
+            if (currentTotalMin > endMin) {
+              notifiedLabAlarmKeys.add(alarmKey);
+              saveNotifiedLabAlarmKey(alarmKey);
+              return;
+            }
+          }
+        }
+
+        // Jangan munculkan popup alarm untuk notifikasi masa lalu (> 30 menit yang lalu) saat buka aplikasi
+        if (n.created_ts) {
+          const notifAgeMin = (Date.now() / 1000 - n.created_ts) / 60;
+          if (notifAgeMin > 30) {
+            notifiedLabAlarmKeys.add(alarmKey);
+            saveNotifiedLabAlarmKey(alarmKey);
+            return;
+          }
+        }
+
+        notifiedLabAlarmKeys.add(alarmKey);
+        saveNotifiedLabAlarmKey(alarmKey);
+        perubahanToNotify.push(n);
       }
     });
   }
@@ -8191,7 +8293,6 @@ function checkLabNotifications() {
     if (modalBody) modalBody.innerHTML = contentHTML;
     openModal(true);
   }
-  openModal(true);
 }
 
 setInterval(checkLabNotifications, 60000);

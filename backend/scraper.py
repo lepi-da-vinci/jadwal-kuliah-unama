@@ -685,6 +685,24 @@ def format_room_clean(room_name: str) -> str:
     r = re.sub(r'\(Kampus\s+(Thehok|Kobar)\)', r'(\1)', r, flags=re.IGNORECASE)
     return r
 
+def extract_room_from_notification(pesan: str) -> str:
+    if not pesan:
+        return ""
+    p = str(pesan).strip()
+    m = re.search(r'JEDA(?:\s+[A-Z]+)?(?:\s*\([^)]*\))?:\s*(?:Ruang\s+)?([^\n\r:]+?)\s+kosong', p, re.I)
+    if m:
+        return format_room_clean(m.group(1).strip())
+    m = re.search(r'dipindahkan\s+MASUK\s+ke\s+([^\n\r,]+?)(?:\s*\(sebelumnya|\.\s+[A-Z]|\.$|$)', p, re.I)
+    if m:
+        return format_room_clean(m.group(1).strip())
+    m = re.search(r'dipindahkan\s+KELUAR\s+dari\s+([^\n\r,]+?)\s+ke\s+', p, re.I)
+    if m:
+        return format_room_clean(m.group(1).strip())
+    m = re.search(r'\bdi\s+([^\n\r,]+?)\s+(?:pada|dialihkan|dibatalkan|kembali|\.\s+[A-Z]|\.$)', p, re.I)
+    if m:
+        return format_room_clean(m.group(1).strip())
+    return ""
+
 def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
     sem_final = target_semester or get_active_semester(conn, cursor)
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA' AND semester = %s", (target_date, sem_final))
@@ -1451,6 +1469,14 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                         else:
                             pesan = f"PERUBAHAN STATUS: Kelas {new_it['nama_mk']} ({new_it['kelas']}) di {ruang_lengkap} pada {new_it['jam_str']}. Status: {old_s} -> {new_s}."
 
+                        # Hapus notifikasi perubahan sebelumnya untuk kelas & jam yang sama di ruangan ini agar tidak menumpuk
+                        cursor.execute("""
+                            DELETE FROM notifikasi_lab 
+                            WHERE tanggal = %s AND (semester = %s OR semester IS NULL) 
+                              AND tipe_notif IN ('PERUBAHAN', 'TAMBAHAN')
+                              AND (pesan LIKE %s OR (pesan LIKE %s AND pesan LIKE %s))
+                        """, (t_date, sem_final, f"%({new_it['kelas']})%{new_it['jam_str']}%", f"%{ruang_lengkap}%", f"%{new_it['jam_str']}%"))
+
                         cursor.execute("""
                             SELECT 1 FROM notifikasi_lab 
                             WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s
@@ -1507,6 +1533,13 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                     # Event PINDAH_KELUAR (Ruangan Asal)
                     pesan_keluar = f"PINDAH RUANGAN: Kelas {old_it['nama_mk']} ({old_it['kelas']}) jam {old_it['jam_str']} dipindahkan KELUAR dari {ruang_asal_clean} ke {ruang_tujuan_clean}."
                     cursor.execute("""
+                        DELETE FROM notifikasi_lab 
+                        WHERE tanggal = %s AND (semester = %s OR semester IS NULL) 
+                          AND tipe_notif IN ('PERUBAHAN', 'TAMBAHAN')
+                          AND (pesan LIKE %s OR (pesan LIKE %s AND pesan LIKE %s))
+                    """, (t_date, sem_final, f"%({old_it['kelas']})%{old_it['jam_str']}%", f"%{ruang_asal_clean}%", f"%{old_it['jam_str']}%"))
+
+                    cursor.execute("""
                         SELECT 1 FROM notifikasi_lab WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s LIMIT 1
                     """, (t_date, sem_final, pesan_keluar))
                     if not cursor.fetchone():
@@ -1528,6 +1561,13 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
 
                     # Event PINDAH_MASUK (Ruangan Tujuan)
                     pesan_masuk = f"PINDAH RUANGAN: Kelas {new_it['nama_mk']} ({new_it['kelas']}) jam {new_it['jam_str']} dipindahkan MASUK ke {ruang_tujuan_clean} (sebelumnya di {ruang_asal_clean}). Dosen: {new_it['dosen'] or '-'}."
+                    cursor.execute("""
+                        DELETE FROM notifikasi_lab 
+                        WHERE tanggal = %s AND (semester = %s OR semester IS NULL) 
+                          AND tipe_notif IN ('PERUBAHAN', 'TAMBAHAN')
+                          AND (pesan LIKE %s OR (pesan LIKE %s AND pesan LIKE %s))
+                    """, (t_date, sem_final, f"%({new_it['kelas']})%{new_it['jam_str']}%", f"%{ruang_tujuan_clean}%", f"%{new_it['jam_str']}%"))
+
                     cursor.execute("""
                         SELECT 1 FROM notifikasi_lab WHERE tanggal = %s AND semester = %s AND tipe_notif = 'PERUBAHAN' AND pesan = %s LIMIT 1
                     """, (t_date, sem_final, pesan_masuk))
@@ -1555,6 +1595,13 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 for new_it in still_unmatched_new:
                     ruang_lengkap = format_room_clean(f"{new_it['nama_ruangan']} ({new_it['lokasi']})" if new_it['lokasi'] else new_it['nama_ruangan'])
                     pesan = f"Kelas TAMBAHAN: {new_it['nama_mk']} ({new_it['kelas']}) di {ruang_lengkap} pada {new_it['jam_str']}. Dosen: {new_it['dosen'] or '-'}."
+                    cursor.execute("""
+                        DELETE FROM notifikasi_lab 
+                        WHERE tanggal = %s AND (semester = %s OR semester IS NULL) 
+                          AND tipe_notif IN ('PERUBAHAN', 'TAMBAHAN')
+                          AND (pesan LIKE %s OR (pesan LIKE %s AND pesan LIKE %s))
+                    """, (t_date, sem_final, f"%({new_it['kelas']})%{new_it['jam_str']}%", f"%{ruang_lengkap}%", f"%{new_it['jam_str']}%"))
+
                     cursor.execute("""
                         SELECT 1 FROM notifikasi_lab 
                         WHERE tanggal = %s AND semester = %s AND tipe_notif = 'TAMBAHAN' AND pesan = %s

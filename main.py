@@ -2236,13 +2236,30 @@ def get_notifikasi_lab(tanggal: str, semester: str = None):
             print(f"Error calculating gaps on fetch: {e_gap}")
 
         cursor.execute("""
-            SELECT tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu, DATE_FORMAT(tanggal, '%Y-%m-%d') as tanggal
+            SELECT id, tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu, DATE_FORMAT(tanggal, '%Y-%m-%d') as tanggal, UNIX_TIMESTAMP(created_at) as created_ts
             FROM notifikasi_lab 
             WHERE tanggal = %s AND (semester = %s OR semester IS NULL)
-            ORDER BY created_at DESC
+            ORDER BY id DESC
         """, (tanggal, sem_active))
         results = cursor.fetchall()
-        return {"status": "success", "semester": sem_active, "data": results}
+
+        # Deduplikasi per ruangan untuk notifikasi PERUBAHAN dan TAMBAHAN
+        # Jika satu ruangan memiliki beberapa riwayat perubahan jadwal, hanya tampilkan notifikasi paling baru di ruangan tersebut!
+        cleaned_results = []
+        seen_change_rooms = set()
+        for item in results:
+            t = (item.get("tipe_notif") or "").upper()
+            if t in ("PERUBAHAN", "TAMBAHAN"):
+                pesan = item.get("pesan") or ""
+                room_str = scraper.extract_room_from_notification(pesan)
+                room_key = re.sub(r'\s*\([^)]*\)', '', room_str).strip().lower() if room_str else ""
+                if room_key:
+                    if room_key in seen_change_rooms:
+                        continue
+                    seen_change_rooms.add(room_key)
+            cleaned_results.append(item)
+
+        return {"status": "success", "semester": sem_active, "data": cleaned_results}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
