@@ -1264,11 +1264,19 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 }
 
 .im-card.im-type-jeda {
-  border-left-color: #f59e0b;
-  background: linear-gradient(to right, rgba(245, 158, 11, 0.05), var(--bg-card, #ffffff));
+  border-left-color: #3b82f6;
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.05), var(--bg-card, #ffffff));
 }
 [data-theme="dark"] .im-card.im-type-jeda {
-  background: linear-gradient(to right, rgba(245, 158, 11, 0.12), rgba(30, 41, 59, 0.7));
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.12), rgba(30, 41, 59, 0.7));
+}
+
+.im-card.im-type-closed {
+  border-left-color: #ea580c;
+  background: linear-gradient(to right, rgba(234, 88, 12, 0.05), var(--bg-card, #ffffff));
+}
+[data-theme="dark"] .im-card.im-type-closed {
+  background: linear-gradient(to right, rgba(234, 88, 12, 0.12), rgba(30, 41, 59, 0.7));
 }
 
 .im-card-header {
@@ -1349,14 +1357,25 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 }
 
 .im-badge-jeda {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #fcd34d;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }
 [data-theme="dark"] .im-badge-jeda {
-  background: rgba(180, 83, 9, 0.25);
-  color: #fcd34d;
-  border-color: rgba(180, 83, 9, 0.4);
+  background: rgba(29, 78, 216, 0.25);
+  color: #93c5fd;
+  border-color: rgba(29, 78, 216, 0.4);
+}
+
+.im-badge-closed {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+[data-theme="dark"] .im-badge-closed {
+  background: rgba(194, 65, 12, 0.25);
+  color: #fdba74;
+  border-color: rgba(194, 65, 12, 0.4);
 }
 
 /* Room & Class Pills */

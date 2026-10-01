@@ -2114,21 +2114,21 @@ def fallback_python_handler(sender, text, aslab):
     if role == 'asmot':
         menu_teks = (
             f"*MENU OPERASIONAL ASMOT (KONTROL AC & RUANGAN)*\n"
-            f"_Petugas: {nama} • Kampus: {kampus_asmot}_\n"
+            f"_Asmot: {nama} • Kampus: {kampus_asmot}_\n"
             f"------------------------------\n\n"
             f"*1.* *Cek Kelas Aktif Sekarang* (AC wajib hidup)\n"
             f"*2.* *Cek Kelas Mau Mulai* (persiapan hidupkan AC)\n"
             f"*3.* *Cek Kelas Selesai* (persiapan matikan AC)\n"
             f"*4.* *Jadwal Seluruh Ruangan Hari Ini* ({kampus_asmot})\n"
             f"*5.* *Cek Ruangan Kosong* ({kampus_asmot})\n"
-            f"*6.* *Cari Posisi Dosen* (ketik: 'pak reza')\n"
+            f"*6.* *Cari Posisi Dosen* (ketik: 'pak asep')\n"
             f"*7.* *Info Mase* (laporan perubahan & kelas online/batal)\n"
             f"*8.* *Link Web & Server*\n\n"
             f"_Ketik nomor menu (1-8) atau langsung tanyakan ruangan/jadwal mas._"
         )
     elif not has_room:
         menu_teks = (
-            "Menu Admin / Viewer:\n\n"
+            "Menu :\n\n"
             "1. Jadwal lab (contoh: 1.5 kobar, 1.8, 2.11)\n"
             "2. Kelas berikutnya (contoh: habis ini 1.8)\n"
             "3. Status real-time lab (contoh: status 1.8)\n"

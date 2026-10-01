@@ -703,10 +703,39 @@ def extract_room_from_notification(pesan: str) -> str:
         return format_room_clean(m.group(1).strip())
     return ""
 
+def extract_time_from_notification(pesan: str) -> str:
+    if not pesan:
+        return ""
+    p = str(pesan)
+    m = re.search(r'(?:jam|pada)\s+([0-2]?[0-9]:[0-5][0-9])', p, re.I)
+    if m:
+        return m.group(1)
+    m_range = re.search(r'([0-2]?[0-9]:[0-5][0-9])\s*-\s*([0-2]?[0-9]:[0-5][0-9])', p)
+    if m_range:
+        return m_range.group(2)
+    m_fall = re.search(r'\b([0-2]?[0-9]:[0-5][0-9])\b', p)
+    if m_fall:
+        return m_fall.group(1)
+    return ""
+
+def parse_time_to_minutes(time_str: str):
+    if not time_str or ':' not in str(time_str):
+        return None
+    try:
+        parts = str(time_str).strip().split(':')
+        return int(parts[0]) * 60 + int(parts[1])
+    except Exception:
+        return None
+
 def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
     sem_final = target_semester or get_active_semester(conn, cursor)
     cursor.execute("DELETE FROM notifikasi_lab WHERE tanggal = %s AND tipe_notif = 'JEDA' AND semester = %s", (target_date, sem_final))
     
+    # Deteksi waktu saat ini jika target_date adalah hari ini
+    now_dt = datetime.now()
+    is_today = (target_date == now_dt.strftime('%Y-%m-%d'))
+    current_min = (now_dt.hour * 60 + now_dt.minute) if is_today else -1
+
     cursor.execute("""
         SELECT j.jam, r.nama_ruangan, r.kampus, j.nama_mk, j.kelas
         FROM jadwal j
@@ -848,6 +877,10 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             b_start = b[0]['start']
             b_end = b[-1]['end']
             
+            # Jika target_date adalah hari ini dan jeda sudah selesai di masa lalu, JANGAN GENERATE!
+            if is_today and b_end <= current_min:
+                continue
+
             # Cek apakah blok ini tumpang tindih dengan kelas tatap muka fisik
             overlaps_tm = False
             for ps in phys_scheds:
@@ -901,23 +934,25 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
         # A. Jeda Pagi: Jika kelas tatap muka pertama mulai >= 09:30 (jeda >= 90 menit dari jam operasional 08:00)
         first_cls = scheds[0]
         if first_cls['start'] - 480 >= 90:
-            gap = first_cls['start'] - 480
-            hours = gap // 60
-            mins = gap % 60
-            dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
-            tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
-            lab_note = f" (Buka Lab {first_cls['jam']})" if is_lab_room else ""
-            pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong 08:00 - {first_cls['jam']}{lab_note}."
+            # Jika jeda pagi sudah selesai di masa lalu hari ini, jangan generate!
+            if not (is_today and first_cls['start'] <= current_min):
+                gap = first_cls['start'] - 480
+                hours = gap // 60
+                mins = gap % 60
+                dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")
+                tipe_jeda = "JEDA SINGKAT" if gap <= 120 else "JEDA PANJANG"
+                lab_note = f" (Buka Lab {first_cls['jam']})" if is_lab_room else ""
+                pesan = f"{tipe_jeda} ({dur_str}): {clean_room} kosong 08:00 - {first_cls['jam']}{lab_note}."
 
-            already_covered = any(
-                not (first_cls['start'] <= rg['start'] or 480 >= rg['end'])
-                for rg in recorded_gaps.get(clean_room, [])
-            )
-            if not already_covered:
-                cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
-                recorded_gaps[clean_room].append({
-                    'start': 480, 'end': first_cls['start'], 'has_note': False, 'pesan': pesan
-                })
+                already_covered = any(
+                    not (first_cls['start'] <= rg['start'] or 480 >= rg['end'])
+                    for rg in recorded_gaps.get(clean_room, [])
+                )
+                if not already_covered:
+                    cursor.execute("INSERT INTO notifikasi_lab (tanggal, tipe_notif, pesan, semester) VALUES (%s, %s, %s, %s)", (target_date, 'JEDA', pesan, sem_final))
+                    recorded_gaps[clean_room].append({
+                        'start': 480, 'end': first_cls['start'], 'has_note': False, 'pesan': pesan
+                    })
 
         # B. Jeda Antar Kelas Fisik
         for i in range(len(scheds) - 1):
@@ -925,6 +960,10 @@ def calculate_and_save_gaps(conn, cursor, target_date, target_semester=None):
             nxt = scheds[i+1]
             gap = nxt['start'] - curr['end']
             if gap >= 90:
+                # Jika jeda antar kelas ini sudah selesai di masa lalu hari ini, jangan generate!
+                if is_today and nxt['start'] <= current_min:
+                    continue
+
                 hours = gap // 60
                 mins = gap % 60
                 dur_str = f"{hours} jam" + (f" {mins} mnt" if mins > 0 else "")

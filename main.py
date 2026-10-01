@@ -2235,6 +2235,10 @@ def get_notifikasi_lab(tanggal: str, semester: str = None):
         except Exception as e_gap:
             print(f"Error calculating gaps on fetch: {e_gap}")
 
+        now_dt = datetime.datetime.now()
+        is_today = (tanggal == now_dt.strftime('%Y-%m-%d'))
+        current_min = (now_dt.hour * 60 + now_dt.minute) if is_today else -1
+
         cursor.execute("""
             SELECT id, tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu, DATE_FORMAT(tanggal, '%Y-%m-%d') as tanggal, UNIX_TIMESTAMP(created_at) as created_ts
             FROM notifikasi_lab 
@@ -2243,21 +2247,63 @@ def get_notifikasi_lab(tanggal: str, semester: str = None):
         """, (tanggal, sem_active))
         results = cursor.fetchall()
 
-        # Deduplikasi per ruangan untuk notifikasi PERUBAHAN dan TAMBAHAN
-        # Jika satu ruangan memiliki beberapa riwayat perubahan jadwal, hanya tampilkan notifikasi paling baru di ruangan tersebut!
         cleaned_results = []
         seen_change_rooms = set()
+        seen_move_classes = set()
+        obsolete_ids_to_delete = []
+
         for item in results:
+            item_id = item.get("id")
             t = (item.get("tipe_notif") or "").upper()
+            pesan = item.get("pesan") or ""
+
+            # Jika hari ini, periksa apakah waktu kegiatan sudah lewat di masa lalu
+            if is_today:
+                if t == "JEDA":
+                    m_range = re.search(r'([0-2]?[0-9]:[0-5][0-9])\s*-\s*([0-2]?[0-9]:[0-5][0-9])', pesan)
+                    if m_range:
+                        gap_end_min = scraper.parse_time_to_minutes(m_range.group(2))
+                        if gap_end_min is not None and gap_end_min <= current_min:
+                            if item_id:
+                                obsolete_ids_to_delete.append(item_id)
+                            continue
+                elif t in ("PERUBAHAN", "TAMBAHAN"):
+                    time_str = scraper.extract_time_from_notification(pesan)
+                    if time_str:
+                        start_min = scraper.parse_time_to_minutes(time_str)
+                        if start_min is not None and (start_min + 120) <= current_min:
+                            # Kelas sudah selesai lebih dari 2 jam lalu -> obsolete, hapus dari DB & lewati
+                            if item_id:
+                                obsolete_ids_to_delete.append(item_id)
+                            continue
+
+            # Deduplikasi kelas pindah ruangan (jika ada MASUK dan KELUAR untuk kelas yang sama, prioritaskan yang MASUK)
+            if "PINDAH RUANGAN" in pesan.upper():
+                mk_match = re.search(r'Kelas\s+([^(\n\r]+?)\s*\(([^)]+)\)', pesan, re.I)
+                if mk_match:
+                    class_key = f"{mk_match.group(1).strip().lower()}___{mk_match.group(2).strip().lower()}"
+                    if class_key in seen_move_classes:
+                        continue
+                    seen_move_classes.add(class_key)
+
+            # Deduplikasi per ruangan untuk notifikasi PERUBAHAN dan TAMBAHAN
             if t in ("PERUBAHAN", "TAMBAHAN"):
-                pesan = item.get("pesan") or ""
                 room_str = scraper.extract_room_from_notification(pesan)
                 room_key = re.sub(r'\s*\([^)]*\)', '', room_str).strip().lower() if room_str else ""
                 if room_key:
                     if room_key in seen_change_rooms:
                         continue
                     seen_change_rooms.add(room_key)
+
             cleaned_results.append(item)
+
+        if obsolete_ids_to_delete:
+            try:
+                format_strings = ','.join(['%s'] * len(obsolete_ids_to_delete))
+                cursor.execute(f"DELETE FROM notifikasi_lab WHERE id IN ({format_strings})", tuple(obsolete_ids_to_delete))
+                conn.commit()
+            except Exception as e_del:
+                print(f"Error deleting obsolete notifikasi_lab rows: {e_del}")
 
         return {"status": "success", "semester": sem_active, "data": cleaned_results}
     except Exception as e:
