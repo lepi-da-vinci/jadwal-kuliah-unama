@@ -222,6 +222,28 @@ def get_status_label(item):
         return 'OL'
     return 'TM'
 
+def parse_jam_to_minutes(jam_val):
+    """Konversi nilai kolom jam database (timedelta, time, str) ke total menit hari itu secara aman."""
+    if jam_val is None:
+        return 0
+    if hasattr(jam_val, 'total_seconds'):
+        return int(jam_val.total_seconds()) // 60
+    elif hasattr(jam_val, 'hour'):
+        return jam_val.hour * 60 + jam_val.minute
+    else:
+        parts = str(jam_val).strip().split(':')
+        if len(parts) >= 2:
+            try:
+                return int(parts[0]) * 60 + int(parts[1])
+            except (ValueError, TypeError):
+                return 0
+        return 0
+
+def format_jam_hh_mm(jam_val):
+    """Format nilai jam ke string 'HH:MM' secara aman."""
+    sm = parse_jam_to_minutes(jam_val)
+    return f"{sm // 60:02d}:{sm % 60:02d}"
+
 def _sync_if_needed(tanggal):
     try:
         conn = get_db_connection()
@@ -231,9 +253,15 @@ def _sync_if_needed(tanggal):
         cursor.close()
         conn.close()
         if not exists:
-            requests.post('http://127.0.0.1:8000/api/sync', json={"tanggal": tanggal}, timeout=5)
+            for base_url in ['http://127.0.0.1:8000', 'http://backend:8000']:
+                try:
+                    res = requests.post(f'{base_url}/api/sync', json={"tanggal": tanggal}, timeout=3)
+                    if res.status_code == 200:
+                        break
+                except Exception:
+                    continue
     except Exception as e:
-        print("Sync error:", e)
+        log_chatbot("WARN", f"Sync check error: {e}", "SYNC")
 
 def normalize_lab_and_kampus(nama_ruangan: str = None, kampus: str = None):
     """
@@ -324,10 +352,10 @@ def cek_jadwal_lab_tertentu(nama_lab: str = None, tanggal_YYYY_MM_DD: str = None
             r_name = items[0]['nama_ruangan']
             msg += f"Jadwal {r_name} ({k_nama}) {tgl_indo}:\n"
             for j in items:
-                total_seconds = int(j['jam'].total_seconds())
+                start_min = parse_jam_to_minutes(j['jam'])
                 dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
-                h, m = total_seconds // 3600, (total_seconds % 3600) // 60
-                eh, em = (total_seconds // 60 + dur) // 60, (total_seconds // 60 + dur) % 60
+                h, m = start_min // 60, start_min % 60
+                eh, em = (start_min + dur) // 60, (start_min + dur) % 60
                 dosen = j['nama_dosen'] or '-'
                 status = get_status_label(j)
                 msg += f"• {h:02d}:{m:02d}-{eh:02d}:{em:02d}: {j['nama_mk']} ({j['kelas']}) [{status}] - {dosen}\n"
@@ -383,8 +411,7 @@ def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
         
         for j in jadwals:
             if not j['jam']: continue
-            tot_sec = int(j['jam'].total_seconds())
-            start_min = tot_sec // 60
+            start_min = parse_jam_to_minutes(j['jam'])
             dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
             end_min = start_min + dur
             
@@ -483,8 +510,7 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
         valid_scheds = [j for j in jadwals if j['jam'] is not None]
         
         for j in valid_scheds:
-            tot_sec = int(j['jam'].total_seconds())
-            start_min = tot_sec // 60
+            start_min = parse_jam_to_minutes(j['jam'])
             dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
             end_min = start_min + dur
             
@@ -566,10 +592,10 @@ def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kela
             if current_room != j['nama_ruangan']:
                 current_room = j['nama_ruangan']
                 msg += f"\n{current_room}\n"
-            total_seconds = int(j['jam'].total_seconds())
+            start_min = parse_jam_to_minutes(j['jam'])
             dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
-            h, m = total_seconds // 3600, (total_seconds % 3600) // 60
-            eh, em = (total_seconds // 60 + dur) // 60, (total_seconds // 60 + dur) % 60
+            h, m = start_min // 60, start_min % 60
+            eh, em = (start_min + dur) // 60, (start_min + dur) % 60
             dosen = j['nama_dosen'] or '-'
             status = get_status_label(j)
             msg += f"• {h:02d}:{m:02d}-{eh:02d}:{em:02d}: {j['nama_mk']} ({j['kelas']}) [{status}] - {dosen}\n"
@@ -611,7 +637,7 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: boo
             if rname not in room_schedules:
                 room_schedules[rname] = []
             if r['jam']:
-                sm = int(r['jam'].total_seconds()) // 60
+                sm = parse_jam_to_minutes(r['jam'])
                 dur = scraper.get_class_duration(r.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
                 room_schedules[rname].append((sm, dur))
         
@@ -667,10 +693,10 @@ def cari_posisi_dosen(nama_dosen: str):
         dosen_full = jadwals[0]['nama_dosen']
         msg = f"Jadwal {dosen_full} Hari Ini:\n"
         for j in jadwals:
-            total_seconds = int(j['jam'].total_seconds())
+            start_min = parse_jam_to_minutes(j['jam'])
             dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
-            h, m = total_seconds // 3600, (total_seconds % 3600) // 60
-            eh, em = (total_seconds // 60 + dur) // 60, (total_seconds // 60 + dur) % 60
+            h, m = start_min // 60, start_min % 60
+            eh, em = (start_min + dur) // 60, (start_min + dur) % 60
             status = get_status_label(j)
             msg += f"• Jam {h:02d}:{m:02d}-{eh:02d}:{em:02d}: {j['nama_ruangan']} | MK: {j['nama_mk']} ({j['kelas']}) [{status}]\n"
         return msg
@@ -695,12 +721,15 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
         cursor = conn.cursor(dictionary=True)
         now = get_wib_now()
         today_str = now.strftime("%Y-%m-%d")
+        current_total_min = now.hour * 60 + now.minute
         tgl_indo = format_tanggal_indo(now)
 
-        # Cek semester aktif
-        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
-        sem_row = cursor.fetchone()
-        sem_target = sem_row['nama_semester'] if sem_row else 'Genap 2025'
+        # Cek semester aktif secara dinamis
+        sem_target = scraper.get_active_semester(conn, cursor) if hasattr(scraper, 'get_active_semester') else None
+        if not sem_target:
+            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+            sem_row = cursor.fetchone()
+            sem_target = sem_row['nama_semester'] if sem_row else 'Ganjil 2026'
 
         # 1. Ambil notifikasi dari notifikasi_lab
         cursor.execute('SELECT tipe_notif, pesan FROM notifikasi_lab WHERE tanggal = %s AND semester = %s ORDER BY id ASC', (today_str, sem_target))
@@ -712,15 +741,22 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             WHERE j.tanggal = %s AND j.semester = %s
-              AND (j.metode_pembelajaran = 'OL' OR j.status_jadwal IN ('CC', 'Batal'))
+              AND (
+                UPPER(TRIM(j.metode_pembelajaran)) IN ('OL', 'CC') 
+                OR UPPER(TRIM(j.metode_pembelajaran)) LIKE '%ONLINE%'
+                OR UPPER(j.status_jadwal) IN ('CC', 'BATAL')
+                OR UPPER(j.status_jadwal) LIKE '%BATAL%'
+                OR UPPER(j.status_jadwal) LIKE '%CANCEL%'
+              )
             ORDER BY r.kampus, r.nama_ruangan, j.jam
         """
         cursor.execute(query_ol_cc, (today_str, sem_target))
-        ol_cc_classes = cursor.fetchall()
+        raw_ol_cc = cursor.fetchall()
 
         perubahan_list = []
         tambahan_list = []
         jeda_list = []
+        seen_move_classes = set()
 
         for n in notifs:
             t = n['tipe_notif']
@@ -731,16 +767,65 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
                 if any(lab_kw in p_lower for lab_kw in ['labor', 'lab ']):
                     continue
             if t == 'PERUBAHAN':
+                # Saring jika jadwal perubahan sudah lewat lebih dari 2 jam lalu
+                time_str = scraper.extract_time_from_notification(p) if hasattr(scraper, 'extract_time_from_notification') else ""
+                if time_str:
+                    st_min = parse_jam_to_minutes(time_str)
+                    if st_min > 0 and (st_min + 135) <= current_total_min:
+                        continue
+                # Deduplikasi pindah ruangan (jangan dobel MASUK dan KELUAR untuk mk & kelas yang sama)
+                mk_match = re.search(r'Kelas\s+([^(\n\r]+?)\s*\(([^)]+)\)', p, re.I)
+                if mk_match and 'PINDAH RUANGAN' in p.upper():
+                    move_key = f"{mk_match.group(1).strip()}_{mk_match.group(2).strip()}".lower()
+                    if move_key in seen_move_classes:
+                        continue
+                    seen_move_classes.add(move_key)
                 perubahan_list.append(p)
             elif t == 'TAMBAHAN':
+                # Saring jika kelas tambahan sudah selesai di masa lalu hari ini
+                time_str = scraper.extract_time_from_notification(p) if hasattr(scraper, 'extract_time_from_notification') else ""
+                if time_str:
+                    st_min = parse_jam_to_minutes(time_str)
+                    if st_min > 0 and (st_min + 135) <= current_total_min:
+                        continue
                 tambahan_list.append(p)
             elif t == 'JEDA':
+                # Filter jeda yang sudah lewat jam selesainya di masa lalu hari ini
+                # Ambil jam selesai dari format range "10:15 - 14:45"
+                m_range = re.search(r'([0-2]?[0-9]:[0-5][0-9])\s*-\s*([0-2]?[0-9]:[0-5][0-9])', p)
+                if m_range:
+                    end_min = parse_jam_to_minutes(m_range.group(2))
+                    if current_total_min >= end_min:
+                        continue
+                else:
+                    time_str = scraper.extract_time_from_notification(p) if hasattr(scraper, 'extract_time_from_notification') else ""
+                    if time_str:
+                        end_min = parse_jam_to_minutes(time_str)
+                        if current_total_min >= end_min:
+                            continue
                 jeda_list.append(p)
 
-        if role == 'asmot':
-            ol_cc_classes = [c for c in ol_cc_classes if not scraper.is_lab(c['nama_ruangan'])]
-            if kampus and kampus.lower() != 'semua':
-                ol_cc_classes = [c for c in ol_cc_classes if c['kampus'].lower() == kampus.lower()]
+        ol_cc_classes = []
+        for c in raw_ol_cc:
+            if role == 'asmot' and scraper.is_lab(c['nama_ruangan']):
+                continue
+            if kampus and kampus.lower() != 'semua' and c['kampus'].lower() != kampus.lower():
+                continue
+            
+            # Ekstrak jam secara aman
+            start_min = parse_jam_to_minutes(c['jam'])
+            jam_str = f"{start_min//60:02d}:{start_min%60:02d}"
+                
+            dur = scraper.get_class_duration(c['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
+            end_min = start_min + dur
+            
+            # Jangan tampilkan kelas OL / CC yang sudah selesai di masa lalu hari ini
+            if current_total_min >= end_min:
+                continue
+                
+            c_copy = dict(c)
+            c_copy['jam_str'] = jam_str
+            ol_cc_classes.append(c_copy)
 
         if not perubahan_list and not tambahan_list and not jeda_list and not ol_cc_classes:
             return (
@@ -748,7 +833,7 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
                 f"_{tgl_indo} • {sem_target}_\n"
                 f"------------------------------\n\n"
                 f"_Semua jadwal perkuliahan hari ini terpantau normal dan sesuai jadwal utama._\n"
-                f"_Tidak ada laporan perubahan ruang, pembatalan kelas, maupun kelas tambahan._\n\n"
+                f"_Tidak ada laporan perubahan ruang, pembatalan kelas, maupun kelas tambahan aktif._\n\n"
                 f"• Operasional Kobar: s/d 17.00 WIB\n"
                 f"• Operasional Thehok: s/d 21.00 WIB"
             )
@@ -765,9 +850,9 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
             label_ol_cc = "TIDAK PERLU HIDUPKAN AC (ONLINE / BATAL):" if role == 'asmot' else "KELAS ONLINE / BATAL (RUANGAN TUTUP):"
             msg += f"\n*{label_ol_cc}*\n"
             for c in ol_cc_classes[:10]:
-                tot_sec = int(c['jam'].total_seconds()) if hasattr(c['jam'], 'total_seconds') else 0
-                jam_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
-                alasan = "Kelas Online" if c['metode_pembelajaran'] == 'OL' else "Dosen Batal/Cancel"
+                jam_str = c.get('jam_str', '00:00')
+                metode = (c.get('metode_pembelajaran') or '').upper()
+                alasan = "Kelas Online" if metode == 'OL' or 'ONLINE' in metode else "Dosen Batal/Cancel"
                 note_ac = " (AC jangan dihidupkan)" if role == 'asmot' else " (Ruangan tidak perlu dibuka)"
                 msg += f"• *{c['nama_ruangan']} ({c['kampus']}):* Jam {jam_str} - {c['nama_mk']} ({c['kelas']}) -> _{alasan}{note_ac}_\n"
 
@@ -830,7 +915,7 @@ def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
         for r in rows:
             if scraper.is_lab(r['nama_ruangan']):
                 continue  # Asmot hanya mengontrol Ruang Kelas Teori, bukan Laboratorium
-            sm = int(r['jam'].total_seconds()) // 60
+            sm = parse_jam_to_minutes(r['jam'])
             dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
             em = sm + dur
             if sm <= current_min <= em:
@@ -902,7 +987,7 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
             rid = r['id_ruangan']
             if rid not in room_map:
                 room_map[rid] = []
-            sm = int(r['jam'].total_seconds()) // 60
+            sm = parse_jam_to_minutes(r['jam'])
             dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
             em = sm + dur
             room_map[rid].append({'row': r, 'sm': sm, 'em': em})
@@ -987,7 +1072,7 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
             rid = r['id_ruangan']
             if rid not in room_map:
                 room_map[rid] = []
-            sm = int(r['jam'].total_seconds()) // 60
+            sm = parse_jam_to_minutes(r['jam'])
             dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
             em = sm + dur
             room_map[rid].append({'row': r, 'sm': sm, 'em': em})
@@ -1126,8 +1211,7 @@ def get_statistik_lab_saya(nama_lab: str = None, kampus: str = None):
 
             if r.get('hari'): hari_map[r['hari']] += 1
             if r.get('jam'):
-                tot_sec = int(r['jam'].total_seconds())
-                j_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                j_str = format_jam_hh_mm(r['jam'])
                 jam_map[j_str] += 1
             if r.get('nama_mk'): mk_map[r['nama_mk']] += 1
 
@@ -1253,8 +1337,7 @@ def get_statistik_akademik(kategori: str):
 
                 if r.get('hari'): hari_map[r['hari']] += 1
                 if r.get('jam'):
-                    tot_sec = int(r['jam'].total_seconds())
-                    j_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                    j_str = format_jam_hh_mm(r['jam'])
                     jam_map[j_str] += 1
 
             top_hari = sorted(hari_map.items(), key=lambda x: x[1], reverse=True)[0] if hari_map else ('-', 0)
@@ -2155,8 +2238,18 @@ def fallback_python_handler(sender, text, aslab):
             f"Ketik nomor 1 s/d 9 atau langsung tanyakan jadwal yang mau dicek mas."
         )
 
-    if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', text_clean) or 
-        re.search(r'\b(menu|inpo|infoo|inpoo)\b', text_clean)):
+    # 2.5 Cek Shortcut Info Mase & Pengumuman Hari Ini (Ketik 7 / info mase / inpo mase / info hari ini)
+    if (text_clean == "7" or 
+        any(text_clean.startswith(k) for k in ["info mase", "inpo mase", "info hari ini", "inpo hari ini", "pengumuman", "laporan info", "info jadwal"]) or
+        text_clean in ["info mase", "inpo mase", "info hari ini", "inpo hari ini", "pengumuman"]):
+        if role == 'asmot':
+            return get_info_mase(role='asmot', kampus=kampus_asmot)
+        return get_info_mase(role='aslab', lab_saya=aslab.get('nama_ruangan'))
+
+    # 3. Cek Menu / Bantuan / Sapaan
+    if (re.search(r'^(menu|bantuan|help|\?)$', text_clean) or 
+        re.search(r'^(tampilkan\s+)?(menu|bantuan)\b', text_clean) or
+        text_clean in ["menu", "bantuan", "help", "?", "oi", "halo", "hai", "p", "inpo", "info"]):
         return menu_teks
 
     has_specific_room = bool(re.search(r'\b\d+\.\d+\b', text_clean))
@@ -2872,8 +2965,9 @@ def handle_incoming_message(sender, text):
         if re.search(r'^\s*[1-9]\b', cmd_text):
             return True
         # 2. Kata kunci menu / sapaan shortcut
-        if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', cmd_text) or 
-            re.search(r'\b(menu|inpo|infoo|inpoo)\b', cmd_text)):
+        if (re.search(r'^(menu|bantuan|help|\?)$', cmd_text) or 
+            re.search(r'^(tampilkan\s+)?(menu|bantuan)\b', cmd_text) or
+            cmd_text in ["menu", "bantuan", "help", "?", "oi", "halo", "hai", "p", "info", "inpo", "info mase", "inpo mase", "info hari ini", "inpo hari ini", "pengumuman"]):
             return True
         # 2.1 Konfirmasi & Percakapan Cepat (oke, siap, makasih, salam, sapaan waktu, ping, dll)
         chitchat_kw = [
@@ -2987,8 +3081,13 @@ def check_lab_schedules():
             FROM jadwal j 
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan 
             WHERE j.tanggal = %s 
-              AND j.metode_pembelajaran NOT IN ('CC', 'OL') 
-              AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL) 
+              AND UPPER(TRIM(j.metode_pembelajaran)) NOT IN ('CC', 'OL') 
+              AND UPPER(TRIM(j.metode_pembelajaran)) NOT LIKE '%ONLINE%'
+              AND (j.status_jadwal IS NULL OR (
+                  UPPER(j.status_jadwal) NOT IN ('CC', 'BATAL') 
+                  AND UPPER(j.status_jadwal) NOT LIKE '%BATAL%' 
+                  AND UPPER(j.status_jadwal) NOT LIKE '%CANCEL%'
+              ))
             ORDER BY r.id_ruangan, j.jam
         """, (current_date,))
         schedules = cursor.fetchall()
@@ -3001,7 +3100,16 @@ def check_lab_schedules():
             room_meta[id_ruangan] = {'nama_ruangan': row['nama_ruangan'], 'kampus': row['kampus']}
             if id_ruangan not in room_schedules:
                 room_schedules[id_ruangan] = []
-            start_min = int(row['jam'].total_seconds()) // 60
+            
+            jam_val = row['jam']
+            if hasattr(jam_val, 'total_seconds'):
+                start_min = int(jam_val.total_seconds()) // 60
+            elif hasattr(jam_val, 'hour'):
+                start_min = jam_val.hour * 60 + jam_val.minute
+            else:
+                parts = str(jam_val).strip().split(':')
+                start_min = int(parts[0]) * 60 + int(parts[1]) if len(parts) >= 2 else 0
+                
             dur = scraper.get_class_duration(row['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
             room_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + dur})
         
@@ -3012,6 +3120,8 @@ def check_lab_schedules():
             no_wa = aslab_data[id_room]['no_wa']
             room_name_full = f"{aslab_data[id_room]['nama_ruangan']} ({aslab_data[id_room]['lokasi_kampus']})"
             scheds = sorted(scheds, key=lambda x: x['start_min'])
+            if not scheds:
+                continue
             
             openings = [scheds[0]]
             closings = []
@@ -3020,31 +3130,49 @@ def check_lab_schedules():
                 curr, nxt = scheds[i], scheds[i+1]
                 gap = nxt['start_min'] - curr['end_min']
                 if gap > 60:
-                    closings.append(curr)
+                    closings.append({'cls': curr, 'tipe': 'JEDA', 'gap': gap, 'nxt': nxt})
                     openings.append(nxt)
-            closings.append(scheds[-1])
+            closings.append({'cls': scheds[-1], 'tipe': 'SELESAI', 'gap': 0, 'nxt': None})
             
+            # 1. Pemicu Buka Lab (HANYA 1 KALI, tepat 15 menit sebelum kelas mulai)
             for cls in openings:
                 diff_buka = cls['start_min'] - current_total_min
-                for target_diff in (30, 15):
-                    if target_diff - 1 <= diff_buka <= target_diff:
-                        notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
-                        if notif_key not in sent_notifications:
-                            h, m = cls['start_min'] // 60, cls['start_min'] % 60
-                            msg = f"*Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d}.\n\nTolong buka lab dalam {target_diff} menit mas."
-                            if send_wa_message(no_wa, msg):
-                                sent_notifications.add(notif_key)
+                target_diff = 15
+                if target_diff - 1 <= diff_buka <= target_diff:
+                    notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
+                    if notif_key not in sent_notifications:
+                        h, m = cls['start_min'] // 60, cls['start_min'] % 60
+                        msg = f"*Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d} WIB.\n\nTolong buka lab dalam {target_diff} menit mas."
+                        if send_wa_message(no_wa, msg):
+                            sent_notifications.add(notif_key)
             
-            for cls in closings:
+            # 2. Pemicu Jeda Lab / Tutup Lab (HANYA 1 KALI, tepat 15 menit sebelum kelas selesai)
+            for item in closings:
+                cls = item['cls']
                 diff_tutup = cls['end_min'] - current_total_min
-                for target_diff in (30, 15):
-                    if target_diff - 1 <= diff_tutup <= target_diff:
-                        notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
-                        if notif_key not in sent_notifications:
-                            eh, em = cls['end_min'] // 60, cls['end_min'] % 60
-                            msg = f"*Tutup Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d}.\n\nTolong tutup lab dalam {target_diff} menit mas."
-                            if send_wa_message(no_wa, msg):
-                                sent_notifications.add(notif_key)
+                target_diff = 15
+                if target_diff - 1 <= diff_tutup <= target_diff:
+                    notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
+                    if notif_key not in sent_notifications:
+                        eh, em = cls['end_min'] // 60, cls['end_min'] % 60
+                        if item['tipe'] == 'JEDA':
+                            nxt_cls = item['nxt']
+                            nh, nm = nxt_cls['start_min'] // 60, nxt_cls['start_min'] % 60
+                            msg = (
+                                f"*Jeda Lab {room_name_full}*\n\n"
+                                f"Kelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
+                                f"• *Kondisi:* _Jeda kosong {item['gap']} menit_\n"
+                                f"• *Kelas Berikutnya:* {nxt_cls['nama_mk']} (Mulai jam {nh:02d}:{nm:02d} WIB)\n\n"
+                                f"_Catatan: Ruangan sedang jeda antar kelas, lab jangan dikunci ya mas._"
+                            )
+                        else:
+                            msg = (
+                                f"*Tutup Lab {room_name_full}*\n\n"
+                                f"Kelas terakhir hari ini *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
+                                f"Tolong tutup dan kunci lab dalam {target_diff} menit mas (ruangan selesai digunakan hari ini)."
+                            )
+                        if send_wa_message(no_wa, msg):
+                            sent_notifications.add(notif_key)
 
         # --- B. NOTIFIKASI UNTUK ASMOT (PENGELOLA AC SELURUH KELAS) ---
         if asmot_data:
