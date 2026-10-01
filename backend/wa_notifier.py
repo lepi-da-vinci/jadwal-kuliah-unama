@@ -536,29 +536,31 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
             cursor.close()
             conn.close()
 
-def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None):
-    """Mengecek jadwal seluruh lab di kampus tertentu (kobar / thehok) pada tanggal tertentu."""
+def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: bool = False):
+    """Mengecek jadwal seluruh lab (atau seluruh ruang kelas jika hanya_kelas=True) di kampus tertentu pada tanggal tertentu."""
     if not tanggal_YYYY_MM_DD:
         tanggal_YYYY_MM_DD = get_wib_now().strftime("%Y-%m-%d")
     _sync_if_needed(tanggal_YYYY_MM_DD)
     tgl_indo = format_tanggal_indo(tanggal_YYYY_MM_DD)
+    label_ruang = "Ruang Kelas" if hanya_kelas else "Lab"
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('''
+        ruang_cond = "NOT (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')" if hanya_kelas else "(r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')"
+        cursor.execute(f'''
             SELECT r.nama_ruangan, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
             WHERE r.kampus LIKE %s AND j.tanggal = %s 
-              AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+              AND {ruang_cond}
             ORDER BY r.nama_ruangan, j.jam
         ''', (f"%{kampus}%", tanggal_YYYY_MM_DD))
         jadwals = cursor.fetchall()
         if not jadwals:
-            return f"Semua lab di kampus {kampus} kosong pada {tgl_indo}."
+            return f"Semua {label_ruang.lower()} di kampus {kampus} kosong pada {tgl_indo}."
         
-        msg = f"Jadwal Lab {kampus} ({tgl_indo}):\n"
+        msg = f"Jadwal {label_ruang} {kampus} ({tgl_indo}):\n"
         current_room = None
         for j in jadwals:
             if current_room != j['nama_ruangan']:
@@ -579,16 +581,18 @@ def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None):
             cursor.close()
             conn.close()
 
-def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None):
-    """Mengecek daftar lab yang kosong di kampus tertentu pada tanggal tertentu. Mengembalikan rentang waktu lab tersebut nganggur."""
+def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: bool = False):
+    """Mengecek daftar lab (atau seluruh ruang kelas jika hanya_kelas=True) yang kosong di kampus tertentu pada tanggal tertentu."""
     if not tanggal_YYYY_MM_DD:
         tanggal_YYYY_MM_DD = get_wib_now().strftime("%Y-%m-%d")
     _sync_if_needed(tanggal_YYYY_MM_DD)
     tgl_indo = format_tanggal_indo(tanggal_YYYY_MM_DD)
+    label_ruang = "Ruang Kelas" if hanya_kelas else "Lab"
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('''
+        ruang_cond = "NOT (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')" if hanya_kelas else "(r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')"
+        cursor.execute(f'''
             SELECT r.nama_ruangan, j.jam, j.nama_mk
             FROM ruangan r
             LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
@@ -596,7 +600,7 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None):
                                AND j.metode_pembelajaran NOT IN ('CC', 'OL')
                                AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
             WHERE r.kampus LIKE %s 
-              AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%')
+              AND {ruang_cond}
             ORDER BY r.nama_ruangan, j.jam
         ''', (tanggal_YYYY_MM_DD, f"%{kampus}%"))
         results = cursor.fetchall()
@@ -611,7 +615,7 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None):
                 dur = scraper.get_class_duration(r.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
                 room_schedules[rname].append((sm, dur))
         
-        msg = f"Info Lab Kosong {kampus} ({tgl_indo}):\n"
+        msg = f"Info {label_ruang} Kosong {kampus} ({tgl_indo}):\n"
         for rname, scheds in room_schedules.items():
             if not scheds:
                 msg += f"- {rname}: full kosong seharian\n"
@@ -721,12 +725,22 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
         for n in notifs:
             t = n['tipe_notif']
             p = n['pesan']
+            if role == 'asmot':
+                # Asmot HANYA mengontrol Ruang Kelas Teori, abaikan info yang khusus laboratorium
+                p_lower = p.lower()
+                if any(lab_kw in p_lower for lab_kw in ['labor', 'lab ']):
+                    continue
             if t == 'PERUBAHAN':
                 perubahan_list.append(p)
             elif t == 'TAMBAHAN':
                 tambahan_list.append(p)
             elif t == 'JEDA':
                 jeda_list.append(p)
+
+        if role == 'asmot':
+            ol_cc_classes = [c for c in ol_cc_classes if not scraper.is_lab(c['nama_ruangan'])]
+            if kampus and kampus.lower() != 'semua':
+                ol_cc_classes = [c for c in ol_cc_classes if c['kampus'].lower() == kampus.lower()]
 
         if not perubahan_list and not tambahan_list and not jeda_list and not ol_cc_classes:
             return (
@@ -814,6 +828,8 @@ def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
         
         aktif = []
         for r in rows:
+            if scraper.is_lab(r['nama_ruangan']):
+                continue  # Asmot hanya mengontrol Ruang Kelas Teori, bukan Laboratorium
             sm = int(r['jam'].total_seconds()) // 60
             dur = scraper.get_class_duration(r['nama_mk']) if hasattr(scraper, 'get_class_duration') else 135
             em = sm + dur
@@ -881,6 +897,8 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
         
         room_map = {}
         for r in rows:
+            if scraper.is_lab(r['nama_ruangan']):
+                continue  # Asmot hanya mengontrol Ruang Kelas Teori, bukan Laboratorium
             rid = r['id_ruangan']
             if rid not in room_map:
                 room_map[rid] = []
@@ -964,6 +982,8 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
         
         room_map = {}
         for r in rows:
+            if scraper.is_lab(r['nama_ruangan']):
+                continue  # Asmot hanya mengontrol Ruang Kelas Teori, bukan Laboratorium
             rid = r['id_ruangan']
             if rid not in room_map:
                 room_map[rid] = []
@@ -1925,6 +1945,122 @@ def extract_date_or_today(text_clean):
             return f"{y_val}-{m_num:02d}-{int(day_str):02d}"
     return now.strftime("%Y-%m-%d")
 
+def handle_conversational_chitchat(text_clean: str, text_raw: str, nama: str, role: str, kampus_asmot: str, label_ruang: str, aslab: dict) -> str | None:
+    """
+    Menangani percakapan santai, konfirmasi (oke/siap), salam, ucapan terima kasih,
+    dan obrolan sehari-hari secara interaktif dan ramah tanpa bergantung pada token AI.
+    """
+    t = text_clean.strip()
+    
+    # 1. Konfirmasi / Persetujuan / Acknowledgment
+    # Contoh: oke, ok, siap, siapp, baik, baik mas, noted, sip, sipp, yoi, mantap, gass, gas, aman, beres, paham, ngerti
+    ack_pattern = r'^(?:(?:y|ya|iya|yo|yoi|oke|okee|okei|okey|ok|oki|sip|sipp|sippp|siap|siapp|siappp|baik|noted|mantap|mantapp|mantul|gass|gas|gaskeun|aman|beres|done|paham|ngerti|siap\s+mas|oke\s+mas|baik\s+mas|siap\s+laksanakan|siap\s+komandan|ashiaap|ashap)[\s\.\!\?]*)+$'
+    if re.match(ack_pattern, t):
+        if role == 'asmot':
+            return (
+                f"Siap mas *{nama}*! Mantap.\n"
+                f"Tetap semangat memantau kelas dan AC-nya ya. Kalau butuh cek kelas aktif atau jadwal ruangan, tinggal sebutkan ruangannya (misal: *2.10*) atau ketik *inpo*."
+            )
+        elif aslab.get('nama_ruangan'):
+            return (
+                f"Siap mas *{nama}*! Mantap.\n"
+                f"Semangat bertugas di {label_ruang} ya. Kalau ada jadwal atau info ruangan yang mau dicek, langsung kabari saya."
+            )
+        else:
+            return (
+                f"Siap mas *{nama}*! Mantap.\n"
+                f"Kalau butuh bantuan cek jadwal atau ruangan kampus, silakan tanyakan langsung ya."
+            )
+
+    # 2. Ucapan Terima Kasih
+    # Contoh: makasih, terima kasih, terimakasih, thanks, thank you, thx, tq, suwun, matur nuwun, nuhun
+    thanks_pattern = r'^(?:(?:terima\s*kasih|makasih|makasi|thanks|thank\s*you|thx|tq|suwun|matur\s*nuwun|nuhun|arigatou|arigato)[\s\.\!\?]*)+(?:mas|mase|bot|min|admin)?[\s\.\!\?]*$'
+    if re.match(thanks_pattern, t) or any(t.startswith(k) for k in ["terima kasih", "makasih ya", "makasi ya", "thanks ya"]):
+        return (
+            f"Sama-sama mas *{nama}*! Senang bisa membantu kelancaran operasional perkuliahan.\n"
+            f"Tetap semangat bertugas hari ini ya! Kalau ada hal lain yang perlu dicek, tinggal chat lagi."
+        )
+
+    # 3. Salam Keagamaan
+    # Contoh: assalamualaikum, samlikum, askum
+    salam_pattern = r'^(?:assalamu[\'\s]?alaikum(?:\s*wr\s*wb)?|asalamualaikum|samlikum|askum|mikum)[\s\.\!\?]*$'
+    if re.match(salam_pattern, t):
+        return (
+            f"Waalaikumsalam warahmatullahi wabarakatuh mas *{nama}*!\n"
+            f"Semoga harinya berkah dan lancar. Ada jadwal perkuliahan atau ruangan yang mau dicek hari ini?"
+        )
+
+    # 4. Sapaan Waktu (Pagi, Siang, Sore, Malam)
+    waktu_match = re.match(r'^(?:selamat\s+)?(pagi|siang|sore|malam|malem)[\s\.\!\?]*(?:mas|mase|bot|min)?[\s\.\!\?]*$', t)
+    if waktu_match:
+        w_str = waktu_match.group(1).replace('malem', 'malam')
+        return (
+            f"Selamat {w_str} mas *{nama}*!\n"
+            f"Semoga aktivitas perkuliahan hari ini berjalan lancar. Ada yang bisa saya bantu cek saat ini?"
+        )
+
+    # 5. Tanya Kabar / Kondisi
+    kabar_pattern = r'^(?:apa\s+kabar|gimana\s+kabarnya|gimana\s+kabar|lagi\s+apa|sibuk\s+apa|sehat\s*(?:mas|bot)?)[\s\.\!\?]*$'
+    if re.match(kabar_pattern, t):
+        return (
+            f"Alhamdulillah sehat dan siap siaga membantu operasional mas *{nama}*!\n"
+            f"Gimana kondisi perkuliahan hari ini? Mau cek status ruangan atau jadwal kelas?"
+        )
+
+    # 6. Tes Koneksi / Ping / Cek Bot Aktif
+    ping_pattern = r'^(?:p|ping|tes|test|tes\s+bot|halo\s+bot|bot\s+aktif|cek\s+bot)[\s\.\!\?]*$'
+    if re.match(ping_pattern, t):
+        return (
+            f"Halo mas *{nama}*! Bot Jadwal UNAMA aktif dan siap bertugas.\n"
+            f"Silakan ketik nomor menu (1-7) atau langsung tanyakan jadwal/ruangan yang ingin dicek."
+        )
+
+    # 7. Pertanyaan Identitas Bot (Kamu siapa / Bisa apa)
+    identitas_pattern = r'^(?:siapa\s+kamu|kamu\s+siapa|bot\s+apa\s+ini|ini\s+bot\s+apa|bisa\s+apa\s+aja|bisa\s+apa\s+saja|fitur\s+apa\s+aja)[\s\.\!\?]*$'
+    if re.match(identitas_pattern, t):
+        if role == 'asmot':
+            return (
+                f"Saya Asisten Bot Operasional UNAMA untuk Asmot mas *{nama}*.\n\n"
+                f"Tugas utama saya membantu mase memantau:\n"
+                f"• Kelas yang sedang aktif (AC wajib hidup)\n"
+                f"• Kelas yang mau mulai (persiapan hidupkan AC)\n"
+                f"• Kelas yang selesai (persiapan matikan AC)\n"
+                f"• Jadwal seluruh ruang kelas & ruangan kosong ({kampus_asmot})\n"
+                f"• Pencarian posisi dosen mengajar hari ini\n"
+                f"• Info pembatalan/peralihan kelas online (Info Mase)\n\n"
+                f"_Ketik inpo untuk melihat daftar menu operasional lengkap._"
+            )
+        else:
+            return (
+                f"Saya Asisten Bot Jadwal Perkuliahan UNAMA untuk Asisten Lab mas *{nama}*.\n\n"
+                f"Saya bisa membantu mase untuk:\n"
+                f"• Cek jadwal lab ({label_ruang})\n"
+                f"• Cek kelas berikutnya & status real-time lab\n"
+                f"• Cek jadwal semua lab & lab kosong di kampus\n"
+                f"• Cari dosen sedang mengajar di ruang mana\n"
+                f"• Kirim pesan/titip pesan ke aslab lain\n"
+                f"• Cek statistik penggunaan laboratorium\n\n"
+                f"_Ketik inpo untuk melihat daftar menu lengkap._"
+            )
+
+    # 8. Pujian / Apresiasi
+    praise_pattern = r'^(?:keren|mantap|mantull|jos|hebat|top|good\s*job|nice|terbaik)[\s\.\!\?]*(?:mas|bot)?[\s\.\!\?]*$'
+    if re.match(praise_pattern, t):
+        return (
+            f"Terima kasih apresiasinya mas *{nama}*! Senang bisa mempermudah pekerjaan mase.\n"
+            f"Semangat terus buat kita semua ya!"
+        )
+
+    # 9. Keluhan / Lelah
+    tired_pattern = r'^(?:capek|cape|lelah|letih|pusing|ngantuk)[\s\.\!\?]*$'
+    if re.match(tired_pattern, t):
+        return (
+            f"Tetap semangat mas *{nama}*!\n"
+            f"Kerja keras mase sangat membantu kelancaran perkuliahan. Jangan lupa istirahat sejenak dan minum air putih ya."
+        )
+
+    return None
+
 def fallback_python_handler(sender, text, aslab):
     global aslab_session_states
     text_clean = text.strip().lower()
@@ -1941,6 +2077,13 @@ def fallback_python_handler(sender, text, aslab):
         label_ruang = ruang if any(ruang.lower().startswith(p) for p in ["lab", "labor", "ruang"]) else f"Lab {ruang}"
     else:
         label_ruang = "Lab Tertentu (misal: 1.5, 1.8)"
+
+    # 0. Respon Interaktif untuk Konfirmasi, Sapaan, Terima Kasih, & Percakapan Santai
+    chitchat_res = handle_conversational_chitchat(text_clean, text, nama, role, kampus_asmot, label_ruang, aslab)
+    if chitchat_res:
+        if sender in aslab_session_states:
+            del aslab_session_states[sender]
+        return chitchat_res
     
     # 1. Cek Pembatalan
     if any(w in text_clean for w in ["batal", "cancel", "stop", "dak jadi", "gak jadi", "santai"]):
@@ -2071,21 +2214,21 @@ def fallback_python_handler(sender, text, aslab):
             return "Sebutkan nama lab yang ingin dicek statusnya ya mas (contoh: *status 1.8* atau *status 1.5 thehok*)."
         return status_lab_sekarang(target_room, kampus=k_target)
 
-    # 7. Opsi 4: Jadwal Semua Lab (misal '4', '4 besok', '4 lusa', 'jadwal semua besok')
+    # 7. Opsi 4: Jadwal Semua Ruangan / Lab (misal '4', '4 besok', '4 lusa', 'jadwal semua besok')
     if (text_clean == "4" or 
         re.search(r'^\s*4\b', text_clean) or 
         any(text_clean.startswith(k) for k in ["jadwal semua", "semua lab", "jadwal kobar", "jadwal thehok", "semua ruangan", "jadwal ruangan"])):
         target_date = extract_date_or_today(text_clean)
         k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else (kampus_asmot if role == 'asmot' else kampus_default))
-        return cek_semua_lab_kampus(k, target_date)
+        return cek_semua_lab_kampus(k, target_date, hanya_kelas=(role == 'asmot'))
 
-    # 8. Opsi 5: Cek Lab Kosong (misal '5', '5 besok', '5 lusa', 'lab kosong besok')
+    # 8. Opsi 5: Cek Ruangan / Lab Kosong (misal '5', '5 besok', '5 lusa', 'lab kosong besok')
     if (text_clean == "5" or 
         re.search(r'^\s*5\b', text_clean) or 
         any(text_clean.startswith(k) for k in ["lab kosong", "cek lab kosong", "kosong", "ruangan kosong", "cek ruangan kosong"])):
         target_date = extract_date_or_today(text_clean)
         k = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else (kampus_asmot if role == 'asmot' else kampus_default))
-        return cek_lab_kosong(k, target_date)
+        return cek_lab_kosong(k, target_date, hanya_kelas=(role == 'asmot'))
 
     # 9. Opsi 6: Cari Posisi Dosen
     if text_clean == "6" or any(text_clean.startswith(k) for k in ["cari dosen", "posisi dosen", "dosen"]):
@@ -2117,8 +2260,8 @@ def fallback_python_handler(sender, text, aslab):
         stat_res = get_statistik_lab_saya(target_room)
         return f"Nih rekap statistik lab {target_room} untuk mas {nama}:\n\n{stat_res}"
 
-    # 13. Cek Ruangan Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4", "lab 1.5")
-    match_room = re.search(r'\b(?:lab\s*|ruang\s*)?(\d+\.\d+)\b', text_clean)
+    # 13. Cek Ruangan / Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4", "r 2.10", "r. 2.10")
+    match_room = re.search(r'\b(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?(\d+\.\d+)\b', text_clean)
     if match_room:
         room_no = match_room.group(1)
         target_date = extract_date_or_today(text_clean)
@@ -2129,38 +2272,49 @@ def fallback_python_handler(sender, text, aslab):
             k_target = kampus_asmot
         return cek_jadwal_lab_tertentu(room_no, target_date, kampus=k_target)
 
-    # 14. Default Fallback
+    # 14. Default Fallback yang Ramah & Interaktif
     if role == 'asmot':
         return (
-            f"Perintah belum dikenal mas.\n\n"
+            f"Halo mas *{nama}*, pesan mase belum saya pahami nih.\n\n"
+            f"Mase bisa langsung tanyakan seperti contoh ini:\n"
+            f"• Cek ruangan: *2.10* atau *2.11*\n"
+            f"• Cari posisi dosen: *pak reza*\n"
+            f"• Cek kelas aktif: *1* atau *kelas aktif*\n\n"
+            f"Atau pilih menu kontrol AC & kelas di bawah:\n\n"
             f"*1.* Cek Kelas Aktif (AC Hidup)\n"
             f"*2.* Cek Kelas Mau Mulai (Persiapan AC)\n"
             f"*3.* Cek Kelas Selesai (Matikan AC)\n"
             f"*4.* Jadwal Seluruh Ruangan ({kampus_asmot})\n"
-            f"*5.* Cek Ruangan Kosong\n"
+            f"*5.* Cek Ruangan Kosong ({kampus_asmot})\n"
             f"*6.* Cari Dosen\n"
-            f"*7.* Info Mase\n\n"
-            f"_Ketik nomor 1 s/d 7 atau ketik inpo untuk melihat menu._"
+            f"*7.* Info Mase (Kelas Batal / Online)\n\n"
+            f"_Ketik angka 1-7 atau langsung tanyakan jadwal ruangan ya mas._"
         )
 
     if not has_room:
         return (
-            "Perintah belum dikenal mas.\n"
-            "Ketik nomor lab (misal: 1.5 kobar, 1.8), ketik 4 untuk semua lab, ketik nama dosen, atau ketik inpo untuk melihat menu."
+            f"Halo mas *{nama}*, pesan mase belum tertangkap nih.\n\n"
+            f"Mase terdaftar sebagai *Admin/Viewer*. Mase bisa coba:\n"
+            f"• Cek lab: *1.5 kobar* atau *1.8*\n"
+            f"• Jadwal semua lab: ketik *4*\n"
+            f"• Cek lab kosong: ketik *5*\n"
+            f"• Cari posisi dosen: *pak reza*\n"
+            f"• Ketik *inpo* untuk melihat menu bantuan lengkap."
         )
 
     return (
-        f"Perintah belum dikenal mas.\n\n"
-        f"1. Jadwal {label_ruang}\n"
-        f"2. Kelas berikutnya\n"
-        f"3. Status real-time {label_ruang}\n"
-        f"4. Jadwal semua lab ({kampus_default})\n"
-        f"5. Cek lab kosong ({kampus_default})\n"
-        f"6. Cari posisi dosen\n"
-        f"7. Info hari ini\n"
-        f"8. Link server\n"
-        f"9. Statistik lab {label_ruang}\n\n"
-        f"Ketik nomor 1 s/d 9 atau ketik inpo untuk bantuan."
+        f"Halo mas *{nama}*, pesan mase belum saya pahami nih.\n\n"
+        f"Mase bisa langsung tanyakan atau gunakan shortcut:\n"
+        f"• *1* - Jadwal {label_ruang}\n"
+        f"• *2* - Kelas berikutnya\n"
+        f"• *3* - Status real-time {label_ruang}\n"
+        f"• *4* - Jadwal semua lab ({kampus_default})\n"
+        f"• *5* - Cek lab kosong ({kampus_default})\n"
+        f"• *6* - Cari posisi dosen (contoh: *pak reza*)\n"
+        f"• *7* - Info Mase hari ini\n"
+        f"• *8* - Link web & server\n"
+        f"• *9* - Statistik {label_ruang}\n\n"
+        f"_Ketik angka 1-9 atau tanyakan langsung jadwal yang mau dicek mas._"
     )
 
 
@@ -2721,6 +2875,16 @@ def handle_incoming_message(sender, text):
         if (re.search(r'^(menu|info|inpo|oi|halo|hai|p|bantuan|help|\?)$', cmd_text) or 
             re.search(r'\b(menu|inpo|infoo|inpoo)\b', cmd_text)):
             return True
+        # 2.1 Konfirmasi & Percakapan Cepat (oke, siap, makasih, salam, sapaan waktu, ping, dll)
+        chitchat_kw = [
+            "oke", "ok", "siap", "baik", "noted", "sip", "mantap", "mantul", "yoi", "gass", "gas", "aman", "beres",
+            "makasih", "makasi", "terima kasih", "thanks", "tq", "suwun", "nuhun",
+            "assalamualaikum", "askum", "samlikum",
+            "pagi", "siang", "sore", "malam",
+            "ping", "tes", "test", "apa kabar", "kamu siapa", "siapa kamu", "capek", "lelah"
+        ]
+        if any(re.match(r'^(?:' + re.escape(kw) + r')[\s\.\!\?]*', cmd_text) for kw in chitchat_kw):
+            return True
         # 3. Permintaan Link server / tunnel / barcode
         if any(k in cmd_text for k in ["link", "server", "web", "ngrok", "barcode", "tunnel", "cloudflare"]):
             return True
@@ -2733,15 +2897,16 @@ def handle_incoming_message(sender, text):
             "statistik", "utilisasi", "batal", "cancel",
             "kelas aktif", "ac hidup", "aktif sekarang", "sedang aktif", "ac nyala",
             "kelas mau mulai", "mau mulai", "akan mulai", "persiapan ac", "hidupkan ac",
-            "kelas selesai", "matikan ac", "ac mati", "sudah selesai"
+            "kelas selesai", "matikan ac", "ac mati", "sudah selesai",
+            "ruangan kosong", "cek ruangan kosong", "jadwal seluruh ruangan", "semua ruangan"
         ]
         if any(k in cmd_text for k in ops_kw):
             return True
         # 5. Modifikasi profil aslab
         if any(cmd_text.startswith(k) for k in ["ganti nama ", "ubah nama ", "ganti lab ", "ubah lab "]):
             return True
-        # 6. Nomor lab spesifik (misal '1.5', '1.8', 'lab 1.8', 'ruang 3.4')
-        if re.search(r'^(?:lab\s*|labor\s*|ruang\s*)?\d+\.\d+\b', cmd_text):
+        # 6. Nomor lab / ruangan spesifik (misal '1.5', '1.8', 'lab 1.8', 'ruang 3.4', 'r 2.10', 'r. 2.10')
+        if re.search(r'^(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?\d+\.\d+\b', cmd_text):
             return True
         return False
 
@@ -2889,6 +3054,9 @@ def check_lab_schedules():
                     continue
                 r_kampus = r_info['kampus']
                 r_nama = r_info['nama_ruangan']
+                # KHUSUS ASMOT: Asmot HANYA mengontrol Ruang Kelas Teori, BUKAN Laboratorium!
+                if scraper.is_lab(r_nama):
+                    continue
                 scheds = sorted(scheds, key=lambda x: x['start_min'])
 
                 # Cari asmot yang bertugas di kampus ruangan ini

@@ -4657,12 +4657,20 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     return (aParts[0] * 60 + aParts[1]) - (bParts[0] * 60 + bParts[1]);
   });
 
-  // Cari aslab untuk ruangan ini jika ruangan merupakan Labor
+  // Cari aslab untuk ruangan ini jika ruangan merupakan Labor (cocokkan nama lab DAN kampus)
   let matchedAslab = null;
+  const targetCampus = (getRoomCampus(roomName, kampusStr || '') || '').trim().toLowerCase();
+
   if (Array.isArray(globalAslabData)) {
     matchedAslab = globalAslabData.find(a => {
       if (!a.nama_ruangan) return false;
-      return getCleanRoom(a.nama_ruangan) === cleanTargetRoom;
+      const roomMatch = getCleanRoom(a.nama_ruangan) === cleanTargetRoom;
+      if (!roomMatch) return false;
+      // Jika data aslab dan ruangan memiliki info kampus, pastikan kampusnya harus cocok!
+      if (a.kampus && targetCampus) {
+        return a.kampus.trim().toLowerCase() === targetCampus;
+      }
+      return true;
     });
   }
 
