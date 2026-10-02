@@ -2543,6 +2543,22 @@ function checkMidnightDateRollover() {
 // Cek pergantian hari 00:00 setiap 10 detik secara presisi
 setInterval(checkMidnightDateRollover, 10000);
 
+function normalizeRoomKey(name) {
+  if (!name) return '';
+  let s = String(name).replace(/\(.*?\)/g, '').trim().toLowerCase();
+  s = s.replace(/\b(laboratorium|labor|lab)\b/g, 'lab');
+  s = s.replace(/\b(ruang|ruangan|r\.)\b/g, 'r');
+  return s.replace(/[^a-z0-9]/g, '');
+}
+
+function isSameRoomName(nameA, nameB) {
+  if (!nameA || !nameB) return false;
+  if (nameA.trim().toLowerCase() === nameB.trim().toLowerCase()) return true;
+  return normalizeRoomKey(nameA) === normalizeRoomKey(nameB);
+}
+window.normalizeRoomKey = normalizeRoomKey;
+window.isSameRoomName = isSameRoomName;
+
 function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime) {
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
   const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
@@ -2565,50 +2581,55 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     }
   }
 
+  // Jika aslab membuka kelas masa depan lebih awal (misal jam 07:30 membuka kelas jam 08:00)
+  if (isToday && !activeClass && nextClass && (nextClass.status_lab || '').toLowerCase() === 'buka') {
+    isOccupied = true;
+    activeClass = nextClass;
+  }
+
+  // Jika kelas saat ini aktif menurut jam tetapi telah ditutup secara eksplisit oleh aslab
+  let isExplicitlyClosed = false;
+  if (activeClass && (activeClass.status_lab || '').toLowerCase() === 'tutup') {
+    isExplicitlyClosed = true;
+  }
+
   let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
   let text = 'Kosong';
   let jamText = '';
+  let lockStatus = 'tutup';
 
-  if (isOccupied) {
+  if (isOccupied && !isExplicitlyClosed) {
     state = 'occupied';
     text = activeClass.nama;
     jamText = activeClass.jam;
-  } else if (hasFutureClass) {
+    lockStatus = (activeClass.status_lab || '').toLowerCase() === 'buka' ? 'buka' : 'tutup';
+  } else if (hasFutureClass && nextClass && (!isOccupied || isExplicitlyClosed)) {
     state = 'waiting';
     text = 'Jeda';
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+    lockStatus = (nextClass.status_lab || '').toLowerCase() === 'buka' ? 'buka' : 'tutup';
   } else if (isToday && validPhysicalClasses.length > 0) {
-    // Seluruh kelas fisik hari ini di ruangan ini telah selesai (berwarna ungu seharian s/d 00:00 ganti hari)
+    // Seluruh kelas fisik hari ini di ruangan ini telah selesai / ditutup
     state = 'finished';
     text = 'Selesai';
-    jamText = '';
+    jamText = isExplicitlyClosed ? '(Ditutup)' : '';
+    lockStatus = 'tutup';
   } else if (!isToday && activeDate < currentDayStr && validPhysicalClasses.length > 0) {
-    // Tanggal lampau: semua kelas fisik telah selesai
     state = 'finished';
     text = 'Selesai';
     jamText = '';
+    lockStatus = 'tutup';
   } else if (!isToday && activeDate > currentDayStr && (schedules || []).length > 0) {
-    // Tanggal masa depan: terjadwal
     state = 'scheduled';
     text = 'Terjadwal';
     jamText = `(${schedules.length} Jadwal)`;
+    lockStatus = 'tutup';
   } else {
     state = 'empty';
     text = 'Kosong';
     jamText = '';
-  }
-
-  // Evaluasi status gembok operasional (buka / tutup)
-  let lockStatus = 'tutup'; // default: gembok tutup (merah)
-  if (isToday && (state === 'occupied' || state === 'waiting')) {
-    if (activeClass && (activeClass.status_lab || '').toLowerCase() === 'buka') {
-      lockStatus = 'buka';
-    } else if (nextClass && (nextClass.status_lab || '').toLowerCase() === 'buka') {
-      lockStatus = 'buka';
-    } else if (validPhysicalClasses.some(s => (s.status_lab || '').toLowerCase() === 'buka')) {
-      lockStatus = 'buka';
-    }
+    lockStatus = 'tutup';
   }
 
   return { state, text, jamText, lockStatus };
@@ -2884,6 +2905,105 @@ function updateActiveLabPanel() {
 }
 
 setInterval(updateActiveLabPanel, 60000);
+
+// ==================== REALTIME LAB / ROOM STATUS BACKGROUND SYNC ====================
+let _lastLabStatusHash = '';
+let _isSyncingLabStatus = false;
+
+async function syncRealtimeLabStatus(force = false) {
+  if (_isSyncingLabStatus && !force) return;
+  _isSyncingLabStatus = true;
+  try {
+    const filterTanggal = document.getElementById('filter-tanggal');
+    const now = new Date();
+    const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const targetDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value.trim() : currentDayStr;
+
+    const res = await fetch(`/api/status-lab?tanggal=${encodeURIComponent(targetDate)}`, {
+      cache: 'no-store'
+    });
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json.status !== 'success' || !Array.isArray(json.data)) return;
+
+    const currentHash = json.data.map(d => `${d.id_ruangan}_${d.jam}_${d.status_lab}_${d.waktu_aksi_str}`).join('|');
+    if (currentHash === _lastLabStatusHash && !force) {
+      return;
+    }
+    _lastLabStatusHash = currentHash;
+
+    if (Array.isArray(allJadwal)) {
+      json.data.forEach(stat => {
+        const statJam = (stat.jam || '').substring(0, 5);
+        const statCamp = formatCampusName(stat.kampus);
+        allJadwal.forEach(j => {
+          const jJam = (j.jam || '').substring(0, 5);
+          const jCamp = formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan));
+          const matchCamp = !statCamp || !jCamp || (jCamp === statCamp);
+          if (j.tanggal === stat.tanggal && isSameRoomName(j.nama_ruangan, stat.nama_ruangan) && matchCamp) {
+            if (stat.status_lab === 'tutup') {
+              if (jJam === statJam || statJam === '08:00') {
+                j.status_lab = stat.status_lab;
+                j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
+                j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
+              }
+            } else if (stat.status_lab === 'buka') {
+              if (jJam === statJam) {
+                j.status_lab = stat.status_lab;
+                j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
+                j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
+              }
+            }
+          }
+        });
+      });
+    }
+
+    if (typeof updateActiveLabPanel === 'function') {
+      updateActiveLabPanel();
+    }
+    if (typeof renderStatusLab === 'function') {
+      renderStatusLab();
+    }
+    if (typeof updateTvModeData === 'function') {
+      updateTvModeData(false, targetDate);
+    }
+
+    const modalEl = document.getElementById('room-detail-modal');
+    if (modalEl && modalEl.classList.contains('open') && window._currentDetailRoom) {
+      const { roomName, kampusStr, activeDate } = window._currentDetailRoom;
+      if (typeof window.showRoomDetail === 'function') {
+        window.showRoomDetail(roomName, kampusStr, activeDate);
+      }
+    }
+  } catch (err) {
+  } finally {
+    _isSyncingLabStatus = false;
+  }
+}
+window.syncRealtimeLabStatus = syncRealtimeLabStatus;
+
+// Sinkronkan status lab setiap 3 detik secara presisi di background
+setInterval(syncRealtimeLabStatus, 3000);
+
+// Sinkronkan instan saat tab menjadi aktif kembali
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    syncRealtimeLabStatus(true);
+  }
+});
+
+// Listener BroadcastChannel untuk sinkronisasi sub-milidetik antar tab di device yang sama
+if (typeof BroadcastChannel !== 'undefined') {
+  try {
+    const labChannel = new BroadcastChannel('unama_lab_status_sync');
+    labChannel.onmessage = (event) => {
+      if (event.data && event.data.type === 'LAB_STATUS_CHANGED') {
+        syncRealtimeLabStatus(true);
+      }
+    };
+  } catch (e) {}
+}
 
 let isCurrentlySyncing = false;
 
@@ -6390,10 +6510,9 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       if (Array.isArray(allJadwal)) {
         allJadwal.forEach(j => {
           const jJam = (j.jam || '').substring(0, 5);
-          const jRoom = (j.nama_ruangan || '').toLowerCase();
           const jCamp = formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan));
           const matchCamp = !targetKampus || !jCamp || (jCamp === formatCampusName(targetKampus));
-          if (j.tanggal === tanggal && jRoom.includes(cleanR) && matchCamp) {
+          if (j.tanggal === tanggal && isSameRoomName(j.nama_ruangan, roomName) && matchCamp) {
             if (targetStatus === 'tutup') {
               // Jika ditutup, seluruh sesi hari ini untuk ruangan ini ditutup
               j.status_lab = 'tutup';
@@ -6419,6 +6538,13 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       }
       if (typeof updateActiveLabPanel === 'function') {
         updateActiveLabPanel();
+      }
+
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const labChannel = new BroadcastChannel('unama_lab_status_sync');
+          labChannel.postMessage({ type: 'LAB_STATUS_CHANGED', roomName, targetStatus });
+        } catch (e) {}
       }
 
       if (typeof showToast === 'function') {

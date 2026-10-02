@@ -3427,7 +3427,7 @@ def update_status_lab(data: StatusLabUpdateInput):
                 conn_t = scraper.get_db()
                 cur_t = conn_t.cursor()
                 cur_t.execute(
-                    "UPDATE status_operasional_lab SET status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW() WHERE tanggal = %s AND id_ruangan = %s AND status_lab = 'buka'",
+                    "UPDATE status_operasional_lab SET status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW() WHERE tanggal = %s AND id_ruangan = %s",
                     (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan)
                 )
                 conn_t.commit()
