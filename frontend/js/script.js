@@ -2838,18 +2838,20 @@ function updateActiveLabPanel() {
                           (room || '').toLowerCase().includes('cisco');
       const entityLabel = isLabEntity ? 'Labor' : 'Ruangan';
       const lockTitle = isBuka 
-        ? `${entityLabel} sudah DIBUKA (Gembok Buka - Biru)` 
-        : `${entityLabel} DITUTUP / belum dibuka (Gembok Tutup - Merah)`;
+        ? `${entityLabel} sudah DIBUKA` 
+        : `${entityLabel} DITUTUP / belum dibuka`;
       const lockIconSvg = isBuka
-        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>`
-        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>`
+        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
 
       html += `
               <div class="lab-card ${data.state}" onclick="showRoomDetail('${escapeHtml(room)}', '${kampusStr}')">
-                <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
-                  ${lockIconSvg}
+                <div class="lab-card-header">
+                  <div class="lab-name">${formatRoomNameHtml(room)}</div>
+                  <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
+                    ${lockIconSvg}
+                  </div>
                 </div>
-                <div class="lab-name">${formatRoomNameHtml(room)}</div>
                 <div class="lab-status">${statusDisplay}</div>
               </div>
             `;
@@ -6414,6 +6416,9 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
 
       if (typeof window.renderStatusLab === 'function') {
         window.renderStatusLab();
+      }
+      if (typeof updateActiveLabPanel === 'function') {
+        updateActiveLabPanel();
       }
 
       if (typeof showToast === 'function') {

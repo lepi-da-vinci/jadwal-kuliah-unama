@@ -1120,12 +1120,62 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   filter: brightness(1.05);
 }
 
-.lab-card .lab-name {
+.lab-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  width: 100%;
+  z-index: 1;
+}
+
+.lab-card .lab-name,
+.lab-card-header .lab-name {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 1.05em;
-  margin-bottom: 4px;
+  font-size: 1.02em;
+  margin-bottom: 0;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
   z-index: 1;
+}
+
+.lab-card-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  z-index: 1;
+}
+
+.lab-card:hover .lab-card-lock {
+  transform: scale(1.1);
+}
+
+.lab-card-lock svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.lab-card-lock.is-buka {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.25);
+}
+
+.lab-card-lock.is-tutup {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.16);
 }
 
 .lab-card .lab-status {
@@ -6428,6 +6478,23 @@ body.semester-explorer-active #semester-explorer-container {
     padding: 10px 8px !important;
     min-height: 52px !important;
     border-radius: var(--radius-md) !important;
+  }
+
+  .lab-card-header {
+    gap: 4px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .lab-card-lock {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    border-radius: 4px !important;
+  }
+
+  .lab-card-lock svg {
+    width: 11px !important;
+    height: 11px !important;
   }
 
   .lab-name {
