@@ -2599,7 +2599,19 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     jamText = '';
   }
 
-  return { state, text, jamText };
+  // Evaluasi status gembok operasional (buka / tutup)
+  let lockStatus = 'tutup'; // default: gembok tutup (merah)
+  if (isToday && (state === 'occupied' || state === 'waiting')) {
+    if (activeClass && (activeClass.status_lab || '').toLowerCase() === 'buka') {
+      lockStatus = 'buka';
+    } else if (nextClass && (nextClass.status_lab || '').toLowerCase() === 'buka') {
+      lockStatus = 'buka';
+    } else if (validPhysicalClasses.some(s => (s.status_lab || '').toLowerCase() === 'buka')) {
+      lockStatus = 'buka';
+    }
+  }
+
+  return { state, text, jamText, lockStatus };
 }
 
 function updateActiveLabPanel() {
@@ -2686,7 +2698,10 @@ function updateActiveLabPanel() {
         kelas: item.kelas || '',
         rawName: item.nama_ruangan,
         cleanName: getCleanRoom(item.nama_ruangan),
-        kampus: item.kampus || getRoomCampus(item.nama_ruangan)
+        kampus: item.kampus || getRoomCampus(item.nama_ruangan),
+        status_lab: item.status_lab,
+        status_lab_oleh: item.status_lab_oleh,
+        status_lab_waktu: item.status_lab_waktu
       });
     }
   });
@@ -2815,8 +2830,25 @@ function updateActiveLabPanel() {
       } else {
         statusDisplay = escapeHtml(data.text) + (data.jamText ? ' ' + escapeHtml(data.jamText) : '');
       }
+
+      const isBuka = (data.lockStatus === 'buka');
+      const lockClass = isBuka ? 'is-buka' : 'is-tutup';
+      const isLabEntity = (typeof isLab === 'function' && isLab(room)) ||
+                          (room || '').toLowerCase().includes('lab') ||
+                          (room || '').toLowerCase().includes('cisco');
+      const entityLabel = isLabEntity ? 'Labor' : 'Ruangan';
+      const lockTitle = isBuka 
+        ? `${entityLabel} sudah DIBUKA (Gembok Buka - Biru)` 
+        : `${entityLabel} DITUTUP / belum dibuka (Gembok Tutup - Merah)`;
+      const lockIconSvg = isBuka
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+
       html += `
               <div class="lab-card ${data.state}" onclick="showRoomDetail('${escapeHtml(room)}', '${kampusStr}')">
+                <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
+                  ${lockIconSvg}
+                </div>
                 <div class="lab-name">${formatRoomNameHtml(room)}</div>
                 <div class="lab-status">${statusDisplay}</div>
               </div>
@@ -5938,14 +5970,17 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     schedules: schedules
   };
 
-  // Status Operasional Lab di Header (Hanya untuk Labor / Ruang Komputer)
-  const isLabRoom = (roomName || '').toLowerCase().includes('lab') ||
-                    (roomName || '').toLowerCase().includes('komputer') ||
-                    Boolean(matchedAslab);
+  // Status Operasional Ruangan & Lab di Header (Untuk semua kelas aktif: Lab maupun Ruang Kelas)
+  const isLabOrComputer = (typeof isLab === 'function' && isLab(roomName)) ||
+                          (roomName || '').toLowerCase().includes('lab') ||
+                          (roomName || '').toLowerCase().includes('cisco') ||
+                          (roomName || '').toLowerCase().includes('komputer') ||
+                          Boolean(matchedAslab);
+  const entityLabel = isLabOrComputer ? 'Lab' : 'Ruang';
 
   const headerLabStatusEl = document.getElementById('room-detail-lab-status-header');
   if (headerLabStatusEl) {
-    if (!isLabRoom || schedules.length === 0) {
+    if (schedules.length === 0) {
       headerLabStatusEl.style.display = 'none';
       headerLabStatusEl.innerHTML = '';
     } else {
@@ -6009,6 +6044,32 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         statusWaktu = lastClosedSession.status_lab_waktu || '';
       }
 
+      const lockBadgeEl = document.getElementById('room-detail-lock-badge');
+      if (lockBadgeEl) {
+        if (currentStatus === 'buka') {
+          lockBadgeEl.className = 'room-detail-pill lock is-buka';
+          lockBadgeEl.innerHTML = `
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
+            <span>Dibuka</span>
+          `;
+          lockBadgeEl.style.display = 'inline-flex';
+        } else if (currentStatus === 'tutup') {
+          lockBadgeEl.className = 'room-detail-pill lock is-tutup';
+          lockBadgeEl.innerHTML = `
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Ditutup</span>
+          `;
+          lockBadgeEl.style.display = 'inline-flex';
+        } else {
+          lockBadgeEl.className = 'room-detail-pill lock is-tutup';
+          lockBadgeEl.innerHTML = `
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Belum Dibuka</span>
+          `;
+          lockBadgeEl.style.display = 'inline-flex';
+        }
+      }
+
       if (currentStatus === 'buka') {
         headerLabStatusEl.className = 'room-lab-status-strip is-buka';
         headerLabStatusEl.style.display = 'flex';
@@ -6016,14 +6077,14 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           <div class="lab-status-left">
             <span class="lab-status-dot dot-buka"></span>
             <div class="lab-status-texts">
-              <span class="lab-status-title">Lab Dibuka</span>
+              <span class="lab-status-title">${entityLabel} Dibuka</span>
               <span class="lab-status-sub">${statusWaktu ? escapeHtml(statusWaktu) + ' WIB' : ''}${statusOleh ? ' • ' + escapeHtml(statusOleh) : ''}</span>
             </div>
           </div>
           <div class="lab-status-right">
-            <button type="button" class="btn-lab-toggle tutup" onclick="window.onHeaderLabStatusClick('tutup')" title="Tutup sesi lab">
+            <button type="button" class="btn-lab-toggle tutup" onclick="window.onHeaderLabStatusClick('tutup')" title="Tutup sesi ${entityLabel.toLowerCase()}">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              <span>Tutup Lab</span>
+              <span>Tutup ${entityLabel}</span>
             </button>
           </div>
         `;
@@ -6034,12 +6095,12 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           <div class="lab-status-left">
             <span class="lab-status-dot dot-tutup"></span>
             <div class="lab-status-texts">
-              <span class="lab-status-title">Lab Ditutup</span>
+              <span class="lab-status-title">${entityLabel} Ditutup</span>
               <span class="lab-status-sub">${statusWaktu ? escapeHtml(statusWaktu) + ' WIB' : ''}${statusOleh ? ' • ' + escapeHtml(statusOleh) : ''}</span>
             </div>
           </div>
           <div class="lab-status-right">
-            <button type="button" class="btn-lab-toggle buka-subtle" onclick="window.onHeaderLabStatusClick('buka')" title="Buka lab kembali">
+            <button type="button" class="btn-lab-toggle buka-subtle" onclick="window.onHeaderLabStatusClick('buka')" title="Buka ${entityLabel.toLowerCase()} kembali">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
               <span>Buka Kembali</span>
             </button>
@@ -6052,14 +6113,14 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           <div class="lab-status-left">
             <span class="lab-status-dot dot-belum"></span>
             <div class="lab-status-texts">
-              <span class="lab-status-title">Lab Belum Dibuka</span>
+              <span class="lab-status-title">${entityLabel} Belum Dibuka</span>
               <span class="lab-status-sub">Sesi siap dibuka</span>
             </div>
           </div>
           <div class="lab-status-right">
-            <button type="button" class="btn-lab-toggle buka" onclick="window.onHeaderLabStatusClick('buka')" title="Buka sesi lab sekarang">
+            <button type="button" class="btn-lab-toggle buka" onclick="window.onHeaderLabStatusClick('buka')" title="Buka sesi ${entityLabel.toLowerCase()} sekarang">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
-              <span>Buka Lab</span>
+              <span>Buka ${entityLabel}</span>
             </button>
           </div>
         `;
@@ -6269,11 +6330,11 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
 window.onHeaderLabStatusClick = function (targetStatus) {
   if (!window._currentDetailRoom) return;
-  const { roomName, activeDate, relevantSession } = window._currentDetailRoom;
+  const { roomName, kampusStr, activeDate, relevantSession } = window._currentDetailRoom;
   const jam = relevantSession ? (relevantSession.jam || '08:00') : '08:00';
   const namaMk = relevantSession ? (relevantSession.nama_mk || '') : '';
   const kelas = relevantSession ? (relevantSession.kelas || '') : '';
-  window.toggleLabSessionStatus(activeDate, roomName, jam, namaMk, kelas, targetStatus);
+  window.toggleLabSessionStatus(activeDate, roomName, jam, namaMk, kelas, targetStatus, kampusStr);
 };
 
 window.onLabStatusBtnClick = function (btn) {
@@ -6284,19 +6345,27 @@ window.onLabStatusBtnClick = function (btn) {
   const namaMk = btn.dataset.mk;
   const kelas = btn.dataset.kelas;
   const targetStatus = btn.dataset.status;
-  window.toggleLabSessionStatus(tanggal, roomName, jam, namaMk, kelas, targetStatus);
+  const kampus = btn.dataset.kampus || null;
+  window.toggleLabSessionStatus(tanggal, roomName, jam, namaMk, kelas, targetStatus, kampus);
 };
 
-window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, kelas, targetStatus) {
+window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, kelas, targetStatus, kampusStr = null) {
   try {
+    const isLabOrComputer = (typeof isLab === 'function' && isLab(roomName)) ||
+                            (roomName || '').toLowerCase().includes('lab') ||
+                            (roomName || '').toLowerCase().includes('cisco');
+    const entityLabel = isLabOrComputer ? 'lab' : 'ruang';
     const statusText = targetStatus === 'buka' ? 'dibuka 🟢' : 'ditutup 🔒';
     if (typeof showToast === 'function') {
-      showToast(`Menyimpan status: lab ${statusText}...`, 'info');
+      showToast(`Menyimpan status: ${entityLabel} ${statusText}...`, 'info');
     }
+
+    const targetKampus = kampusStr || (window._currentDetailRoom ? window._currentDetailRoom.kampusStr : null);
 
     const payload = {
       tanggal: tanggal,
       nama_ruangan: roomName,
+      kampus: targetKampus,
       jam: jam,
       nama_mk: namaMk,
       kelas: kelas,
@@ -6320,7 +6389,9 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
         allJadwal.forEach(j => {
           const jJam = (j.jam || '').substring(0, 5);
           const jRoom = (j.nama_ruangan || '').toLowerCase();
-          if (j.tanggal === tanggal && jRoom.includes(cleanR)) {
+          const jCamp = formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan));
+          const matchCamp = !targetKampus || !jCamp || (jCamp === formatCampusName(targetKampus));
+          if (j.tanggal === tanggal && jRoom.includes(cleanR) && matchCamp) {
             if (targetStatus === 'tutup') {
               // Jika ditutup, seluruh sesi hari ini untuk ruangan ini ditutup
               j.status_lab = 'tutup';
@@ -6338,7 +6409,11 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       }
 
       if (typeof window.showRoomDetail === 'function') {
-        window.showRoomDetail(roomName, null, tanggal);
+        window.showRoomDetail(roomName, targetKampus, tanggal);
+      }
+
+      if (typeof window.renderStatusLab === 'function') {
+        window.renderStatusLab();
       }
 
       if (typeof showToast === 'function') {
@@ -6346,7 +6421,7 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       }
     } else {
       if (typeof showToast === 'function') {
-        showToast(data.message || 'Gagal mengubah status lab', 'error');
+        showToast(data.message || `Gagal mengubah status ${entityLabel}`, 'error');
       }
     }
   } catch (err) {
