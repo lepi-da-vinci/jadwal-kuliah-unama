@@ -5893,34 +5893,178 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   const campusLabel = cleanCamp || (isKobarRoom ? 'Kobar' : 'Thehok');
 
   if (titleEl) {
-    titleEl.innerHTML = `
-      <span>${formatRoomNameHtml(roomName)}</span>
-      <span class="badge" style="font-size: 0.65em; font-weight: 700; padding: 4px 11px; border-radius: var(--radius-full); background: rgba(99, 102, 241, 0.12); color: var(--primary); border: 1px solid rgba(99, 102, 241, 0.25); display: inline-flex; align-items: center; gap: 5px; vertical-align: middle;">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-        <span>Kampus ${escapeHtml(campusLabel)}</span>
-      </span>
+    titleEl.innerHTML = formatRoomNameHtml(roomName);
+  }
+
+  const campusBadgeEl = document.getElementById('room-detail-campus-badge');
+  if (campusBadgeEl) {
+    campusBadgeEl.innerHTML = `
+      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+      <span>${escapeHtml(campusLabel)}</span>
     `;
+    campusBadgeEl.style.display = 'inline-flex';
   }
 
   const badgeEl = document.getElementById('room-detail-badge');
   if (badgeEl) {
-    badgeEl.innerText = `${schedules.length} Jadwal`;
-    badgeEl.style.display = 'inline-block';
+    badgeEl.innerText = `${schedules.length} Sesi`;
+    badgeEl.style.display = 'inline-flex';
   }
 
   const subdescEl = document.getElementById('room-detail-subdesc');
   if (subdescEl) {
     const hoursText = isKobarRoom ? '08:00 - 17:00 WIB' : '08:00 - 21:00 WIB';
+    let tglText = formatTanggalIndo(activeDate);
+    tglText = tglText
+      .replace(/Oktober/i, 'Okt')
+      .replace(/September/i, 'Sep')
+      .replace(/November/i, 'Nov')
+      .replace(/Desember/i, 'Des')
+      .replace(/Januari/i, 'Jan')
+      .replace(/Februari/i, 'Feb')
+      .replace(/Agustus/i, 'Agu');
     subdescEl.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 0.88em; color: var(--text-muted); font-weight: 500;">
-        <span style="font-weight: 700; color: var(--text-dark);">${escapeHtml(formatTanggalIndo(activeDate))}</span>
-        <span style="opacity: 0.35;">•</span>
-        <span style="display: inline-flex; align-items: center; gap: 4px;">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          <span>Operasional ${hoursText}</span>
-        </span>
-      </div>
+      <span>${escapeHtml(tglText)}</span>
+      <span class="sep">•</span>
+      <span>🕒 ${hoursText}</span>
     `;
+  }
+
+  // Simpan data ruangan saat ini ke window untuk aksi lab status di header
+  window._currentDetailRoom = {
+    roomName: roomName,
+    kampusStr: kampusStr,
+    activeDate: activeDate,
+    schedules: schedules
+  };
+
+  // Status Operasional Lab di Header (Hanya untuk Labor / Ruang Komputer)
+  const isLabRoom = (roomName || '').toLowerCase().includes('lab') ||
+                    (roomName || '').toLowerCase().includes('komputer') ||
+                    Boolean(matchedAslab);
+
+  const headerLabStatusEl = document.getElementById('room-detail-lab-status-header');
+  if (headerLabStatusEl) {
+    if (!isLabRoom || schedules.length === 0) {
+      headerLabStatusEl.style.display = 'none';
+      headerLabStatusEl.innerHTML = '';
+    } else {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const isToday = (activeDate === currentDayStr);
+
+      let ongoingSession = null;
+      let upcomingSession = null;
+      let openSession = null;
+      let lastClosedSession = null;
+
+      for (const s of schedules) {
+        const parts = (s.jam || '').split(/[-–—]/).map(p => p.trim());
+        let sStart = 0, sEnd = 0;
+        if (parts.length >= 1 && parts[0].includes(':')) {
+          const [sh, sm] = parts[0].split(':').map(Number);
+          if (!isNaN(sh) && !isNaN(sm)) {
+            sStart = sh * 60 + sm;
+            if (parts.length >= 2 && parts[1].includes(':')) {
+              const [eh, em] = parts[1].split(':').map(Number);
+              sEnd = (!isNaN(eh) && !isNaN(em)) ? (eh * 60 + em) : (sStart + 135);
+            } else {
+              sEnd = sStart + 135;
+            }
+          }
+        }
+        s._startM = sStart;
+        s._endM = sEnd;
+
+        if (isToday) {
+          if (currentMinutes >= sStart && currentMinutes <= sEnd) {
+            ongoingSession = s;
+          } else if (currentMinutes < sStart && !upcomingSession) {
+            upcomingSession = s;
+          }
+        }
+
+        const st = (s.status_lab || '').toLowerCase();
+        if (st === 'buka') {
+          openSession = s;
+        } else if (st === 'tutup') {
+          lastClosedSession = s;
+        }
+      }
+
+      const relevantSession = ongoingSession || upcomingSession || schedules[0];
+      window._currentDetailRoom.relevantSession = relevantSession;
+
+      let currentStatus = 'belum';
+      let statusOleh = '';
+      let statusWaktu = '';
+
+      if (openSession) {
+        currentStatus = 'buka';
+        statusOleh = openSession.status_lab_oleh || '';
+        statusWaktu = openSession.status_lab_waktu || '';
+      } else if (lastClosedSession) {
+        currentStatus = 'tutup';
+        statusOleh = lastClosedSession.status_lab_oleh || '';
+        statusWaktu = lastClosedSession.status_lab_waktu || '';
+      }
+
+      if (currentStatus === 'buka') {
+        headerLabStatusEl.className = 'room-lab-status-strip is-buka';
+        headerLabStatusEl.style.display = 'flex';
+        headerLabStatusEl.innerHTML = `
+          <div class="lab-status-left">
+            <span class="lab-status-dot dot-buka"></span>
+            <div class="lab-status-texts">
+              <span class="lab-status-title">Lab Dibuka</span>
+              <span class="lab-status-sub">${statusWaktu ? escapeHtml(statusWaktu) + ' WIB' : ''}${statusOleh ? ' • ' + escapeHtml(statusOleh) : ''}</span>
+            </div>
+          </div>
+          <div class="lab-status-right">
+            <button type="button" class="btn-lab-toggle tutup" onclick="window.onHeaderLabStatusClick('tutup')" title="Tutup sesi lab">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <span>Tutup Lab</span>
+            </button>
+          </div>
+        `;
+      } else if (currentStatus === 'tutup') {
+        headerLabStatusEl.className = 'room-lab-status-strip is-tutup';
+        headerLabStatusEl.style.display = 'flex';
+        headerLabStatusEl.innerHTML = `
+          <div class="lab-status-left">
+            <span class="lab-status-dot dot-tutup"></span>
+            <div class="lab-status-texts">
+              <span class="lab-status-title">Lab Ditutup</span>
+              <span class="lab-status-sub">${statusWaktu ? escapeHtml(statusWaktu) + ' WIB' : ''}${statusOleh ? ' • ' + escapeHtml(statusOleh) : ''}</span>
+            </div>
+          </div>
+          <div class="lab-status-right">
+            <button type="button" class="btn-lab-toggle buka-subtle" onclick="window.onHeaderLabStatusClick('buka')" title="Buka lab kembali">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
+              <span>Buka Kembali</span>
+            </button>
+          </div>
+        `;
+      } else {
+        headerLabStatusEl.className = 'room-lab-status-strip is-belum';
+        headerLabStatusEl.style.display = 'flex';
+        headerLabStatusEl.innerHTML = `
+          <div class="lab-status-left">
+            <span class="lab-status-dot dot-belum"></span>
+            <div class="lab-status-texts">
+              <span class="lab-status-title">Lab Belum Dibuka</span>
+              <span class="lab-status-sub">Sesi siap dibuka</span>
+            </div>
+          </div>
+          <div class="lab-status-right">
+            <button type="button" class="btn-lab-toggle buka" onclick="window.onHeaderLabStatusClick('buka')" title="Buka sesi lab sekarang">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
+              <span>Buka Lab</span>
+            </button>
+          </div>
+        `;
+      }
+    }
   }
 
   const listContainer = document.getElementById('room-detail-list');
@@ -6075,104 +6219,6 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       }
       if (!kampusText) kampusText = 'UNAMA';
 
-      // 6. Status Real-Time Operasional Lab (Buka / Tutup Sesi Kelas oleh Aslab)
-      const stLab = (s.status_lab || '').toLowerCase();
-      const stOleh = s.status_lab_oleh || '';
-      const stWaktu = s.status_lab_waktu ? ` pukul ${s.status_lab_waktu} WIB` : '';
-      const siapaKet = stOleh ? ` (${escapeHtml(stOleh)}${stWaktu})` : (stWaktu ? ` (${stWaktu.trim()})` : '');
-
-      let opStatusBadge = '';
-      let opActionBtns = '';
-
-      if (stLab === 'buka') {
-        opStatusBadge = `
-          <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-full); padding: 4px 10px; font-size: 0.78em; display: inline-flex; align-items: center; gap: 6px;">
-            <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981;"></span>
-            <span>Lab Sudah Dibuka <small style="opacity:0.85;">${siapaKet}</small></span>
-          </span>
-        `;
-        opActionBtns = `
-          <button type="button" class="btn-lab-status-action"
-            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
-            data-room="${escapeHtml(roomName)}"
-            data-jam="${escapeHtml(s.jam || startTimeStr)}"
-            data-mk="${escapeHtml(s.nama_mk || '')}"
-            data-kelas="${escapeHtml(s.kelas || '')}"
-            data-status="tutup"
-            onclick="window.onLabStatusBtnClick(this)"
-            style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 4px 12px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;" title="Tandai lab sudah ditutup">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            <span>Tutup Lab</span>
-          </button>
-        `;
-      } else if (stLab === 'tutup') {
-        opStatusBadge = `
-          <span class="badge" style="background: rgba(107, 114, 128, 0.15); color: #6b7280; font-weight: 700; border: 1px solid rgba(107, 114, 128, 0.3); border-radius: var(--radius-full); padding: 4px 10px; font-size: 0.78em; display: inline-flex; align-items: center; gap: 6px;">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            <span>Lab Sudah Ditutup <small style="opacity:0.85;">${siapaKet}</small></span>
-          </span>
-        `;
-        opActionBtns = `
-          <button type="button" class="btn-lab-status-action"
-            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
-            data-room="${escapeHtml(roomName)}"
-            data-jam="${escapeHtml(s.jam || startTimeStr)}"
-            data-mk="${escapeHtml(s.nama_mk || '')}"
-            data-kelas="${escapeHtml(s.kelas || '')}"
-            data-status="buka"
-            onclick="window.onLabStatusBtnClick(this)"
-            style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 4px 12px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;" title="Buka lab kembali">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
-            <span>Buka Kembali</span>
-          </button>
-        `;
-      } else {
-        opStatusBadge = `
-          <span class="badge" style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 4px 10px; font-size: 0.78em; display: inline-flex; align-items: center; gap: 6px;">
-            <span style="width: 7px; height: 7px; border-radius: 50%; background: #9ca3af;"></span>
-            <span>Belum Dibuka</span>
-          </span>
-        `;
-        opActionBtns = `
-          <button type="button" class="btn-lab-status-action btn-buka-primary"
-            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
-            data-room="${escapeHtml(roomName)}"
-            data-jam="${escapeHtml(s.jam || startTimeStr)}"
-            data-mk="${escapeHtml(s.nama_mk || '')}"
-            data-kelas="${escapeHtml(s.kelas || '')}"
-            data-status="buka"
-            onclick="window.onLabStatusBtnClick(this)"
-            style="background: #10b981; color: #ffffff; border: none; border-radius: 8px; padding: 5px 14px; font-size: 0.8em; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); transition: all 0.2s;">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
-            <span>Buka Lab</span>
-          </button>
-          <button type="button" class="btn-lab-status-action"
-            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
-            data-room="${escapeHtml(roomName)}"
-            data-jam="${escapeHtml(s.jam || startTimeStr)}"
-            data-mk="${escapeHtml(s.nama_mk || '')}"
-            data-kelas="${escapeHtml(s.kelas || '')}"
-            data-status="tutup"
-            onclick="window.onLabStatusBtnClick(this)"
-            style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 0.8em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Tandai sudah ditutup / selesai">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            <span>Tutup</span>
-          </button>
-        `;
-      }
-
-      const operationalStatusHtml = `
-        <div class="room-card-status-bar" style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 0.76em; color: var(--text-muted); font-weight: 600;">Status Lab:</span>
-            ${opStatusBadge}
-          </div>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            ${opActionBtns}
-          </div>
-        </div>
-      `;
-
       return `
         <div class="room-detail-card ${cardStatusClass}">
           <div class="room-card-header">
@@ -6212,7 +6258,6 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
           </div>
 
-          ${operationalStatusHtml}
           ${aslabRowHtml}
         </div>
       `;
@@ -6220,6 +6265,15 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   }
 
   document.getElementById('room-detail-modal').classList.add('open');
+};
+
+window.onHeaderLabStatusClick = function (targetStatus) {
+  if (!window._currentDetailRoom) return;
+  const { roomName, activeDate, relevantSession } = window._currentDetailRoom;
+  const jam = relevantSession ? (relevantSession.jam || '08:00') : '08:00';
+  const namaMk = relevantSession ? (relevantSession.nama_mk || '') : '';
+  const kelas = relevantSession ? (relevantSession.kelas || '') : '';
+  window.toggleLabSessionStatus(activeDate, roomName, jam, namaMk, kelas, targetStatus);
 };
 
 window.onLabStatusBtnClick = function (btn) {
@@ -6260,15 +6314,25 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
     if (data.status === 'success') {
       const cleanJam = (jam || '').substring(0, 5);
       const cleanR = (roomName || '').replace(/\(.*?\)/, '').trim().toLowerCase();
+      const actionWaktu = data.waktu || new Date().toTimeString().substring(0, 5);
 
       if (Array.isArray(allJadwal)) {
         allJadwal.forEach(j => {
           const jJam = (j.jam || '').substring(0, 5);
           const jRoom = (j.nama_ruangan || '').toLowerCase();
-          if (j.tanggal === tanggal && jJam === cleanJam && jRoom.includes(cleanR)) {
-            j.status_lab = targetStatus;
-            j.status_lab_oleh = 'Aslab (Web)';
-            j.status_lab_waktu = data.waktu || new Date().toTimeString().substring(0, 5);
+          if (j.tanggal === tanggal && jRoom.includes(cleanR)) {
+            if (targetStatus === 'tutup') {
+              // Jika ditutup, seluruh sesi hari ini untuk ruangan ini ditutup
+              j.status_lab = 'tutup';
+              j.status_lab_oleh = 'Aslab (Web)';
+              j.status_lab_waktu = actionWaktu;
+            } else if (targetStatus === 'buka') {
+              if (jJam === cleanJam || !j.status_lab || j.status_lab === 'belum' || j.status_lab === 'tutup') {
+                j.status_lab = 'buka';
+                j.status_lab_oleh = 'Aslab (Web)';
+                j.status_lab_waktu = actionWaktu;
+              }
+            }
           }
         });
       }

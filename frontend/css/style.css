@@ -4761,6 +4761,293 @@ tr.table-row-conflict td:first-child {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   ROOM DETAIL MODAL - MODERN, COMPACT, & AIRY LAYOUT
+   ══════════════════════════════════════════════════════════════ */
+#room-detail-modal .modal-box {
+  width: min(580px, 94vw) !important;
+  max-width: 580px !important;
+  border-radius: 20px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35) !important;
+}
+
+@media (max-width: 640px) {
+  #room-detail-modal .modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 24px 24px 0 0 !important;
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+    max-height: 88vh !important;
+    padding: 0 !important;
+  }
+}
+
+.room-detail-header {
+  padding: 14px 18px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.room-detail-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.room-detail-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.room-detail-title-group h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  color: var(--text-dark);
+  line-height: 1.2;
+}
+
+.room-detail-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.room-detail-pill.campus {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+}
+
+.room-detail-pill.count {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.room-detail-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.room-detail-close-btn:hover {
+  background: var(--bg-card);
+  color: var(--text-dark);
+}
+
+.room-detail-subline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.room-detail-subline .sep {
+  opacity: 0.35;
+}
+
+/* Strip Status Lab Modern */
+.room-lab-status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  margin-top: 2px;
+}
+
+.room-lab-status-strip.is-buka {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.room-lab-status-strip.is-tutup {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.room-lab-status-strip.is-belum {
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+.lab-status-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lab-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lab-status-dot.dot-buka {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.lab-status-dot.dot-tutup {
+  background: #ef4444;
+}
+
+.lab-status-dot.dot-belum {
+  background: #9ca3af;
+}
+
+.lab-status-texts {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.lab-status-title {
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.room-lab-status-strip.is-buka .lab-status-title {
+  color: #10b981;
+}
+
+.room-lab-status-strip.is-tutup .lab-status-title {
+  color: #ef4444;
+}
+
+.lab-status-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.lab-status-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-lab-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-lab-toggle.tutup {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.btn-lab-toggle.tutup:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.btn-lab-toggle.buka {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+.btn-lab-toggle.buka:hover {
+  background: #059669;
+}
+
+.btn-lab-toggle.buka-subtle {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.btn-lab-toggle.buka-subtle:hover {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.room-detail-modal-body {
+  padding: 14px 18px;
+  max-height: 60vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  .room-detail-modal-body {
+    padding: 12px 14px;
+    max-height: calc(88vh - 120px) !important;
+  }
+}
+
+.room-detail-modal-footer {
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .room-detail-modal-footer {
+    display: none !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
    MODE EKSPLORASI DATABASE SEMESTER (ARSIP & SEARCH EXPLORER)
    ══════════════════════════════════════════════════════════════ */
 body.semester-explorer-active #live-dashboard-view,
@@ -6220,6 +6507,10 @@ body.semester-explorer-active #semester-explorer-container {
     box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45) !important;
     animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
     z-index: 100001 !important;
+  }
+
+  #room-detail-modal .modal-box {
+    padding: 0 !important;
   }
 
   /* ══════════════════════════════════════════════════════════════

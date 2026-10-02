@@ -3373,7 +3373,7 @@ class StatusLabUpdateInput(BaseModel):
     id_ruangan: int = None
     nama_ruangan: str = None
     kampus: str = None
-    jam: str
+    jam: str = None
     status_lab: str = "buka" # "buka" / "tutup"
     nama_mk: str = None
     kelas: str = None
@@ -3404,19 +3404,37 @@ def update_status_lab(data: StatusLabUpdateInput):
         if not id_ruangan:
             return {"status": "error", "message": "Ruangan tidak ditemukan"}
 
-        jam_clean = data.jam.split('-')[0].strip() if '-' in data.jam else data.jam.strip()
-        if len(jam_clean) > 5 and ':' in jam_clean:
-            jam_clean = jam_clean[:5]
+        jam_clean = "08:00"
+        if data.jam:
+            jam_clean = data.jam.split('-')[0].strip() if '-' in data.jam else data.jam.strip()
+            if len(jam_clean) > 5 and ':' in jam_clean:
+                jam_clean = jam_clean[:5]
+
+        target_status = data.status_lab.strip().lower()
 
         sukses = wa_notifier.set_status_operasional_lab(
             tanggal=data.tanggal.strip(),
             id_ruangan=id_ruangan,
             jam=jam_clean,
-            status_lab=data.status_lab.strip().lower(),
+            status_lab=target_status,
             diubah_oleh=data.diubah_oleh.strip() if data.diubah_oleh else "Aslab (Web)",
             nama_mk=data.nama_mk.strip() if data.nama_mk else None,
             kelas=data.kelas.strip() if data.kelas else None
         )
+
+        if target_status == "tutup":
+            try:
+                conn_t = scraper.get_db()
+                cur_t = conn_t.cursor()
+                cur_t.execute(
+                    "UPDATE status_operasional_lab SET status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW() WHERE tanggal = %s AND id_ruangan = %s AND status_lab = 'buka'",
+                    (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan)
+                )
+                conn_t.commit()
+                cur_t.close()
+                conn_t.close()
+            except Exception:
+                pass
 
         if sukses:
             return {
