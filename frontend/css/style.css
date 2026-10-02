@@ -6545,6 +6545,7 @@ body.semester-explorer-active #semester-explorer-container {
   #wa-modal-edit,
   #wa-modal-monitor,
   #wa-modal-semester,
+  #wa-modal-absensi,
   .db-clear-modal-box {
     flex: 1 1 auto !important;
     min-height: 0 !important;

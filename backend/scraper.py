@@ -208,6 +208,32 @@ def init_db_schema():
             cursor.execute("ALTER TABLE asisten_lab ADD COLUMN kampus_tugas VARCHAR(50) NULL")
         except Exception:
             pass
+        try:
+            cursor.execute("ALTER TABLE asisten_lab MODIFY COLUMN no_wa VARCHAR(50) NULL DEFAULT ''")
+        except Exception:
+            pass
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS absensi_aslab (
+                id_absensi INT AUTO_INCREMENT PRIMARY KEY,
+                id_aslab INT NULL,
+                nama_aslab VARCHAR(150) NOT NULL,
+                kampus VARCHAR(50) NOT NULL,
+                nomor_lab VARCHAR(50) NOT NULL,
+                tanggal DATE NOT NULL,
+                jam_masuk VARCHAR(20) NOT NULL,
+                nama_dosen VARCHAR(150) NOT NULL,
+                nama_mk VARCHAR(200) NOT NULL,
+                kode_kelas VARCHAR(50) NOT NULL,
+                status_perkuliahan ENUM('Tatap Muka', 'Online', 'Cancel') NOT NULL DEFAULT 'Tatap Muka',
+                keterangan TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (id_aslab) REFERENCES asisten_lab(id_aslab) ON DELETE SET NULL,
+                INDEX idx_absensi_tgl (tanggal),
+                INDEX idx_absensi_lab (nomor_lab),
+                INDEX idx_absensi_aslab (id_aslab)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (

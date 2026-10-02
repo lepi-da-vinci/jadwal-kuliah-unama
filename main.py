@@ -2975,6 +2975,205 @@ def get_detail_kelas(kelas: str, semester: str = None):
         }
     except Exception as e:
         print(f"[API Detail Kelas Error] {e}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# ─────────────────────────────────────────────────────────────
+# API ABSENSI ASISTEN LABORATORIUM (INTEGRASI FORM GOOGLE)
+# ─────────────────────────────────────────────────────────────
+class AbsensiInput(BaseModel):
+    id_aslab: int = None
+    nama_aslab: str
+    kampus: str = None
+    nomor_lab: str
+    tanggal: str
+    jam_masuk: str
+    nama_dosen: str
+    nama_mk: str
+    kode_kelas: str
+    status_perkuliahan: str = "Tatap Muka"
+    keterangan: str = None
+
+@app.get("/api/absensi/master")
+def get_absensi_master():
+    """Mengambil master data aslab (14 aslab) dan opsi-opsi Google Form"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, role FROM asisten_lab WHERE role = 'aslab' ORDER BY kampus_tugas, nama_aslab")
+        aslab_list = cursor.fetchall()
+        
+        # Opsi Lab sesuai form Google Form resmi
+        labs = [
+            # Kobar
+            "1.5 Kobar", "1.6 Kobar", "1.7 Kobar", "1.8 Kobar", "1.9 Kobar",
+            # Thehok
+            "1.3 Thehok", "1.4 Thehok", "1.5 Thehok", "2.7 Thehok", 
+            "3.1 Thehok", "3.2 Thehok", "3.4 Thehok", "4.1 Thehok", "4.3 Thehok", 
+            "Lab S2"
+        ]
+        
+        jam_options = [
+            "08.00 WIB", "08.45 WIB", "09.30 WIB", "10.15 WIB", 
+            "11.00 WIB", "11.45 WIB", "12.30 WIB", "13.15 WIB", 
+            "14.00 WIB", "14.45 WIB", "15.30 WIB", "16.15 WIB", 
+            "17.00 WIB", "17.45 WIB", "18.30 WIB", "19.15 WIB", 
+            "20.00 WIB", "20.45 WIB"
+        ]
+        
+        status_options = ["Tatap Muka", "Online", "Cancel"]
+
+        return {
+            "status": "success",
+            "aslab": aslab_list,
+            "labs": labs,
+            "jam_options": jam_options,
+            "status_options": status_options
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/absensi")
+def submit_absensi(data: AbsensiInput):
+    """Menyimpan absensi asisten lab saat dosen masuk kelas di lab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Validasi aslab jika id_aslab belum diberikan
+        id_aslab = data.id_aslab
+        kampus = data.kampus
+        if not id_aslab and data.nama_aslab:
+            cursor.execute("SELECT id_aslab, kampus_tugas FROM asisten_lab WHERE nama_aslab = %s LIMIT 1", (data.nama_aslab.strip(),))
+            row = cursor.fetchone()
+            if row:
+                id_aslab = row["id_aslab"]
+                if not kampus:
+                    kampus = row["kampus_tugas"]
+
+        if not kampus:
+            kampus = "Thehok" if "Thehok" in data.nomor_lab or "S2" in data.nomor_lab else "Kobar"
+
+        cursor.execute("""
+            INSERT INTO absensi_aslab (
+                id_aslab, nama_aslab, kampus, nomor_lab, tanggal, jam_masuk,
+                nama_dosen, nama_mk, kode_kelas, status_perkuliahan, keterangan
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            id_aslab,
+            data.nama_aslab.strip(),
+            kampus.strip(),
+            data.nomor_lab.strip(),
+            data.tanggal.strip(),
+            data.jam_masuk.strip(),
+            data.nama_dosen.strip(),
+            data.nama_mk.strip(),
+            data.kode_kelas.strip(),
+            data.status_perkuliahan.strip(),
+            data.keterangan.strip() if data.keterangan else None
+        ))
+        conn.commit()
+        absensi_id = cursor.lastrowid
+        return {"status": "success", "message": "Absensi berhasil dicatat!", "id_absensi": absensi_id}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/absensi")
+def get_absensi_list(tanggal: str = None, nomor_lab: str = None, kampus: str = None, nama_aslab: str = None, limit: int = 100):
+    """Mengambil rekap/riwayat absensi aslab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT * FROM absensi_aslab WHERE 1=1"
+        params = []
+        if tanggal:
+            query += " AND tanggal = %s"
+            params.append(tanggal)
+        if nomor_lab:
+            query += " AND nomor_lab = %s"
+            params.append(nomor_lab)
+        if kampus:
+            query += " AND kampus = %s"
+            params.append(kampus)
+        if nama_aslab:
+            query += " AND nama_aslab LIKE %s"
+            params.append(f"%{nama_aslab}%")
+            
+        query += " ORDER BY tanggal DESC, id_absensi DESC LIMIT %s"
+        params.append(limit)
+        
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        return {"status": "success", "data": rows, "total": len(rows)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/absensi/autofill")
+def autofill_absensi(nomor_lab: str, jam: str, tanggal: str = None):
+    """Membantu Aslab dengan auto-fill Dosen, Matakuliah, dan Kelas dari jadwal aktif hari ini"""
+    try:
+        if not tanggal:
+            tanggal = datetime.date.today().strftime("%Y-%m-%d")
+        
+        clean_lab = nomor_lab.replace("Thehok", "").replace("Kobar", "").replace("Labor", "").replace("Lab", "").strip()
+        clean_jam = jam.replace("WIB", "").replace(".", ":").strip()
+        
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT j.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE j.tanggal = %s AND (r.nama_ruangan LIKE %s OR r.nama_ruangan LIKE %s)
+        """, (tanggal, f"%{clean_lab}%", f"%{clean_lab}%"))
+        results = cursor.fetchall()
+        
+        matched = None
+        for row in results:
+            jam_str = str(row.get("jam", ""))
+            if clean_jam and (clean_jam in jam_str or jam_str.startswith(clean_jam[:2])):
+                matched = row
+                break
+        
+        if not matched and results:
+            matched = results[0]
+            
+        return {
+            "status": "success",
+            "found": bool(matched),
+            "data": matched or {}
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/absensi/{id_absensi}")
+def delete_absensi(id_absensi: int):
+    """Menghapus data absensi berdasarkan ID"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
+        conn.commit()
+        return {"status": "success", "message": f"Absensi #{id_absensi} berhasil dihapus"}
+    except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
         if 'conn' in locals() and conn.is_connected():

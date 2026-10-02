@@ -4335,7 +4335,8 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       chat: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
       list: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`,
       add: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>`,
-      edit: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`
+      edit: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
+      absensi: `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`
     };
 
     const showMenu = () => {
@@ -4348,6 +4349,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-semester')) document.getElementById('wa-modal-semester').style.display = 'none';
+      if (document.getElementById('wa-modal-absensi')) document.getElementById('wa-modal-absensi').style.display = 'none';
       modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
@@ -4591,6 +4593,29 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 
         // Back button
         document.getElementById('qr-back-btn').onclick = showMenu;
+      };
+    }
+
+    // Navigasi ke Form Absensi Aslab (Dosen Masuk Lab)
+    const btnShowAbsensi = document.getElementById('btn-show-absensi-aslab');
+    if (btnShowAbsensi) {
+      btnShowAbsensi.onclick = () => {
+        menuView.style.display = 'none';
+        const absensiView = document.getElementById('wa-modal-absensi');
+        if (absensiView) absensiView.style.display = 'flex';
+        adminToggle.style.display = 'none';
+        modalTitle.innerText = "Absensi Asisten Lab";
+        modalIcon.innerHTML = SVG_WA_ICONS.absensi;
+
+        const tglInput = document.getElementById('absensi-tanggal');
+        if (tglInput && !tglInput.value) {
+          const today = new Date();
+          tglInput.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        }
+
+        if (typeof window.switchAbsensiTab === 'function') {
+          window.switchAbsensiTab('form');
+        }
       };
     }
 
@@ -4951,6 +4976,409 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     alert("Gagal memuat daftar aslab.");
   }
 });
+
+// ==================== FITUR ABSENSI ASISTEN LAB (DOSEN MASUK) ====================
+let currentAbsensiAutofillData = null;
+
+window.openAbsensiModal = function () {
+  const settingBtn = document.getElementById('setting-btn') || document.getElementById('btn-setting');
+  if (settingBtn) {
+    settingBtn.click();
+    setTimeout(() => {
+      const btn = document.getElementById('btn-show-absensi-aslab');
+      if (btn) btn.click();
+    }, 150);
+  }
+};
+
+window.switchAbsensiTab = function (tab) {
+  const formTabBtn = document.getElementById('tab-btn-absensi-form');
+  const histTabBtn = document.getElementById('tab-btn-absensi-history');
+  const formView = document.getElementById('absensi-view-form');
+  const histView = document.getElementById('absensi-view-history');
+
+  if (tab === 'form') {
+    if (formTabBtn) {
+      formTabBtn.style.background = 'var(--primary)';
+      formTabBtn.style.color = '#fff';
+      formTabBtn.style.fontWeight = '700';
+    }
+    if (histTabBtn) {
+      histTabBtn.style.background = 'transparent';
+      histTabBtn.style.color = 'var(--text-muted)';
+      histTabBtn.style.fontWeight = '600';
+    }
+    if (formView) formView.style.display = 'flex';
+    if (histView) histView.style.display = 'none';
+  } else {
+    if (histTabBtn) {
+      histTabBtn.style.background = 'var(--primary)';
+      histTabBtn.style.color = '#fff';
+      histTabBtn.style.fontWeight = '700';
+    }
+    if (formTabBtn) {
+      formTabBtn.style.background = 'transparent';
+      formTabBtn.style.color = 'var(--text-muted)';
+      formTabBtn.style.fontWeight = '600';
+    }
+    if (histView) histView.style.display = 'flex';
+    if (formView) formView.style.display = 'none';
+    window.loadAbsensiHistoryList();
+  }
+};
+
+window.handleAslabSelectedChange = function () {
+  const aslabSelect = document.getElementById('absensi-nama-aslab');
+  const labSelect = document.getElementById('absensi-nomor-lab');
+  if (!aslabSelect || !labSelect) return;
+  const opt = aslabSelect.options[aslabSelect.selectedIndex];
+  if (!opt || !opt.value) return;
+  const kampus = opt.getAttribute('data-kampus');
+  if (kampus === 'Kobar' && (!labSelect.value || labSelect.value.includes('Thehok'))) {
+    labSelect.value = '1.5 Kobar';
+  } else if (kampus === 'Thehok' && (!labSelect.value || labSelect.value.includes('Kobar'))) {
+    labSelect.value = '1.3 Thehok';
+  }
+  window.triggerAbsensiScheduleLookup();
+};
+
+window.triggerAbsensiScheduleLookup = async function () {
+  const labSelect = document.getElementById('absensi-nomor-lab');
+  const jamSelect = document.getElementById('absensi-jam-masuk');
+  const tglInput = document.getElementById('absensi-tanggal');
+  const banner = document.getElementById('absensi-autofill-banner');
+  const desc = document.getElementById('absensi-autofill-desc');
+
+  if (!labSelect || !jamSelect || !tglInput || !banner || !desc) return;
+
+  const nomorLab = labSelect.value.trim();
+  const jamMasuk = jamSelect.value.trim();
+  const tanggal = tglInput.value.trim();
+
+  if (!nomorLab || !jamMasuk || !tanggal) {
+    banner.style.display = 'none';
+    currentAbsensiAutofillData = null;
+    return;
+  }
+
+  const cleanLabMatch = nomorLab.match(/(?:\d+\.\d+|S2)/i);
+  const cleanLab = cleanLabMatch ? cleanLabMatch[0].toLowerCase() : nomorLab.toLowerCase();
+
+  const jamNumMatch = jamMasuk.match(/(\d{1,2})[:.](\d{2})/);
+  const jamHour = jamNumMatch ? parseInt(jamNumMatch[1], 10) : null;
+  const jamMin = jamNumMatch ? parseInt(jamNumMatch[2], 10) : 0;
+  const targetMinutes = jamHour !== null ? jamHour * 60 + jamMin : null;
+
+  let matched = null;
+  if (Array.isArray(allJadwal) && allJadwal.length > 0) {
+    matched = allJadwal.find(item => {
+      if (item.tanggal !== tanggal) return false;
+      const rName = (item.nama_ruangan || '').toLowerCase();
+      if (!rName.includes(cleanLab)) return false;
+
+      if (nomorLab.toLowerCase().includes('thehok') && item.kampus && !item.kampus.toLowerCase().includes('thehok')) return false;
+      if (nomorLab.toLowerCase().includes('kobar') && item.kampus && !item.kampus.toLowerCase().includes('kobar')) return false;
+
+      if (targetMinutes !== null && item.jam) {
+        const itemJamParts = String(item.jam).split(/[-–—:]/).map(p => parseInt(p.trim(), 10) || 0);
+        if (itemJamParts.length >= 2) {
+          const itemMinutes = itemJamParts[0] * 60 + itemJamParts[1];
+          if (Math.abs(itemMinutes - targetMinutes) <= 60) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+  }
+
+  if (!matched) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/absensi/autofill?nomor_lab=${encodeURIComponent(nomorLab)}&jam=${encodeURIComponent(jamMasuk)}&tanggal=${encodeURIComponent(tanggal)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.status === 'success' && json.found && json.data) {
+          matched = json.data;
+        }
+      }
+    } catch (e) {
+      console.warn("Autofill schedule lookup error:", e);
+    }
+  }
+
+  if (matched && (matched.nama_mk || matched.nama_dosen)) {
+    currentAbsensiAutofillData = matched;
+    desc.innerHTML = `<b>${escapeHtml(matched.nama_mk || '-')}</b> (${escapeHtml(matched.kelas || '-')}) — ${escapeHtml(matched.nama_dosen || '-')}`;
+    banner.style.display = 'flex';
+    window.applyAutofillDataToForm();
+  } else {
+    currentAbsensiAutofillData = null;
+    banner.style.display = 'none';
+  }
+};
+
+window.applyAutofillDataToForm = function () {
+  if (!currentAbsensiAutofillData) return;
+  const d = currentAbsensiAutofillData;
+  if (d.nama_dosen) document.getElementById('absensi-nama-dosen').value = d.nama_dosen;
+  if (d.nama_mk) document.getElementById('absensi-nama-mk').value = d.nama_mk;
+  if (d.kelas) document.getElementById('absensi-kode-kelas').value = d.kelas;
+
+  const radios = document.getElementsByName('absensi-status-perkuliahan');
+  let targetStatus = 'Tatap Muka';
+  const metode = (d.metode_pembelajaran || '').toUpperCase();
+  if (metode === 'OL' || /online/i.test(d.status_jadwal || '')) targetStatus = 'Online';
+  else if (metode === 'CC' || /batal|cancel/i.test(d.status_jadwal || '')) targetStatus = 'Cancel';
+
+  for (const r of radios) {
+    r.checked = (r.value === targetStatus);
+    if (r.parentElement) {
+      if (r.checked) {
+        r.parentElement.style.borderColor = targetStatus === 'Tatap Muka' ? '#10b981' : (targetStatus === 'Online' ? '#0284c7' : '#ef4444');
+      } else {
+        r.parentElement.style.borderColor = 'var(--border)';
+      }
+    }
+  }
+};
+
+window.submitAbsensiAslabAction = async function () {
+  const aslabSelect = document.getElementById('absensi-nama-aslab');
+  const labSelect = document.getElementById('absensi-nomor-lab');
+  const tglInput = document.getElementById('absensi-tanggal');
+  const jamSelect = document.getElementById('absensi-jam-masuk');
+  const dosenInput = document.getElementById('absensi-nama-dosen');
+  const mkInput = document.getElementById('absensi-nama-mk');
+  const kelasInput = document.getElementById('absensi-kode-kelas');
+  const ketInput = document.getElementById('absensi-keterangan');
+
+  const namaAslab = aslabSelect ? aslabSelect.value.trim() : '';
+  const nomorLab = labSelect ? labSelect.value.trim() : '';
+  const tanggal = tglInput ? tglInput.value.trim() : '';
+  const jamMasuk = jamSelect ? jamSelect.value.trim() : '';
+  const namaDosen = dosenInput ? dosenInput.value.trim() : '';
+  const namaMk = mkInput ? mkInput.value.trim() : '';
+  const kodeKelas = kelasInput ? kelasInput.value.trim() : '';
+  const keterangan = ketInput ? ketInput.value.trim() : '';
+
+  const radios = document.getElementsByName('absensi-status-perkuliahan');
+  let statusPerkuliahan = 'Tatap Muka';
+  for (const r of radios) {
+    if (r.checked) {
+      statusPerkuliahan = r.value;
+      break;
+    }
+  }
+
+  if (!namaAslab) {
+    alert("Harap pilih Nama Asisten Lab terlebih dahulu!");
+    aslabSelect?.focus();
+    return;
+  }
+  if (!nomorLab) {
+    alert("Harap pilih Nomor Lab!");
+    labSelect?.focus();
+    return;
+  }
+  if (!jamMasuk) {
+    alert("Harap pilih Jam Masuk!");
+    jamSelect?.focus();
+    return;
+  }
+  if (!tanggal) {
+    alert("Harap pilih Tanggal Perkuliahan!");
+    tglInput?.focus();
+    return;
+  }
+  if (!namaDosen) {
+    alert("Harap isi Nama Dosen!");
+    dosenInput?.focus();
+    return;
+  }
+  if (!namaMk) {
+    alert("Harap isi Nama Matakuliah!");
+    mkInput?.focus();
+    return;
+  }
+  if (!kodeKelas) {
+    alert("Harap isi Kode Kelas!");
+    kelasInput?.focus();
+    return;
+  }
+
+  const selectedOpt = aslabSelect.options[aslabSelect.selectedIndex];
+  let kampus = selectedOpt ? selectedOpt.getAttribute('data-kampus') : '';
+  if (!kampus) {
+    kampus = (nomorLab.includes('Thehok') || nomorLab.includes('S2')) ? 'Thehok' : 'Kobar';
+  }
+
+  const btn = document.getElementById('btn-submit-absensi');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span>Mengirim Absensi...</span>';
+
+  try {
+    const payload = {
+      nama_aslab: namaAslab,
+      kampus: kampus,
+      nomor_lab: nomorLab,
+      tanggal: tanggal,
+      jam_masuk: jamMasuk,
+      nama_dosen: namaDosen,
+      nama_mk: namaMk,
+      kode_kelas: kodeKelas,
+      status_perkuliahan: statusPerkuliahan,
+      keterangan: keterangan || null
+    };
+
+    const res = await fetch(`${API_BASE_URL}/api/absensi`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+
+    if (res.ok && result.status === 'success') {
+      alert("✅ Berhasil! " + (result.message || "Absensi lab telah dicatat ke database."));
+      if (dosenInput) dosenInput.value = '';
+      if (mkInput) mkInput.value = '';
+      if (kelasInput) kelasInput.value = '';
+      if (ketInput) ketInput.value = '';
+      const banner = document.getElementById('absensi-autofill-banner');
+      if (banner) banner.style.display = 'none';
+      currentAbsensiAutofillData = null;
+
+      window.switchAbsensiTab('history');
+    } else {
+      alert("❌ Gagal menyimpan absensi: " + (result.message || "Terjadi kesalahan."));
+    }
+  } catch (err) {
+    console.error("Submit absensi error:", err);
+    alert("❌ Terjadi kesalahan jaringan saat mengirim absensi.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+};
+
+window.loadAbsensiHistoryList = async function () {
+  const container = document.getElementById('absensi-history-container');
+  const badge = document.getElementById('absensi-history-count-badge');
+  const tglInput = document.getElementById('absensi-tanggal');
+  if (!container) return;
+
+  const tanggal = tglInput && tglInput.value ? tglInput.value : '';
+  container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.88em;">Memuat riwayat absensi...</div>';
+
+  try {
+    const url = tanggal
+      ? `${API_BASE_URL}/api/absensi?tanggal=${encodeURIComponent(tanggal)}`
+      : `${API_BASE_URL}/api/absensi?limit=50`;
+    const res = await fetch(url);
+    const json = await res.json();
+
+    if (json.status === 'success' && Array.isArray(json.data)) {
+      const list = json.data;
+      if (badge) badge.innerText = `Total Absen (${tanggal || 'Semua'}): ${list.length}`;
+
+      if (list.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 30px 20px; color: var(--text-muted); background: var(--bg-card); border-radius: 12px; border: 1px dashed var(--border);">
+            <div style="font-size: 1.8em; margin-bottom: 6px;">📋</div>
+            <div style="font-weight: 600; font-size: 0.95em; color: var(--text);">Belum Ada Absensi Dicatat</div>
+            <div style="font-size: 0.8em; opacity: 0.8; margin-top: 4px;">Pilih tab Form Absen untuk mencatat kehadiran dosen masuk lab hari ini.</div>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      for (const item of list) {
+        const statusLower = (item.status_perkuliahan || '').toLowerCase();
+        let statusColor = '#059669';
+        let statusBg = 'rgba(16, 185, 129, 0.15)';
+        if (statusLower.includes('online') || statusLower.includes('ol')) {
+          statusColor = '#0284c7';
+          statusBg = 'rgba(2, 132, 199, 0.15)';
+        } else if (statusLower.includes('cancel') || statusLower.includes('batal') || statusLower.includes('cc')) {
+          statusColor = '#ef4444';
+          statusBg = 'rgba(239, 68, 68, 0.15)';
+        }
+
+        html += `
+          <div style="background: var(--bg-card); border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span style="font-weight: 700; font-size: 0.85em; background: rgba(99, 102, 241, 0.12); color: var(--primary); padding: 3px 8px; border-radius: 6px;">
+                  🏢 ${escapeHtml(item.nomor_lab || '-')}
+                </span>
+                <span style="font-size: 0.82em; font-weight: 600; color: var(--text-muted); background: var(--bg-elevated); padding: 3px 7px; border-radius: 6px;">
+                  ⏰ ${escapeHtml(item.jam_masuk || '-')}
+                </span>
+                <span style="font-size: 0.76em; font-weight: 700; color: ${statusColor}; background: ${statusBg}; padding: 3px 7px; border-radius: 6px;">
+                  ${escapeHtml(item.status_perkuliahan || 'Tatap Muka')}
+                </span>
+              </div>
+              <button type="button" onclick="deleteAbsensiRecord(${item.id_absensi})" title="Hapus absensi ini"
+                style="background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 4px; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+            </div>
+            <div>
+              <b style="font-size: 0.94em; color: var(--text);">${escapeHtml(item.nama_mk || '-')}</b>
+              <span style="font-size: 0.84em; font-weight: 600; color: var(--primary);">(${escapeHtml(item.kode_kelas || '-')})</span>
+            </div>
+            <div style="font-size: 0.82em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px;">
+              <div>👨‍🏫 <b>Dosen:</b> ${escapeHtml(item.nama_dosen || '-')}</div>
+              <div>🧑‍💻 <b>Aslab:</b> ${escapeHtml(item.nama_aslab || '-')} (${escapeHtml(item.kampus || '-')})</div>
+              ${item.keterangan ? `<div style="margin-top: 2px; font-style: italic; color: var(--text);">💬 "${escapeHtml(item.keterangan)}"</div>` : ''}
+            </div>
+            <div style="font-size: 0.72em; color: var(--text-muted); text-align: right; margin-top: 2px;">
+              Dicatat: ${item.created_at ? new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WIB
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ef4444; font-size: 0.88em;">Gagal mengambil data absensi.</div>';
+    }
+  } catch (err) {
+    console.error("Load absensi error:", err);
+    container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ef4444; font-size: 0.88em;">Terjadi kesalahan jaringan.</div>';
+  }
+};
+
+window.deleteAbsensiRecord = async function (id) {
+  if (!id) return;
+  if (!confirm(`Yakin ingin menghapus catatan absensi #${id}?`)) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      window.loadAbsensiHistoryList();
+    } else {
+      alert("Gagal menghapus: " + (json.message || "Terjadi kesalahan"));
+    }
+  } catch (e) {
+    alert("Terjadi kesalahan jaringan saat menghapus.");
+  }
+};
+
+window.closeAbsensiModalToMenu = function () {
+  const showMenuBtn = document.getElementById('qr-back-btn');
+  if (showMenuBtn) {
+    showMenuBtn.click();
+  } else {
+    const menu = document.getElementById('wa-modal-menu');
+    const absensi = document.getElementById('wa-modal-absensi');
+    if (menu) menu.style.display = 'flex';
+    if (absensi) absensi.style.display = 'none';
+  }
+};
 
 // Toggle Info Mase Inline Panel
 document.getElementById('toggle-notif-btn').addEventListener('click', () => {
