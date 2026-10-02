@@ -4607,14 +4607,35 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         modalTitle.innerText = "Absensi Asisten Lab";
         modalIcon.innerHTML = SVG_WA_ICONS.absensi;
 
+        // Inisialisasi tanggal: default TODAY jika kosong
         const tglInput = document.getElementById('absensi-tanggal');
         if (tglInput && !tglInput.value) {
           const today = new Date();
           tglInput.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
         }
 
+        // Pulihkan aslab yang terakhir dipilih
+        const aslabSelect = document.getElementById('absensi-nama-aslab');
+        if (aslabSelect) {
+          try {
+            const savedAslab = localStorage.getItem('last_aslab_name');
+            if (savedAslab) aslabSelect.value = savedAslab;
+          } catch (e) {}
+        }
+
+        // Atur visibilitas tab switcher: Hanya tampil jika Admin ON
+        const tabSwitcher = document.getElementById('absensi-tab-switcher');
+        if (tabSwitcher) {
+          tabSwitcher.style.display = isAslabAdmin ? 'flex' : 'none';
+        }
+
         if (typeof window.switchAbsensiTab === 'function') {
           window.switchAbsensiTab('form');
+        }
+
+        // Refresh sesi kelas di lab jika lab sudah terpilih
+        if (typeof window.handleAbsensiDateOrLabChange === 'function') {
+          window.handleAbsensiDateOrLabChange();
         }
       };
     }
@@ -4978,7 +4999,19 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 });
 
 // ==================== FITUR ABSENSI ASISTEN LAB (DOSEN MASUK) ====================
+let currentLabSessionsData = [];
+let currentSelectedSession = null;
 let currentAbsensiAutofillData = null;
+
+function safeEscapeAbsensi(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 window.openAbsensiModal = function () {
   const settingBtn = document.getElementById('setting-btn') || document.getElementById('btn-setting');
@@ -4992,10 +5025,20 @@ window.openAbsensiModal = function () {
 };
 
 window.switchAbsensiTab = function (tab) {
+  // Hanya mode admin yang boleh membuka tab history
+  if (tab === 'history' && !isAslabAdmin) {
+    tab = 'form';
+  }
+
   const formTabBtn = document.getElementById('tab-btn-absensi-form');
   const histTabBtn = document.getElementById('tab-btn-absensi-history');
   const formView = document.getElementById('absensi-view-form');
   const histView = document.getElementById('absensi-view-history');
+  const tabSwitcher = document.getElementById('absensi-tab-switcher');
+
+  if (tabSwitcher) {
+    tabSwitcher.style.display = isAslabAdmin ? 'flex' : 'none';
+  }
 
   if (tab === 'form') {
     if (formTabBtn) {
@@ -5030,116 +5073,357 @@ window.switchAbsensiTab = function (tab) {
 window.handleAslabSelectedChange = function () {
   const aslabSelect = document.getElementById('absensi-nama-aslab');
   const labSelect = document.getElementById('absensi-nomor-lab');
-  if (!aslabSelect || !labSelect) return;
+  if (!aslabSelect) return;
+  const val = aslabSelect.value.trim();
+  if (val) {
+    try { localStorage.setItem('last_aslab_name', val); } catch (e) {}
+  }
+  if (!labSelect) return;
   const opt = aslabSelect.options[aslabSelect.selectedIndex];
   if (!opt || !opt.value) return;
   const kampus = opt.getAttribute('data-kampus');
   if (kampus === 'Kobar' && (!labSelect.value || labSelect.value.includes('Thehok'))) {
     labSelect.value = '1.5 Kobar';
+    window.handleAbsensiDateOrLabChange();
   } else if (kampus === 'Thehok' && (!labSelect.value || labSelect.value.includes('Kobar'))) {
     labSelect.value = '1.3 Thehok';
+    window.handleAbsensiDateOrLabChange();
   }
-  window.triggerAbsensiScheduleLookup();
 };
 
-window.triggerAbsensiScheduleLookup = async function () {
-  const labSelect = document.getElementById('absensi-nomor-lab');
-  const jamSelect = document.getElementById('absensi-jam-masuk');
-  const tglInput = document.getElementById('absensi-tanggal');
-  const banner = document.getElementById('absensi-autofill-banner');
-  const desc = document.getElementById('absensi-autofill-desc');
+window.syncAbsensiStatusRadios = function (val) {
+  const radios = document.getElementsByName('absensi-status-perkuliahan');
+  for (const r of radios) {
+    r.checked = (r.value === val);
+  }
+};
 
-  if (!labSelect || !jamSelect || !tglInput || !banner || !desc) return;
+window.handleAbsensiDateOrLabChange = async function () {
+  const labSelect = document.getElementById('absensi-nomor-lab');
+  const tglInput = document.getElementById('absensi-tanggal');
+  const sesiSelect = document.getElementById('absensi-sesi-kelas');
+  const countBadge = document.getElementById('absensi-sesi-count');
+  const banner = document.getElementById('absensi-status-banner');
+
+  if (!labSelect || !tglInput || !sesiSelect) return;
 
   const nomorLab = labSelect.value.trim();
-  const jamMasuk = jamSelect.value.trim();
   const tanggal = tglInput.value.trim();
 
-  if (!nomorLab || !jamMasuk || !tanggal) {
-    banner.style.display = 'none';
-    currentAbsensiAutofillData = null;
+  currentLabSessionsData = [];
+  currentSelectedSession = null;
+
+  if (!nomorLab) {
+    sesiSelect.innerHTML = '<option value="">-- Pilih Lab Terlebih Dahulu --</option>';
+    if (countBadge) countBadge.innerText = '';
+    if (banner) banner.style.display = 'none';
     return;
   }
 
-  const cleanLabMatch = nomorLab.match(/(?:\d+\.\d+|S2)/i);
-  const cleanLab = cleanLabMatch ? cleanLabMatch[0].toLowerCase() : nomorLab.toLowerCase();
+  if (!tanggal) {
+    sesiSelect.innerHTML = '<option value="">-- Tentukan Tanggal Terlebih Dahulu --</option>';
+    if (countBadge) countBadge.innerText = '';
+    if (banner) banner.style.display = 'none';
+    return;
+  }
 
-  const jamNumMatch = jamMasuk.match(/(\d{1,2})[:.](\d{2})/);
-  const jamHour = jamNumMatch ? parseInt(jamNumMatch[1], 10) : null;
-  const jamMin = jamNumMatch ? parseInt(jamNumMatch[2], 10) : 0;
-  const targetMinutes = jamHour !== null ? jamHour * 60 + jamMin : null;
+  sesiSelect.innerHTML = '<option value="">⏳ Memuat sesi kelas & status absensi...</option>';
+  if (banner) banner.style.display = 'none';
 
-  let matched = null;
-  if (Array.isArray(allJadwal) && allJadwal.length > 0) {
-    matched = allJadwal.find(item => {
+  let sessions = [];
+
+  // 1. Coba panggil endpoint backend GET /api/absensi/lab-sessions
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/lab-sessions?nomor_lab=${encodeURIComponent(nomorLab)}&tanggal=${encodeURIComponent(tanggal)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.status === 'success' && Array.isArray(json.sessions)) {
+        sessions = json.sessions;
+        if (Array.isArray(json.extra_absensi) && json.extra_absensi.length > 0) {
+          json.extra_absensi.forEach(extra => {
+            sessions.push({
+              id_jadwal: null,
+              jam: extra.jam_masuk,
+              nama_mk: extra.nama_mk,
+              kelas: extra.kode_kelas,
+              nama_dosen: extra.nama_dosen,
+              metode_pembelajaran: extra.status_perkuliahan === 'Online' ? 'OL' : (extra.status_perkuliahan === 'Cancel' ? 'CC' : 'TM'),
+              status_jadwal: extra.status_perkuliahan,
+              is_diabsen: true,
+              nama_aslab: extra.nama_aslab,
+              absensi: extra,
+              is_extra: true
+            });
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Fetch lab-sessions endpoint failed, fallback to client matching:", err);
+  }
+
+  // 2. Fallback jika offline / jadwal belum di DB
+  if (sessions.length === 0 && Array.isArray(allJadwal) && allJadwal.length > 0) {
+    const cleanLabMatch = nomorLab.match(/(?:\d+\.\d+|S2)/i);
+    const cleanLab = cleanLabMatch ? cleanLabMatch[0].toLowerCase() : nomorLab.toLowerCase();
+    const isThehok = nomorLab.toLowerCase().includes('thehok') || cleanLab === 's2';
+    const isKobar = nomorLab.toLowerCase().includes('kobar');
+
+    const matchedJadwal = allJadwal.filter(item => {
       if (item.tanggal !== tanggal) return false;
       const rName = (item.nama_ruangan || '').toLowerCase();
       if (!rName.includes(cleanLab)) return false;
+      if (isThehok && item.kampus && !item.kampus.toLowerCase().includes('thehok')) return false;
+      if (isKobar && item.kampus && !item.kampus.toLowerCase().includes('kobar')) return false;
+      return true;
+    });
 
-      if (nomorLab.toLowerCase().includes('thehok') && item.kampus && !item.kampus.toLowerCase().includes('thehok')) return false;
-      if (nomorLab.toLowerCase().includes('kobar') && item.kampus && !item.kampus.toLowerCase().includes('kobar')) return false;
-
-      if (targetMinutes !== null && item.jam) {
-        const itemJamParts = String(item.jam).split(/[-–—:]/).map(p => parseInt(p.trim(), 10) || 0);
-        if (itemJamParts.length >= 2) {
-          const itemMinutes = itemJamParts[0] * 60 + itemJamParts[1];
-          if (Math.abs(itemMinutes - targetMinutes) <= 60) {
-            return true;
-          }
+    let existingAbsensi = [];
+    try {
+      const resAbs = await fetch(`${API_BASE_URL}/api/absensi?tanggal=${encodeURIComponent(tanggal)}&nomor_lab=${encodeURIComponent(nomorLab)}`);
+      if (resAbs.ok) {
+        const jsonAbs = await resAbs.json();
+        if (jsonAbs.status === 'success' && Array.isArray(jsonAbs.data)) {
+          existingAbsensi = jsonAbs.data;
         }
       }
-      return false;
+    } catch (e) {}
+
+    matchedJadwal.sort((a, b) => (a.jam || '').localeCompare(b.jam || ''));
+
+    const usedAbsensiIds = new Set();
+    sessions = matchedJadwal.map(j => {
+      const jKelas = (j.kelas || '').trim().toLowerCase();
+      const jJamClean = (j.jam || '').replace('WIB', '').replace('.', ':').trim();
+      const startJam = jJamClean.split('-')[0].trim();
+
+      const matchedAbs = existingAbsensi.find(ab => {
+        const abKelas = (ab.kode_kelas || '').trim().toLowerCase();
+        const abJam = (ab.jam_masuk || '').replace('WIB', '').replace('.', ':').trim();
+        if (jKelas && abKelas && jKelas === abKelas) return true;
+        if (startJam && abJam && (startJam.startsWith(abJam.slice(0, 2)) || abJam.startsWith(startJam.slice(0, 2)))) return true;
+        return false;
+      });
+
+      if (matchedAbs) {
+        usedAbsensiIds.add(matchedAbs.id_absensi);
+        return {
+          id_jadwal: j.id_jadwal,
+          jam: j.jam,
+          nama_mk: j.nama_mk,
+          kelas: j.kelas,
+          nama_dosen: j.nama_dosen,
+          metode_pembelajaran: j.metode_pembelajaran,
+          status_jadwal: j.status_jadwal,
+          is_diabsen: true,
+          nama_aslab: matchedAbs.nama_aslab,
+          absensi: matchedAbs
+        };
+      }
+      return {
+        id_jadwal: j.id_jadwal,
+        jam: j.jam,
+        nama_mk: j.nama_mk,
+        kelas: j.kelas,
+        nama_dosen: j.nama_dosen,
+        metode_pembelajaran: j.metode_pembelajaran,
+        status_jadwal: j.status_jadwal,
+        is_diabsen: false,
+        nama_aslab: null,
+        absensi: null
+      };
+    });
+
+    existingAbsensi.forEach(ab => {
+      if (!usedAbsensiIds.has(ab.id_absensi)) {
+        sessions.push({
+          id_jadwal: null,
+          jam: ab.jam_masuk,
+          nama_mk: ab.nama_mk,
+          kelas: ab.kode_kelas,
+          nama_dosen: ab.nama_dosen,
+          metode_pembelajaran: 'TM',
+          status_jadwal: ab.status_perkuliahan,
+          is_diabsen: true,
+          nama_aslab: ab.nama_aslab,
+          absensi: ab,
+          is_extra: true
+        });
+      }
     });
   }
 
-  if (!matched) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/absensi/autofill?nomor_lab=${encodeURIComponent(nomorLab)}&jam=${encodeURIComponent(jamMasuk)}&tanggal=${encodeURIComponent(tanggal)}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.status === 'success' && json.found && json.data) {
-          matched = json.data;
-        }
-      }
-    } catch (e) {
-      console.warn("Autofill schedule lookup error:", e);
-    }
+  currentLabSessionsData = sessions;
+
+  if (countBadge) {
+    const diabsenCount = sessions.filter(s => s.is_diabsen).length;
+    countBadge.innerText = sessions.length > 0 ? `${diabsenCount}/${sessions.length} Selesai Diabsen` : '';
   }
 
-  if (matched && (matched.nama_mk || matched.nama_dosen)) {
-    currentAbsensiAutofillData = matched;
-    desc.innerHTML = `<b>${escapeHtml(matched.nama_mk || '-')}</b> (${escapeHtml(matched.kelas || '-')}) — ${escapeHtml(matched.nama_dosen || '-')}`;
-    banner.style.display = 'flex';
-    window.applyAutofillDataToForm();
-  } else {
-    currentAbsensiAutofillData = null;
-    banner.style.display = 'none';
+  if (sessions.length === 0) {
+    sesiSelect.innerHTML = `
+      <option value="">(Tidak ada jadwal kuliah resmi di lab ini)</option>
+      <option value="manual">➕ Input Manual / Kelas Tambahan</option>
+    `;
+    sesiSelect.value = "manual";
+    window.handleAbsensiSessionSelected();
+    return;
+  }
+
+  let html = `<option value="">-- Pilih Sesi Jam Kelas (${sessions.length} Sesi Terjadwal) --</option>`;
+  sessions.forEach((s, idx) => {
+    const isDone = s.is_diabsen;
+    const tag = isDone ? `[✅ Sudah Diabsen: ${s.nama_aslab || 'Aslab'}]` : `[⏳ Belum Diabsen]`;
+    const label = `${s.jam ? s.jam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${tag}`;
+    html += `<option value="${idx}">${safeEscapeAbsensi(label)}</option>`;
+  });
+  html += `<option value="manual">➕ Input Manual / Jam Lain...</option>`;
+
+  sesiSelect.innerHTML = html;
+
+  // Auto-pilih sesi yang belum diabsen pertama, atau sesi ke-0
+  let autoSelectIdx = sessions.findIndex(s => !s.is_diabsen);
+  if (autoSelectIdx === -1 && sessions.length > 0) autoSelectIdx = 0;
+
+  if (autoSelectIdx !== -1) {
+    sesiSelect.value = String(autoSelectIdx);
+    window.handleAbsensiSessionSelected();
   }
 };
 
-window.applyAutofillDataToForm = function () {
-  if (!currentAbsensiAutofillData) return;
-  const d = currentAbsensiAutofillData;
-  if (d.nama_dosen) document.getElementById('absensi-nama-dosen').value = d.nama_dosen;
-  if (d.nama_mk) document.getElementById('absensi-nama-mk').value = d.nama_mk;
-  if (d.kelas) document.getElementById('absensi-kode-kelas').value = d.kelas;
+window.handleAbsensiSessionSelected = function () {
+  const sesiSelect = document.getElementById('absensi-sesi-kelas');
+  const banner = document.getElementById('absensi-status-banner');
+  const dosenInput = document.getElementById('absensi-nama-dosen');
+  const mkInput = document.getElementById('absensi-nama-mk');
+  const kelasInput = document.getElementById('absensi-kode-kelas');
+  const jamSelect = document.getElementById('absensi-jam-masuk');
+  const statusSelect = document.getElementById('absensi-status-select');
+  const ketInput = document.getElementById('absensi-keterangan');
+  const btnSubmitText = document.getElementById('btn-submit-absensi-text');
 
-  const radios = document.getElementsByName('absensi-status-perkuliahan');
-  let targetStatus = 'Tatap Muka';
-  const metode = (d.metode_pembelajaran || '').toUpperCase();
-  if (metode === 'OL' || /online/i.test(d.status_jadwal || '')) targetStatus = 'Online';
-  else if (metode === 'CC' || /batal|cancel/i.test(d.status_jadwal || '')) targetStatus = 'Cancel';
+  if (!sesiSelect) return;
+  const val = sesiSelect.value;
 
-  for (const r of radios) {
-    r.checked = (r.value === targetStatus);
-    if (r.parentElement) {
-      if (r.checked) {
-        r.parentElement.style.borderColor = targetStatus === 'Tatap Muka' ? '#10b981' : (targetStatus === 'Online' ? '#0284c7' : '#ef4444');
-      } else {
-        r.parentElement.style.borderColor = 'var(--border)';
+  if (val === "" || !val) {
+    currentSelectedSession = null;
+    if (banner) banner.style.display = 'none';
+    if (btnSubmitText) btnSubmitText.innerText = "Kirim Absensi Lab";
+    return;
+  }
+
+  if (val === "manual") {
+    currentSelectedSession = null;
+    if (banner) {
+      banner.style.display = 'block';
+      banner.style.background = 'var(--bg-elevated)';
+      banner.style.border = '1.5px dashed var(--border)';
+      banner.style.color = 'var(--text)';
+      banner.innerHTML = `
+        <div style="font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+          <span>📝 Mode Input Manual:</span>
+        </div>
+        <div style="margin-top: 2px; font-size: 0.86em; opacity: 0.85;">
+          Silakan isi nama dosen, matakuliah, dan kode kelas secara manual di bawah.
+        </div>
+      `;
+    }
+    if (btnSubmitText) btnSubmitText.innerText = "Kirim Absensi Lab";
+    return;
+  }
+
+  const idx = parseInt(val, 10);
+  if (isNaN(idx) || !currentLabSessionsData[idx]) return;
+
+  const s = currentLabSessionsData[idx];
+  currentSelectedSession = s;
+
+  // Auto-fill fields
+  if (dosenInput) dosenInput.value = s.nama_dosen || '';
+  if (mkInput) mkInput.value = s.nama_mk || '';
+  if (kelasInput) kelasInput.value = s.kelas || '';
+
+  // Sinkronisasi Jam Masuk
+  if (jamSelect && s.jam) {
+    const rawJam = String(s.jam).replace('WIB', '').replace('.', ':').trim();
+    const startStr = rawJam.split('-')[0].trim();
+    const hourMatch = startStr.match(/(\d{1,2})/);
+    if (hourMatch) {
+      const hourVal = hourMatch[1].padStart(2, '0');
+      for (const opt of jamSelect.options) {
+        if (opt.value.startsWith(hourVal)) {
+          jamSelect.value = opt.value;
+          break;
+        }
       }
     }
   }
+
+  // Sinkronisasi Status Perkuliahan
+  let statusVal = 'Tatap Muka';
+  if (s.absensi && s.absensi.status_perkuliahan) {
+    statusVal = s.absensi.status_perkuliahan;
+  } else {
+    const metode = (s.metode_pembelajaran || '').toUpperCase();
+    if (metode === 'OL' || /online/i.test(s.status_jadwal || '')) statusVal = 'Online';
+    else if (metode === 'CC' || /batal|cancel/i.test(s.status_jadwal || '')) statusVal = 'Cancel';
+  }
+
+  if (statusSelect) statusSelect.value = statusVal;
+  window.syncAbsensiStatusRadios(statusVal);
+
+  if (ketInput) {
+    ketInput.value = (s.absensi && s.absensi.keterangan) ? s.absensi.keterangan : '';
+  }
+
+  // Tampilkan Status Banner (Sudah Diabsen vs Belum Diabsen)
+  if (banner) {
+    banner.style.display = 'block';
+    if (s.is_diabsen) {
+      const namaAslabPencatat = s.nama_aslab || (s.absensi && s.absensi.nama_aslab) || 'Asisten Lab';
+      const waktuAbsen = (s.absensi && s.absensi.jam_masuk) || s.jam || '-';
+      const statusAbsen = (s.absensi && s.absensi.status_perkuliahan) || statusVal;
+      const createdTime = s.absensi && s.absensi.created_at ? new Date(s.absensi.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+
+      banner.style.background = 'rgba(16, 185, 129, 0.12)';
+      banner.style.border = '1.5px solid #10b981';
+      banner.style.color = 'var(--text)';
+      banner.innerHTML = `
+        <div style="font-weight: 700; color: #059669; font-size: 0.95em; display: flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          <span>Sesi Ini SUDAH DIABSEN!</span>
+        </div>
+        <div style="margin-top: 5px; font-size: 0.88em; line-height: 1.5;">
+          Diabsennin oleh: <b style="color: var(--primary); font-size: 1.05em;">${safeEscapeAbsensi(namaAslabPencatat)}</b>
+          <br>
+          <span style="opacity: 0.85;">Jam Masuk: <b>${safeEscapeAbsensi(waktuAbsen)}</b> • Status: <b>${safeEscapeAbsensi(statusAbsen)}</b> ${createdTime ? `• Waktu: ${createdTime} WIB` : ''}</span>
+          ${s.absensi && s.absensi.keterangan ? `<br><span style="font-style: italic; opacity: 0.9;">Catatan: "${safeEscapeAbsensi(s.absensi.keterangan)}"</span>` : ''}
+        </div>
+      `;
+      if (btnSubmitText) btnSubmitText.innerText = "Perbarui / Kirim Ulang Absensi";
+    } else {
+      banner.style.background = 'rgba(99, 102, 241, 0.08)';
+      banner.style.border = '1.5px dashed var(--primary)';
+      banner.style.color = 'var(--text)';
+      banner.innerHTML = `
+        <div style="font-weight: 700; color: var(--primary); font-size: 0.92em; display: flex; align-items: center; gap: 6px;">
+          <span>✨ Sesi Ini BELUM Diabsen</span>
+        </div>
+        <div style="margin-top: 3px; font-size: 0.84em; opacity: 0.9;">
+          Data jadwal otomatis terisi. Pilih nama Asisten Lab Anda lalu klik <b>Kirim Absensi Lab</b>.
+        </div>
+      `;
+      if (btnSubmitText) btnSubmitText.innerText = "Kirim Absensi Lab";
+    }
+  }
+};
+
+window.triggerAbsensiScheduleLookup = function () {
+  window.handleAbsensiDateOrLabChange();
+};
+
+window.applyAutofillDataToForm = function () {
+  window.handleAbsensiSessionSelected();
 };
 
 window.submitAbsensiAslabAction = async function () {
@@ -5147,6 +5431,7 @@ window.submitAbsensiAslabAction = async function () {
   const labSelect = document.getElementById('absensi-nomor-lab');
   const tglInput = document.getElementById('absensi-tanggal');
   const jamSelect = document.getElementById('absensi-jam-masuk');
+  const statusSelect = document.getElementById('absensi-status-select');
   const dosenInput = document.getElementById('absensi-nama-dosen');
   const mkInput = document.getElementById('absensi-nama-mk');
   const kelasInput = document.getElementById('absensi-kode-kelas');
@@ -5156,23 +5441,15 @@ window.submitAbsensiAslabAction = async function () {
   const nomorLab = labSelect ? labSelect.value.trim() : '';
   const tanggal = tglInput ? tglInput.value.trim() : '';
   const jamMasuk = jamSelect ? jamSelect.value.trim() : '';
+  const statusPerkuliahan = statusSelect ? statusSelect.value.trim() : 'Tatap Muka';
   const namaDosen = dosenInput ? dosenInput.value.trim() : '';
   const namaMk = mkInput ? mkInput.value.trim() : '';
   const kodeKelas = kelasInput ? kelasInput.value.trim() : '';
   const keterangan = ketInput ? ketInput.value.trim() : '';
 
-  const radios = document.getElementsByName('absensi-status-perkuliahan');
-  let statusPerkuliahan = 'Tatap Muka';
-  for (const r of radios) {
-    if (r.checked) {
-      statusPerkuliahan = r.value;
-      break;
-    }
-  }
-
-  if (!namaAslab) {
-    alert("Harap pilih Nama Asisten Lab terlebih dahulu!");
-    aslabSelect?.focus();
+  if (!tanggal) {
+    alert("Harap tentukan Tanggal Perkuliahan!");
+    tglInput?.focus();
     return;
   }
   if (!nomorLab) {
@@ -5180,14 +5457,9 @@ window.submitAbsensiAslabAction = async function () {
     labSelect?.focus();
     return;
   }
-  if (!jamMasuk) {
-    alert("Harap pilih Jam Masuk!");
-    jamSelect?.focus();
-    return;
-  }
-  if (!tanggal) {
-    alert("Harap pilih Tanggal Perkuliahan!");
-    tglInput?.focus();
+  if (!namaAslab) {
+    alert("Harap pilih Nama Asisten Lab yang bertugas!");
+    aslabSelect?.focus();
     return;
   }
   if (!namaDosen) {
@@ -5206,6 +5478,15 @@ window.submitAbsensiAslabAction = async function () {
     return;
   }
 
+  // Jika sesi ini sebelumnya sudah pernah diabsen, minta konfirmasi
+  if (currentSelectedSession && currentSelectedSession.is_diabsen) {
+    const pencatat = currentSelectedSession.nama_aslab || (currentSelectedSession.absensi && currentSelectedSession.absensi.nama_aslab) || 'Aslab Lain';
+    const confirmUpdate = confirm(`⚠️ Sesi perkuliahan ini sebelumnya sudah diabsen oleh "${pencatat}".\n\nApakah Anda ingin tetap mengirim / memperbarui catatan absensi ini?`);
+    if (!confirmUpdate) return;
+  }
+
+  try { localStorage.setItem('last_aslab_name', namaAslab); } catch (e) {}
+
   const selectedOpt = aslabSelect.options[aslabSelect.selectedIndex];
   let kampus = selectedOpt ? selectedOpt.getAttribute('data-kampus') : '';
   if (!kampus) {
@@ -5219,6 +5500,7 @@ window.submitAbsensiAslabAction = async function () {
 
   try {
     const payload = {
+      id_absensi: (currentSelectedSession && currentSelectedSession.absensi && currentSelectedSession.absensi.id_absensi) ? currentSelectedSession.absensi.id_absensi : null,
       nama_aslab: namaAslab,
       kampus: kampus,
       nomor_lab: nomorLab,
@@ -5240,15 +5522,14 @@ window.submitAbsensiAslabAction = async function () {
 
     if (res.ok && result.status === 'success') {
       alert("✅ Berhasil! " + (result.message || "Absensi lab telah dicatat ke database."));
-      if (dosenInput) dosenInput.value = '';
-      if (mkInput) mkInput.value = '';
-      if (kelasInput) kelasInput.value = '';
-      if (ketInput) ketInput.value = '';
-      const banner = document.getElementById('absensi-autofill-banner');
-      if (banner) banner.style.display = 'none';
-      currentAbsensiAutofillData = null;
 
-      window.switchAbsensiTab('history');
+      // Refresh list sesi lab agar status dan nama aslab langsung terupdate realtime
+      await window.handleAbsensiDateOrLabChange();
+
+      // Jika admin, refresh riwayat
+      if (isAslabAdmin && typeof window.loadAbsensiHistoryList === 'function') {
+        window.loadAbsensiHistoryList();
+      }
     } else {
       alert("❌ Gagal menyimpan absensi: " + (result.message || "Terjadi kesalahan."));
     }
@@ -5310,13 +5591,13 @@ window.loadAbsensiHistoryList = async function () {
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
               <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                 <span style="font-weight: 700; font-size: 0.85em; background: rgba(99, 102, 241, 0.12); color: var(--primary); padding: 3px 8px; border-radius: 6px;">
-                  🏢 ${escapeHtml(item.nomor_lab || '-')}
+                  🏢 ${safeEscapeAbsensi(item.nomor_lab || '-')}
                 </span>
                 <span style="font-size: 0.82em; font-weight: 600; color: var(--text-muted); background: var(--bg-elevated); padding: 3px 7px; border-radius: 6px;">
-                  ⏰ ${escapeHtml(item.jam_masuk || '-')}
+                  ⏰ ${safeEscapeAbsensi(item.jam_masuk || '-')}
                 </span>
                 <span style="font-size: 0.76em; font-weight: 700; color: ${statusColor}; background: ${statusBg}; padding: 3px 7px; border-radius: 6px;">
-                  ${escapeHtml(item.status_perkuliahan || 'Tatap Muka')}
+                  ${safeEscapeAbsensi(item.status_perkuliahan || 'Tatap Muka')}
                 </span>
               </div>
               <button type="button" onclick="deleteAbsensiRecord(${item.id_absensi})" title="Hapus absensi ini"
@@ -5328,13 +5609,13 @@ window.loadAbsensiHistoryList = async function () {
               </button>
             </div>
             <div>
-              <b style="font-size: 0.94em; color: var(--text);">${escapeHtml(item.nama_mk || '-')}</b>
-              <span style="font-size: 0.84em; font-weight: 600; color: var(--primary);">(${escapeHtml(item.kode_kelas || '-')})</span>
+              <b style="font-size: 0.94em; color: var(--text);">${safeEscapeAbsensi(item.nama_mk || '-')}</b>
+              <span style="font-size: 0.84em; font-weight: 600; color: var(--primary);">(${safeEscapeAbsensi(item.kode_kelas || '-')})</span>
             </div>
             <div style="font-size: 0.82em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px;">
-              <div>👨‍🏫 <b>Dosen:</b> ${escapeHtml(item.nama_dosen || '-')}</div>
-              <div>🧑‍💻 <b>Aslab:</b> ${escapeHtml(item.nama_aslab || '-')} (${escapeHtml(item.kampus || '-')})</div>
-              ${item.keterangan ? `<div style="margin-top: 2px; font-style: italic; color: var(--text);">💬 "${escapeHtml(item.keterangan)}"</div>` : ''}
+              <div>👨‍🏫 <b>Dosen:</b> ${safeEscapeAbsensi(item.nama_dosen || '-')}</div>
+              <div>🧑‍💻 <b>Aslab:</b> ${safeEscapeAbsensi(item.nama_aslab || '-')} (${safeEscapeAbsensi(item.kampus || '-')})</div>
+              ${item.keterangan ? `<div style="margin-top: 2px; font-style: italic; color: var(--text);">💬 "${safeEscapeAbsensi(item.keterangan)}"</div>` : ''}
             </div>
             <div style="font-size: 0.72em; color: var(--text-muted); text-align: right; margin-top: 2px;">
               Dicatat: ${item.created_at ? new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WIB

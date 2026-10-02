@@ -2984,6 +2984,7 @@ def get_detail_kelas(kelas: str, semester: str = None):
 # API ABSENSI ASISTEN LABORATORIUM (INTEGRASI FORM GOOGLE)
 # ─────────────────────────────────────────────────────────────
 class AbsensiInput(BaseModel):
+    id_absensi: int = None
     id_aslab: int = None
     nama_aslab: str
     kampus: str = None
@@ -3041,7 +3042,7 @@ def get_absensi_master():
 
 @app.post("/api/absensi")
 def submit_absensi(data: AbsensiInput):
-    """Menyimpan absensi asisten lab saat dosen masuk kelas di lab"""
+    """Menyimpan atau memperbarui absensi asisten lab saat dosen masuk kelas di lab"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
@@ -3059,6 +3060,30 @@ def submit_absensi(data: AbsensiInput):
 
         if not kampus:
             kampus = "Thehok" if "Thehok" in data.nomor_lab or "S2" in data.nomor_lab else "Kobar"
+
+        if data.id_absensi:
+            cursor.execute("""
+                UPDATE absensi_aslab SET
+                    id_aslab = %s, nama_aslab = %s, kampus = %s, nomor_lab = %s,
+                    tanggal = %s, jam_masuk = %s, nama_dosen = %s, nama_mk = %s,
+                    kode_kelas = %s, status_perkuliahan = %s, keterangan = %s
+                WHERE id_absensi = %s
+            """, (
+                id_aslab,
+                data.nama_aslab.strip(),
+                kampus.strip(),
+                data.nomor_lab.strip(),
+                data.tanggal.strip(),
+                data.jam_masuk.strip(),
+                data.nama_dosen.strip(),
+                data.nama_mk.strip(),
+                data.kode_kelas.strip(),
+                data.status_perkuliahan.strip(),
+                data.keterangan.strip() if data.keterangan else None,
+                data.id_absensi
+            ))
+            conn.commit()
+            return {"status": "success", "message": "Absensi berhasil diperbarui!", "id_absensi": data.id_absensi}
 
         cursor.execute("""
             INSERT INTO absensi_aslab (
@@ -3135,9 +3160,10 @@ def autofill_absensi(nomor_lab: str, jam: str, tanggal: str = None):
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT j.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam
+            SELECT d.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
             WHERE j.tanggal = %s AND (r.nama_ruangan LIKE %s OR r.nama_ruangan LIKE %s)
         """, (tanggal, f"%{clean_lab}%", f"%{clean_lab}%"))
         results = cursor.fetchall()
@@ -3156,6 +3182,119 @@ def autofill_absensi(nomor_lab: str, jam: str, tanggal: str = None):
             "status": "success",
             "found": bool(matched),
             "data": matched or {}
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/absensi/lab-sessions")
+def get_lab_sessions(nomor_lab: str, tanggal: str = None):
+    """Mengambil daftar seluruh sesi kelas di lab dan tanggal terpilih beserta status absensinya"""
+    try:
+        if not tanggal:
+            tanggal = datetime.date.today().strftime("%Y-%m-%d")
+
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        clean_lab_match = re.search(r'(?:\d+\.\d+|S2)', nomor_lab, re.IGNORECASE)
+        clean_lab = clean_lab_match.group(0) if clean_lab_match else nomor_lab
+
+        kampus = None
+        if "thehok" in nomor_lab.lower() or "s2" in nomor_lab.lower():
+            kampus = "Thehok"
+        elif "kobar" in nomor_lab.lower():
+            kampus = "Kobar"
+
+        query_jadwal = """
+            SELECT j.id_jadwal, d.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam, j.status_jadwal,
+                   r.nama_ruangan, r.kampus
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.tanggal = %s AND (r.nama_ruangan LIKE %s)
+        """
+        params_jadwal = [tanggal, f"%{clean_lab}%"]
+        if kampus:
+            query_jadwal += " AND r.kampus LIKE %s"
+            params_jadwal.append(f"%{kampus}%")
+        query_jadwal += " ORDER BY j.jam ASC"
+
+        cursor.execute(query_jadwal, tuple(params_jadwal))
+        schedules = cursor.fetchall()
+
+        # Ambil seluruh absensi di lab dan tanggal tersebut
+        cursor.execute("""
+            SELECT id_absensi, id_aslab, nama_aslab, kampus, nomor_lab, tanggal, jam_masuk,
+                   nama_dosen, nama_mk, kode_kelas, status_perkuliahan, keterangan, created_at
+            FROM absensi_aslab
+            WHERE tanggal = %s AND nomor_lab = %s
+            ORDER BY id_absensi DESC
+        """, (tanggal, nomor_lab))
+        absensi_list = cursor.fetchall()
+
+        matched_absensi_ids = set()
+        session_results = []
+
+        for row in schedules:
+            row_kelas = (row.get("kelas") or "").strip().lower()
+            row_jam = str(row.get("jam") or "")
+            clean_row_jam = row_jam.replace("WIB", "").replace(".", ":").strip()
+            start_jam = clean_row_jam.split("-")[0].strip() if "-" in clean_row_jam else clean_row_jam
+
+            matched_absen = None
+            for ab in absensi_list:
+                ab_kelas = (ab.get("kode_kelas") or "").strip().lower()
+                ab_jam = (ab.get("jam_masuk") or "").replace("WIB", "").replace(".", ":").strip()
+                if row_kelas and ab_kelas and row_kelas == ab_kelas:
+                    matched_absen = ab
+                    break
+                elif start_jam and ab_jam and (start_jam.startswith(ab_jam[:2]) or ab_jam.startswith(start_jam[:2])):
+                    matched_absen = ab
+                    break
+
+            if matched_absen:
+                matched_absensi_ids.add(matched_absen["id_absensi"])
+                session_results.append({
+                    "id_jadwal": row.get("id_jadwal"),
+                    "jam": row.get("jam"),
+                    "nama_mk": row.get("nama_mk"),
+                    "kelas": row.get("kelas"),
+                    "nama_dosen": row.get("nama_dosen"),
+                    "metode_pembelajaran": row.get("metode_pembelajaran"),
+                    "status_jadwal": row.get("status_jadwal"),
+                    "is_diabsen": True,
+                    "nama_aslab": matched_absen["nama_aslab"],
+                    "absensi": matched_absen
+                })
+            else:
+                session_results.append({
+                    "id_jadwal": row.get("id_jadwal"),
+                    "jam": row.get("jam"),
+                    "nama_mk": row.get("nama_mk"),
+                    "kelas": row.get("kelas"),
+                    "nama_dosen": row.get("nama_dosen"),
+                    "metode_pembelajaran": row.get("metode_pembelajaran"),
+                    "status_jadwal": row.get("status_jadwal"),
+                    "is_diabsen": False,
+                    "nama_aslab": None,
+                    "absensi": None
+                })
+
+        # Cek jika ada absensi di luar jadwal formal
+        extra_absensi = [ab for ab in absensi_list if ab["id_absensi"] not in matched_absensi_ids]
+
+        return {
+            "status": "success",
+            "tanggal": tanggal,
+            "nomor_lab": nomor_lab,
+            "sessions": session_results,
+            "extra_absensi": extra_absensi,
+            "total_sessions": len(session_results),
+            "total_diabsen": len([s for s in session_results if s["is_diabsen"]]) + len(extra_absensi)
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}

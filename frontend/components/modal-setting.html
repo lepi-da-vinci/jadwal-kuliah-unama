@@ -496,62 +496,48 @@
 
     <!-- Tampilan Form & Rekap Absensi Asisten Lab (Dosen Masuk) -->
     <div id="wa-modal-absensi" class="modal-body" style="display: none; flex-direction: column; gap: 14px;">
-      <!-- Tab Switcher: Form Input vs Riwayat Hari Ini -->
-      <div style="display: flex; background: var(--bg-elevated); padding: 4px; border-radius: 12px; gap: 6px; border: 1px solid var(--border);">
+      <!-- Tab Switcher: Form Input vs Riwayat (Hanya Muncul di Mode Admin) -->
+      <div id="absensi-tab-switcher" class="admin-only" style="display: none; background: var(--bg-elevated); padding: 4px; border-radius: 12px; gap: 6px; border: 1px solid var(--border);">
         <button type="button" id="tab-btn-absensi-form" onclick="switchAbsensiTab('form')"
           style="flex: 1; padding: 10px 14px; font-size: 0.88em; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #fff;">
           📝 Form Absen
         </button>
         <button type="button" id="tab-btn-absensi-history" onclick="switchAbsensiTab('history')"
           style="flex: 1; padding: 10px 14px; font-size: 0.88em; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted);">
-          📋 Riwayat Absen
+          📋 Riwayat Absen (Admin)
         </button>
       </div>
 
       <!-- TAB 1: FORM INPUT ABSENSI -->
       <div id="absensi-view-form" style="display: flex; flex-direction: column; gap: 12px;">
         <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 95, 70, 0.05)); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 12px; font-size: 0.82em; color: var(--text); line-height: 1.45;">
-          <b style="color: #059669;">📌 Panduan:</b> Form absen ini diisi ketika dosen matakuliah telah masuk ke lab masing-masing (TA Ganjil 2026/2027).
+          <b style="color: #059669;">📌 Panduan Cepat:</b> Pilih <b>Tanggal</b> dan <b>Nomor Lab</b>, lalu pilih <b>Sesi Jam Kelas</b>. Data dosen, matakuliah, dan kelas akan otomatis terisi!
         </div>
 
-        <!-- 1. Nama Asisten (14 Aslab) -->
-        <div>
-          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
-            Nama Asisten Lab <span style="color: #ef4444;">*</span>
-          </label>
-          <select id="absensi-nama-aslab" onchange="handleAslabSelectedChange()"
-            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
-            <option value="">-- Pilih Nama Asisten --</option>
-            <optgroup label="📍 Asisten Lab Thehok">
-              <option value="Isodorus Bakti Pangestu" data-kampus="Thehok">Isodorus Bakti Pangestu (Thehok)</option>
-              <option value="Ahmad Idris" data-kampus="Thehok">Ahmad Idris (Thehok)</option>
-              <option value="Delvio Pasha" data-kampus="Thehok">Delvio Pasha (Thehok)</option>
-              <option value="Bayu Zaidan Azizi" data-kampus="Thehok">Bayu Zaidan Azizi (Thehok)</option>
-              <option value="Rezky Cahya Gandana" data-kampus="Thehok">Rezky Cahya Gandana (Thehok)</option>
-              <option value="Andi Noor" data-kampus="Thehok">Andi Noor (Thehok)</option>
-              <option value="Zuan Vivaldi" data-kampus="Thehok">Zuan Vivaldi (Thehok)</option>
-              <option value="Trio Prananda" data-kampus="Thehok">Trio Prananda (Thehok)</option>
-              <option value="Rafli Maulana" data-kampus="Thehok">Rafli Maulana (Thehok)</option>
-            </optgroup>
-            <optgroup label="📍 Asisten Lab Kobar">
-              <option value="Dwi Cahya Medika" data-kampus="Kobar">Dwi Cahya Medika (Kobar)</option>
-              <option value="Iqbal Prasetyo" data-kampus="Kobar">Iqbal Prasetyo (Kobar)</option>
-              <option value="M. Ghalih. M" data-kampus="Kobar">M. Ghalih. M (Kobar)</option>
-              <option value="Haykal Wais Alqorni" data-kampus="Kobar">Haykal Wais Alqorni (Kobar)</option>
-              <option value="M.Raffi Pra Diestyawan" data-kampus="Kobar">M.Raffi Pra Diestyawan (Kobar)</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <!-- 2. Nomor Lab & Jam Masuk (Side by Side) -->
+        <!-- 1. Tanggal Perkuliahan & Nomor Lab (Side by Side) -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
+              Tanggal <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="date" id="absensi-tanggal" onchange="handleAbsensiDateOrLabChange()"
+              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.88em; outline: none;">
+          </div>
+
           <div>
             <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
               Nomor Lab <span style="color: #ef4444;">*</span>
             </label>
-            <select id="absensi-nomor-lab" onchange="triggerAbsensiScheduleLookup()"
-              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
+            <select id="absensi-nomor-lab" onchange="handleAbsensiDateOrLabChange()"
+              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.88em; outline: none;">
               <option value="">-- Pilih Lab --</option>
+              <optgroup label="🏢 Kampus Kobar">
+                <option value="1.5 Kobar">1.5 Kobar</option>
+                <option value="1.6 Kobar">1.6 Kobar</option>
+                <option value="1.7 Kobar">1.7 Kobar</option>
+                <option value="1.8 Kobar">1.8 Kobar</option>
+                <option value="1.9 Kobar">1.9 Kobar</option>
+              </optgroup>
               <optgroup label="🏢 Kampus Thehok">
                 <option value="1.3 Thehok">1.3 Thehok</option>
                 <option value="1.4 Thehok">1.4 Thehok</option>
@@ -564,21 +550,64 @@
                 <option value="4.3 Thehok">4.3 Thehok</option>
                 <option value="Lab S2">Lab S2</option>
               </optgroup>
-              <optgroup label="🏢 Kampus Kobar">
-                <option value="1.5 Kobar">1.5 Kobar</option>
-                <option value="1.6 Kobar">1.6 Kobar</option>
-                <option value="1.7 Kobar">1.7 Kobar</option>
-                <option value="1.8 Kobar">1.8 Kobar</option>
-                <option value="1.9 Kobar">1.9 Kobar</option>
-              </optgroup>
             </select>
           </div>
+        </div>
 
+        <!-- 2. Opsi Sesi Jam Kelas di Lab Ini -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <label style="font-size: 0.84em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 5px;">
+              <span>⏰ Pilihan Jam/Sesi Kelas di Lab Ini</span>
+              <span style="color: #ef4444;">*</span>
+            </label>
+            <span id="absensi-sesi-count" style="font-size: 0.78em; color: var(--primary); font-weight: 600;"></span>
+          </div>
+          <select id="absensi-sesi-kelas" onchange="handleAbsensiSessionSelected()"
+            style="width: 100%; padding: 11px 12px; border-radius: var(--radius-sm); border: 2px solid var(--primary); background: var(--bg-card); color: var(--text); font-size: 0.88em; outline: none; font-weight: 600;">
+            <option value="">-- Pilih Lab Terlebih Dahulu --</option>
+          </select>
+        </div>
+
+        <!-- 3. Status Absen Banner (Sudah Diabsen / Belum Diabsen) -->
+        <div id="absensi-status-banner" style="display: none; border-radius: 10px; padding: 11px 13px; font-size: 0.85em; line-height: 1.45; transition: all 0.25s ease;">
+          <!-- Konten diisi dinamis oleh JS -->
+        </div>
+
+        <!-- 4. Nama Dosen -->
+        <div>
+          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
+            Nama Dosen <span style="color: #ef4444;">*</span>
+          </label>
+          <input type="text" id="absensi-nama-dosen" placeholder="Nama dosen pengajar..."
+            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
+        </div>
+
+        <!-- 5. Nama Matakuliah & Kode Kelas -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div>
+            <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
+              Nama Matakuliah <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="absensi-nama-mk" placeholder="Contoh: Algoritma & Pemrograman"
+              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
+              Kode Kelas <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="absensi-kode-kelas" placeholder="Contoh: 04PSP"
+              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
+          </div>
+        </div>
+
+        <!-- 6. Jam Masuk & Status Perkuliahan -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div>
             <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
               Jam Masuk <span style="color: #ef4444;">*</span>
             </label>
-            <select id="absensi-jam-masuk" onchange="triggerAbsensiScheduleLookup()"
+            <select id="absensi-jam-masuk"
               style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
               <option value="08.00 WIB">08.00 WIB</option>
               <option value="08.45 WIB">08.45 WIB</option>
@@ -600,75 +629,53 @@
               <option value="20.45 WIB">20.45 WIB</option>
             </select>
           </div>
-        </div>
-
-        <!-- 3. Tanggal Absensi -->
-        <div>
-          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
-            Tanggal Perkuliahan <span style="color: #ef4444;">*</span>
-          </label>
-          <input type="date" id="absensi-tanggal" onchange="triggerAbsensiScheduleLookup()"
-            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
-        </div>
-
-        <!-- 4. Smart Autofill Alert Box -->
-        <div id="absensi-autofill-banner" style="display: none; background: rgba(99, 102, 241, 0.08); border: 1px dashed var(--primary); border-radius: 10px; padding: 10px 12px; font-size: 0.82em; color: var(--text); align-items: center; justify-content: space-between; gap: 8px;">
-          <div>
-            <span style="font-weight: 700; color: var(--primary);">✨ Jadwal Terdeteksi:</span>
-            <div id="absensi-autofill-desc" style="margin-top: 2px; font-size: 0.95em;">-</div>
-          </div>
-          <button type="button" onclick="applyAutofillDataToForm()"
-            style="background: var(--primary); color: #fff; border: none; padding: 5px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 600; cursor: pointer; white-space: nowrap;">
-            Gunakan
-          </button>
-        </div>
-
-        <!-- 5. Nama Dosen -->
-        <div>
-          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
-            Nama Dosen <span style="color: #ef4444;">*</span>
-          </label>
-          <input type="text" id="absensi-nama-dosen" placeholder="Nama dosen pengajar..."
-            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
-        </div>
-
-        <!-- 6. Nama Matakuliah & Kode Kelas -->
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
           <div>
             <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
-              Nama Matakuliah <span style="color: #ef4444;">*</span>
+              Status Kuliah <span style="color: #ef4444;">*</span>
             </label>
-            <input type="text" id="absensi-nama-mk" placeholder="Contoh: Algoritma & Pemrograman"
-              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
-              Kode Kelas <span style="color: #ef4444;">*</span>
-            </label>
-            <input type="text" id="absensi-kode-kelas" placeholder="Contoh: 04PSP"
-              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
+            <select id="absensi-status-select" onchange="syncAbsensiStatusRadios(this.value)"
+              style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none; font-weight: 600;">
+              <option value="Tatap Muka">🟢 Tatap Muka</option>
+              <option value="Online">🔵 Online</option>
+              <option value="Cancel">🔴 Cancel</option>
+            </select>
           </div>
         </div>
 
-        <!-- 7. Status Perkuliahan -->
+        <!-- Hidden Radio Buttons untuk kompatibilitas backward -->
+        <div style="display: none;">
+          <input type="radio" name="absensi-status-perkuliahan" value="Tatap Muka" checked>
+          <input type="radio" name="absensi-status-perkuliahan" value="Online">
+          <input type="radio" name="absensi-status-perkuliahan" value="Cancel">
+        </div>
+
+        <!-- 7. Nama Asisten Lab (14 Aslab) -->
         <div>
-          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 6px; color: var(--text);">
-            Status Perkuliahan <span style="color: #ef4444;">*</span>
+          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
+            Nama Asisten Lab (Yang Bertugas) <span style="color: #ef4444;">*</span>
           </label>
-          <div style="display: flex; gap: 8px;">
-            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border: 1.5px solid #10b981; border-radius: 8px; background: rgba(16, 185, 129, 0.1); cursor: pointer; font-size: 0.86em; font-weight: 600; color: #059669;">
-              <input type="radio" name="absensi-status-perkuliahan" value="Tatap Muka" checked style="accent-color: #10b981;">
-              Tatap Muka
-            </label>
-            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg-card); cursor: pointer; font-size: 0.86em; font-weight: 600; color: var(--text);">
-              <input type="radio" name="absensi-status-perkuliahan" value="Online" style="accent-color: #0284c7;">
-              Online
-            </label>
-            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg-card); cursor: pointer; font-size: 0.86em; font-weight: 600; color: var(--text);">
-              <input type="radio" name="absensi-status-perkuliahan" value="Cancel" style="accent-color: #ef4444;">
-              Cancel
-            </label>
-          </div>
+          <select id="absensi-nama-aslab" onchange="handleAslabSelectedChange()"
+            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
+            <option value="">-- Pilih Nama Asisten --</option>
+            <optgroup label="📍 Asisten Lab Kobar">
+              <option value="Dwi Cahya Medika" data-kampus="Kobar">Dwi Cahya Medika (Kobar)</option>
+              <option value="Iqbal Prasetyo" data-kampus="Kobar">Iqbal Prasetyo (Kobar)</option>
+              <option value="M. Ghalih. M" data-kampus="Kobar">M. Ghalih. M (Kobar)</option>
+              <option value="Haykal Wais Alqorni" data-kampus="Kobar">Haykal Wais Alqorni (Kobar)</option>
+              <option value="M.Raffi Pra Diestyawan" data-kampus="Kobar">M.Raffi Pra Diestyawan (Kobar)</option>
+            </optgroup>
+            <optgroup label="📍 Asisten Lab Thehok">
+              <option value="Isodorus Bakti Pangestu" data-kampus="Thehok">Isodorus Bakti Pangestu (Thehok)</option>
+              <option value="Ahmad Idris" data-kampus="Thehok">Ahmad Idris (Thehok)</option>
+              <option value="Delvio Pasha" data-kampus="Thehok">Delvio Pasha (Thehok)</option>
+              <option value="Bayu Zaidan Azizi" data-kampus="Thehok">Bayu Zaidan Azizi (Thehok)</option>
+              <option value="Rezky Cahya Gandana" data-kampus="Thehok">Rezky Cahya Gandana (Thehok)</option>
+              <option value="Andi Noor" data-kampus="Thehok">Andi Noor (Thehok)</option>
+              <option value="Zuan Vivaldi" data-kampus="Thehok">Zuan Vivaldi (Thehok)</option>
+              <option value="Trio Prananda" data-kampus="Thehok">Trio Prananda (Thehok)</option>
+              <option value="Rafli Maulana" data-kampus="Thehok">Rafli Maulana (Thehok)</option>
+            </optgroup>
+          </select>
         </div>
 
         <!-- 8. Keterangan Opsional -->
@@ -676,7 +683,7 @@
           <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
             Keterangan / Catatan Tambahan <span style="font-weight: normal; color: var(--text-muted);">(Opsional)</span>
           </label>
-          <input type="text" id="absensi-keterangan" placeholder="Catatan aslab (misal: pengganti dosen, kendala AC...)"
+          <input type="text" id="absensi-keterangan" placeholder="Catatan aslab (misal: dosen pengganti, kendala AC...)"
             style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
         </div>
 
@@ -687,7 +694,7 @@
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            <span>Kirim Absensi Lab</span>
+            <span id="btn-submit-absensi-text">Kirim Absensi Lab</span>
           </button>
           <button type="button" class="modal-btn" onclick="closeAbsensiModalToMenu()"
             style="background: var(--text-muted); padding: 10px; width: 100%; min-height: 44px; font-weight: 600;">
@@ -696,7 +703,7 @@
         </div>
       </div>
 
-      <!-- TAB 2: RIWAYAT ABSENSI HARI INI -->
+      <!-- TAB 2: RIWAYAT ABSENSI HARI INI (HANYA MODE ADMIN) -->
       <div id="absensi-view-history" style="display: none; flex-direction: column; gap: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
           <div style="font-size: 0.86em; font-weight: 700; color: var(--text);" id="absensi-history-count-badge">
