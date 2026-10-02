@@ -4884,6 +4884,13 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     document.getElementById('data-wa-back-btn').onclick = showMenu;
     document.getElementById('add-wa-back-btn').onclick = showMenu;
     document.getElementById('edit-wa-back-btn').onclick = showMenu;
+    const qrBack = document.getElementById('qr-back-btn');
+    if (qrBack) qrBack.onclick = showMenu;
+    const absBack = document.getElementById('absensi-back-btn');
+    if (absBack) absBack.onclick = showMenu;
+    const absHistBack = document.getElementById('absensi-history-back-btn');
+    if (absHistBack) absHistBack.onclick = showMenu;
+    window.closeAbsensiModalToMenu = showMenu;
 
     // Submit Edit Data WA
     document.getElementById('edit-wa-submit-btn').onclick = async () => {
@@ -5758,15 +5765,27 @@ window.deleteAbsensiRecord = async function (id) {
 };
 
 window.closeAbsensiModalToMenu = function () {
-  const showMenuBtn = document.getElementById('qr-back-btn');
-  if (showMenuBtn) {
-    showMenuBtn.click();
-  } else {
-    const menu = document.getElementById('wa-modal-menu');
-    const absensi = document.getElementById('wa-modal-absensi');
-    if (menu) menu.style.display = 'flex';
-    if (absensi) absensi.style.display = 'none';
+  const absensiView = document.getElementById('wa-modal-absensi');
+  const menuView = document.getElementById('wa-modal-menu');
+  if (absensiView) absensiView.style.display = 'none';
+  if (menuView) menuView.style.display = 'flex';
+
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) modalTitle.innerText = "Setting";
+
+  const modalIcon = document.getElementById('wa-modal-icon');
+  if (modalIcon) {
+    modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
   }
+
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  if (adminToggle) adminToggle.style.display = 'block';
+
+  document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
+    el.classList.remove('open');
+    const w = el.closest('.custom-select-wrapper');
+    if (w) w.style.zIndex = '';
+  });
 };
 
 // Toggle Info Mase Inline Panel

@@ -8,6 +8,7 @@ import re
 import secrets
 import socket
 import time
+import threading
 import requests
 from dotenv import load_dotenv
 
@@ -3040,6 +3041,52 @@ def get_absensi_master():
             cursor.close()
             conn.close()
 
+def forward_absensi_to_google_form(data: AbsensiInput):
+    """
+    Mengirim data absensi secara otomatis ke Google Form Aslab
+    Link: https://forms.gle/yqZRi5D8KTyt1gmN8
+    Action: https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/formResponse
+    """
+    try:
+        url = "https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/formResponse"
+        
+        # Parse tanggal (YYYY-MM-DD)
+        year, month, day = "", "", ""
+        if data.tanggal:
+            parts = data.tanggal.strip().split("-")
+            if len(parts) == 3:
+                year, month, day = parts[0], parts[1], parts[2]
+
+        payload = {
+            "entry.146029558": data.nama_dosen.strip() if data.nama_dosen else "",
+            "entry.404112387": data.nama_mk.strip() if data.nama_mk else "",
+            "entry.380055525": data.kode_kelas.strip() if data.kode_kelas else "",
+            "entry.1558064062": data.status_perkuliahan.strip() if data.status_perkuliahan else "Tatap Muka",
+            "entry.1210016936_year": year,
+            "entry.1210016936_month": month,
+            "entry.1210016936_day": day,
+            "entry.1210016936": data.tanggal.strip() if data.tanggal else "",
+            "entry.1292956818": data.jam_masuk.strip() if data.jam_masuk else "",
+            "entry.1658465425": data.nama_aslab.strip() if data.nama_aslab else "",
+            "entry.1487398951": data.nomor_lab.strip() if data.nomor_lab else "",
+        }
+
+        resp = requests.post(
+            url,
+            data=payload,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10
+        )
+        if resp.status_code in (200, 302):
+            print(f"[Absensi GForm] Berhasil terkirim ke Google Form untuk {data.nama_mk} ({data.nomor_lab})")
+            return True
+        else:
+            print(f"[Absensi GForm] Status respon Google Form: {resp.status_code}")
+            return False
+    except Exception as err:
+        print(f"[Absensi GForm] Gagal meneruskan ke Google Form: {err}")
+        return False
+
 @app.post("/api/absensi")
 def submit_absensi(data: AbsensiInput):
     """Menyimpan atau memperbarui absensi asisten lab saat dosen masuk kelas di lab"""
@@ -3083,7 +3130,11 @@ def submit_absensi(data: AbsensiInput):
                 data.id_absensi
             ))
             conn.commit()
-            return {"status": "success", "message": "Absensi berhasil diperbarui!", "id_absensi": data.id_absensi}
+
+            # Otomatis teruskan ke Google Form di background
+            threading.Thread(target=forward_absensi_to_google_form, args=(data,), daemon=True).start()
+
+            return {"status": "success", "message": "Absensi berhasil diperbarui dan dikirim ulang ke Google Form!", "id_absensi": data.id_absensi}
 
         cursor.execute("""
             INSERT INTO absensi_aslab (
@@ -3105,7 +3156,11 @@ def submit_absensi(data: AbsensiInput):
         ))
         conn.commit()
         absensi_id = cursor.lastrowid
-        return {"status": "success", "message": "Absensi berhasil dicatat!", "id_absensi": absensi_id}
+
+        # Otomatis teruskan ke Google Form di background
+        threading.Thread(target=forward_absensi_to_google_form, args=(data,), daemon=True).start()
+
+        return {"status": "success", "message": "Absensi berhasil dicatat dan otomatis terkirim ke Google Form!", "id_absensi": absensi_id}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:

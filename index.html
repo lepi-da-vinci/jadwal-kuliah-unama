@@ -4356,14 +4356,8 @@
           </div>
         </div>
 
-        <!-- 8. Keterangan Opsional -->
-        <div>
-          <label style="display: block; font-size: 0.84em; font-weight: 600; margin-bottom: 5px; color: var(--text);">
-            Keterangan / Catatan Tambahan <span style="font-weight: normal; color: var(--text-muted);">(Opsional)</span>
-          </label>
-          <input type="text" id="absensi-keterangan" placeholder="Catatan aslab (misal: dosen pengganti, kendala AC...)"
-            style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.9em; outline: none;">
-        </div>
+        <!-- Keterangan / Catatan Tambahan tidak ditampilkan (hidden untuk kompatibilitas script) -->
+        <input type="hidden" id="absensi-keterangan" value="">
 
         <!-- Tombol Aksi Form -->
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
@@ -4374,7 +4368,7 @@
             </svg>
             <span id="btn-submit-absensi-text">Kirim Absensi Lab</span>
           </button>
-          <button type="button" class="modal-btn" onclick="closeAbsensiModalToMenu()"
+          <button type="button" class="modal-btn" id="absensi-back-btn" onclick="closeAbsensiModalToMenu()"
             style="background: var(--text-muted); padding: 10px; width: 100%; min-height: 44px; font-weight: 600;">
             Kembali ke Menu
           </button>
@@ -4400,7 +4394,7 @@
         </div>
 
         <div style="margin-top: 8px;">
-          <button type="button" class="modal-btn" onclick="closeAbsensiModalToMenu()"
+          <button type="button" class="modal-btn" id="absensi-history-back-btn" onclick="closeAbsensiModalToMenu()"
             style="background: var(--text-muted); padding: 10px; width: 100%; min-height: 44px; font-weight: 600;">
             Kembali ke Menu
           </button>
@@ -4925,7 +4919,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261002_absensi_v3"></script>
+  <script src="frontend/js/script.js?v=20261002_absensi_v4"></script>
 </body>
 
 </html>
