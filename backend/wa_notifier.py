@@ -157,11 +157,91 @@ def ensure_db_schema():
                 conn.commit()
             except Exception:
                 pass
+
+        # Inisialisasi tabel status real-time operasional lab
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS status_operasional_lab (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    tanggal DATE NOT NULL,
+                    id_ruangan INT NOT NULL,
+                    jam TIME NOT NULL,
+                    kode_mk VARCHAR(50) NULL,
+                    nama_mk VARCHAR(150) NULL,
+                    kelas VARCHAR(50) NULL,
+                    status_lab VARCHAR(20) NOT NULL DEFAULT 'buka',
+                    diubah_oleh VARCHAR(100) NULL,
+                    waktu_aksi DATETIME NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_tanggal_ruang_jam (tanggal, id_ruangan, jam)
+                )
+            """)
+            conn.commit()
+        except Exception:
+            pass
+
         cursor.close()
         conn.close()
         _schema_migrated = True
     except Exception:
         pass
+
+def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_lab: str, diubah_oleh: str = "Aslab", nama_mk: str = None, kelas: str = None):
+    """
+    Menyimpan atau memperbarui status operasional lab (buka/tutup) untuk sesi kelas tertentu.
+    Jika status_lab == 'buka':
+    - Otomatis menonaktifkan notifikasi pengingat buka lab untuk sesi kelas ini (sent_notifications)
+    """
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        ensure_db_schema()
+
+        # Format jam jadi HH:MM:00 jika hanya HH:MM
+        jam_clean = jam.strip()
+        if len(jam_clean) == 5:
+            jam_sql = f"{jam_clean}:00"
+        else:
+            jam_sql = jam_clean
+
+        cursor.execute("""
+            INSERT INTO status_operasional_lab (
+                tanggal, id_ruangan, jam, nama_mk, kelas, status_lab, diubah_oleh, waktu_aksi
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                status_lab = VALUES(status_lab),
+                diubah_oleh = VALUES(diubah_oleh),
+                waktu_aksi = NOW(),
+                nama_mk = COALESCE(VALUES(nama_mk), nama_mk),
+                kelas = COALESCE(VALUES(kelas), kelas)
+        """, (tanggal, id_ruangan, jam_sql, nama_mk, kelas, status_lab, diubah_oleh))
+        conn.commit()
+
+        # Update sent_notifications agar notifikasi pengingat berikutnya tidak muncul
+        try:
+            parts = jam_clean.split(':')
+            start_min = int(parts[0]) * 60 + int(parts[1]) if len(parts) >= 2 else 0
+            if status_lab == 'buka':
+                # Matikan notif buka untuk sesi ini
+                for diff in range(5, 30):
+                    sent_notifications.add(f"{tanggal}_{id_ruangan}_buka_{start_min}_{diff}")
+            elif status_lab == 'tutup':
+                dur = scraper.get_class_duration(nama_mk, kelas) if hasattr(scraper, 'get_class_duration') else 135
+                end_min = start_min + dur
+                for diff in range(5, 30):
+                    sent_notifications.add(f"{tanggal}_{id_ruangan}_tutup_{end_min}_{diff}")
+        except Exception:
+            pass
+
+        return True
+    except Exception as e:
+        print(f"Error set_status_operasional_lab: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 def get_db_connection():
     ensure_db_schema()
@@ -2144,6 +2224,161 @@ def handle_conversational_chitchat(text_clean: str, text_raw: str, nama: str, ro
 
     return None
 
+def handle_konfirmasi_buka_tutup_lab(sender, text_clean, aslab, aksi="buka"):
+    """
+    Menangani konfirmasi aslab ketika menyatakan lab sudah dibuka atau sudah ditutup.
+    Mencari ruangan dan sesi kelas hari ini yang bersangkutan, memperbarui status di database,
+    dan mematikan notifikasi pengingat buka/tutup lab untuk sesi tersebut.
+    """
+    nama = aslab.get('nama_aslab') or 'mas'
+    now = get_wib_now()
+    current_date = now.strftime("%Y-%m-%d")
+    current_total_min = now.hour * 60 + now.minute
+    jam_sekarang = now.strftime("%H:%M")
+
+    target_id_room = None
+    target_nama_room = None
+    target_kampus = None
+
+    # Cek apakah nomor lab disebutkan secara spesifik dalam pesan (misal: "1.3", "lab 1.3", "1.5 kobar")
+    room_match = re.search(r'\b(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?(\d+\.\d+)\b', text_clean)
+    conn = scraper.get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if room_match:
+            clean_kw, detected_camp = normalize_lab_and_kampus(room_match.group(1), None)
+            if "thehok" in text_clean or "tehok" in text_clean:
+                detected_camp = "Thehok"
+            elif "kobar" in text_clean:
+                detected_camp = "Kobar"
+
+            query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
+            params = [f"%{clean_kw}%"]
+            if detected_camp:
+                query += " AND kampus = %s"
+                params.append(detected_camp)
+            cursor.execute(query, tuple(params))
+            found_rooms = cursor.fetchall()
+            if found_rooms:
+                target_id_room = found_rooms[0]['id_ruangan']
+                target_nama_room = found_rooms[0]['nama_ruangan']
+                target_kampus = found_rooms[0]['kampus']
+
+        # Jika tidak ditemukan dari teks pesan, gunakan ruangan yang ditugaskan ke aslab ini
+        if not target_id_room and aslab.get('id_ruangan'):
+            target_id_room = aslab['id_ruangan']
+            target_nama_room = aslab.get('nama_ruangan')
+            target_kampus = aslab.get('kampus')
+
+        if not target_id_room:
+            return (
+                f"Mau tandai lab yang mana mas *{nama}*?\n\n"
+                f"Sebutkan nomor labnya ya, contoh:\n"
+                f"• *1.3 udah buka*\n"
+                f"• *lab 1.8 udah ditutup*\n"
+                f"• *1.5 kobar udah buka*"
+            )
+
+        # 2. Cari Jadwal Kelas di Ruangan Ini Hari Ini
+        cursor.execute("""
+            SELECT j.jam, j.nama_mk, j.kelas, j.kode_mk
+            FROM jadwal j
+            WHERE j.tanggal = %s AND j.id_ruangan = %s
+              AND UPPER(TRIM(j.metode_pembelajaran)) NOT IN ('CC', 'OL')
+              AND UPPER(TRIM(j.metode_pembelajaran)) NOT LIKE '%ONLINE%'
+              AND (j.status_jadwal IS NULL OR (
+                  UPPER(j.status_jadwal) NOT IN ('CC', 'BATAL')
+                  AND UPPER(j.status_jadwal) NOT LIKE '%BATAL%'
+                  AND UPPER(j.status_jadwal) NOT LIKE '%CANCEL%'
+              ))
+            ORDER BY j.jam ASC
+        """, (current_date, target_id_room))
+        classes_today = cursor.fetchall()
+
+        if not classes_today:
+            return (
+                f"Halo mas *{nama}*, di *{target_nama_room} ({target_kampus})* "
+                f"tidak ada jadwal perkuliahan tatap muka hari ini ({format_tanggal_indo(current_date)})."
+            )
+
+        # Cari kelas yang paling relevan (sedang berlangsung sekarang, atau mulai terdekat)
+        chosen_cls = None
+        best_diff = 999999
+
+        for c in classes_today:
+            jam_val = c['jam']
+            if hasattr(jam_val, 'total_seconds'):
+                start_min = int(jam_val.total_seconds()) // 60
+            elif hasattr(jam_val, 'hour'):
+                start_min = jam_val.hour * 60 + jam_val.minute
+            else:
+                parts = str(jam_val).strip().split(':')
+                start_min = int(parts[0]) * 60 + int(parts[1]) if len(parts) >= 2 else 0
+
+            dur = scraper.get_class_duration(c['nama_mk'], c['kelas']) if hasattr(scraper, 'get_class_duration') else 135
+            end_min = start_min + dur
+
+            # Prioritas 1: Kelas yang saat ini sedang aktif atau persiapan mulai (H-45 sampai selesai)
+            if (start_min - 45) <= current_total_min <= end_min:
+                chosen_cls = dict(c)
+                chosen_cls['start_min'] = start_min
+                chosen_cls['end_min'] = end_min
+                break
+
+            # Prioritas 2: Kelas mendatang terdekat
+            diff = abs(start_min - current_total_min)
+            if diff < best_diff:
+                best_diff = diff
+                chosen_cls = dict(c)
+                chosen_cls['start_min'] = start_min
+                chosen_cls['end_min'] = end_min
+
+        if not chosen_cls:
+            chosen_cls = dict(classes_today[0])
+            chosen_cls['start_min'] = parse_jam_to_minutes(str(chosen_cls['jam']))
+
+        jam_str = f"{chosen_cls['start_min'] // 60:02d}:{chosen_cls['start_min'] % 60:02d}"
+
+        # 3. Simpan ke database status_operasional_lab & update sent_notifications
+        set_status_operasional_lab(
+            tanggal=current_date,
+            id_ruangan=target_id_room,
+            jam=f"{jam_str}:00",
+            status_lab=aksi,
+            diubah_oleh=f"{nama} (via WA)",
+            nama_mk=chosen_cls.get('nama_mk'),
+            kelas=chosen_cls.get('kelas')
+        )
+
+        if aksi == "buka":
+            return (
+                f"*LAB BERHASIL DIBUKA* 🟢\n\n"
+                f"Halo mas *{nama}*, status operasional lab telah dicatat:\n"
+                f"• *Ruangan:* {target_nama_room} ({target_kampus})\n"
+                f"• *Kelas:* {chosen_cls['nama_mk']} ({chosen_cls['kelas']})\n"
+                f"• *Jadwal Mulai:* {jam_str} WIB\n"
+                f"• *Status:* *SUDAH DIBUKA* 🟢\n"
+                f"• *Waktu Konfirmasi:* {jam_sekarang} WIB\n\n"
+                f"_Notifikasi pengingat buka lab untuk kelas ini otomatis dinonaktifkan. Terima kasih atas konfirmasinya mas!_"
+            )
+        else:
+            return (
+                f"*LAB BERHASIL DITUTUP* 🔒\n\n"
+                f"Halo mas *{nama}*, status operasional lab telah dicatat:\n"
+                f"• *Ruangan:* {target_nama_room} ({target_kampus})\n"
+                f"• *Kelas:* {chosen_cls['nama_mk']} ({chosen_cls['kelas']})\n"
+                f"• *Status:* *SUDAH DITUTUP / SELESAI* 🔒\n"
+                f"• *Waktu Konfirmasi:* {jam_sekarang} WIB\n\n"
+                f"_Data telah diperbarui di dashboard operasional. Terima kasih mas!_"
+            )
+    except Exception as err:
+        print(f"Error handle_konfirmasi_buka_tutup_lab: {err}")
+        return f"Terjadi kendala saat memperbarui status lab: {err}"
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 def fallback_python_handler(sender, text, aslab):
     global aslab_session_states
     text_clean = text.strip().lower()
@@ -2160,6 +2395,29 @@ def fallback_python_handler(sender, text, aslab):
         label_ruang = ruang if any(ruang.lower().startswith(p) for p in ["lab", "labor", "ruang"]) else f"Lab {ruang}"
     else:
         label_ruang = "Lab Tertentu (misal: 1.5, 1.8)"
+
+    # 0.1 Deteksi Konfirmasi Buka / Tutup Lab (Real-time Operasional Lab)
+    is_q = bool(re.search(r'(\?|\b(?:kapan|jam berapa|apakah|siapa|kenapa)\b)', text_clean))
+    if not is_q:
+        # Pola Buka Lab:
+        is_open_intent = (
+            re.search(r'\b(?:udah|sudah|udh|dh|dah|telah|berhasil)\s*(?:di\s*)?buka(?:k)?\b', text_clean) or
+            re.search(r'\b(?:buka\s*lab|lab\s*(?:sudah|udah|udh|dh)?\s*buka(?:k)?|sudah\s*kubuka|udah\s*kubuka|sudah\s*saya\s*buka)\b', text_clean) or
+            re.search(r'^\s*(?:lab\s*)?\d+\.\d+\s*(?:sudah|udah|udh|dh)?\s*buka(?:k)?\s*$', text_clean) or
+            re.search(r'^\s*buka(?:\s+lab|\s+mas|\s+ya)?\s*$', text_clean)
+        )
+        if is_open_intent:
+            return handle_konfirmasi_buka_tutup_lab(sender, text_clean, aslab, aksi="buka")
+
+        # Pola Tutup Lab:
+        is_close_intent = (
+            re.search(r'\b(?:udah|sudah|udh|dh|dah|telah|berhasil)\s*(?:di\s*)?tutup\b', text_clean) or
+            re.search(r'\b(?:tutup\s*lab|lab\s*(?:sudah|udah|udh|dh)?\s*tutup|sudah\s*kututup|udah\s*kututup|sudah\s*saya\s*tutup)\b', text_clean) or
+            re.search(r'^\s*(?:lab\s*)?\d+\.\d+\s*(?:sudah|udah|udh|dh)?\s*tutup\s*$', text_clean) or
+            re.search(r'^\s*tutup(?:\s+lab|\s+mas|\s+ya)?\s*$', text_clean)
+        )
+        if is_close_intent:
+            return handle_konfirmasi_buka_tutup_lab(sender, text_clean, aslab, aksi="tutup")
 
     # 0. Respon Interaktif untuk Konfirmasi, Sapaan, Terima Kasih, & Percakapan Santai
     chitchat_res = handle_conversational_chitchat(text_clean, text, nama, role, kampus_asmot, label_ruang, aslab)
@@ -2982,6 +3240,13 @@ def handle_incoming_message(sender, text):
         # 3. Permintaan Link server / tunnel / barcode
         if any(k in cmd_text for k in ["link", "server", "web", "ngrok", "barcode", "tunnel", "cloudflare"]):
             return True
+        # 3.5 Konfirmasi Buka / Tutup Lab Real-time (udah buka, sudah dibuka, udh bukak, tutup lab, dll)
+        if not bool(re.search(r'(\?|\b(?:kapan|jam berapa|apakah|siapa|kenapa)\b)', cmd_text)):
+            if (re.search(r'\b(?:udah|sudah|udh|dh|dah|telah|berhasil)?\s*(?:di\s*)?buka(?:k)?\b', cmd_text) or
+                re.search(r'\b(?:udah|sudah|udh|dh|dah|telah|berhasil)?\s*(?:di\s*)?tutup\b', cmd_text) or
+                re.search(r'\b(?:buka|tutup)\s*lab\b', cmd_text) or
+                re.search(r'^\s*(?:buka|tutup)\s*$', cmd_text)):
+                return True
         # 4. Operasional spesifik (Aslab & Asmot)
         ops_kw = [
             "kelas berikutnya", "next class", "habis ini", "setelah ini", "kelas selanjutnya",
@@ -3141,8 +3406,26 @@ def check_lab_schedules():
                 if target_diff - 1 <= diff_buka <= target_diff:
                     notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
                     if notif_key not in sent_notifications:
+                        # Cek apakah lab untuk sesi ini SUDAH DIBUKA sebelumnya oleh aslab
+                        cls_jam_str = f"{cls['start_min'] // 60:02d}:{cls['start_min'] % 60:02d}:00"
+                        cursor.execute("""
+                            SELECT status_lab, diubah_oleh FROM status_operasional_lab
+                            WHERE tanggal = %s AND id_ruangan = %s AND jam = %s
+                            LIMIT 1
+                        """, (current_date, id_room, cls_jam_str))
+                        sol = cursor.fetchone()
+                        if sol and sol.get('status_lab') == 'buka':
+                            sent_notifications.add(notif_key)
+                            log_chatbot("INFO", f"Lab {room_name_full} untuk {cls['nama_mk']} jam {cls_jam_str} sudah dibuka oleh {sol.get('diubah_oleh')}. Notifikasi buka lab dilewati.", "OPERASIONAL-LAB")
+                            continue
+
                         h, m = cls['start_min'] // 60, cls['start_min'] % 60
-                        msg = f"*Buka Lab {room_name_full}*\n\nKelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d} WIB.\n\nTolong buka lab dalam {target_diff} menit mas."
+                        msg = (
+                            f"*Buka Lab {room_name_full}*\n\n"
+                            f"Kelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d} WIB.\n\n"
+                            f"Tolong buka lab dalam {target_diff} menit mas.\n\n"
+                            f"_Balas *'udah buka'* jika lab sudah kamu buka ya mas._"
+                        )
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)
             
@@ -3154,6 +3437,18 @@ def check_lab_schedules():
                 if target_diff - 1 <= diff_tutup <= target_diff:
                     notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
                     if notif_key not in sent_notifications:
+                        # Cek apakah lab sudah ditutup lebih awal
+                        cls_jam_str = f"{cls['start_min'] // 60:02d}:{cls['start_min'] % 60:02d}:00"
+                        cursor.execute("""
+                            SELECT status_lab FROM status_operasional_lab
+                            WHERE tanggal = %s AND id_ruangan = %s AND jam = %s
+                            LIMIT 1
+                        """, (current_date, id_room, cls_jam_str))
+                        sol = cursor.fetchone()
+                        if sol and sol.get('status_lab') == 'tutup':
+                            sent_notifications.add(notif_key)
+                            continue
+
                         eh, em = cls['end_min'] // 60, cls['end_min'] % 60
                         if item['tipe'] == 'JEDA':
                             nxt_cls = item['nxt']
@@ -3169,7 +3464,8 @@ def check_lab_schedules():
                             msg = (
                                 f"*Tutup Lab {room_name_full}*\n\n"
                                 f"Kelas terakhir hari ini *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
-                                f"Tolong tutup dan kunci lab dalam {target_diff} menit mas (ruangan selesai digunakan hari ini)."
+                                f"Tolong tutup dan kunci lab dalam {target_diff} menit mas (ruangan selesai digunakan hari ini).\n\n"
+                                f"_Balas *'udah tutup'* jika lab sudah kamu kunci ya mas._"
                             )
                         if send_wa_message(no_wa, msg):
                             sent_notifications.add(notif_key)

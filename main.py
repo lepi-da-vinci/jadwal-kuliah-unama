@@ -684,11 +684,14 @@ def get_semua_jadwal(semester: str = None):
                 is_enriched = True
                 print(f"[Initial-Restore] Berhasil memulihkan {missing_count} jadwal dari arsip permanen untuk semester {target_sem} karena tabel jadwal kosong.")
 
+        wa_notifier.ensure_db_schema()
         query = '''
             SELECT 
+                j.id_jadwal,
                 j.hari, 
                 j.tanggal, 
                 j.jam, 
+                j.id_ruangan,
                 d.nama_dosen, 
                 COALESCE(j.nama_mk, mk.nama_mk) AS nama_mk, 
                 j.kelas,
@@ -696,11 +699,15 @@ def get_semua_jadwal(semester: str = None):
                 r.nama_ruangan, 
                 j.status_jadwal, 
                 j.metode_pembelajaran,
-                j.semester
+                j.semester,
+                sol.status_lab,
+                sol.diubah_oleh AS status_lab_oleh,
+                sol.waktu_aksi AS status_lab_waktu
             FROM jadwal j
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
             LEFT JOIN mata_kuliah mk ON j.kode_mk = mk.kode_mk
             LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN status_operasional_lab sol ON j.tanggal = sol.tanggal AND j.id_ruangan = sol.id_ruangan AND j.jam = sol.jam
             WHERE j.semester = %s
             ORDER BY j.tanggal ASC, j.jam ASC
         '''
@@ -709,6 +716,9 @@ def get_semua_jadwal(semester: str = None):
         
         # Format date and time for JSON serialization
         for item in hasil:
+            if item.get('status_lab_waktu'):
+                item['status_lab_waktu'] = item['status_lab_waktu'].strftime('%H:%M')
+
             if item['tanggal']:
                 # Create formatted date for display (e.g. 18/07/2026)
                 item['tanggal_format'] = item['tanggal'].strftime('%d/%m/%Y')
@@ -3351,6 +3361,109 @@ def get_lab_sessions(nomor_lab: str, tanggal: str = None):
             "total_sessions": len(session_results),
             "total_diabsen": len([s for s in session_results if s["is_diabsen"]]) + len(extra_absensi)
         }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class StatusLabUpdateInput(BaseModel):
+    tanggal: str
+    id_ruangan: int = None
+    nama_ruangan: str = None
+    kampus: str = None
+    jam: str
+    status_lab: str = "buka" # "buka" / "tutup"
+    nama_mk: str = None
+    kelas: str = None
+    diubah_oleh: str = "Aslab (Web)"
+
+@app.post("/api/status-lab")
+def update_status_lab(data: StatusLabUpdateInput):
+    """Memperbarui status operasional lab (buka/tutup) per sesi kelas via dashboard web"""
+    try:
+        id_ruangan = data.id_ruangan
+        if not id_ruangan and data.nama_ruangan:
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
+            query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
+            params = [f"%{clean_kw}%"]
+            if detected_camp:
+                query += " AND kampus = %s"
+                params.append(detected_camp)
+            query += " LIMIT 1"
+            cursor.execute(query, tuple(params))
+            row = cursor.fetchone()
+            if row:
+                id_ruangan = row['id_ruangan']
+            cursor.close()
+            conn.close()
+
+        if not id_ruangan:
+            return {"status": "error", "message": "Ruangan tidak ditemukan"}
+
+        jam_clean = data.jam.split('-')[0].strip() if '-' in data.jam else data.jam.strip()
+        if len(jam_clean) > 5 and ':' in jam_clean:
+            jam_clean = jam_clean[:5]
+
+        sukses = wa_notifier.set_status_operasional_lab(
+            tanggal=data.tanggal.strip(),
+            id_ruangan=id_ruangan,
+            jam=jam_clean,
+            status_lab=data.status_lab.strip().lower(),
+            diubah_oleh=data.diubah_oleh.strip() if data.diubah_oleh else "Aslab (Web)",
+            nama_mk=data.nama_mk.strip() if data.nama_mk else None,
+            kelas=data.kelas.strip() if data.kelas else None
+        )
+
+        if sukses:
+            return {
+                "status": "success",
+                "message": f"Status lab berhasil diperbarui menjadi {data.status_lab}",
+                "status_lab": data.status_lab,
+                "waktu": datetime.datetime.now().strftime("%H:%M")
+            }
+        else:
+            return {"status": "error", "message": "Gagal menyimpan status ke database"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/status-lab")
+def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
+    """Mengambil riwayat/status lab real-time untuk tanggal tertentu"""
+    try:
+        if not tanggal:
+            tanggal = datetime.date.today().strftime("%Y-%m-%d")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        wa_notifier.ensure_db_schema()
+
+        query = """
+            SELECT sol.*, r.nama_ruangan, r.kampus
+            FROM status_operasional_lab sol
+            JOIN ruangan r ON sol.id_ruangan = r.id_ruangan
+            WHERE sol.tanggal = %s
+        """
+        params = [tanggal]
+        if id_ruangan:
+            query += " AND sol.id_ruangan = %s"
+            params.append(id_ruangan)
+
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get('waktu_aksi'):
+                r['waktu_aksi_str'] = r['waktu_aksi'].strftime('%H:%M:%S')
+                r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
+            if r.get('jam'):
+                total_sec = int(r['jam'].total_seconds()) if hasattr(r['jam'], 'total_seconds') else 0
+                r['jam'] = f"{total_sec//3600:02d}:{(total_sec%3600)//60:02d}"
+            if r.get('tanggal'):
+                r['tanggal'] = str(r['tanggal'])
+
+        return {"status": "success", "tanggal": tanggal, "data": rows}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:

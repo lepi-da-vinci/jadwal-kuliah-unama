@@ -6061,6 +6061,104 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       }
       if (!kampusText) kampusText = 'UNAMA';
 
+      // 6. Status Real-Time Operasional Lab (Buka / Tutup Sesi Kelas oleh Aslab)
+      const stLab = (s.status_lab || '').toLowerCase();
+      const stOleh = s.status_lab_oleh || '';
+      const stWaktu = s.status_lab_waktu ? ` pukul ${s.status_lab_waktu} WIB` : '';
+      const siapaKet = stOleh ? ` (${escapeHtml(stOleh)}${stWaktu})` : (stWaktu ? ` (${stWaktu.trim()})` : '');
+
+      let opStatusBadge = '';
+      let opActionBtns = '';
+
+      if (stLab === 'buka') {
+        opStatusBadge = `
+          <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-full); padding: 4px 10px; font-size: 0.78em; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981;"></span>
+            <span>Lab Sudah Dibuka <small style="opacity:0.85;">${siapaKet}</small></span>
+          </span>
+        `;
+        opActionBtns = `
+          <button type="button" class="btn-lab-status-action"
+            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
+            data-room="${escapeHtml(roomName)}"
+            data-jam="${escapeHtml(s.jam || startTimeStr)}"
+            data-mk="${escapeHtml(s.nama_mk || '')}"
+            data-kelas="${escapeHtml(s.kelas || '')}"
+            data-status="tutup"
+            onclick="window.onLabStatusBtnClick(this)"
+            style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 4px 12px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;" title="Tandai lab sudah ditutup">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Tutup Lab</span>
+          </button>
+        `;
+      } else if (stLab === 'tutup') {
+        opStatusBadge = `
+          <span class="badge" style="background: rgba(107, 114, 128, 0.15); color: #6b7280; font-weight: 700; border: 1px solid rgba(107, 114, 128, 0.3); border-radius: var(--radius-full); padding: 4px 10px; font-size: 0.78em; display: inline-flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Lab Sudah Ditutup <small style="opacity:0.85;">${siapaKet}</small></span>
+          </span>
+        `;
+        opActionBtns = `
+          <button type="button" class="btn-lab-status-action"
+            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
+            data-room="${escapeHtml(roomName)}"
+            data-jam="${escapeHtml(s.jam || startTimeStr)}"
+            data-mk="${escapeHtml(s.nama_mk || '')}"
+            data-kelas="${escapeHtml(s.kelas || '')}"
+            data-status="buka"
+            onclick="window.onLabStatusBtnClick(this)"
+            style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 4px 12px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;" title="Buka lab kembali">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
+            <span>Buka Kembali</span>
+          </button>
+        `;
+      } else {
+        opStatusBadge = `
+          <span class="badge" style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 4px 10px; font-size: 0.78em; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="width: 7px; height: 7px; border-radius: 50%; background: #9ca3af;"></span>
+            <span>Belum Dibuka</span>
+          </span>
+        `;
+        opActionBtns = `
+          <button type="button" class="btn-lab-status-action btn-buka-primary"
+            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
+            data-room="${escapeHtml(roomName)}"
+            data-jam="${escapeHtml(s.jam || startTimeStr)}"
+            data-mk="${escapeHtml(s.nama_mk || '')}"
+            data-kelas="${escapeHtml(s.kelas || '')}"
+            data-status="buka"
+            onclick="window.onLabStatusBtnClick(this)"
+            style="background: #10b981; color: #ffffff; border: none; border-radius: 8px; padding: 5px 14px; font-size: 0.8em; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); transition: all 0.2s;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
+            <span>Buka Lab</span>
+          </button>
+          <button type="button" class="btn-lab-status-action"
+            data-tanggal="${escapeHtml(s.tanggal || activeDate)}"
+            data-room="${escapeHtml(roomName)}"
+            data-jam="${escapeHtml(s.jam || startTimeStr)}"
+            data-mk="${escapeHtml(s.nama_mk || '')}"
+            data-kelas="${escapeHtml(s.kelas || '')}"
+            data-status="tutup"
+            onclick="window.onLabStatusBtnClick(this)"
+            style="background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 0.8em; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Tandai sudah ditutup / selesai">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Tutup</span>
+          </button>
+        `;
+      }
+
+      const operationalStatusHtml = `
+        <div class="room-card-status-bar" style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.76em; color: var(--text-muted); font-weight: 600;">Status Lab:</span>
+            ${opStatusBadge}
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            ${opActionBtns}
+          </div>
+        </div>
+      `;
+
       return `
         <div class="room-detail-card ${cardStatusClass}">
           <div class="room-card-header">
@@ -6104,6 +6202,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
           </div>
 
+          ${operationalStatusHtml}
           ${aslabRowHtml}
         </div>
       `;
@@ -6111,6 +6210,77 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   }
 
   document.getElementById('room-detail-modal').classList.add('open');
+};
+
+window.onLabStatusBtnClick = function (btn) {
+  if (!btn || !btn.dataset) return;
+  const tanggal = btn.dataset.tanggal;
+  const roomName = btn.dataset.room;
+  const jam = btn.dataset.jam;
+  const namaMk = btn.dataset.mk;
+  const kelas = btn.dataset.kelas;
+  const targetStatus = btn.dataset.status;
+  window.toggleLabSessionStatus(tanggal, roomName, jam, namaMk, kelas, targetStatus);
+};
+
+window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, kelas, targetStatus) {
+  try {
+    const statusText = targetStatus === 'buka' ? 'dibuka 🟢' : 'ditutup 🔒';
+    if (typeof showToast === 'function') {
+      showToast(`Menyimpan status: lab ${statusText}...`, 'info');
+    }
+
+    const payload = {
+      tanggal: tanggal,
+      nama_ruangan: roomName,
+      jam: jam,
+      nama_mk: namaMk,
+      kelas: kelas,
+      status_lab: targetStatus,
+      diubah_oleh: 'Aslab (Web)'
+    };
+
+    const res = await fetch('/api/status-lab', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      const cleanJam = (jam || '').substring(0, 5);
+      const cleanR = (roomName || '').replace(/\(.*?\)/, '').trim().toLowerCase();
+
+      if (Array.isArray(allJadwal)) {
+        allJadwal.forEach(j => {
+          const jJam = (j.jam || '').substring(0, 5);
+          const jRoom = (j.nama_ruangan || '').toLowerCase();
+          if (j.tanggal === tanggal && jJam === cleanJam && jRoom.includes(cleanR)) {
+            j.status_lab = targetStatus;
+            j.status_lab_oleh = 'Aslab (Web)';
+            j.status_lab_waktu = data.waktu || new Date().toTimeString().substring(0, 5);
+          }
+        });
+      }
+
+      if (typeof window.showRoomDetail === 'function') {
+        window.showRoomDetail(roomName, null, tanggal);
+      }
+
+      if (typeof showToast === 'function') {
+        showToast(`Berhasil: ${roomName} telah ${statusText}`, 'success');
+      }
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(data.message || 'Gagal mengubah status lab', 'error');
+      }
+    }
+  } catch (err) {
+    console.error('Error toggleLabSessionStatus:', err);
+    if (typeof showToast === 'function') {
+      showToast('Terjadi kendala saat memperbarui status', 'error');
+    }
+  }
 };
 
 const roomModal = document.getElementById('room-detail-modal');
