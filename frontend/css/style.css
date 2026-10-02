@@ -1950,6 +1950,19 @@ body.modal-open {
   display: block;
   animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.custom-select-group-header {
+  padding: 8px 12px 4px;
+  font-size: 0.74em;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  user-select: none;
+}
+.custom-select-wrapper:has(.custom-select-dropdown.open) {
+  z-index: 10060;
+}
 
 /* ─── Switch Toggle ─── */
 /* ─── Loading Skeleton ─── */

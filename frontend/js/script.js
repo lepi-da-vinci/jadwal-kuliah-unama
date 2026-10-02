@@ -358,15 +358,20 @@ function selectAslabItem(element, value) {
 function toggleCustomSelect(id, event) {
   event.stopPropagation();
   const dropdown = document.getElementById(`dropdown-${id}`);
+  if (!dropdown) return;
   const isCurrentlyOpen = dropdown.classList.contains('open');
 
   // Close all other open dropdowns
   document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
     el.classList.remove('open');
+    const w = el.closest('.custom-select-wrapper');
+    if (w) w.style.zIndex = '';
   });
 
   if (!isCurrentlyOpen) {
     dropdown.classList.add('open');
+    const wrapper = dropdown.closest('.custom-select-wrapper');
+    if (wrapper) wrapper.style.zIndex = '10060';
   }
 }
 
@@ -390,6 +395,8 @@ function selectCustomOption(id, value, label) {
   // Close the dropdown
   const dropdown = document.getElementById(`dropdown-${id}`);
   if (dropdown) dropdown.classList.remove('open');
+  const wrapper = dropdown ? dropdown.closest('.custom-select-wrapper') : null;
+  if (wrapper) wrapper.style.zIndex = '';
 
   // Trigger applyFilters or update dynamic options if necessary
   if (id === 'kampus' || id === 'kategori-ruang' || id === 'waktu' || id === 'metode') {
@@ -403,6 +410,8 @@ function selectCustomOption(id, value, label) {
 document.addEventListener('click', (event) => {
   document.querySelectorAll('.custom-select-dropdown.open').forEach(el => {
     el.classList.remove('open');
+    const w = el.closest('.custom-select-wrapper');
+    if (w) w.style.zIndex = '';
   });
 });
 
@@ -4619,7 +4628,15 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         if (aslabSelect) {
           try {
             const savedAslab = localStorage.getItem('last_aslab_name');
-            if (savedAslab) aslabSelect.value = savedAslab;
+            if (savedAslab) {
+              const item = document.querySelector(`#dropdown-absensi-nama-aslab .aslab-list-item[data-value="${savedAslab}"]`);
+              const label = item ? item.innerText.replace(/✓$/, '').trim() : savedAslab;
+              if (typeof window.setAbsensiCustomValue === 'function') {
+                window.setAbsensiCustomValue('absensi-nama-aslab', savedAslab, label);
+              } else {
+                aslabSelect.value = savedAslab;
+              }
+            }
           } catch (e) {}
         }
 
@@ -5070,23 +5087,78 @@ window.switchAbsensiTab = function (tab) {
   }
 };
 
-window.handleAslabSelectedChange = function () {
-  const aslabSelect = document.getElementById('absensi-nama-aslab');
-  const labSelect = document.getElementById('absensi-nomor-lab');
-  if (!aslabSelect) return;
-  const val = aslabSelect.value.trim();
+window.setAbsensiCustomValue = function (type, value, label) {
+  const hiddenInput = document.getElementById(type);
+  if (hiddenInput) hiddenInput.value = (value !== undefined && value !== null) ? value : '';
+
+  const labelEl = document.getElementById(`label-${type}`);
+  if (labelEl) {
+    if (label !== undefined && label !== null) {
+      labelEl.innerText = label;
+    } else {
+      const item = document.querySelector(`#dropdown-${type} .aslab-list-item[data-value="${value}"]`);
+      if (item) {
+        labelEl.innerText = item.innerText.replace(/✓$/, '').trim();
+      } else {
+        labelEl.innerText = value || '-- Pilih --';
+      }
+    }
+  }
+
+  const items = document.querySelectorAll(`#dropdown-${type} .aslab-list-item`);
+  items.forEach(item => {
+    const val = item.getAttribute('data-value');
+    if (val !== null && val === String(value)) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+};
+
+window.selectAbsensiCustomOption = function (type, value, label, extra) {
+  window.setAbsensiCustomValue(type, value, label);
+
+  const dropdown = document.getElementById(`dropdown-${type}`);
+  if (dropdown) dropdown.classList.remove('open');
+
+  const wrapper = dropdown ? dropdown.closest('.custom-select-wrapper') : null;
+  if (wrapper) wrapper.style.zIndex = '';
+
+  if (type === 'absensi-nomor-lab') {
+    window.handleAbsensiDateOrLabChange();
+  } else if (type === 'absensi-sesi-kelas') {
+    window.handleAbsensiSessionSelected();
+  } else if (type === 'absensi-status-select') {
+    window.syncAbsensiStatusRadios(value);
+  } else if (type === 'absensi-nama-aslab') {
+    window.handleAslabSelectedChange(value, extra);
+  }
+};
+
+window.handleAslabSelectedChange = function (overrideVal, overrideKampus) {
+  const aslabInput = document.getElementById('absensi-nama-aslab');
+  const labInput = document.getElementById('absensi-nomor-lab');
+  if (!aslabInput) return;
+  const val = (overrideVal !== undefined ? overrideVal : aslabInput.value).trim();
   if (val) {
     try { localStorage.setItem('last_aslab_name', val); } catch (e) {}
   }
-  if (!labSelect) return;
-  const opt = aslabSelect.options[aslabSelect.selectedIndex];
-  if (!opt || !opt.value) return;
-  const kampus = opt.getAttribute('data-kampus');
-  if (kampus === 'Kobar' && (!labSelect.value || labSelect.value.includes('Thehok'))) {
-    labSelect.value = '1.5 Kobar';
+  if (!labInput) return;
+
+  let kampus = overrideKampus;
+  if (!kampus) {
+    const item = document.querySelector(`#dropdown-absensi-nama-aslab .aslab-list-item[data-value="${val}"]`);
+    if (item) kampus = item.getAttribute('data-kampus');
+  }
+
+  if (!kampus) return;
+  const currentLabVal = labInput.value || '';
+  if (kampus === 'Kobar' && (!currentLabVal || currentLabVal.includes('Thehok'))) {
+    window.setAbsensiCustomValue('absensi-nomor-lab', '1.5 Kobar', '1.5 Kobar');
     window.handleAbsensiDateOrLabChange();
-  } else if (kampus === 'Thehok' && (!labSelect.value || labSelect.value.includes('Kobar'))) {
-    labSelect.value = '1.3 Thehok';
+  } else if (kampus === 'Thehok' && (!currentLabVal || currentLabVal.includes('Kobar'))) {
+    window.setAbsensiCustomValue('absensi-nomor-lab', '1.3 Thehok', '1.3 Thehok');
     window.handleAbsensiDateOrLabChange();
   }
 };
@@ -5104,6 +5176,8 @@ window.handleAbsensiDateOrLabChange = async function () {
   const sesiSelect = document.getElementById('absensi-sesi-kelas');
   const countBadge = document.getElementById('absensi-sesi-count');
   const banner = document.getElementById('absensi-status-banner');
+  const dropdownSesi = document.getElementById('dropdown-absensi-sesi-kelas');
+  const labelSesi = document.getElementById('label-absensi-sesi-kelas');
 
   if (!labSelect || !tglInput || !sesiSelect) return;
 
@@ -5114,20 +5188,25 @@ window.handleAbsensiDateOrLabChange = async function () {
   currentSelectedSession = null;
 
   if (!nomorLab) {
-    sesiSelect.innerHTML = '<option value="">-- Pilih Lab Terlebih Dahulu --</option>';
+    if (dropdownSesi) dropdownSesi.innerHTML = '<div class="aslab-list-item disabled" style="opacity:0.6; cursor:default;">-- Pilih Lab Terlebih Dahulu --</div>';
+    if (labelSesi) labelSesi.innerText = '-- Pilih Lab Terlebih Dahulu --';
+    sesiSelect.value = '';
     if (countBadge) countBadge.innerText = '';
     if (banner) banner.style.display = 'none';
     return;
   }
 
   if (!tanggal) {
-    sesiSelect.innerHTML = '<option value="">-- Tentukan Tanggal Terlebih Dahulu --</option>';
+    if (dropdownSesi) dropdownSesi.innerHTML = '<div class="aslab-list-item disabled" style="opacity:0.6; cursor:default;">-- Tentukan Tanggal Terlebih Dahulu --</div>';
+    if (labelSesi) labelSesi.innerText = '-- Tentukan Tanggal Terlebih Dahulu --';
+    sesiSelect.value = '';
     if (countBadge) countBadge.innerText = '';
     if (banner) banner.style.display = 'none';
     return;
   }
 
-  sesiSelect.innerHTML = '<option value="">⏳ Memuat sesi kelas & status absensi...</option>';
+  if (dropdownSesi) dropdownSesi.innerHTML = '<div class="aslab-list-item disabled" style="opacity:0.7; cursor:wait;">⏳ Memuat sesi kelas & status absensi...</div>';
+  if (labelSesi) labelSesi.innerText = '⏳ Memuat sesi kelas...';
   if (banner) banner.style.display = 'none';
 
   let sessions = [];
@@ -5261,32 +5340,55 @@ window.handleAbsensiDateOrLabChange = async function () {
   }
 
   if (sessions.length === 0) {
-    sesiSelect.innerHTML = `
-      <option value="">(Tidak ada jadwal kuliah resmi di lab ini)</option>
-      <option value="manual">➕ Input Manual / Kelas Tambahan</option>
-    `;
-    sesiSelect.value = "manual";
+    if (dropdownSesi) {
+      dropdownSesi.innerHTML = `
+        <div class="aslab-list-item disabled" style="opacity: 0.6; cursor: default;">(Tidak ada jadwal kuliah resmi di lab ini)</div>
+        <div class="aslab-list-item active" data-value="manual" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', 'manual', '➕ Input Manual / Kelas Tambahan')" style="font-weight: 600; color: var(--primary);">➕ Input Manual / Kelas Tambahan</div>
+      `;
+    }
+    window.setAbsensiCustomValue('absensi-sesi-kelas', 'manual', '➕ Input Manual / Kelas Tambahan');
     window.handleAbsensiSessionSelected();
     return;
   }
 
-  let html = `<option value="">-- Pilih Sesi Jam Kelas (${sessions.length} Sesi Terjadwal) --</option>`;
+  let html = `<div class="aslab-list-item" data-value="" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', '', '-- Pilih Sesi Jam Kelas (${sessions.length} Sesi Terjadwal) --')">-- Pilih Sesi Jam Kelas (${sessions.length} Sesi Terjadwal) --</div>`;
   sessions.forEach((s, idx) => {
     const isDone = s.is_diabsen;
-    const tag = isDone ? `[✅ Sudah Diabsen: ${s.nama_aslab || 'Aslab'}]` : `[⏳ Belum Diabsen]`;
-    const label = `${s.jam ? s.jam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${tag}`;
-    html += `<option value="${idx}">${safeEscapeAbsensi(label)}</option>`;
-  });
-  html += `<option value="manual">➕ Input Manual / Jam Lain...</option>`;
+    const displayShort = `${s.jam ? s.jam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
 
-  sesiSelect.innerHTML = html;
+    html += `
+      <div class="aslab-list-item" data-value="${idx}" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', '${idx}', '${safeEscapeAbsensi(displayShort).replace(/'/g, "\\'")}')" style="display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; border-bottom: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+          <span style="font-weight: 700; font-size: 0.93em; color: var(--text);">${safeEscapeAbsensi(s.jam || '')} • ${safeEscapeAbsensi(s.nama_mk || '-')}</span>
+          <span class="badge ${isDone ? 'badge-tm' : 'badge-batal'}" style="font-size: 0.72em; padding: 2px 7px; border-radius: 6px;">
+            ${isDone ? '✅ Sudah Diabsen' : '⏳ Belum'}
+          </span>
+        </div>
+        <div style="font-size: 0.8em; opacity: 0.85; display: flex; flex-wrap: wrap; gap: 8px;">
+          <span>Kelas: <b>${safeEscapeAbsensi(s.kelas || '-')}</b></span>
+          ${isDone ? `<span>• Aslab: <b style="color:var(--primary);">${safeEscapeAbsensi(s.nama_aslab || 'Aslab')}</b></span>` : ''}
+          ${s.nama_dosen ? `<span>• Dosen: ${safeEscapeAbsensi(s.nama_dosen)}</span>` : ''}
+        </div>
+      </div>
+    `;
+  });
+  html += `
+    <div class="aslab-list-item" data-value="manual" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', 'manual', '➕ Input Manual / Jam Lain...')" style="font-weight: 600; color: var(--primary);">
+      ➕ Input Manual / Jam Lain...
+    </div>
+  `;
+
+  if (dropdownSesi) dropdownSesi.innerHTML = html;
 
   // Auto-pilih sesi yang belum diabsen pertama, atau sesi ke-0
   let autoSelectIdx = sessions.findIndex(s => !s.is_diabsen);
   if (autoSelectIdx === -1 && sessions.length > 0) autoSelectIdx = 0;
 
   if (autoSelectIdx !== -1) {
-    sesiSelect.value = String(autoSelectIdx);
+    const s = sessions[autoSelectIdx];
+    const isDone = s.is_diabsen;
+    const displayShort = `${s.jam ? s.jam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
+    window.setAbsensiCustomValue('absensi-sesi-kelas', String(autoSelectIdx), displayShort);
     window.handleAbsensiSessionSelected();
   }
 };
@@ -5297,8 +5399,6 @@ window.handleAbsensiSessionSelected = function () {
   const dosenInput = document.getElementById('absensi-nama-dosen');
   const mkInput = document.getElementById('absensi-nama-mk');
   const kelasInput = document.getElementById('absensi-kode-kelas');
-  const jamSelect = document.getElementById('absensi-jam-masuk');
-  const statusSelect = document.getElementById('absensi-status-select');
   const ketInput = document.getElementById('absensi-keterangan');
   const btnSubmitText = document.getElementById('btn-submit-absensi-text');
 
@@ -5344,23 +5444,24 @@ window.handleAbsensiSessionSelected = function () {
   if (kelasInput) kelasInput.value = s.kelas || '';
 
   // Sinkronisasi Jam Masuk
-  if (jamSelect && s.jam) {
+  if (s.jam) {
     const rawJam = String(s.jam).replace('WIB', '').replace('.', ':').trim();
     const startStr = rawJam.split('-')[0].trim();
     const hourMatch = startStr.match(/(\d{1,2})/);
     if (hourMatch) {
       const hourVal = hourMatch[1].padStart(2, '0');
-      for (const opt of jamSelect.options) {
-        if (opt.value.startsWith(hourVal)) {
-          jamSelect.value = opt.value;
-          break;
-        }
+      const items = Array.from(document.querySelectorAll('#dropdown-absensi-jam-masuk .aslab-list-item'));
+      const matchedItem = items.find(el => (el.getAttribute('data-value') || '').startsWith(hourVal));
+      if (matchedItem) {
+        const val = matchedItem.getAttribute('data-value');
+        window.setAbsensiCustomValue('absensi-jam-masuk', val, val);
       }
     }
   }
 
   // Sinkronisasi Status Perkuliahan
   let statusVal = 'Tatap Muka';
+  let statusLabel = '🟢 Tatap Muka';
   if (s.absensi && s.absensi.status_perkuliahan) {
     statusVal = s.absensi.status_perkuliahan;
   } else {
@@ -5368,8 +5469,10 @@ window.handleAbsensiSessionSelected = function () {
     if (metode === 'OL' || /online/i.test(s.status_jadwal || '')) statusVal = 'Online';
     else if (metode === 'CC' || /batal|cancel/i.test(s.status_jadwal || '')) statusVal = 'Cancel';
   }
+  if (statusVal === 'Online') statusLabel = '🔵 Online';
+  else if (statusVal === 'Cancel') statusLabel = '🔴 Cancel';
 
-  if (statusSelect) statusSelect.value = statusVal;
+  window.setAbsensiCustomValue('absensi-status-select', statusVal, statusLabel);
   window.syncAbsensiStatusRadios(statusVal);
 
   if (ketInput) {
@@ -5454,12 +5557,14 @@ window.submitAbsensiAslabAction = async function () {
   }
   if (!nomorLab) {
     alert("Harap pilih Nomor Lab!");
-    labSelect?.focus();
+    const trig = document.querySelector('#wrapper-absensi-nomor-lab .custom-select-trigger');
+    trig?.focus();
     return;
   }
   if (!namaAslab) {
     alert("Harap pilih Nama Asisten Lab yang bertugas!");
-    aslabSelect?.focus();
+    const trig = document.querySelector('#wrapper-absensi-nama-aslab .custom-select-trigger');
+    trig?.focus();
     return;
   }
   if (!namaDosen) {
@@ -5487,8 +5592,11 @@ window.submitAbsensiAslabAction = async function () {
 
   try { localStorage.setItem('last_aslab_name', namaAslab); } catch (e) {}
 
-  const selectedOpt = aslabSelect.options[aslabSelect.selectedIndex];
-  let kampus = selectedOpt ? selectedOpt.getAttribute('data-kampus') : '';
+  let kampus = '';
+  const aslabActiveItem = document.querySelector(`#dropdown-absensi-nama-aslab .aslab-list-item[data-value="${namaAslab}"]`);
+  if (aslabActiveItem) {
+    kampus = aslabActiveItem.getAttribute('data-kampus') || '';
+  }
   if (!kampus) {
     kampus = (nomorLab.includes('Thehok') || nomorLab.includes('S2')) ? 'Thehok' : 'Kobar';
   }
