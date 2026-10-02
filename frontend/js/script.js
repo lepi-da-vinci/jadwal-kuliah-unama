@@ -5888,8 +5888,18 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
   const titleEl = document.getElementById('room-detail-title');
   const cleanCamp = formatCampusName(kampusStr || getRoomCampus(roomName));
+  const roomCampus = getRoomCampus(roomName, kampusStr || '');
+  const isKobarRoom = roomCampus.includes('Kobar');
+  const campusLabel = cleanCamp || (isKobarRoom ? 'Kobar' : 'Thehok');
+
   if (titleEl) {
-    titleEl.innerHTML = `${formatRoomNameHtml(roomName)} ${cleanCamp ? `<span style="font-weight:normal;opacity:0.85;">(${escapeHtml(cleanCamp)})</span>` : ''}`;
+    titleEl.innerHTML = `
+      <span>${formatRoomNameHtml(roomName)}</span>
+      <span class="badge" style="font-size: 0.65em; font-weight: 700; padding: 4px 11px; border-radius: var(--radius-full); background: rgba(99, 102, 241, 0.12); color: var(--primary); border: 1px solid rgba(99, 102, 241, 0.25); display: inline-flex; align-items: center; gap: 5px; vertical-align: middle;">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        <span>Kampus ${escapeHtml(campusLabel)}</span>
+      </span>
+    `;
   }
 
   const badgeEl = document.getElementById('room-detail-badge');
@@ -5898,15 +5908,19 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     badgeEl.style.display = 'inline-block';
   }
 
-  const roomCampus = getRoomCampus(roomName, kampusStr || '');
-  const isKobarRoom = roomCampus.includes('Kobar');
-
   const subdescEl = document.getElementById('room-detail-subdesc');
   if (subdescEl) {
-    const hoursNote = isKobarRoom
-      ? 'Operasional 08:00 - 17:00 (Kobar • Tidak ada kelas malam)'
-      : 'Operasional 08:00 - 21:00 (Thehok • Tersedia kelas malam mulai 17:00)';
-    subdescEl.innerHTML = `Daftar perkuliahan tanggal ${formatTanggalIndo(activeDate)}<br><small style="color:var(--text-muted);font-weight:600;">${hoursNote}</small>`;
+    const hoursText = isKobarRoom ? '08:00 - 17:00 WIB' : '08:00 - 21:00 WIB';
+    subdescEl.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 0.88em; color: var(--text-muted); font-weight: 500;">
+        <span style="font-weight: 700; color: var(--text-dark);">${escapeHtml(formatTanggalIndo(activeDate))}</span>
+        <span style="opacity: 0.35;">•</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Operasional ${hoursText}</span>
+        </span>
+      </div>
+    `;
   }
 
   const listContainer = document.getElementById('room-detail-list');
@@ -6191,10 +6205,6 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             <div class="room-card-chip">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
               <span>Dosen: <strong>${escapeHtml(s.nama_dosen || '-')}</strong></span>
-            </div>
-            <div class="room-card-chip">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              <span>Lokasi: <strong>${escapeHtml(kampusText)}</strong></span>
             </div>
             <div class="room-card-chip">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
