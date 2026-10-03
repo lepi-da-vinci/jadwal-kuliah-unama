@@ -1734,26 +1734,10 @@ def check_and_broadcast_server_url_change(force_broadcast: bool = False):
             if not target_wa:
                 continue
 
-            nama = rec.get('nama_aslab') or 'Asisten'
-            raw_role = (rec.get('role') or '').lower()
-            if not rec.get('id_ruangan') and not rec.get('kampus_tugas'):
-                role_label = 'ADMIN' if 'admin' in raw_role or 'admin' in nama.lower() else ('VIEWER' if 'viewer' in raw_role or 'viewer' in nama.lower() else 'ADMIN/VIEWER')
-            elif raw_role == 'asmot':
-                role_label = 'ASMOT'
-            else:
-                role_label = 'ASLAB'
-
-            old_info = f"\n*Link Sebelumnya:*\n~{prev_url}~\n" if prev_url else ""
             pesan_wa = (
-                f"*PEMBERITAHUAN SERVER JADWAL UNAMA*\n"
-                f"_Pembaruan Link Akses Web Otomatis_\n\n"
-                f"Halo *{nama}* ({role_label}), server jadwal kuliah baru saja online / restart (sebelumnya mati lampu atau koneksi terputus).\n\n"
-                f"*Link Server Baru:*\n"
-                f"{current_url}\n"
-                f"{old_info}\n"
-                f"*Waktu Pembaruan:*\n"
-                f"{waktu_str}\n\n"
-                f"_Silakan klik link di atas untuk membuka web jadwal kuliah UNAMA dari HP._"
+                f"*Server Jadwal UNAMA Restart*\n\n"
+                f"Server jadwal kuliah baru saja restart. Silakan akses melalui link baru berikut:\n"
+                f"{current_url}"
             )
 
             try:
