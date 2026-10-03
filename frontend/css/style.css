@@ -728,6 +728,15 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   min-height: 100%;
 }
 
+/* ─── Modal Setting & Absensi Aslab (Always on top of all modal layers) ─── */
+#test-wa-modal {
+  z-index: 2147483648 !important;
+}
+#test-wa-modal .modal-box,
+#test-wa-modal .setting-modal-box {
+  z-index: 2147483649 !important;
+}
+
 /* ─── Fullscreen Filter, Info & Detail Modal Dedicated Styles ─── */
 #modal-fs-filter,
 #room-detail-modal,

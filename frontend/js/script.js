@@ -4052,6 +4052,7 @@ function closeSettingModal(keepAdminSession = false, skipAnimation = false) {
     finalizeClose();
   }
 }
+window.closeSettingModal = closeSettingModal;
 
 /**
  * Fitur Gesture Tarik / Swipe-to-Dismiss untuk Modal Setting (Bottom Sheet di HP & Desktop)
@@ -5436,9 +5437,21 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
     targetSession = window._currentDetailRoom.schedules[sessionIdx] || null;
   }
 
-  // Tutup modal detail ruangan
+  // Tutup modal detail ruangan secara tuntas dan hilangkan inline display
+  if (typeof window.closeRoomDetailModal === 'function') {
+    window.closeRoomDetailModal(true);
+  }
   const roomModal = document.getElementById('room-detail-modal');
-  if (roomModal) roomModal.classList.remove('open');
+  if (roomModal) {
+    roomModal.classList.remove('open');
+    roomModal.style.display = 'none';
+    const rBox = roomModal.querySelector('.modal-box');
+    if (rBox) {
+      rBox.style.removeProperty('transform');
+      rBox.style.removeProperty('transition');
+      rBox.style.removeProperty('opacity');
+    }
+  }
 
   // Buka test-wa-modal di tab Absensi
   const settingModal = document.getElementById('test-wa-modal');
