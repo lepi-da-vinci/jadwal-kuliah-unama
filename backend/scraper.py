@@ -1268,17 +1268,18 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                 SELECT id_aslab, nama_aslab, no_wa, wa_lid
                 FROM asisten_lab
                 WHERE id_ruangan = %s 
-                  AND no_wa IS NOT NULL 
-                  AND no_wa != '' 
-                  AND no_wa NOT LIKE '%@lid%' 
-                  AND no_wa NOT LIKE '%lid%'
+                  AND ((no_wa IS NOT NULL AND no_wa != '' AND no_wa != '-')
+                    OR (wa_lid IS NOT NULL AND wa_lid != ''))
             """, (id_ruangan,))
             aslab_rows = cursor.fetchall()
 
             if not aslab_rows:
                 aslab_targets = [(None, 'Sistem (Tanpa Aslab)', '-')]
             else:
-                aslab_targets = [(row[0], row[1], row[2]) for row in aslab_rows]
+                aslab_targets = []
+                for row in aslab_rows:
+                    t_target = row[3] if (row[3] and '@lid' in str(row[3])) else (row[2] or row[3] or '-')
+                    aslab_targets.append((row[0], row[1], t_target))
 
             for id_aslab, nama_aslab, no_wa in aslab_targets:
                 clean_no_wa = str(no_wa).strip()

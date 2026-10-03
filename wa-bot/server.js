@@ -200,14 +200,21 @@ app.post('/send', async (req, res) => {
     }
     
     let jid = target;
-    // Jika belum mengandung '@', format sebagai nomor standar
+    // Jika belum mengandung '@', format sebagai nomor standar atau lid
     if (!target.includes('@')) {
         // Hapus karakter non-angka
         target = target.replace(/\D/g, '');
         if (target.startsWith('0')) {
             target = '62' + target.substring(1);
+            jid = target + '@s.whatsapp.net';
+        } else if (target.startsWith('62')) {
+            jid = target + '@s.whatsapp.net';
+        } else if (target.length >= 14) {
+            // Identifier WhatsApp LID (misal akun privasi tanpa nomor HP publik)
+            jid = target + '@lid';
+        } else {
+            jid = target + '@s.whatsapp.net';
         }
-        jid = target + '@s.whatsapp.net';
     }
     
     if (!sock || !sock.user) {
