@@ -6753,20 +6753,56 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       }
       if (!kampusText) kampusText = 'UNAMA';
 
+      // Hanya tampilkan tombol dan aksi absensi jika ruangan adalah Laboratorium (bukan kelas teori / asmot)
+      const timeBadgeHtml = isLabEntity ? `
+        <div class="room-card-time clickable-time" role="button" tabindex="0"
+          onclick="window.openAbsensiFromDetailByIndex(${idx})"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+          title="Klik jam untuk isi Absensi Sesi Ini"
+          aria-label="Isi Absensi untuk ${escapeHtml(s.nama_mk || '')} (${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
+          <svg class="time-absen-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity: 0.6; margin-left: 2px; flex-shrink: 0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </div>
+      ` : `
+        <div class="room-card-time">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
+        </div>
+      `;
+
+      const titleHtml = isLabEntity ? `
+        <h4 class="room-card-title clickable-title"
+          role="button"
+          tabindex="0"
+          onclick="window.openAbsensiFromDetailByIndex(${idx})"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+          title="Klik judul mata kuliah untuk isi Absensi kelas ini">
+          <span>${escapeHtml(s.nama_mk)}</span>
+          <svg class="title-absen-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity: 0.6; margin-left: 4px; vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </h4>
+      ` : `
+        <h4 class="room-card-title">${escapeHtml(s.nama_mk)}</h4>
+      `;
+
+      const absenBtnHtml = isLabEntity ? `
+        <div style="margin-top: 6px;">
+          <button type="button" class="btn-room-card-absen"
+            onclick="event.stopPropagation(); window.openAbsensiFromDetailByIndex(${idx})"
+            title="Isi Absensi Asisten Lab untuk Sesi Ini"
+            aria-label="Isi Absensi untuk ${escapeHtml(s.nama_mk || '')}">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            <span>Isi Absensi Aslab</span>
+          </button>
+        </div>
+      ` : '';
+
       return `
         <div class="room-detail-card ${cardStatusClass}">
           <div class="room-card-header">
             <div class="room-card-session-group">
               <span class="room-session-badge">Sesi ${idx + 1}</span>
-              <div class="room-card-time clickable-time" role="button" tabindex="0"
-                onclick="window.openAbsensiFromDetailByIndex(${idx})"
-                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
-                title="Klik jam untuk isi Absensi Sesi Ini"
-                aria-label="Isi Absensi untuk ${escapeHtml(s.nama_mk || '')} (${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB)">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
-                <svg class="time-absen-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity: 0.6; margin-left: 2px; flex-shrink: 0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-              </div>
+              ${timeBadgeHtml}
               <span class="room-card-duration-chip">${durationMins} Menit</span>
             </div>
             <div class="room-card-badges-right">
@@ -6778,15 +6814,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 4px;">
-            <h4 class="room-card-title clickable-title"
-              role="button"
-              tabindex="0"
-              onclick="window.openAbsensiFromDetailByIndex(${idx})"
-              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
-              title="Klik judul mata kuliah untuk isi Absensi kelas ini">
-              <span>${escapeHtml(s.nama_mk)}</span>
-              <svg class="title-absen-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity: 0.6; margin-left: 4px; vertical-align: middle;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-            </h4>
+            ${titleHtml}
             ${s.kode_mk ? `<span style="font-size: 0.78em; font-family: monospace; font-weight: 700; color: var(--primary); background: var(--primary-bg); padding: 2px 8px; border-radius: 6px; width: fit-content;">Kode: ${escapeHtml(s.kode_mk)}</span>` : ''}
           </div>
 
@@ -6805,23 +6833,30 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
           </div>
 
-          <div style="margin-top: 6px;">
-            <button type="button" class="btn-room-card-absen"
-              onclick="event.stopPropagation(); window.openAbsensiFromDetailByIndex(${idx})"
-              title="Isi Absensi Asisten Lab untuk Sesi Ini"
-              aria-label="Isi Absensi untuk ${escapeHtml(s.nama_mk || '')}">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-              <span>Isi Absensi Aslab</span>
-            </button>
-          </div>
-
+          ${absenBtnHtml}
           ${aslabRowHtml}
         </div>
       `;
     }).join('');
   }
 
-  document.getElementById('room-detail-modal').classList.add('open');
+  const roomModalEl = document.getElementById('room-detail-modal');
+  if (roomModalEl) {
+    const boxEl = roomModalEl.querySelector('.modal-box');
+    if (boxEl) {
+      boxEl.style.removeProperty('transform');
+      boxEl.style.removeProperty('transition');
+      boxEl.style.removeProperty('opacity');
+    }
+    roomModalEl.style.removeProperty('background-color');
+    roomModalEl.style.removeProperty('transition');
+    roomModalEl.style.display = 'flex';
+    roomModalEl.classList.add('open');
+
+    if (typeof window.initRoomDetailDragToDismiss === 'function') {
+      window.initRoomDetailDragToDismiss();
+    }
+  }
 };
 
 window.onHeaderLabStatusClick = function (targetStatus) {
@@ -7001,10 +7036,252 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
   }
 };
 
+// Animasi Menutup & Swipe-to-Dismiss untuk Modal Detail Ruangan
+window.closeRoomDetailModal = function (quick = false, fromDrag = false) {
+  const modal = document.getElementById('room-detail-modal');
+  if (!modal) return;
+  const modalBox = modal.querySelector('.modal-box');
+
+  const finalizeClose = () => {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+    if (modalBox) {
+      modalBox.style.removeProperty('transform');
+      modalBox.style.removeProperty('transition');
+      modalBox.style.removeProperty('opacity');
+    }
+    modal.style.removeProperty('background-color');
+    modal.style.removeProperty('transition');
+  };
+
+  if (!quick && !fromDrag && modalBox && modal.classList.contains('open')) {
+    modalBox.style.setProperty('transition', 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease', 'important');
+    modal.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+    modalBox.style.setProperty('transform', 'translateY(110%) scale(0.96)', 'important');
+    modal.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+    setTimeout(finalizeClose, 220);
+  } else {
+    finalizeClose();
+  }
+};
+
+window.initRoomDetailDragToDismiss = function () {
+  const modalOverlay = document.getElementById('room-detail-modal');
+  if (!modalOverlay) return;
+
+  const modalBox = modalOverlay.querySelector('.modal-box');
+  const dragHandle = document.getElementById('room-detail-drag-handle');
+  if (!modalBox || !dragHandle) return;
+
+  if (dragHandle.dataset.dragInitialized === 'true') return;
+  dragHandle.dataset.dragInitialized = 'true';
+
+  let isDragging = false;
+  let startY = 0;
+  let currentY = 0;
+  let startTime = 0;
+  let activePointerId = null;
+
+  const pillBar = dragHandle.querySelector('.modal-drag-handle-bar');
+  const hintPill = document.getElementById('room-detail-drag-hint');
+  const hintText = hintPill ? hintPill.querySelector('.hint-text') : null;
+
+  function resetBoxStyles(animate = true) {
+    if (animate) {
+      modalBox.style.setProperty('transition', 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.28s ease', 'important');
+      if (pillBar) {
+        pillBar.style.setProperty('transition', 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, box-shadow 0.25s ease', 'important');
+      }
+    } else {
+      modalBox.style.removeProperty('transition');
+      modalOverlay.style.removeProperty('transition');
+      if (pillBar) pillBar.style.removeProperty('transition');
+    }
+    modalBox.style.removeProperty('transform');
+    modalBox.style.removeProperty('animation');
+    modalBox.classList.remove('dragging');
+    modalOverlay.style.removeProperty('background-color');
+    dragHandle.classList.remove('dragging');
+    if (pillBar) {
+      pillBar.style.removeProperty('width');
+      pillBar.style.removeProperty('background-color');
+      pillBar.style.removeProperty('box-shadow');
+    }
+    if (hintPill) hintPill.classList.remove('ready-to-close');
+    if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+
+    if (animate) {
+      setTimeout(() => {
+        modalBox.style.removeProperty('transition');
+        modalOverlay.style.removeProperty('transition');
+        if (pillBar) pillBar.style.removeProperty('transition');
+      }, 300);
+    }
+  }
+
+  function handleStart(clientY, pointerId, target) {
+    if (target && target.closest('button, input, select, a, [role="button"]:not(#room-detail-drag-handle)')) {
+      return false;
+    }
+
+    isDragging = true;
+    activePointerId = pointerId;
+    startY = clientY;
+    currentY = clientY;
+    startTime = Date.now();
+
+    modalBox.classList.add('dragging');
+    modalBox.style.setProperty('animation', 'none', 'important');
+    modalBox.style.setProperty('transition', 'none', 'important');
+    modalOverlay.style.setProperty('transition', 'none', 'important');
+    modalBox.style.setProperty('will-change', 'transform', 'important');
+    if (pillBar) pillBar.style.setProperty('transition', 'none', 'important');
+
+    dragHandle.classList.add('dragging');
+    if (hintPill) hintPill.classList.remove('ready-to-close');
+    if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+    return true;
+  }
+
+  function handleMove(clientY, e) {
+    if (!isDragging) return;
+    if (e && e.cancelable) {
+      try { e.preventDefault(); } catch (_) { }
+    }
+    currentY = clientY;
+    const deltaY = currentY - startY;
+
+    if (deltaY > 0) {
+      const ratio = Math.min(deltaY / 75, 1);
+      const scale = 1 - Math.min(deltaY / 1500, 0.035);
+      modalBox.style.setProperty('transform', `translateY(${deltaY}px) scale(${scale})`, 'important');
+
+      const progress = Math.min(deltaY / 400, 1);
+      const alpha = Math.max(0.1, 0.6 * (1 - progress * 0.75));
+      modalOverlay.style.setProperty('background-color', `rgba(15, 23, 42, ${alpha})`, 'important');
+
+      if (pillBar) {
+        const dynamicWidth = Math.min(74, 48 + ratio * 24);
+        pillBar.style.setProperty('width', `${dynamicWidth}px`, 'important');
+        pillBar.style.setProperty('background-color', 'var(--primary, #8b7cf6)', 'important');
+      }
+
+      if (deltaY >= 65) {
+        if (hintPill && !hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.add('ready-to-close');
+          if (hintText) hintText.innerText = 'Lepas untuk menutup';
+          if (pillBar) pillBar.style.setProperty('box-shadow', '0 0 16px rgba(139, 124, 246, 0.8)', 'important');
+        }
+      } else {
+        if (hintPill && hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.remove('ready-to-close');
+          if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+          if (pillBar) pillBar.style.removeProperty('box-shadow');
+        }
+      }
+    } else {
+      const damped = Math.max(-28, deltaY * 0.22);
+      modalBox.style.setProperty('transform', `translateY(${damped}px)`, 'important');
+      if (pillBar) pillBar.style.setProperty('width', '42px', 'important');
+      if (hintPill) hintPill.classList.remove('ready-to-close');
+    }
+  }
+
+  function handleEnd(target) {
+    if (!isDragging) return;
+    isDragging = false;
+    modalBox.style.removeProperty('will-change');
+    dragHandle.classList.remove('dragging');
+
+    const deltaY = currentY - startY;
+    const dt = Math.max(Date.now() - startTime, 1);
+    const velocity = deltaY / dt;
+
+    const isTapOnHandle = Math.abs(deltaY) < 8 && dt < 280 && Boolean(target && target.closest('#room-detail-drag-handle'));
+    const isSwipeDown = deltaY > 65 || (deltaY > 20 && velocity > 0.3);
+
+    if (isSwipeDown || isTapOnHandle) {
+      modalBox.style.setProperty('transition', 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+      modalBox.style.setProperty('transform', 'translateY(115%) scale(0.95)', 'important');
+      modalOverlay.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+
+      setTimeout(() => {
+        window.closeRoomDetailModal(false, true);
+        resetBoxStyles(false);
+      }, 230);
+    } else {
+      resetBoxStyles(true);
+    }
+  }
+
+  const targets = [dragHandle];
+  const headerContainer = document.getElementById('room-detail-header-container');
+  if (headerContainer) targets.push(headerContainer);
+
+  targets.forEach(el => {
+    el.style.touchAction = 'none';
+
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (!handleStart(e.clientY, e.pointerId, e.target)) return;
+
+      const onWindowPointerMove = (moveEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && moveEvt.pointerId !== activePointerId) return;
+        handleMove(moveEvt.clientY, moveEvt);
+      };
+
+      const onWindowPointerUp = (upEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && upEvt.pointerId !== activePointerId) return;
+        window.removeEventListener('pointermove', onWindowPointerMove);
+        window.removeEventListener('pointerup', onWindowPointerUp);
+        window.removeEventListener('pointercancel', onWindowPointerUp);
+        activePointerId = null;
+        handleEnd(upEvt.target);
+      };
+
+      window.addEventListener('pointermove', onWindowPointerMove, { passive: false });
+      window.addEventListener('pointerup', onWindowPointerUp);
+      window.addEventListener('pointercancel', onWindowPointerUp);
+    });
+
+    el.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      if (!handleStart(e.touches[0].clientY, 'touch', e.target)) return;
+
+      const onWindowTouchMove = (moveEvt) => {
+        if (!isDragging || !moveEvt.touches || moveEvt.touches.length !== 1) return;
+        handleMove(moveEvt.touches[0].clientY, moveEvt);
+      };
+
+      const onWindowTouchEnd = (endEvt) => {
+        window.removeEventListener('touchmove', onWindowTouchMove);
+        window.removeEventListener('touchend', onWindowTouchEnd);
+        window.removeEventListener('touchcancel', onWindowTouchEnd);
+        handleEnd(endEvt.target);
+      };
+
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+      window.addEventListener('touchend', onWindowTouchEnd);
+      window.addEventListener('touchcancel', onWindowTouchEnd);
+    }, { passive: false });
+  });
+
+  dragHandle.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      window.closeRoomDetailModal(false, false);
+    }
+  });
+};
+
 const roomModal = document.getElementById('room-detail-modal');
-document.getElementById('room-detail-close-btn').addEventListener('click', () => roomModal.classList.remove('open'));
-roomModal.addEventListener('click', (e) => { if (e.target === roomModal) roomModal.classList.remove('open'); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal.classList.contains('open')) roomModal.classList.remove('open'); });
+document.getElementById('room-detail-close-btn')?.addEventListener('click', () => window.closeRoomDetailModal(false));
+roomModal?.addEventListener('click', (e) => { if (e.target === roomModal) window.closeRoomDetailModal(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal?.classList.contains('open')) window.closeRoomDetailModal(false); });
 
 document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {
   // Tutup modal Data WA Aslab sementara untuk menampilkan simulasi notifikasi, status admin tetap aktif
@@ -11920,6 +12197,15 @@ window.openFullscreenInfoModal = function () {
   const modal = document.getElementById('modal-fs-info');
   if (!modal) return;
 
+  const modalBox = modal.querySelector('.modal-box');
+  if (modalBox) {
+    modalBox.style.removeProperty('transform');
+    modalBox.style.removeProperty('transition');
+    modalBox.style.removeProperty('opacity');
+  }
+  modal.style.removeProperty('background-color');
+  modal.style.removeProperty('transition');
+
   const liveWarnings = document.getElementById('live-warnings')?.innerHTML || '';
   const fsWarnings = document.getElementById('fs-live-warnings');
   if (fsWarnings) fsWarnings.innerHTML = liveWarnings;
@@ -11934,14 +12220,248 @@ window.openFullscreenInfoModal = function () {
 
   modal.style.display = 'flex';
   modal.classList.add('open');
+
+  if (typeof window.initFsInfoDragToDismiss === 'function') {
+    window.initFsInfoDragToDismiss();
+  }
 };
 
-window.closeFullscreenInfoModal = function () {
+window.closeFullscreenInfoModal = function (quick = false, fromDrag = false) {
   const modal = document.getElementById('modal-fs-info');
-  if (modal) {
+  if (!modal) return;
+  const modalBox = modal.querySelector('.modal-box');
+
+  const finalizeClose = () => {
     modal.style.display = 'none';
     modal.classList.remove('open');
+    if (modalBox) {
+      modalBox.style.removeProperty('transform');
+      modalBox.style.removeProperty('transition');
+      modalBox.style.removeProperty('opacity');
+    }
+    modal.style.removeProperty('background-color');
+    modal.style.removeProperty('transition');
+  };
+
+  if (!quick && !fromDrag && modalBox && modal.classList.contains('open')) {
+    modalBox.style.setProperty('transition', 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease', 'important');
+    modal.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+    modalBox.style.setProperty('transform', 'translateY(110%) scale(0.96)', 'important');
+    modal.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+    setTimeout(finalizeClose, 220);
+  } else {
+    finalizeClose();
   }
+};
+
+window.initFsInfoDragToDismiss = function () {
+  const modalOverlay = document.getElementById('modal-fs-info');
+  if (!modalOverlay) return;
+
+  const modalBox = modalOverlay.querySelector('.modal-box');
+  const dragHandle = document.getElementById('fs-info-drag-handle');
+  if (!modalBox || !dragHandle) return;
+
+  if (dragHandle.dataset.dragInitialized === 'true') return;
+  dragHandle.dataset.dragInitialized = 'true';
+
+  let isDragging = false;
+  let startY = 0;
+  let currentY = 0;
+  let startTime = 0;
+  let activePointerId = null;
+
+  const pillBar = dragHandle.querySelector('.modal-drag-handle-bar');
+  const hintPill = document.getElementById('fs-info-drag-hint');
+  const hintText = hintPill ? hintPill.querySelector('.hint-text') : null;
+
+  function resetBoxStyles(animate = true) {
+    if (animate) {
+      modalBox.style.setProperty('transition', 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.28s ease', 'important');
+      if (pillBar) {
+        pillBar.style.setProperty('transition', 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, box-shadow 0.25s ease', 'important');
+      }
+    } else {
+      modalBox.style.removeProperty('transition');
+      modalOverlay.style.removeProperty('transition');
+      if (pillBar) pillBar.style.removeProperty('transition');
+    }
+    modalBox.style.removeProperty('transform');
+    modalBox.style.removeProperty('animation');
+    modalBox.classList.remove('dragging');
+    modalOverlay.style.removeProperty('background-color');
+    dragHandle.classList.remove('dragging');
+    if (pillBar) {
+      pillBar.style.removeProperty('width');
+      pillBar.style.removeProperty('background-color');
+      pillBar.style.removeProperty('box-shadow');
+    }
+    if (hintPill) hintPill.classList.remove('ready-to-close');
+    if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+
+    if (animate) {
+      setTimeout(() => {
+        modalBox.style.removeProperty('transition');
+        modalOverlay.style.removeProperty('transition');
+        if (pillBar) pillBar.style.removeProperty('transition');
+      }, 300);
+    }
+  }
+
+  function handleStart(clientY, pointerId, target) {
+    if (target && target.closest('button, input, select, a, [role="button"]:not(#fs-info-drag-handle)')) {
+      return false;
+    }
+
+    isDragging = true;
+    activePointerId = pointerId;
+    startY = clientY;
+    currentY = clientY;
+    startTime = Date.now();
+
+    modalBox.classList.add('dragging');
+    modalBox.style.setProperty('animation', 'none', 'important');
+    modalBox.style.setProperty('transition', 'none', 'important');
+    modalOverlay.style.setProperty('transition', 'none', 'important');
+    modalBox.style.setProperty('will-change', 'transform', 'important');
+    if (pillBar) pillBar.style.setProperty('transition', 'none', 'important');
+
+    dragHandle.classList.add('dragging');
+    if (hintPill) hintPill.classList.remove('ready-to-close');
+    if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+    return true;
+  }
+
+  function handleMove(clientY, e) {
+    if (!isDragging) return;
+    if (e && e.cancelable) {
+      try { e.preventDefault(); } catch (_) { }
+    }
+    currentY = clientY;
+    const deltaY = currentY - startY;
+
+    if (deltaY > 0) {
+      const ratio = Math.min(deltaY / 75, 1);
+      const scale = 1 - Math.min(deltaY / 1500, 0.035);
+      modalBox.style.setProperty('transform', `translateY(${deltaY}px) scale(${scale})`, 'important');
+
+      const progress = Math.min(deltaY / 400, 1);
+      const alpha = Math.max(0.1, 0.6 * (1 - progress * 0.75));
+      modalOverlay.style.setProperty('background-color', `rgba(15, 23, 42, ${alpha})`, 'important');
+
+      if (pillBar) {
+        const dynamicWidth = Math.min(74, 48 + ratio * 24);
+        pillBar.style.setProperty('width', `${dynamicWidth}px`, 'important');
+        pillBar.style.setProperty('background-color', 'var(--primary, #8b7cf6)', 'important');
+      }
+
+      if (deltaY >= 65) {
+        if (hintPill && !hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.add('ready-to-close');
+          if (hintText) hintText.innerText = 'Lepas untuk menutup';
+          if (pillBar) pillBar.style.setProperty('box-shadow', '0 0 16px rgba(139, 124, 246, 0.8)', 'important');
+        }
+      } else {
+        if (hintPill && hintPill.classList.contains('ready-to-close')) {
+          hintPill.classList.remove('ready-to-close');
+          if (hintText) hintText.innerText = 'Tarik ke bawah untuk menutup';
+          if (pillBar) pillBar.style.removeProperty('box-shadow');
+        }
+      }
+    } else {
+      const damped = Math.max(-28, deltaY * 0.22);
+      modalBox.style.setProperty('transform', `translateY(${damped}px)`, 'important');
+      if (pillBar) pillBar.style.setProperty('width', '42px', 'important');
+      if (hintPill) hintPill.classList.remove('ready-to-close');
+    }
+  }
+
+  function handleEnd(target) {
+    if (!isDragging) return;
+    isDragging = false;
+    modalBox.style.removeProperty('will-change');
+    dragHandle.classList.remove('dragging');
+
+    const deltaY = currentY - startY;
+    const dt = Math.max(Date.now() - startTime, 1);
+    const velocity = deltaY / dt;
+
+    const isTapOnHandle = Math.abs(deltaY) < 8 && dt < 280 && Boolean(target && target.closest('#fs-info-drag-handle'));
+    const isSwipeDown = deltaY > 65 || (deltaY > 20 && velocity > 0.3);
+
+    if (isSwipeDown || isTapOnHandle) {
+      modalBox.style.setProperty('transition', 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease', 'important');
+      modalOverlay.style.setProperty('transition', 'background-color 0.22s ease', 'important');
+      modalBox.style.setProperty('transform', 'translateY(115%) scale(0.95)', 'important');
+      modalOverlay.style.setProperty('background-color', 'rgba(15, 23, 42, 0)', 'important');
+
+      setTimeout(() => {
+        window.closeFullscreenInfoModal(false, true);
+        resetBoxStyles(false);
+      }, 230);
+    } else {
+      resetBoxStyles(true);
+    }
+  }
+
+  const targets = [dragHandle];
+  targets.forEach(el => {
+    el.style.touchAction = 'none';
+
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (!handleStart(e.clientY, e.pointerId, e.target)) return;
+
+      const onWindowPointerMove = (moveEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && moveEvt.pointerId !== activePointerId) return;
+        handleMove(moveEvt.clientY, moveEvt);
+      };
+
+      const onWindowPointerUp = (upEvt) => {
+        if (!isDragging) return;
+        if (activePointerId !== null && upEvt.pointerId !== activePointerId) return;
+        window.removeEventListener('pointermove', onWindowPointerMove);
+        window.removeEventListener('pointerup', onWindowPointerUp);
+        window.removeEventListener('pointercancel', onWindowPointerUp);
+        activePointerId = null;
+        handleEnd(upEvt.target);
+      };
+
+      window.addEventListener('pointermove', onWindowPointerMove, { passive: false });
+      window.addEventListener('pointerup', onWindowPointerUp);
+      window.addEventListener('pointercancel', onWindowPointerUp);
+    });
+
+    el.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      if (!handleStart(e.touches[0].clientY, 'touch', e.target)) return;
+
+      const onWindowTouchMove = (moveEvt) => {
+        if (!isDragging || !moveEvt.touches || moveEvt.touches.length !== 1) return;
+        handleMove(moveEvt.touches[0].clientY, moveEvt);
+      };
+
+      const onWindowTouchEnd = (endEvt) => {
+        window.removeEventListener('touchmove', onWindowTouchMove);
+        window.removeEventListener('touchend', onWindowTouchEnd);
+        window.removeEventListener('touchcancel', onWindowTouchEnd);
+        handleEnd(endEvt.target);
+      };
+
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+      window.addEventListener('touchend', onWindowTouchEnd);
+      window.addEventListener('touchcancel', onWindowTouchEnd);
+    }, { passive: false });
+  });
+
+  dragHandle.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      window.closeFullscreenInfoModal(false, false);
+    }
+  });
 };
 
 function onFullscreenEnter() {
