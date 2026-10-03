@@ -3480,6 +3480,22 @@ def update_status_lab(data: StatusLabUpdateInput):
             except Exception as err_t:
                 print(f"[Error update all sessions to tutup]: {err_t}")
 
+        elif target_status == "buka":
+            try:
+                conn_b = scraper.get_db()
+                cur_b = conn_b.cursor()
+                # Saat dibuka kembali, pastikan status ruangan hari ini diaktifkan/dibuka sepenuhnya
+                cur_b.execute("""
+                    UPDATE status_operasional_lab
+                    SET status_lab = 'buka', diubah_oleh = %s, waktu_aksi = NOW()
+                    WHERE tanggal = %s AND id_ruangan = %s
+                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
+                conn_b.commit()
+                cur_b.close()
+                conn_b.close()
+            except Exception as err_b:
+                print(f"[Error update sessions to buka]: {err_b}")
+
         if sukses:
             return {
                 "status": "success",

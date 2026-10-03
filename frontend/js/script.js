@@ -2568,6 +2568,58 @@ function getRoomOperationalStatus(schedules, isToday) {
     return { status: 'tutup', label: 'belum', session: null, waktu: '', oleh: '' };
   }
 
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // 1. Cek sesi yang sedang berlangsung saat ini atau sesi berikutnya hari ini
+  let ongoingSession = null;
+  let upcomingSession = null;
+  for (const s of schedules) {
+    const parts = (s.jam || '').split(/[-–—]/).map(p => p.trim());
+    let sStart = 0, sEnd = 0;
+    if (parts.length >= 1 && parts[0].includes(':')) {
+      const [sh, sm] = parts[0].split(':').map(Number);
+      if (!isNaN(sh) && !isNaN(sm)) {
+        sStart = sh * 60 + sm;
+        if (parts.length >= 2 && parts[1].includes(':')) {
+          const [eh, em] = parts[1].split(':').map(Number);
+          sEnd = (!isNaN(eh) && !isNaN(em)) ? (eh * 60 + em) : (sStart + 135);
+        } else {
+          sEnd = sStart + 135;
+        }
+      }
+    }
+    if (currentMinutes >= sStart && currentMinutes <= sEnd) {
+      ongoingSession = s;
+    } else if (currentMinutes < sStart && !upcomingSession) {
+      upcomingSession = s;
+    }
+  }
+
+  // Jika ada sesi aktif/mendatang dan statusnya sudah tercatat, jadikan penentu status ruangan utama
+  const activeOrNext = ongoingSession || upcomingSession;
+  if (activeOrNext) {
+    const st = (activeOrNext.status_lab || '').toLowerCase();
+    if (st === 'buka') {
+      return {
+        status: 'buka',
+        label: 'buka',
+        session: activeOrNext,
+        waktu: activeOrNext.status_lab_waktu || '',
+        oleh: activeOrNext.status_lab_oleh || ''
+      };
+    } else if (st === 'tutup') {
+      return {
+        status: 'tutup',
+        label: 'tutup',
+        session: activeOrNext,
+        waktu: activeOrNext.status_lab_waktu || '',
+        oleh: activeOrNext.status_lab_oleh || ''
+      };
+    }
+  }
+
+  // 2. Evaluasi berdasarkan tindakan operasional terbaru antar seluruh sesi
   let latestActionMinutes = -1;
   let latestStatus = null;
   let latestSession = null;
@@ -2583,9 +2635,9 @@ function getRoomOperationalStatus(schedules, isToday) {
         if (!isNaN(h) && !isNaN(m)) actionMin = h * 60 + m;
       }
 
-      // Prioritaskan aksi operasional terbaru berdasarkan waktu tindakan; jika sama gunakan urutan sesi
+      // Jika ada waktu tindakan yang lebih baru, atau waktu sama dan statusnya 'buka' (utamakan aksi buka kembali)
       if (actionMin >= 0) {
-        if (actionMin >= latestActionMinutes) {
+        if (actionMin > latestActionMinutes || (actionMin === latestActionMinutes && st === 'buka')) {
           latestActionMinutes = actionMin;
           latestStatus = st;
           latestSession = s;
@@ -3008,10 +3060,11 @@ async function syncRealtimeLabStatus(force = false) {
                             isSameRoomName(j.nama_ruangan, stat.nama_ruangan);
           if (j.tanggal === stat.tanggal && matchRoom && matchCamp) {
             if (stat.status_lab === 'tutup') {
-              // Jika status ditutup: tandai seluruh sesi ruangan hari ini sebagai ditutup (konsisten dengan toggle)
-              j.status_lab = 'tutup';
-              j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
-              j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
+              if (jJam === statJam || !statJam) {
+                j.status_lab = 'tutup';
+                j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
+                j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
+              }
             } else if (stat.status_lab === 'buka') {
               if (jJam === statJam || !statJam) {
                 j.status_lab = 'buka';
@@ -6455,7 +6508,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         }
       }
 
-      const relevantSession = ongoingSession || upcomingSession || schedules[0];
+      const relevantSession = ongoingSession || upcomingSession || schedules[schedules.length - 1] || schedules[0];
       window._currentDetailRoom.relevantSession = relevantSession;
 
       const opStatus = getRoomOperationalStatus(schedules, isToday);
@@ -6501,7 +6554,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
           </div>
           <div class="lab-status-right">
-            <button type="button" class="btn-lab-toggle tutup" onclick="window.onHeaderLabStatusClick('tutup')" title="Tutup sesi ${entityLabel.toLowerCase()}">
+            <button type="button" class="btn-lab-toggle tutup" onclick="window.onHeaderLabStatusClick('tutup')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="Tutup sesi ${entityLabel.toLowerCase()}">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
               <span>Tutup ${entityLabel}</span>
             </button>
@@ -6519,7 +6572,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
           </div>
           <div class="lab-status-right">
-            <button type="button" class="btn-lab-toggle buka-subtle" onclick="window.onHeaderLabStatusClick('buka')" title="Buka ${entityLabel.toLowerCase()} kembali">
+            <button type="button" class="btn-lab-toggle buka-subtle" onclick="window.onHeaderLabStatusClick('buka')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="Buka ${entityLabel.toLowerCase()} kembali">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
               <span>Buka Kembali</span>
             </button>
@@ -6537,7 +6590,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
           </div>
           <div class="lab-status-right">
-            <button type="button" class="btn-lab-toggle buka" onclick="window.onHeaderLabStatusClick('buka')" title="Buka sesi ${entityLabel.toLowerCase()} sekarang">
+            <button type="button" class="btn-lab-toggle buka" onclick="window.onHeaderLabStatusClick('buka')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="Buka sesi ${entityLabel.toLowerCase()} sekarang">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
               <span>Buka ${entityLabel}</span>
             </button>
@@ -6754,10 +6807,17 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
 window.onHeaderLabStatusClick = function (targetStatus) {
   if (!window._currentDetailRoom) return;
-  const { roomName, kampusStr, activeDate, relevantSession } = window._currentDetailRoom;
-  const jam = relevantSession ? (relevantSession.jam || '08:00') : '08:00';
-  const namaMk = relevantSession ? (relevantSession.nama_mk || '') : '';
-  const kelas = relevantSession ? (relevantSession.kelas || '') : '';
+  const btn = document.querySelector('.btn-lab-toggle');
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.pointerEvents = 'none';
+  }
+  const { roomName, kampusStr, activeDate, relevantSession, schedules } = window._currentDetailRoom;
+  const relSess = relevantSession || (Array.isArray(schedules) && schedules.length > 0 ? (schedules[schedules.length - 1] || schedules[0]) : null);
+  const jam = relSess ? (relSess.jam || '08:00') : '08:00';
+  const namaMk = relSess ? (relSess.nama_mk || '') : '';
+  const kelas = relSess ? (relSess.kelas || '') : '';
   window.toggleLabSessionStatus(activeDate, roomName, jam, namaMk, kelas, targetStatus, kampusStr);
 };
 
@@ -6834,11 +6894,10 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
               j.status_lab_oleh = 'Aslab (Web)';
               j.status_lab_waktu = actionWaktu;
             } else if (targetStatus === 'buka') {
-              if (jJam === cleanJam || !j.status_lab || j.status_lab === 'belum' || j.status_lab === 'tutup') {
-                j.status_lab = 'buka';
-                j.status_lab_oleh = 'Aslab (Web)';
-                j.status_lab_waktu = actionWaktu;
-              }
+              // Jika dibuka kembali, seluruh sesi ruangan hari ini dibuka kembali
+              j.status_lab = 'buka';
+              j.status_lab_oleh = 'Aslab (Web)';
+              j.status_lab_waktu = actionWaktu;
             }
 
             // Tandai alarm keys agar notifikasi popup tidak muncul lagi untuk sesi yang sudah ditandai
