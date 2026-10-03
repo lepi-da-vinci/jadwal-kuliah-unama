@@ -4891,6 +4891,26 @@ tr.table-row-conflict td:first-child {
   transition: all 0.2s ease;
 }
 
+.room-card-title.clickable-title {
+  cursor: pointer;
+  transition: color 0.18s ease, transform 0.18s ease;
+  user-select: none;
+}
+
+.room-card-title.clickable-title:hover {
+  color: var(--primary);
+}
+
+.room-card-title.clickable-title:hover .title-absen-icon {
+  opacity: 1 !important;
+  color: var(--primary);
+  transform: scale(1.15);
+}
+
+.title-absen-icon {
+  transition: all 0.18s ease;
+}
+
 /* ══════════════════════════════════════════════════════════════
    ROOM DETAIL MODAL - MODERN, COMPACT, & AIRY LAYOUT
    ══════════════════════════════════════════════════════════════ */
