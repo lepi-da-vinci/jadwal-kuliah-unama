@@ -197,19 +197,19 @@ CREATE TABLE IF NOT EXISTS absensi_aslab (
 
 -- Data Master 14 Asisten Lab (Thehok & Kobar, Asmot tidak termasuk)
 INSERT IGNORE INTO asisten_lab (nama_aslab, no_wa, kampus_tugas, role, id_ruangan) VALUES
-('Isodorus Bakti Pangestu', '', 'Thehok', 'aslab', NULL),
-('Ahmad Idris', '', 'Thehok', 'aslab', NULL),
-('Delvio Pasha', '', 'Thehok', 'aslab', NULL),
-('Bayu Zaidan Azizi', '', 'Thehok', 'aslab', NULL),
-('Rezky Cahya Gandana', '', 'Thehok', 'aslab', NULL),
-('Andi Noor', '', 'Thehok', 'aslab', NULL),
-('Zuan Vivaldi', '', 'Thehok', 'aslab', NULL),
-('Trio Prananda', '', 'Thehok', 'aslab', NULL),
-('Rafli Maulana', '', 'Thehok', 'aslab', NULL),
-('Dwi Cahya Medika', '', 'Kobar', 'aslab', NULL),
-('Iqbal Prasetyo', '', 'Kobar', 'aslab', NULL),
-('M. Ghalih. M', '', 'Kobar', 'aslab', NULL),
-('Haykal Wais Alqorni', '', 'Kobar', 'aslab', NULL),
-('M.Raffi Pra Diestyawan', '', 'Kobar', 'aslab', NULL);
+('Isodorus Bakti Pangestu', '', 'Thehok', 'aslab', 4),
+('Ahmad Idris', '', 'Thehok', 'aslab', 2),
+('Delvio Pasha', '', 'Thehok', 'aslab', 1),
+('Bayu Zaidan Azizi', '', 'Thehok', 'aslab', 11),
+('Rezky Cahya Gandana', '', 'Thehok', 'aslab', 17),
+('Andi Noor', '', 'Thehok', 'aslab', 3),
+('Zuan Vivaldi', '', 'Thehok', 'aslab', 7),
+('Trio Prananda', '', 'Thehok', 'aslab', 38),
+('Rafli Maulana', '', 'Thehok', 'aslab', 30),
+('Dwi Cahya Medika', '', 'Kobar', 'aslab', 10),
+('Iqbal Prasetyo', '', 'Kobar', 'aslab', 6),
+('M. Ghalih. M', '', 'Kobar', 'aslab', 28),
+('Haykal Wais Alqorni', '', 'Kobar', 'aslab', 13),
+('M.Raffi Pra Diestyawan', '', 'Kobar', 'aslab', 31);
 
 

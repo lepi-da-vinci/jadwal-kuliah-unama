@@ -4859,15 +4859,36 @@ tr.table-row-conflict td:first-child {
 
 .room-card-time.clickable-time {
   cursor: pointer;
-  transition: all 0.18s ease;
-  border-radius: 6px;
-  padding: 2px 6px;
-  margin: -2px -6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 8px;
+  padding: 3px 8px;
+  margin: -3px -6px;
+  border: 1px dashed transparent;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .room-card-time.clickable-time:hover {
   background: rgba(99, 102, 241, 0.12);
   color: var(--primary);
+  border-color: rgba(99, 102, 241, 0.35);
+  transform: translateY(-1px);
+}
+
+.room-card-time.clickable-time:hover .time-absen-icon {
+  opacity: 1 !important;
+  color: var(--primary);
+  transform: scale(1.12);
+}
+
+.room-card-time.clickable-time:active {
+  transform: scale(0.97);
+}
+
+.time-absen-icon {
+  transition: all 0.2s ease;
 }
 
 /* ══════════════════════════════════════════════════════════════

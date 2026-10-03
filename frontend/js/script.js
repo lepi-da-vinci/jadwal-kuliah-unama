@@ -5251,6 +5251,185 @@ function safeEscapeAbsensi(str) {
     .replace(/'/g, '&#039;');
 }
 
+// Pemetaan Asisten Lab yang memegang masing-masing Labor
+const DEFAULT_LAB_ASLAB_MAP = {
+  // Kampus Kobar
+  '1.5 kobar': 'Dwi Cahya Medika',
+  '1.6 kobar': 'Iqbal Prasetyo',
+  '1.7 kobar': 'M. Ghalih. M',
+  '1.8 kobar': 'Haykal Wais Alqorni',
+  '1.9 kobar': 'M.Raffi Pra Diestyawan',
+  // Kampus Thehok
+  '1.3 thehok': 'Isodorus Bakti Pangestu',
+  '1.4 thehok': 'Ahmad Idris',
+  '1.5 thehok': 'Delvio Pasha',
+  '2.7 thehok': 'Bayu Zaidan Azizi',
+  '3.1 thehok': 'Rezky Cahya Gandana',
+  '3.2 thehok': 'Andi Noor',
+  '3.4 thehok': 'Zuan Vivaldi',
+  '4.1 thehok': 'Trio Prananda',
+  '4.3 thehok': 'Rafli Maulana',
+  'lab s2': 'Rafli Maulana'
+};
+
+function mapRoomToAbsensiLabValue(roomName, campusStr) {
+  if (!roomName) return '';
+  const cleanRoom = String(roomName).trim();
+  const campus = (campusStr || (typeof getRoomCampus === 'function' ? getRoomCampus(cleanRoom) : '') || '').toLowerCase();
+  const isKobar = campus.includes('kobar');
+  const isThehok = campus.includes('thehok');
+
+  if (/s2\b/i.test(cleanRoom)) {
+    return 'Lab S2';
+  }
+
+  const m = cleanRoom.match(/(\d+\.\d+)/);
+  if (m) {
+    const num = m[1];
+    if (isKobar) return `${num} Kobar`;
+    if (isThehok) return `${num} Thehok`;
+    const kobarEl = document.querySelector(`#dropdown-absensi-nomor-lab .aslab-list-item[data-value="${num} Kobar"]`);
+    if (kobarEl) return `${num} Kobar`;
+    const thehokEl = document.querySelector(`#dropdown-absensi-nomor-lab .aslab-list-item[data-value="${num} Thehok"]`);
+    if (thehokEl) return `${num} Thehok`;
+  }
+  return '';
+}
+
+function getAssignedAslabForRoom(roomName, campusLabel) {
+  if (!roomName) return { nama: '', kampus: '' };
+  const cleanTargetRoom = typeof normalizeRoomKey === 'function' ? normalizeRoomKey(roomName) : roomName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanRoomStr = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName.toLowerCase());
+  const targetCamp = (campusLabel || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : '') || '').trim().toLowerCase();
+
+  // 1. Cek dari data asisten_lab di database / API (globalAslabData)
+  if (Array.isArray(globalAslabData) && globalAslabData.length > 0) {
+    const found = globalAslabData.find(a => {
+      if (!a.nama_ruangan) return false;
+      const aClean = typeof normalizeRoomKey === 'function' ? normalizeRoomKey(a.nama_ruangan) : a.nama_ruangan.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const roomMatch = (aClean === cleanTargetRoom) || (cleanRoomStr && a.nama_ruangan.toLowerCase().includes(cleanRoomStr));
+      if (!roomMatch) return false;
+      if (a.kampus && targetCamp) {
+        return a.kampus.trim().toLowerCase() === targetCamp;
+      }
+      return true;
+    });
+    if (found && found.nama_aslab) {
+      return { nama: found.nama_aslab, kampus: found.kampus || (targetCamp.includes('kobar') ? 'Kobar' : 'Thehok') };
+    }
+  }
+
+  // 2. Gunakan pemetaan default resmi
+  const mappedLab = mapRoomToAbsensiLabValue(roomName, campusLabel);
+  const searchKeys = [
+    (mappedLab || '').toLowerCase().trim(),
+    `${cleanRoomStr} ${targetCamp}`.trim(),
+    cleanRoomStr
+  ];
+
+  for (const key of searchKeys) {
+    if (!key) continue;
+    if (DEFAULT_LAB_ASLAB_MAP[key]) {
+      return {
+        nama: DEFAULT_LAB_ASLAB_MAP[key],
+        kampus: targetCamp.includes('kobar') ? 'Kobar' : 'Thehok'
+      };
+    }
+  }
+
+  for (const [k, v] of Object.entries(DEFAULT_LAB_ASLAB_MAP)) {
+    if (searchKeys.some(sk => sk && (sk.includes(k) || k.includes(sk)))) {
+      return {
+        nama: v,
+        kampus: targetCamp.includes('kobar') ? 'Kobar' : 'Thehok'
+      };
+    }
+  }
+
+  return { nama: '', kampus: targetCamp.includes('kobar') ? 'Kobar' : 'Thehok' };
+}
+window.getAssignedAslabForRoom = getAssignedAslabForRoom;
+window.mapRoomToAbsensiLabValue = mapRoomToAbsensiLabValue;
+
+window.openAbsensiFromDetailByIndex = function (idx) {
+  if (!window._currentDetailRoom) return;
+  const { roomName, kampusStr, activeDate, schedules } = window._currentDetailRoom;
+  const targetSession = (Array.isArray(schedules) && schedules[idx]) ? schedules[idx] : null;
+  const cleanCamp = (typeof formatCampusName === 'function') ? formatCampusName(kampusStr || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : '')) : '';
+  const isKobarRoom = (typeof getRoomCampus === 'function' ? getRoomCampus(roomName, kampusStr || '') : '').includes('Kobar');
+  const campusLabel = cleanCamp || (isKobarRoom ? 'Kobar' : 'Thehok');
+
+  window.openAbsensiFromDetail(roomName, campusLabel, activeDate, idx, targetSession);
+};
+
+window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate, sessionIdx = null, targetSession = null) {
+  // Simpan konteks asal agar tombol 'Kembali' bisa membuka kembali detail ruangan
+  window._openedAbsensiFromDetail = {
+    roomName: roomName,
+    campusLabel: campusLabel,
+    activeDate: activeDate
+  };
+
+  if (!targetSession && window._currentDetailRoom && Array.isArray(window._currentDetailRoom.schedules) && sessionIdx !== null) {
+    targetSession = window._currentDetailRoom.schedules[sessionIdx] || null;
+  }
+
+  // Tutup modal detail ruangan
+  const roomModal = document.getElementById('room-detail-modal');
+  if (roomModal) roomModal.classList.remove('open');
+
+  // Buka test-wa-modal di tab Absensi
+  const settingModal = document.getElementById('test-wa-modal');
+  const menuView = document.getElementById('wa-modal-menu');
+  const absensiView = document.getElementById('wa-modal-absensi');
+  const modalTitle = document.getElementById('wa-modal-title');
+  const modalIcon = document.getElementById('wa-modal-icon');
+  const adminToggle = document.getElementById('admin-mode-toggle');
+
+  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  if (absensiView) absensiView.style.display = 'flex';
+  if (adminToggle) adminToggle.style.display = 'none';
+  if (modalTitle) modalTitle.innerText = "Absensi Asisten Lab";
+  if (modalIcon && SVG_WA_ICONS && SVG_WA_ICONS.absensi) modalIcon.innerHTML = SVG_WA_ICONS.absensi;
+
+  const tabSwitcher = document.getElementById('absensi-tab-switcher');
+  if (tabSwitcher) tabSwitcher.style.display = isAslabAdmin ? 'flex' : 'none';
+  if (typeof window.switchAbsensiTab === 'function') window.switchAbsensiTab('form');
+
+  if (settingModal) settingModal.classList.add('open');
+
+  // 1. Tentukan Tanggal
+  const tglInput = document.getElementById('absensi-tanggal');
+  if (tglInput && activeDate) {
+    tglInput.value = activeDate;
+  }
+
+  // 2. Petakan Nomor Lab ke opsi dropdown absensi
+  const mappedLabVal = mapRoomToAbsensiLabValue(roomName, campusLabel);
+  if (mappedLabVal) {
+    window.setAbsensiCustomValue('absensi-nomor-lab', mappedLabVal, mappedLabVal);
+  }
+
+  // 3. Tentukan Aslab yang memegang lab ini
+  const aslabInfo = getAssignedAslabForRoom(roomName, campusLabel);
+  if (aslabInfo && aslabInfo.nama) {
+    const aslabItem = document.querySelector(`#dropdown-absensi-nama-aslab .aslab-list-item[data-value="${aslabInfo.nama}"]`);
+    const aslabLabel = aslabItem ? aslabItem.innerText.replace(/✓$/, '').trim() : `${aslabInfo.nama} (${aslabInfo.kampus})`;
+    window.setAbsensiCustomValue('absensi-nama-aslab', aslabInfo.nama, aslabLabel);
+    try { localStorage.setItem('last_aslab_name', aslabInfo.nama); } catch (e) {}
+  }
+
+  // 4. Muat sesi dan pilih sesi spesifik yang diklik
+  if (typeof window.handleAbsensiDateOrLabChange === 'function') {
+    await window.handleAbsensiDateOrLabChange(targetSession);
+  }
+};
+
 window.openAbsensiModal = function () {
   const settingBtn = document.getElementById('setting-btn') || document.getElementById('btn-setting');
   if (settingBtn) {
@@ -5405,7 +5584,7 @@ window.syncAbsensiStatusRadios = function (val) {
   }
 };
 
-window.handleAbsensiDateOrLabChange = async function () {
+window.handleAbsensiDateOrLabChange = async function (preferredSessionMatch = null) {
   const labSelect = document.getElementById('absensi-nomor-lab');
   const tglInput = document.getElementById('absensi-tanggal');
   const sesiSelect = document.getElementById('absensi-sesi-kelas');
@@ -5440,8 +5619,8 @@ window.handleAbsensiDateOrLabChange = async function () {
     return;
   }
 
-  if (dropdownSesi) dropdownSesi.innerHTML = '<div class="aslab-list-item disabled" style="opacity:0.7; cursor:wait;">⏳ Memuat sesi kelas & status absensi...</div>';
-  if (labelSesi) labelSesi.innerText = '⏳ Memuat sesi kelas...';
+  if (dropdownSesi) dropdownSesi.innerHTML = '<div class="aslab-list-item disabled" style="opacity:0.7; cursor:wait;">Memuat sesi kelas & status absensi...</div>';
+  if (labelSesi) labelSesi.innerText = 'Memuat sesi kelas...';
   if (banner) banner.style.display = 'none';
 
   let sessions = [];
@@ -5616,9 +5795,43 @@ window.handleAbsensiDateOrLabChange = async function () {
 
   if (dropdownSesi) dropdownSesi.innerHTML = html;
 
-  // Auto-pilih sesi yang belum diabsen pertama, atau sesi ke-0
-  let autoSelectIdx = sessions.findIndex(s => !s.is_diabsen);
-  if (autoSelectIdx === -1 && sessions.length > 0) autoSelectIdx = 0;
+  // Prioritaskan sesi yang cocok dengan preferredSessionMatch jika diklik dari detail ruangan
+  let autoSelectIdx = -1;
+  if (preferredSessionMatch) {
+    const pJam = (preferredSessionMatch.jam || '').replace(/\D/g, '').slice(0, 4);
+    const pMk = (preferredSessionMatch.nama_mk || '').toLowerCase().trim();
+    const pKelas = (preferredSessionMatch.kelas || '').toLowerCase().trim();
+
+    autoSelectIdx = sessions.findIndex(s => {
+      const sJam = (s.jam || '').replace(/\D/g, '').slice(0, 4);
+      const sMk = (s.nama_mk || '').toLowerCase().trim();
+      const sKelas = (s.kelas || '').toLowerCase().trim();
+
+      // 1. Cocokkan kelas & mata kuliah
+      if (pKelas && sKelas && pKelas === sKelas) {
+        if (!pMk || !sMk || pMk === sMk || sMk.includes(pMk) || pMk.includes(sMk)) {
+          return true;
+        }
+      }
+      // 2. Cocokkan mata kuliah & jam
+      if (pMk && sMk && (pMk === sMk || sMk.includes(pMk) || pMk.includes(sMk))) {
+        if (!pJam || !sJam || sJam.startsWith(pJam.slice(0, 2)) || pJam.startsWith(sJam.slice(0, 2))) {
+          return true;
+        }
+      }
+      // 3. Cocokkan jam mulai
+      if (pJam && sJam && (sJam === pJam || sJam.startsWith(pJam.slice(0, 2)))) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  // Jika tidak ditemukan kecocokan khusus, auto-pilih sesi yang belum diabsen pertama, atau sesi ke-0
+  if (autoSelectIdx === -1) {
+    autoSelectIdx = sessions.findIndex(s => !s.is_diabsen);
+    if (autoSelectIdx === -1 && sessions.length > 0) autoSelectIdx = 0;
+  }
 
   if (autoSelectIdx !== -1) {
     const s = sessions[autoSelectIdx];
@@ -5824,7 +6037,7 @@ window.submitAbsensiAslabAction = async function () {
   // Jika sesi ini sebelumnya sudah pernah diabsen, minta konfirmasi
   if (currentSelectedSession && currentSelectedSession.is_diabsen) {
     const pencatat = currentSelectedSession.nama_aslab || (currentSelectedSession.absensi && currentSelectedSession.absensi.nama_aslab) || 'Aslab Lain';
-    const confirmUpdate = confirm(`⚠️ Sesi perkuliahan ini sebelumnya sudah diabsen oleh "${pencatat}".\n\nApakah Anda ingin tetap mengirim / memperbarui catatan absensi ini?`);
+    const confirmUpdate = confirm(`Sesi perkuliahan ini sebelumnya sudah diabsen oleh "${pencatat}".\n\nApakah Anda ingin tetap mengirim / memperbarui catatan absensi ini?`);
     if (!confirmUpdate) return;
   }
 
@@ -5940,11 +6153,13 @@ window.loadAbsensiHistoryList = async function () {
           <div style="background: var(--bg-card); border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
               <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                <span style="font-weight: 700; font-size: 0.85em; background: rgba(99, 102, 241, 0.12); color: var(--primary); padding: 3px 8px; border-radius: 6px;">
-                  🏢 ${safeEscapeAbsensi(item.nomor_lab || '-')}
+                <span style="font-weight: 700; font-size: 0.85em; background: rgba(99, 102, 241, 0.12); color: var(--primary); padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                  <span>${safeEscapeAbsensi(item.nomor_lab || '-')}</span>
                 </span>
-                <span style="font-size: 0.82em; font-weight: 600; color: var(--text-muted); background: var(--bg-elevated); padding: 3px 7px; border-radius: 6px;">
-                  ⏰ ${safeEscapeAbsensi(item.jam_masuk || '-')}
+                <span style="font-size: 0.82em; font-weight: 600; color: var(--text-muted); background: var(--bg-elevated); padding: 3px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span>${safeEscapeAbsensi(item.jam_masuk || '-')}</span>
                 </span>
                 <span style="font-size: 0.76em; font-weight: 700; color: ${statusColor}; background: ${statusBg}; padding: 3px 7px; border-radius: 6px;">
                   ${safeEscapeAbsensi(item.status_perkuliahan || 'Tatap Muka')}
@@ -5963,9 +6178,9 @@ window.loadAbsensiHistoryList = async function () {
               <span style="font-size: 0.84em; font-weight: 600; color: var(--primary);">(${safeEscapeAbsensi(item.kode_kelas || '-')})</span>
             </div>
             <div style="font-size: 0.82em; color: var(--text-muted); display: flex; flex-direction: column; gap: 2px;">
-              <div>👨‍🏫 <b>Dosen:</b> ${safeEscapeAbsensi(item.nama_dosen || '-')}</div>
-              <div>🧑‍💻 <b>Aslab:</b> ${safeEscapeAbsensi(item.nama_aslab || '-')} (${safeEscapeAbsensi(item.kampus || '-')})</div>
-              ${item.keterangan ? `<div style="margin-top: 2px; font-style: italic; color: var(--text);">💬 "${safeEscapeAbsensi(item.keterangan)}"</div>` : ''}
+              <div><b>Dosen:</b> ${safeEscapeAbsensi(item.nama_dosen || '-')}</div>
+              <div><b>Aslab:</b> ${safeEscapeAbsensi(item.nama_aslab || '-')} (${safeEscapeAbsensi(item.kampus || '-')})</div>
+              ${item.keterangan ? `<div style="margin-top: 2px; font-style: italic; color: var(--text);">Catatan: "${safeEscapeAbsensi(item.keterangan)}"</div>` : ''}
             </div>
             <div style="font-size: 0.72em; color: var(--text-muted); text-align: right; margin-top: 2px;">
               Dicatat: ${item.created_at ? new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WIB
@@ -6000,6 +6215,17 @@ window.deleteAbsensiRecord = async function (id) {
 };
 
 window.closeAbsensiModalToMenu = function () {
+  if (window._openedAbsensiFromDetail) {
+    const { roomName, campusLabel, activeDate } = window._openedAbsensiFromDetail;
+    window._openedAbsensiFromDetail = null;
+    if (typeof closeSettingModal === 'function') closeSettingModal();
+    else document.getElementById('test-wa-modal')?.classList.remove('open');
+    if (typeof window.showRoomDetail === 'function') {
+      window.showRoomDetail(roomName, campusLabel, activeDate);
+    }
+    return;
+  }
+
   const absensiView = document.getElementById('wa-modal-absensi');
   const menuView = document.getElementById('wa-modal-menu');
   if (absensiView) absensiView.style.display = 'none';
@@ -6161,7 +6387,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     subdescEl.innerHTML = `
       <span>${escapeHtml(tglText)}</span>
       <span class="sep">•</span>
-      <span>🕒 ${hoursText}</span>
+      <span style="display:inline-flex; align-items:center; gap:4px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:-1px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>${hoursText}</span>
     `;
   }
 
@@ -6470,9 +6696,14 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           <div class="room-card-header">
             <div class="room-card-session-group">
               <span class="room-session-badge">Sesi ${idx + 1}</span>
-              <div class="room-card-time">
+              <div class="room-card-time clickable-time" role="button" tabindex="0"
+                onclick="window.openAbsensiFromDetailByIndex(${idx})"
+                onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+                title="Klik jam untuk isi Absensi Sesi Ini"
+                aria-label="Isi Absensi untuk ${escapeHtml(s.nama_mk || '')} (${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB)">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span>${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)} WIB</span>
+                <svg class="time-absen-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="opacity: 0.6; margin-left: 2px; flex-shrink: 0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </div>
               <span class="room-card-duration-chip">${durationMins} Menit</span>
             </div>
