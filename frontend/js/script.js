@@ -6462,12 +6462,14 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   };
 
   // Status Operasional Ruangan & Lab di Header (Untuk semua kelas aktif: Lab maupun Ruang Kelas)
-  const isLabOrComputer = (typeof isLab === 'function' && isLab(roomName)) ||
-                          (roomName || '').toLowerCase().includes('lab') ||
-                          (roomName || '').toLowerCase().includes('cisco') ||
+  const isLabEntity = (typeof isLab === 'function' && isLab(roomName)) ||
+                      (roomName || '').toLowerCase().includes('lab') ||
+                      (roomName || '').toLowerCase().includes('labor') ||
+                      (roomName || '').toLowerCase().includes('cisco');
+  const isLabOrComputer = isLabEntity ||
                           (roomName || '').toLowerCase().includes('komputer') ||
                           Boolean(matchedAslab);
-  const entityLabel = isLabOrComputer ? 'Lab' : 'Ruang';
+  const entityLabel = isLabEntity ? 'Lab' : 'Ruang';
 
   const headerLabStatusEl = document.getElementById('room-detail-lab-status-header');
   if (headerLabStatusEl) {
