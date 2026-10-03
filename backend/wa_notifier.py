@@ -1872,7 +1872,7 @@ def list_aslab_lain():
 def kirim_pesan_ke_aslab(nama_atau_ruangan_target: str, isi_pesan: str):
     """Mengirim pesan WhatsApp ke aslab lain yang dituju. Gunakan tool ini setelah aslab tujuan dan isi pesan sudah jelas.
     Parameter:
-    - nama_atau_ruangan_target: nama aslab tujuan atau nomor ruangan lab (misal 'Yanto', 'Reza', atau '1.7')
+    - nama_atau_ruangan_target: nama aslab tujuan atau nomor ruangan lab (misal 'Yanto', 'usep', atau '1.7')
     - isi_pesan: isi pesan teks yang ingin disampaikan ke aslab tersebut
     """
     sender = getattr(current_sender_context, 'sender', None)
@@ -2589,7 +2589,7 @@ def fallback_python_handler(sender, text, aslab):
                     query_dosen = text[len(pfx):].strip()
                     return cari_posisi_dosen(query_dosen)
         aslab_session_states[sender] = {"step": "cari_dosen"}
-        return "Siap mas! Masukkan nama dosen yang dicari (misal: 'Reza' atau 'Pak Reza'):"
+        return "Siap mas! Masukkan nama dosen yang dicari (misal: 'Usep' atau 'Pak Usep'):"
 
     # 10. Opsi 7: Info Mase
     if text_clean == "7" or any(text_clean.startswith(k) for k in ["info mase", "inpo mase", "pengumuman", "info hari ini", "inpo hari ini"]):
@@ -2629,7 +2629,7 @@ def fallback_python_handler(sender, text, aslab):
             f"Halo mas *{nama}*, pesan mase belum saya pahami nih.\n\n"
             f"Mase bisa langsung tanyakan seperti contoh ini:\n"
             f"• Cek ruangan: *2.10* atau *2.11*\n"
-            f"• Cari posisi dosen: *pak reza*\n"
+            f"• Cari posisi dosen: *pak Usep*\n"
             f"• Cek kelas aktif: *1* atau *kelas aktif*\n\n"
             f"Atau pilih menu kontrol AC & kelas di bawah:\n\n"
             f"*1.* Cek Kelas Aktif (AC Hidup)\n"
@@ -2649,7 +2649,7 @@ def fallback_python_handler(sender, text, aslab):
             f"• Cek lab: *1.5 kobar* atau *1.8*\n"
             f"• Jadwal semua lab: ketik *4*\n"
             f"• Cek lab kosong: ketik *5*\n"
-            f"• Cari posisi dosen: *pak reza*\n"
+            f"• Cari posisi dosen: *pak usep\n"
             f"• Ketik *inpo* untuk melihat menu bantuan lengkap."
         )
 
@@ -2661,7 +2661,7 @@ def fallback_python_handler(sender, text, aslab):
         f"• *3* - Status real-time {label_ruang}\n"
         f"• *4* - Jadwal semua lab ({kampus_default})\n"
         f"• *5* - Cek lab kosong ({kampus_default})\n"
-        f"• *6* - Cari posisi dosen (contoh: *pak reza*)\n"
+        f"• *6* - Cari posisi dosen (contoh: *pak usep*)\n"
         f"• *7* - Info Mase hari ini\n"
         f"• *8* - Link web & server\n"
         f"• *9* - Statistik {label_ruang}\n\n"

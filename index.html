@@ -4132,18 +4132,18 @@
       <div id="absensi-tab-switcher" class="admin-only" style="display: none; background: var(--bg-elevated); padding: 4px; border-radius: 12px; gap: 6px; border: 1px solid var(--border);">
         <button type="button" id="tab-btn-absensi-form" onclick="switchAbsensiTab('form')"
           style="flex: 1; padding: 10px 14px; font-size: 0.88em; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #fff;">
-          📝 Form Absen
+          Form Absen
         </button>
         <button type="button" id="tab-btn-absensi-history" onclick="switchAbsensiTab('history')"
           style="flex: 1; padding: 10px 14px; font-size: 0.88em; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted);">
-          📋 Riwayat Absen (Admin)
+          Riwayat Absen (Admin)
         </button>
       </div>
 
       <!-- TAB 1: FORM INPUT ABSENSI -->
       <div id="absensi-view-form" style="display: flex; flex-direction: column; gap: 12px;">
         <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 95, 70, 0.05)); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 12px; font-size: 0.82em; color: var(--text); line-height: 1.45;">
-          <b style="color: #059669;">📌 Panduan Cepat:</b> Pilih <b>Tanggal</b> dan <b>Nomor Lab</b>, lalu pilih <b>Sesi Jam Kelas</b>. Data dosen, matakuliah, dan kelas akan otomatis terisi!
+          <b style="color: #059669;">Panduan Cepat:</b> Pilih <b>Tanggal</b> dan <b>Nomor Lab</b>, lalu pilih <b>Sesi Jam Kelas</b>. Data dosen, matakuliah, dan kelas akan otomatis terisi!
         </div>
 
         <!-- 1. Tanggal Perkuliahan & Nomor Lab (Side by Side) -->
@@ -4170,13 +4170,13 @@
               </div>
               <div class="aslab-list-container custom-select-dropdown" id="dropdown-absensi-nomor-lab" style="max-height: 250px;">
                 <div class="aslab-list-item" data-value="" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '', '-- Pilih Lab --')">-- Pilih Lab --</div>
-                <div class="custom-select-group-header">🏢 Kampus Kobar</div>
+                <div class="custom-select-group-header">Kampus Kobar</div>
                 <div class="aslab-list-item" data-value="1.5 Kobar" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.5 Kobar', '1.5 Kobar')">1.5 Kobar</div>
                 <div class="aslab-list-item" data-value="1.6 Kobar" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.6 Kobar', '1.6 Kobar')">1.6 Kobar</div>
                 <div class="aslab-list-item" data-value="1.7 Kobar" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.7 Kobar', '1.7 Kobar')">1.7 Kobar</div>
                 <div class="aslab-list-item" data-value="1.8 Kobar" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.8 Kobar', '1.8 Kobar')">1.8 Kobar</div>
                 <div class="aslab-list-item" data-value="1.9 Kobar" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.9 Kobar', '1.9 Kobar')">1.9 Kobar</div>
-                <div class="custom-select-group-header">🏢 Kampus Thehok</div>
+                <div class="custom-select-group-header">Kampus Thehok</div>
                 <div class="aslab-list-item" data-value="1.3 Thehok" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.3 Thehok', '1.3 Thehok')">1.3 Thehok</div>
                 <div class="aslab-list-item" data-value="1.4 Thehok" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.4 Thehok', '1.4 Thehok')">1.4 Thehok</div>
                 <div class="aslab-list-item" data-value="1.5 Thehok" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '1.5 Thehok', '1.5 Thehok')">1.5 Thehok</div>
@@ -4197,7 +4197,7 @@
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
             <label style="font-size: 0.84em; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 5px;">
-              <span>⏰ Pilihan Jam/Sesi Kelas di Lab Ini</span>
+              <span>Pilihan Jam/Sesi Kelas di Lab Ini</span>
               <span style="color: #ef4444;">*</span>
             </label>
             <span id="absensi-sesi-count" style="font-size: 0.78em; color: var(--primary); font-weight: 600;"></span>
@@ -4294,15 +4294,15 @@
             <div class="custom-select-wrapper" id="wrapper-absensi-status-select">
               <div class="custom-select-trigger" tabindex="0" role="button" aria-haspopup="listbox"
                 onclick="toggleCustomSelect('absensi-status-select', event)">
-                <span class="custom-select-label" id="label-absensi-status-select">🟢 Tatap Muka</span>
+                <span class="custom-select-label" id="label-absensi-status-select">Tatap Muka</span>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
               </div>
               <div class="aslab-list-container custom-select-dropdown" id="dropdown-absensi-status-select">
-                <div class="aslab-list-item active" data-value="Tatap Muka" onclick="selectAbsensiCustomOption('absensi-status-select', 'Tatap Muka', '🟢 Tatap Muka')">🟢 Tatap Muka</div>
-                <div class="aslab-list-item" data-value="Online" onclick="selectAbsensiCustomOption('absensi-status-select', 'Online', '🔵 Online')">🔵 Online</div>
-                <div class="aslab-list-item" data-value="Cancel" onclick="selectAbsensiCustomOption('absensi-status-select', 'Cancel', '🔴 Cancel')">🔴 Cancel</div>
+                <div class="aslab-list-item active" data-value="Tatap Muka" onclick="selectAbsensiCustomOption('absensi-status-select', 'Tatap Muka', 'Tatap Muka')">Tatap Muka</div>
+                <div class="aslab-list-item" data-value="Online" onclick="selectAbsensiCustomOption('absensi-status-select', 'Online', 'Online')">Online</div>
+                <div class="aslab-list-item" data-value="Cancel" onclick="selectAbsensiCustomOption('absensi-status-select', 'Cancel', 'Cancel')">Cancel</div>
               </div>
               <input type="hidden" id="absensi-status-select" value="Tatap Muka">
             </div>
@@ -4331,13 +4331,13 @@
             </div>
             <div class="aslab-list-container custom-select-dropdown" id="dropdown-absensi-nama-aslab" style="max-height: 260px;">
               <div class="aslab-list-item" data-value="" onclick="selectAbsensiCustomOption('absensi-nama-aslab', '', '-- Pilih Nama Asisten --', '')">-- Pilih Nama Asisten --</div>
-              <div class="custom-select-group-header">📍 Asisten Lab Kobar</div>
+              <div class="custom-select-group-header">Asisten Lab Kobar</div>
               <div class="aslab-list-item" data-value="Dwi Cahya Medika" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Dwi Cahya Medika', 'Dwi Cahya Medika (Kobar)', 'Kobar')">Dwi Cahya Medika (Kobar)</div>
               <div class="aslab-list-item" data-value="Iqbal Prasetyo" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Iqbal Prasetyo', 'Iqbal Prasetyo (Kobar)', 'Kobar')">Iqbal Prasetyo (Kobar)</div>
               <div class="aslab-list-item" data-value="M. Ghalih. M" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'M. Ghalih. M', 'M. Ghalih. M (Kobar)', 'Kobar')">M. Ghalih. M (Kobar)</div>
               <div class="aslab-list-item" data-value="Haykal Wais Alqorni" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Haykal Wais Alqorni', 'Haykal Wais Alqorni (Kobar)', 'Kobar')">Haykal Wais Alqorni (Kobar)</div>
               <div class="aslab-list-item" data-value="M.Raffi Pra Diestyawan" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'M.Raffi Pra Diestyawan', 'M.Raffi Pra Diestyawan (Kobar)', 'Kobar')">M.Raffi Pra Diestyawan (Kobar)</div>
-              <div class="custom-select-group-header">📍 Asisten Lab Thehok</div>
+              <div class="custom-select-group-header">Asisten Lab Thehok</div>
               <div class="aslab-list-item" data-value="Isodorus Bakti Pangestu" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Isodorus Bakti Pangestu', 'Isodorus Bakti Pangestu (Thehok)', 'Thehok')">Isodorus Bakti Pangestu (Thehok)</div>
               <div class="aslab-list-item" data-value="Ahmad Idris" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Ahmad Idris', 'Ahmad Idris (Thehok)', 'Thehok')">Ahmad Idris (Thehok)</div>
               <div class="aslab-list-item" data-value="Delvio Pasha" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Delvio Pasha', 'Delvio Pasha (Thehok)', 'Thehok')">Delvio Pasha (Thehok)</div>
@@ -4379,7 +4379,7 @@
           </div>
           <button type="button" onclick="loadAbsensiHistoryList()"
             style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 5px 12px; border-radius: 6px; font-size: 0.8em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-            🔄 Refresh
+            Refresh
           </button>
         </div>
 
@@ -4915,7 +4915,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261002_absensi_v7"></script>
+  <script src="frontend/js/script.js?v=20261002_absensi_v8"></script>
 </body>
 
 </html>

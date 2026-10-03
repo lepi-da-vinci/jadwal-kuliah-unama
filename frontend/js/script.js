@@ -5518,10 +5518,10 @@ window.handleAbsensiDateOrLabChange = async function () {
     if (dropdownSesi) {
       dropdownSesi.innerHTML = `
         <div class="aslab-list-item disabled" style="opacity: 0.6; cursor: default;">(Tidak ada jadwal kuliah resmi di lab ini)</div>
-        <div class="aslab-list-item active" data-value="manual" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', 'manual', '➕ Input Manual / Kelas Tambahan')" style="font-weight: 600; color: var(--primary);">➕ Input Manual / Kelas Tambahan</div>
+        <div class="aslab-list-item active" data-value="manual" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', 'manual', 'Input Manual / Kelas Tambahan')" style="font-weight: 600; color: var(--primary);">Input Manual / Kelas Tambahan</div>
       `;
     }
-    window.setAbsensiCustomValue('absensi-sesi-kelas', 'manual', '➕ Input Manual / Kelas Tambahan');
+    window.setAbsensiCustomValue('absensi-sesi-kelas', 'manual', 'Input Manual / Kelas Tambahan');
     window.handleAbsensiSessionSelected();
     return;
   }
@@ -5530,14 +5530,14 @@ window.handleAbsensiDateOrLabChange = async function () {
   sessions.forEach((s, idx) => {
     const isDone = s.is_diabsen;
     const cleanJam = formatJamAbsensi(s.jam);
-    const displayShort = `${cleanJam ? cleanJam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
+    const displayShort = `${cleanJam ? cleanJam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '[Sudah]' : '[Belum]'}`;
 
     html += `
       <div class="aslab-list-item" data-value="${idx}" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', '${idx}', '${safeEscapeAbsensi(displayShort).replace(/'/g, "\\'")}')" style="display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; border-bottom: 1px solid var(--border);">
         <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
           <span style="font-weight: 700; font-size: 0.93em; color: var(--text);">${safeEscapeAbsensi(cleanJam || '')} • ${safeEscapeAbsensi(s.nama_mk || '-')}</span>
           <span class="badge ${isDone ? 'badge-tm' : 'badge-batal'}" style="font-size: 0.72em; padding: 2px 7px; border-radius: 6px;">
-            ${isDone ? '✅ Sudah Diabsen' : '⏳ Belum'}
+            ${isDone ? 'Sudah Diabsen' : 'Belum'}
           </span>
         </div>
         <div style="font-size: 0.8em; opacity: 0.85; display: flex; flex-wrap: wrap; gap: 8px;">
@@ -5549,8 +5549,8 @@ window.handleAbsensiDateOrLabChange = async function () {
     `;
   });
   html += `
-    <div class="aslab-list-item" data-value="manual" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', 'manual', '➕ Input Manual / Jam Lain...')" style="font-weight: 600; color: var(--primary);">
-      ➕ Input Manual / Jam Lain...
+    <div class="aslab-list-item" data-value="manual" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', 'manual', 'Input Manual / Jam Lain...')" style="font-weight: 600; color: var(--primary);">
+      Input Manual / Jam Lain...
     </div>
   `;
 
@@ -5564,7 +5564,7 @@ window.handleAbsensiDateOrLabChange = async function () {
     const s = sessions[autoSelectIdx];
     const isDone = s.is_diabsen;
     const cleanJam = formatJamAbsensi(s.jam);
-    const displayShort = `${cleanJam ? cleanJam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
+    const displayShort = `${cleanJam ? cleanJam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '[Sudah]' : '[Belum]'}`;
     window.setAbsensiCustomValue('absensi-sesi-kelas', String(autoSelectIdx), displayShort);
     window.handleAbsensiSessionSelected();
   }
@@ -5598,7 +5598,7 @@ window.handleAbsensiSessionSelected = function () {
       banner.style.color = 'var(--text)';
       banner.innerHTML = `
         <div style="font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 6px;">
-          <span>📝 Mode Input Manual:</span>
+          <span>Mode Input Manual:</span>
         </div>
         <div style="margin-top: 2px; font-size: 0.86em; opacity: 0.85;">
           Silakan isi nama dosen, matakuliah, dan kode kelas secara manual di bawah.
@@ -5639,7 +5639,7 @@ window.handleAbsensiSessionSelected = function () {
 
   // Sinkronisasi Status Perkuliahan
   let statusVal = 'Tatap Muka';
-  let statusLabel = '🟢 Tatap Muka';
+  let statusLabel = 'Tatap Muka';
   if (s.absensi && s.absensi.status_perkuliahan) {
     statusVal = s.absensi.status_perkuliahan;
   } else {
@@ -5647,8 +5647,8 @@ window.handleAbsensiSessionSelected = function () {
     if (metode === 'OL' || /online/i.test(s.status_jadwal || '')) statusVal = 'Online';
     else if (metode === 'CC' || /batal|cancel/i.test(s.status_jadwal || '')) statusVal = 'Cancel';
   }
-  if (statusVal === 'Online') statusLabel = '🔵 Online';
-  else if (statusVal === 'Cancel') statusLabel = '🔴 Cancel';
+  if (statusVal === 'Online') statusLabel = 'Online';
+  else if (statusVal === 'Cancel') statusLabel = 'Cancel';
 
   window.setAbsensiCustomValue('absensi-status-select', statusVal, statusLabel);
   window.syncAbsensiStatusRadios(statusVal);
@@ -5688,7 +5688,7 @@ window.handleAbsensiSessionSelected = function () {
       banner.style.color = 'var(--text)';
       banner.innerHTML = `
         <div style="font-weight: 700; color: var(--primary); font-size: 0.92em; display: flex; align-items: center; gap: 6px;">
-          <span>✨ Sesi Ini BELUM Diabsen</span>
+          <span>Sesi Ini BELUM Diabsen</span>
         </div>
         <div style="margin-top: 3px; font-size: 0.84em; opacity: 0.9;">
           Data jadwal otomatis terisi. Pilih nama Asisten Lab Anda lalu klik <b>Kirim Absensi Lab</b>.
@@ -6546,8 +6546,45 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
                 j.status_lab_waktu = actionWaktu;
               }
             }
+
+            // Tandai alarm keys agar notifikasi popup tidak muncul lagi untuk sesi yang sudah ditandai
+            if (typeof parseTimeToMinutes === 'function' && typeof saveNotifiedLabAlarmKey === 'function') {
+              const sm = parseTimeToMinutes(j.jam);
+              if (sm !== null) {
+                if (targetStatus === 'buka') {
+                  const k1 = `${tanggal}_${j.nama_ruangan}_buka_${sm}`;
+                  if (typeof notifiedLabAlarmKeys !== 'undefined') notifiedLabAlarmKeys.add(k1);
+                  saveNotifiedLabAlarmKey(k1);
+                } else if (targetStatus === 'tutup') {
+                  const dur = typeof getClassDuration === 'function' ? getClassDuration(j) : 135;
+                  const em = sm + dur;
+                  const k1 = `${tanggal}_${j.nama_ruangan}_tutup_${em}`;
+                  if (typeof notifiedLabAlarmKeys !== 'undefined') notifiedLabAlarmKeys.add(k1);
+                  saveNotifiedLabAlarmKey(k1);
+                }
+              }
+            }
           }
         });
+      }
+
+      // Jika modal notifikasi (#lab-modal) sedang aktif terbuka, bersihkan kartu ruangan ini
+      const activeLabModal = document.getElementById('lab-modal');
+      if (activeLabModal && activeLabModal.classList.contains('open')) {
+        const cards = activeLabModal.querySelectorAll('.im-card');
+        let remainingCards = 0;
+        cards.forEach(card => {
+          const roomTag = (card.querySelector('.im-tag-room')?.textContent || '').trim();
+          if (typeof isSameRoomName === 'function' && isSameRoomName(roomTag, roomName)) {
+            card.remove();
+          } else {
+            remainingCards++;
+          }
+        });
+        if (remainingCards === 0) {
+          activeLabModal.classList.remove('open');
+          if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('lab-modal');
+        }
       }
 
       if (typeof window.showRoomDetail === 'function') {
@@ -9447,7 +9484,10 @@ function checkLabNotifications() {
         endMin,
         dur,
         isLab: isLab(item.nama_ruangan),
-        kampus: item.kampus || ''
+        kampus: item.kampus || '',
+        status_lab: item.status_lab || null,
+        status_lab_oleh: item.status_lab_oleh || null,
+        status_lab_waktu: item.status_lab_waktu || null
       });
     }
   });
@@ -9477,10 +9517,27 @@ function checkLabNotifications() {
     // Kelas terakhir hari ini
     closings.push({ cls: scheds[scheds.length - 1], tipe: 'SELESAI', gap: 0, nxt: null });
 
-    // 1. Pemicu Buka Lab / Hidupkan AC (tepat 15 - 20 menit sebelum kelas)
+    // 1. Pemicu Buka Lab / Hidupkan AC (HANYA untuk yang BELUM DITANDAI, tepat 15 - 20 menit sebelum kelas)
     for (const cls of openings) {
       const alarmKey = `${currentDayStr}_${ruang}_buka_${cls.startMin}`;
       const diffBuka = cls.startMin - currentTotalMin;
+
+      // Cek apakah status ruangan/sesi ini SUDAH DITANDAI BUKA atau TUTUP
+      const clsStatus = (cls.status_lab || '').toLowerCase().trim();
+      const isRoomAlreadyOpened = clsStatus === 'buka' ||
+        scheds.some(s => (s.status_lab || '').toLowerCase().trim() === 'buka' && s.startMin <= cls.startMin && s.endMin >= cls.startMin);
+      const isRoomAlreadyClosed = clsStatus === 'tutup';
+
+      // JIKA SUDAH DITANDAI BUKA ATAU TUTUP:
+      // Jangan pernah munculkan notifikasi buka lab lagi!
+      if (isRoomAlreadyOpened || isRoomAlreadyClosed) {
+        if (!notifiedLabAlarmKeys.has(alarmKey) && !persistentAlarmKeys.has(alarmKey)) {
+          notifiedLabAlarmKeys.add(alarmKey);
+          saveNotifiedLabAlarmKey(alarmKey);
+        }
+        continue; // Lewati! Hanya yang belum ditandai yang diberi notifikasi
+      }
+
       if (diffBuka >= 15 && diffBuka <= 20) {
         if (!notifiedLabAlarmKeys.has(alarmKey) && !persistentAlarmKeys.has(alarmKey)) {
           notifiedLabAlarmKeys.add(alarmKey);
@@ -9508,11 +9565,27 @@ function checkLabNotifications() {
       }
     }
 
-    // 2. Pemicu Jeda Ruangan / Tutup Lab & Matikan AC (tepat 0 - 5 menit setelah kelas selesai)
+    // 2. Pemicu Jeda Ruangan / Tutup Lab & Matikan AC (HANYA untuk yang BELUM DITANDAI TUTUP, tepat 0 - 5 menit setelah kelas selesai)
     for (const item of closings) {
       const cls = item.cls;
       const alarmKey = `${currentDayStr}_${ruang}_tutup_${cls.endMin}`;
       const diffTutup = currentTotalMin - cls.endMin;
+
+      // Cek apakah ruangan/sesi ini SUDAH DITANDAI TUTUP oleh aslab
+      const clsStatus = (cls.status_lab || '').toLowerCase().trim();
+      const isAlreadyClosed = clsStatus === 'tutup' ||
+        scheds.some(s => (s.status_lab || '').toLowerCase().trim() === 'tutup' && s.endMin >= cls.endMin);
+
+      // JIKA SUDAH DITANDAI TUTUP:
+      // Jangan pernah munculkan notifikasi tutup lab lagi!
+      if (isAlreadyClosed) {
+        if (!notifiedLabAlarmKeys.has(alarmKey) && !persistentAlarmKeys.has(alarmKey)) {
+          notifiedLabAlarmKeys.add(alarmKey);
+          saveNotifiedLabAlarmKey(alarmKey);
+        }
+        continue; // Lewati! Hanya yang belum ditandai tutup yang diberi notifikasi
+      }
+
       if (diffTutup >= 0 && diffTutup <= 5) {
         if (!notifiedLabAlarmKeys.has(alarmKey) && !persistentAlarmKeys.has(alarmKey)) {
           notifiedLabAlarmKeys.add(alarmKey);
@@ -9523,6 +9596,11 @@ function checkLabNotifications() {
           const jamSelesaiStr = `${String(Math.floor(cls.endMin / 60)).padStart(2, '0')}:${String(cls.endMin % 60).padStart(2, '0')}`;
 
           if (item.tipe === 'JEDA') {
+            // Jika sesi lanjutan berikutnya sudah ditandai buka, tidak perlu notifikasi jeda matikan AC
+            const nxtStatus = (item.nxt.status_lab || '').toLowerCase().trim();
+            if (nxtStatus === 'buka') {
+              continue;
+            }
             const nextJamStr = `${String(Math.floor(item.nxt.startMin / 60)).padStart(2, '0')}:${String(item.nxt.startMin % 60).padStart(2, '0')}`;
             jedaToNotify.push({
               ruang,
