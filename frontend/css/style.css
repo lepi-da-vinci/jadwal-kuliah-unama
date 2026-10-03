@@ -5929,6 +5929,80 @@ body.semester-explorer-active #semester-explorer-container {
   background: rgba(239, 68, 68, 0.1) !important;
 }
 
+/* Explicit responsive layout for Absensi Aslab button in Setting Modal */
+#btn-show-absensi-aslab,
+.modal-box .modal-body #btn-show-absensi-aslab {
+  min-height: unset !important;
+  height: auto !important;
+  padding: 12px 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  text-align: left !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  border-radius: 12px !important;
+  box-sizing: border-box !important;
+  line-height: normal !important;
+}
+
+#btn-show-absensi-aslab .aslab-btn-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#btn-show-absensi-aslab .aslab-btn-texts {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#btn-show-absensi-aslab .aslab-btn-title {
+  color: #059669;
+  font-size: 0.94em;
+  font-weight: 700;
+  display: block;
+  line-height: 1.3;
+  margin: 0;
+  white-space: normal;
+}
+
+#btn-show-absensi-aslab .aslab-btn-subtitle {
+  font-size: 0.76em;
+  opacity: 0.82;
+  display: block;
+  margin-top: 2px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+}
+
+#btn-show-absensi-aslab .aslab-btn-badge {
+  background: rgba(16, 185, 129, 0.2);
+  color: #047857;
+  font-size: 0.72em;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+[data-theme="dark"] #btn-show-absensi-aslab .aslab-btn-title,
+body.dark-theme #btn-show-absensi-aslab .aslab-btn-title {
+  color: #34d399;
+}
+[data-theme="dark"] #btn-show-absensi-aslab .aslab-btn-badge,
+body.dark-theme #btn-show-absensi-aslab .aslab-btn-badge {
+  background: rgba(52, 211, 153, 0.2);
+  color: #6ee7b7;
+}
+
 /* =========================================================================
    COMPREHENSIVE MOBILE & TABLET RESPONSIVE SYSTEM (UI/UX 2.0)
    ========================================================================= */

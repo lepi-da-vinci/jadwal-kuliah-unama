@@ -17,6 +17,7 @@ from fastapi import FastAPI, Depends, Header, HTTPException, Request, Response, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Optional, List, Dict, Any, Union
 
 import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -2995,18 +2996,18 @@ def get_detail_kelas(kelas: str, semester: str = None):
 # API ABSENSI ASISTEN LABORATORIUM (INTEGRASI FORM GOOGLE)
 # ─────────────────────────────────────────────────────────────
 class AbsensiInput(BaseModel):
-    id_absensi: int = None
-    id_aslab: int = None
+    id_absensi: Optional[int] = None
+    id_aslab: Optional[int] = None
     nama_aslab: str
-    kampus: str = None
+    kampus: Optional[str] = None
     nomor_lab: str
     tanggal: str
     jam_masuk: str
-    nama_dosen: str
-    nama_mk: str
-    kode_kelas: str
-    status_perkuliahan: str = "Tatap Muka"
-    keterangan: str = None
+    nama_dosen: Optional[str] = ""
+    nama_mk: Optional[str] = ""
+    kode_kelas: Optional[str] = ""
+    status_perkuliahan: Optional[str] = "Tatap Muka"
+    keterangan: Optional[str] = None
 
 @app.get("/api/absensi/master")
 def get_absensi_master():
@@ -3306,7 +3307,28 @@ def get_lab_sessions(nomor_lab: str, tanggal: str = None):
 
         for row in schedules:
             row_kelas = (row.get("kelas") or "").strip().lower()
-            row_jam = str(row.get("jam") or "")
+            raw_jam = row.get("jam")
+            formatted_jam = ""
+            if isinstance(raw_jam, datetime.timedelta):
+                total_sec = int(raw_jam.total_seconds())
+                h = total_sec // 3600
+                m = (total_sec % 3600) // 60
+                formatted_jam = f"{h:02d}.{m:02d} WIB"
+            elif isinstance(raw_jam, (int, float)) and raw_jam >= 3600:
+                h = int(raw_jam) // 3600
+                m = (int(raw_jam) % 3600) // 60
+                formatted_jam = f"{h:02d}.{m:02d} WIB"
+            elif raw_jam is not None:
+                str_j = str(raw_jam).strip()
+                if str_j.isdigit() and int(str_j) >= 3600:
+                    val_int = int(str_j)
+                    h = val_int // 3600
+                    m = (val_int % 3600) // 60
+                    formatted_jam = f"{h:02d}.{m:02d} WIB"
+                else:
+                    formatted_jam = str_j
+
+            row_jam = formatted_jam or ""
             clean_row_jam = row_jam.replace("WIB", "").replace(".", ":").strip()
             start_jam = clean_row_jam.split("-")[0].strip() if "-" in clean_row_jam else clean_row_jam
 
@@ -3325,7 +3347,7 @@ def get_lab_sessions(nomor_lab: str, tanggal: str = None):
                 matched_absensi_ids.add(matched_absen["id_absensi"])
                 session_results.append({
                     "id_jadwal": row.get("id_jadwal"),
-                    "jam": row.get("jam"),
+                    "jam": formatted_jam,
                     "nama_mk": row.get("nama_mk"),
                     "kelas": row.get("kelas"),
                     "nama_dosen": row.get("nama_dosen"),
@@ -3338,7 +3360,7 @@ def get_lab_sessions(nomor_lab: str, tanggal: str = None):
             else:
                 session_results.append({
                     "id_jadwal": row.get("id_jadwal"),
-                    "jam": row.get("jam"),
+                    "jam": formatted_jam,
                     "nama_mk": row.get("nama_mk"),
                     "kelas": row.get("kelas"),
                     "nama_dosen": row.get("nama_dosen"),
@@ -3370,13 +3392,13 @@ def get_lab_sessions(nomor_lab: str, tanggal: str = None):
 
 class StatusLabUpdateInput(BaseModel):
     tanggal: str
-    id_ruangan: int = None
-    nama_ruangan: str = None
-    kampus: str = None
-    jam: str = None
+    id_ruangan: Optional[int] = None
+    nama_ruangan: Optional[str] = None
+    kampus: Optional[str] = None
+    jam: Optional[str] = None
     status_lab: str = "buka" # "buka" / "tutup"
-    nama_mk: str = None
-    kelas: str = None
+    nama_mk: Optional[str] = None
+    kelas: Optional[str] = None
     diubah_oleh: str = "Aslab (Web)"
 
 @app.post("/api/status-lab")

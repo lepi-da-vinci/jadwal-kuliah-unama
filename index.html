@@ -3681,19 +3681,19 @@
 
       <!-- Tombol Akses Form Absensi Aslab (Dosen Masuk Lab) -->
       <button class="btn btn-secondary" id="btn-show-absensi-aslab"
-        style="padding: 13px 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08)); border: 1.5px solid #10b981; color: var(--text); cursor: pointer; border-radius: 12px; transition: all 0.2s ease;">
-        <div style="display: flex; align-items: center; gap: 10px; text-align: left;">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2"
+        style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08)); border: 1.5px solid #10b981; color: var(--text); cursor: pointer; transition: all 0.2s ease;">
+        <div class="aslab-btn-content">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" stroke-linejoin="round" style="color: #10b981; flex-shrink: 0;">
             <path d="M9 11l3 3L22 4"></path>
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
           </svg>
-          <div>
-            <b style="color: #059669; font-size: 0.98em; font-weight: 700; display: block;">Absensi Asisten Lab (Dosen Masuk)</b>
-            <span style="font-size: 0.77em; opacity: 0.8; display: block; margin-top: 1px;">Catat kehadiran dosen perkuliahan di laboratorium</span>
+          <div class="aslab-btn-texts">
+            <span class="aslab-btn-title">Absensi Asisten Lab (Dosen Masuk)</span>
+            <span class="aslab-btn-subtitle">Catat kehadiran dosen perkuliahan di laboratorium</span>
           </div>
         </div>
-        <span style="background: rgba(16, 185, 129, 0.2); color: #047857; font-size: 0.73em; font-weight: 700; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px; white-space: nowrap;">FORM ABSEN</span>
+        <span class="aslab-btn-badge">FORM ABSEN</span>
       </button>
 
       <button class="btn btn-secondary" id="btn-setting-spotlight" onclick="closeSettingAndOpenSpotlight()"
@@ -4915,7 +4915,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261002_location_header_v1"></script>
+  <script src="frontend/js/script.js?v=20261002_absensi_v7"></script>
 </body>
 
 </html>

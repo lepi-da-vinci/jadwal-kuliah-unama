@@ -5248,6 +5248,20 @@ window.switchAbsensiTab = function (tab) {
   }
 };
 
+function formatJamAbsensi(jam) {
+  if (!jam) return '';
+  const str = String(jam).trim();
+  if (/^\d+$/.test(str)) {
+    const totalSec = parseInt(str, 10);
+    if (totalSec >= 3600) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      return `${String(h).padStart(2, '0')}.${String(m).padStart(2, '0')} WIB`;
+    }
+  }
+  return str;
+}
+
 window.setAbsensiCustomValue = function (type, value, label) {
   const hiddenInput = document.getElementById(type);
   if (hiddenInput) hiddenInput.value = (value !== undefined && value !== null) ? value : '';
@@ -5515,12 +5529,13 @@ window.handleAbsensiDateOrLabChange = async function () {
   let html = `<div class="aslab-list-item" data-value="" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', '', '-- Pilih Sesi Jam Kelas (${sessions.length} Sesi Terjadwal) --')">-- Pilih Sesi Jam Kelas (${sessions.length} Sesi Terjadwal) --</div>`;
   sessions.forEach((s, idx) => {
     const isDone = s.is_diabsen;
-    const displayShort = `${s.jam ? s.jam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
+    const cleanJam = formatJamAbsensi(s.jam);
+    const displayShort = `${cleanJam ? cleanJam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
 
     html += `
       <div class="aslab-list-item" data-value="${idx}" onclick="selectAbsensiCustomOption('absensi-sesi-kelas', '${idx}', '${safeEscapeAbsensi(displayShort).replace(/'/g, "\\'")}')" style="display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; border-bottom: 1px solid var(--border);">
         <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
-          <span style="font-weight: 700; font-size: 0.93em; color: var(--text);">${safeEscapeAbsensi(s.jam || '')} • ${safeEscapeAbsensi(s.nama_mk || '-')}</span>
+          <span style="font-weight: 700; font-size: 0.93em; color: var(--text);">${safeEscapeAbsensi(cleanJam || '')} • ${safeEscapeAbsensi(s.nama_mk || '-')}</span>
           <span class="badge ${isDone ? 'badge-tm' : 'badge-batal'}" style="font-size: 0.72em; padding: 2px 7px; border-radius: 6px;">
             ${isDone ? '✅ Sudah Diabsen' : '⏳ Belum'}
           </span>
@@ -5548,7 +5563,8 @@ window.handleAbsensiDateOrLabChange = async function () {
   if (autoSelectIdx !== -1) {
     const s = sessions[autoSelectIdx];
     const isDone = s.is_diabsen;
-    const displayShort = `${s.jam ? s.jam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
+    const cleanJam = formatJamAbsensi(s.jam);
+    const displayShort = `${cleanJam ? cleanJam + ' | ' : ''}${s.nama_mk || '-'} (${s.kelas || '-'}) ${isDone ? '✅ [Sudah]' : '⏳ [Belum]'}`;
     window.setAbsensiCustomValue('absensi-sesi-kelas', String(autoSelectIdx), displayShort);
     window.handleAbsensiSessionSelected();
   }
@@ -5606,7 +5622,8 @@ window.handleAbsensiSessionSelected = function () {
 
   // Sinkronisasi Jam Masuk
   if (s.jam) {
-    const rawJam = String(s.jam).replace('WIB', '').replace('.', ':').trim();
+    const cleanJam = formatJamAbsensi(s.jam);
+    const rawJam = String(cleanJam).replace('WIB', '').replace('.', ':').trim();
     const startStr = rawJam.split('-')[0].trim();
     const hourMatch = startStr.match(/(\d{1,2})/);
     if (hourMatch) {
@@ -5800,7 +5817,11 @@ window.submitAbsensiAslabAction = async function () {
         window.loadAbsensiHistoryList();
       }
     } else {
-      alert("❌ Gagal menyimpan absensi: " + (result.message || "Terjadi kesalahan."));
+      let errMsg = result.message;
+      if (!errMsg && Array.isArray(result.detail)) {
+        errMsg = result.detail.map(d => (d.loc ? d.loc.slice(1).join('.') + ': ' : '') + d.msg).join('\n');
+      }
+      alert("❌ Gagal menyimpan absensi: " + (errMsg || "Terjadi kesalahan."));
     }
   } catch (err) {
     console.error("Submit absensi error:", err);
