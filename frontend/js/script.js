@@ -1709,6 +1709,10 @@ async function fetchAllJadwal() {
       }
       populateFilters();
       applyFilters();
+      if (typeof syncRealtimeLabStatus === 'function') {
+        _lastLabStatusHash = '';
+        syncRealtimeLabStatus(true);
+      }
     } else {
       if (!filterTanggal.value) { applyFilters(); }
       else { tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color:var(--badge-cc);">Gagal memuat data jadwal: ${data.message}</td></tr>`; }
@@ -2979,7 +2983,7 @@ async function syncRealtimeLabStatus(force = false) {
     const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const targetDate = (filterTanggal && filterTanggal.value) ? filterTanggal.value.trim() : currentDayStr;
 
-    const res = await fetch(`/api/status-lab?tanggal=${encodeURIComponent(targetDate)}`, {
+    const res = await fetch(`${API_BASE_URL}/api/status-lab?tanggal=${encodeURIComponent(targetDate)}&_t=${Date.now()}`, {
       cache: 'no-store'
     });
     if (!res.ok) return;
@@ -3000,16 +3004,17 @@ async function syncRealtimeLabStatus(force = false) {
           const jJam = (j.jam || '').substring(0, 5);
           const jCamp = formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan));
           const matchCamp = !statCamp || !jCamp || (jCamp === statCamp);
-          if (j.tanggal === stat.tanggal && isSameRoomName(j.nama_ruangan, stat.nama_ruangan) && matchCamp) {
+          const matchRoom = (stat.id_ruangan && j.id_ruangan && Number(stat.id_ruangan) === Number(j.id_ruangan)) ||
+                            isSameRoomName(j.nama_ruangan, stat.nama_ruangan);
+          if (j.tanggal === stat.tanggal && matchRoom && matchCamp) {
             if (stat.status_lab === 'tutup') {
-              if (jJam === statJam || statJam === '08:00') {
-                j.status_lab = stat.status_lab;
-                j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
-                j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
-              }
+              // Jika status ditutup: tandai seluruh sesi ruangan hari ini sebagai ditutup (konsisten dengan toggle)
+              j.status_lab = 'tutup';
+              j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
+              j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
             } else if (stat.status_lab === 'buka') {
-              if (jJam === statJam) {
-                j.status_lab = stat.status_lab;
+              if (jJam === statJam || !statJam) {
+                j.status_lab = 'buka';
                 j.status_lab_oleh = stat.diubah_oleh || 'Aslab';
                 j.status_lab_waktu = stat.waktu_aksi_str ? stat.waktu_aksi_str.substring(0, 5) : '';
               }
@@ -3027,6 +3032,9 @@ async function syncRealtimeLabStatus(force = false) {
     }
     if (typeof updateTvModeData === 'function') {
       updateTvModeData(false, targetDate);
+    }
+    if (typeof applyFilters === 'function') {
+      applyFilters();
     }
 
     const modalEl = document.getElementById('room-detail-modal');
@@ -6778,8 +6786,19 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
 
     const targetKampus = kampusStr || (window._currentDetailRoom ? window._currentDetailRoom.kampusStr : null);
 
+    let targetIdRuangan = null;
+    if (window._currentDetailRoom && Array.isArray(window._currentDetailRoom.schedules)) {
+      const match = window._currentDetailRoom.schedules.find(s => s.id_ruangan);
+      if (match) targetIdRuangan = match.id_ruangan;
+    }
+    if (!targetIdRuangan && Array.isArray(allJadwal)) {
+      const match = allJadwal.find(j => isSameRoomName(j.nama_ruangan, roomName) && (!targetKampus || formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan)) === formatCampusName(targetKampus)) && j.id_ruangan);
+      if (match) targetIdRuangan = match.id_ruangan;
+    }
+
     const payload = {
       tanggal: tanggal,
+      id_ruangan: targetIdRuangan,
       nama_ruangan: roomName,
       kampus: targetKampus,
       jam: jam,
@@ -6789,7 +6808,7 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       diubah_oleh: 'Aslab (Web)'
     };
 
-    const res = await fetch('/api/status-lab', {
+    const res = await fetch(`${API_BASE_URL}/api/status-lab`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -6806,7 +6825,9 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
           const jJam = (j.jam || '').substring(0, 5);
           const jCamp = formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan));
           const matchCamp = !targetKampus || !jCamp || (jCamp === formatCampusName(targetKampus));
-          if (j.tanggal === tanggal && isSameRoomName(j.nama_ruangan, roomName) && matchCamp) {
+          const matchRoom = (targetIdRuangan && j.id_ruangan && Number(targetIdRuangan) === Number(j.id_ruangan)) ||
+                            isSameRoomName(j.nama_ruangan, roomName);
+          if (j.tanggal === tanggal && matchRoom && matchCamp) {
             if (targetStatus === 'tutup') {
               // Jika ditutup, seluruh sesi hari ini untuk ruangan ini ditutup
               j.status_lab = 'tutup';
@@ -6870,12 +6891,20 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       if (typeof updateActiveLabPanel === 'function') {
         updateActiveLabPanel();
       }
+      if (typeof applyFilters === 'function') {
+        applyFilters();
+      }
 
       if (typeof BroadcastChannel !== 'undefined') {
         try {
           const labChannel = new BroadcastChannel('unama_lab_status_sync');
-          labChannel.postMessage({ type: 'LAB_STATUS_CHANGED', roomName, targetStatus });
+          labChannel.postMessage({ type: 'LAB_STATUS_CHANGED', roomName, targetStatus, id_ruangan: targetIdRuangan });
         } catch (e) {}
+      }
+
+      // Picu sinkronisasi instan dari server untuk memastikan konsistensi multi-device
+      if (typeof syncRealtimeLabStatus === 'function') {
+        syncRealtimeLabStatus(true);
       }
 
       if (typeof showToast === 'function') {

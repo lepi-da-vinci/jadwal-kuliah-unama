@@ -3410,14 +3410,27 @@ def update_status_lab(data: StatusLabUpdateInput):
             conn = get_db()
             cursor = conn.cursor(dictionary=True)
             clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
-            query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
-            params = [f"%{clean_kw}%"]
+            
+            # Coba pencarian eksak terlebih dahulu berdasarkan nama ruangan dan kampus
+            query_exact = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
+            params_exact = [data.nama_ruangan.strip()]
             if detected_camp:
-                query += " AND kampus = %s"
-                params.append(detected_camp)
-            query += " LIMIT 1"
-            cursor.execute(query, tuple(params))
+                query_exact += " AND kampus = %s"
+                params_exact.append(detected_camp)
+            query_exact += " LIMIT 1"
+            cursor.execute(query_exact, tuple(params_exact))
             row = cursor.fetchone()
+            
+            if not row:
+                query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
+                params = [f"%{clean_kw}%"]
+                if detected_camp:
+                    query += " AND kampus = %s"
+                    params.append(detected_camp)
+                query += " LIMIT 1"
+                cursor.execute(query, tuple(params))
+                row = cursor.fetchone()
+                
             if row:
                 id_ruangan = row['id_ruangan']
             cursor.close()
@@ -3448,21 +3461,31 @@ def update_status_lab(data: StatusLabUpdateInput):
             try:
                 conn_t = scraper.get_db()
                 cur_t = conn_t.cursor()
+                # 1. Update seluruh riwayat status operasional ruangan hari ini menjadi tutup
                 cur_t.execute(
                     "UPDATE status_operasional_lab SET status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW() WHERE tanggal = %s AND id_ruangan = %s",
                     (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan)
                 )
+                # 2. Sinkronkan seluruh sesi jadwal aktif hari ini di ruangan ini agar tercatat eksplisit ditutup
+                cur_t.execute("""
+                    INSERT INTO status_operasional_lab (tanggal, id_ruangan, jam, nama_mk, kelas, status_lab, diubah_oleh, waktu_aksi)
+                    SELECT j.tanggal, j.id_ruangan, j.jam, j.nama_mk, j.kelas, 'tutup', %s, NOW()
+                    FROM jadwal j
+                    WHERE j.tanggal = %s AND j.id_ruangan = %s
+                    ON DUPLICATE KEY UPDATE status_lab = 'tutup', diubah_oleh = VALUES(diubah_oleh), waktu_aksi = NOW()
+                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
                 conn_t.commit()
                 cur_t.close()
                 conn_t.close()
-            except Exception:
-                pass
+            except Exception as err_t:
+                print(f"[Error update all sessions to tutup]: {err_t}")
 
         if sukses:
             return {
                 "status": "success",
                 "message": f"Status lab berhasil diperbarui menjadi {data.status_lab}",
                 "status_lab": data.status_lab,
+                "id_ruangan": id_ruangan,
                 "waktu": datetime.datetime.now().strftime("%H:%M")
             }
         else:
@@ -3490,6 +3513,8 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
         if id_ruangan:
             query += " AND sol.id_ruangan = %s"
             params.append(id_ruangan)
+
+        query += " ORDER BY sol.waktu_aksi ASC, sol.id ASC"
 
         cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
