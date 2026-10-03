@@ -570,7 +570,7 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
             params.append(target_kampus)
 
         cursor.execute(f'''
-            SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+            SELECT r.id_ruangan, r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
             FROM ruangan r
             LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
@@ -586,6 +586,31 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
         r_info = f"{jadwals[0]['nama_ruangan']} ({jadwals[0]['kampus']})"
         tgl_indo = format_tanggal_indo(today_str)
         
+        # Cek status pintu operasional lab/ruang hari ini
+        door_info = ""
+        room_id = jadwals[0].get('id_ruangan')
+        if room_id:
+            try:
+                cursor.execute('''
+                    SELECT status_lab, diubah_oleh, DATE_FORMAT(waktu_aksi, '%H:%i') as waktu_aksi_str
+                    FROM status_operasional_lab
+                    WHERE tanggal = %s AND id_ruangan = %s
+                    ORDER BY waktu_aksi DESC, id DESC
+                    LIMIT 1
+                ''', (today_str, room_id))
+                sol_row = cursor.fetchone()
+                if sol_row:
+                    st = (sol_row.get('status_lab') or '').lower()
+                    oleh = sol_row.get('diubah_oleh') or 'Aslab'
+                    waktu = sol_row.get('waktu_aksi_str') or ''
+                    waktu_txt = f" pukul {waktu} WIB" if waktu else ""
+                    if st == 'buka':
+                        door_info = f"• Status Pintu: *DIBUKA* 🟢 (oleh {oleh}{waktu_txt})\n"
+                    elif st == 'tutup':
+                        door_info = f"• Status Pintu: *DIKUNCI / TUTUP* 🔒 (oleh {oleh}{waktu_txt})\n"
+            except Exception:
+                pass
+
         ongoing = None
         upcoming = []
         valid_scheds = [j for j in jadwals if j['jam'] is not None]
@@ -615,12 +640,16 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
         if ongoing:
             sisa = ongoing['end_min'] - now_min
             msg += f"*STATUS: SEDANG DIPAKAI KULIAH*\n"
+            if door_info:
+                msg += door_info
             msg += f"• MK: {ongoing['mk']} ({ongoing['kelas']}) [{ongoing['status']}]\n"
             msg += f"• Dosen: {ongoing['dosen']}\n"
             msg += f"• Jam: {ongoing['start_str']} - {ongoing['end_str']}\n"
             msg += f"• Sisa Waktu: *{sisa} menit lagi* (selesai {ongoing['end_str']})\n"
         else:
             msg += f"*STATUS: KOSONG / TIDAK ADA KULIAH*\n"
+            if door_info:
+                msg += door_info
             msg += f"• Saat ini tidak ada perkuliahan yang aktif di ruangan ini.\n"
             
         if upcoming:

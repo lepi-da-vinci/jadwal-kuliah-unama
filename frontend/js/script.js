@@ -2559,6 +2559,64 @@ function isSameRoomName(nameA, nameB) {
 window.normalizeRoomKey = normalizeRoomKey;
 window.isSameRoomName = isSameRoomName;
 
+function getRoomOperationalStatus(schedules, isToday) {
+  if (!isToday || !Array.isArray(schedules) || schedules.length === 0) {
+    return { status: 'tutup', label: 'belum', session: null, waktu: '', oleh: '' };
+  }
+
+  let latestActionMinutes = -1;
+  let latestStatus = null;
+  let latestSession = null;
+
+  for (const s of schedules) {
+    const st = (s.status_lab || '').toLowerCase();
+    if (st === 'buka' || st === 'tutup') {
+      let actionMin = -1;
+      if (s.status_lab_waktu && s.status_lab_waktu.includes(':')) {
+        const parts = s.status_lab_waktu.split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (!isNaN(h) && !isNaN(m)) actionMin = h * 60 + m;
+      }
+
+      // Prioritaskan aksi operasional terbaru berdasarkan waktu tindakan; jika sama gunakan urutan sesi
+      if (actionMin >= 0) {
+        if (actionMin >= latestActionMinutes) {
+          latestActionMinutes = actionMin;
+          latestStatus = st;
+          latestSession = s;
+        }
+      } else {
+        if (st === 'buka' || latestStatus === null) {
+          latestStatus = st;
+          latestSession = s;
+        }
+      }
+    }
+  }
+
+  if (latestStatus === 'buka') {
+    return {
+      status: 'buka',
+      label: 'buka',
+      session: latestSession,
+      waktu: latestSession ? (latestSession.status_lab_waktu || '') : '',
+      oleh: latestSession ? (latestSession.status_lab_oleh || '') : ''
+    };
+  } else if (latestStatus === 'tutup') {
+    return {
+      status: 'tutup',
+      label: 'tutup',
+      session: latestSession,
+      waktu: latestSession ? (latestSession.status_lab_waktu || '') : '',
+      oleh: latestSession ? (latestSession.status_lab_oleh || '') : ''
+    };
+  }
+
+  return { status: 'tutup', label: 'belum', session: null, waktu: '', oleh: '' };
+}
+window.getRoomOperationalStatus = getRoomOperationalStatus;
+
 function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime) {
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
   const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
@@ -2587,50 +2645,52 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     activeClass = nextClass;
   }
 
+  // Cek status operasional aktual buka/tutup yang dicatat oleh Aslab / Asmot
+  const opStatus = getRoomOperationalStatus(schedules, isToday);
+
   // Jika kelas saat ini aktif menurut jam tetapi telah ditutup secara eksplisit oleh aslab
   let isExplicitlyClosed = false;
-  if (activeClass && (activeClass.status_lab || '').toLowerCase() === 'tutup') {
+  if (opStatus.status === 'tutup' && (activeClass || validPhysicalClasses.length > 0) && opStatus.label === 'tutup') {
     isExplicitlyClosed = true;
   }
 
   let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
   let text = 'Kosong';
   let jamText = '';
-  let lockStatus = 'tutup';
 
   if (isOccupied && !isExplicitlyClosed) {
     state = 'occupied';
     text = activeClass.nama;
     jamText = activeClass.jam;
-    lockStatus = (activeClass.status_lab || '').toLowerCase() === 'buka' ? 'buka' : 'tutup';
   } else if (hasFutureClass && nextClass && (!isOccupied || isExplicitlyClosed)) {
     state = 'waiting';
     text = 'Jeda';
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    lockStatus = (nextClass.status_lab || '').toLowerCase() === 'buka' ? 'buka' : 'tutup';
   } else if (isToday && validPhysicalClasses.length > 0) {
     // Seluruh kelas fisik hari ini di ruangan ini telah selesai / ditutup
     state = 'finished';
     text = 'Selesai';
     jamText = isExplicitlyClosed ? '(Ditutup)' : '';
-    lockStatus = 'tutup';
   } else if (!isToday && activeDate < currentDayStr && validPhysicalClasses.length > 0) {
     state = 'finished';
     text = 'Selesai';
     jamText = '';
-    lockStatus = 'tutup';
   } else if (!isToday && activeDate > currentDayStr && (schedules || []).length > 0) {
     state = 'scheduled';
     text = 'Terjadwal';
     jamText = `(${schedules.length} Jadwal)`;
-    lockStatus = 'tutup';
   } else {
     state = 'empty';
     text = 'Kosong';
     jamText = '';
-    lockStatus = 'tutup';
   }
+
+  // Status gembok buka/tutup (lockStatus):
+  // Wajib selalu tergantung dari aksi buka/tutup aktual Aslab atau Asmot hari ini!
+  // Jika Aslab/Asmot mencatat ruangan DIBUKA, maka ikon gembok berstatus 'buka' (gembok terbuka),
+  // baik saat sedang jeda antar kelas, kelas sedang berlangsung, maupun jeda istirahat.
+  let lockStatus = isToday ? opStatus.status : 'tutup';
 
   return { state, text, jamText, lockStatus };
 }
@@ -6133,8 +6193,6 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
       let ongoingSession = null;
       let upcomingSession = null;
-      let openSession = null;
-      let lastClosedSession = null;
 
       for (const s of schedules) {
         const parts = (s.jam || '').split(/[-–—]/).map(p => p.trim());
@@ -6161,31 +6219,15 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             upcomingSession = s;
           }
         }
-
-        const st = (s.status_lab || '').toLowerCase();
-        if (st === 'buka') {
-          openSession = s;
-        } else if (st === 'tutup') {
-          lastClosedSession = s;
-        }
       }
 
       const relevantSession = ongoingSession || upcomingSession || schedules[0];
       window._currentDetailRoom.relevantSession = relevantSession;
 
-      let currentStatus = 'belum';
-      let statusOleh = '';
-      let statusWaktu = '';
-
-      if (openSession) {
-        currentStatus = 'buka';
-        statusOleh = openSession.status_lab_oleh || '';
-        statusWaktu = openSession.status_lab_waktu || '';
-      } else if (lastClosedSession) {
-        currentStatus = 'tutup';
-        statusOleh = lastClosedSession.status_lab_oleh || '';
-        statusWaktu = lastClosedSession.status_lab_waktu || '';
-      }
+      const opStatus = getRoomOperationalStatus(schedules, isToday);
+      let currentStatus = opStatus.label;
+      let statusOleh = opStatus.oleh;
+      let statusWaktu = opStatus.waktu;
 
       const lockBadgeEl = document.getElementById('room-detail-lock-badge');
       if (lockBadgeEl) {
