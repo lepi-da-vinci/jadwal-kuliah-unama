@@ -7126,6 +7126,7 @@ body.dark-theme #btn-show-absensi-aslab .aslab-btn-badge {
   #wa-modal-monitor,
   #wa-modal-semester,
   #wa-modal-absensi,
+  #wa-modal-absensi-config,
   .db-clear-modal-box {
     flex: 1 1 auto !important;
     min-height: 0 !important;

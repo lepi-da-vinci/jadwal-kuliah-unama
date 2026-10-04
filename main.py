@@ -3009,20 +3009,27 @@ class AbsensiInput(BaseModel):
     status_perkuliahan: Optional[str] = "Tatap Muka"
     keterangan: Optional[str] = None
 
+class MasterLabInput(BaseModel):
+    nama_lab: str
+    kampus: Optional[str] = "Thehok"
+
+class MasterAslabInput(BaseModel):
+    nama_aslab: str
+    kampus_tugas: Optional[str] = "Thehok"
+
 @app.get("/api/absensi/master")
 def get_absensi_master():
-    """Mengambil master data aslab (14 aslab) dan opsi-opsi Google Form"""
+    """Mengambil master data aslab dan opsi lab absensi dinamis dari database"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, role FROM asisten_lab WHERE role = 'aslab' ORDER BY kampus_tugas, nama_aslab")
         aslab_list = cursor.fetchall()
         
-        # Opsi Lab sesuai form Google Form resmi
-        labs = [
-            # Kobar
+        cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
+        labs_data = cursor.fetchall()
+        labs = [row["nama_lab"] for row in labs_data] if labs_data else [
             "1.5 Kobar", "1.6 Kobar", "1.7 Kobar", "1.8 Kobar", "1.9 Kobar",
-            # Thehok
             "1.3 Thehok", "1.4 Thehok", "1.5 Thehok", "2.7 Thehok", 
             "3.1 Thehok", "3.2 Thehok", "3.4 Thehok", "4.1 Thehok", "4.3 Thehok", 
             "Lab S2"
@@ -3042,6 +3049,7 @@ def get_absensi_master():
             "status": "success",
             "aslab": aslab_list,
             "labs": labs,
+            "labs_detail": labs_data,
             "jam_options": jam_options,
             "status_options": status_options
         }
@@ -3051,6 +3059,113 @@ def get_absensi_master():
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+@app.post("/api/absensi/master/lab")
+def add_master_lab(data: MasterLabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_lab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama lab tidak boleh kosong."}
+    kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO absensi_master_lab (nama_lab, kampus) VALUES (%s, %s)", (nama, kampus))
+        conn.commit()
+        return {"status": "success", "message": f"Lab '{nama}' berhasil ditambahkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.put("/api/absensi/master/lab/{id_lab_opsi}")
+def edit_master_lab(id_lab_opsi: int, data: MasterLabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_lab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama lab tidak boleh kosong."}
+    kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE absensi_master_lab SET nama_lab = %s, kampus = %s WHERE id_lab_opsi = %s", (nama, kampus, id_lab_opsi))
+        conn.commit()
+        return {"status": "success", "message": "Nama lab berhasil diperbarui."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/absensi/master/lab/{id_lab_opsi}")
+def delete_master_lab(id_lab_opsi: int, admin: str = Depends(verify_admin_token)):
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
+        conn.commit()
+        return {"status": "success", "message": "Opsi lab berhasil dihapus."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/absensi/master/aslab")
+def add_master_aslab(data: MasterAslabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_aslab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
+    kampus = data.kampus_tugas or "Thehok"
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO asisten_lab (nama_aslab, no_wa, kampus_tugas, role) VALUES (%s, '', %s, 'aslab')", (nama, kampus))
+        conn.commit()
+        return {"status": "success", "message": f"Asisten lab '{nama}' berhasil ditambahkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.put("/api/absensi/master/aslab/{id_aslab}")
+def edit_master_aslab(id_aslab: int, data: MasterAslabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_aslab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
+    kampus = data.kampus_tugas or "Thehok"
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE asisten_lab SET nama_aslab = %s, kampus_tugas = %s WHERE id_aslab = %s", (nama, kampus, id_aslab))
+        conn.commit()
+        return {"status": "success", "message": "Data asisten lab berhasil diperbarui."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/absensi/master/aslab/{id_aslab}")
+def delete_master_aslab(id_aslab: int, admin: str = Depends(verify_admin_token)):
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM asisten_lab WHERE id_aslab = %s", (id_aslab,))
+        conn.commit()
+        return {"status": "success", "message": "Asisten lab berhasil dihapus."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 
 def forward_absensi_to_google_form(data: AbsensiInput):
     """

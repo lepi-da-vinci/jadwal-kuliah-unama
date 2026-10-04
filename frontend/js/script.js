@@ -4636,6 +4636,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-semester')) document.getElementById('wa-modal-semester').style.display = 'none';
       if (document.getElementById('wa-modal-absensi')) document.getElementById('wa-modal-absensi').style.display = 'none';
+      if (document.getElementById('wa-modal-absensi-config')) document.getElementById('wa-modal-absensi-config').style.display = 'none';
       modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
@@ -4892,6 +4893,10 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         adminToggle.style.display = 'none';
         modalTitle.innerText = "Absensi Asisten Lab";
         modalIcon.innerHTML = SVG_WA_ICONS.absensi;
+
+        if (typeof window.loadAbsensiMasterConfig === 'function') {
+          window.loadAbsensiMasterConfig(true);
+        }
 
         // Inisialisasi tanggal: default TODAY jika kosong
         const tglInput = document.getElementById('absensi-tanggal');
@@ -5461,7 +5466,7 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
   const modalIcon = document.getElementById('wa-modal-icon');
   const adminToggle = document.getElementById('admin-mode-toggle');
 
-  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
+  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-absensi-config', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
   views.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
@@ -5471,6 +5476,10 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
   if (adminToggle) adminToggle.style.display = 'none';
   if (modalTitle) modalTitle.innerText = "Absensi Asisten Lab";
   if (modalIcon) modalIcon.innerHTML = (window.SVG_WA_ICONS && window.SVG_WA_ICONS.absensi) ? window.SVG_WA_ICONS.absensi : '';
+
+  if (typeof window.loadAbsensiMasterConfig === 'function') {
+    window.loadAbsensiMasterConfig(true);
+  }
 
   const tabSwitcher = document.getElementById('absensi-tab-switcher');
   if (tabSwitcher) tabSwitcher.style.display = isAslabAdmin ? 'flex' : 'none';
@@ -5569,7 +5578,7 @@ window.openAbsensiHistoryDirectly = function () {
   const modalTitle = document.getElementById('wa-modal-title');
   const modalIcon = document.getElementById('wa-modal-icon');
 
-  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
+  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-absensi-config', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
   views.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
@@ -6483,6 +6492,502 @@ window.closeAbsensiModalToMenu = function () {
     const w = el.closest('.custom-select-wrapper');
     if (w) w.style.zIndex = '';
   });
+};
+
+// ==========================================
+// PUSAT KELOLA OPSI DATA ABSEN (ADMIN)
+// ==========================================
+window._masterLabsCache = [];
+window._masterAslabsCache = [];
+
+function sanitizeCfgText(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+window.openAbsensiConfigDirectly = function () {
+  const cfgView = document.getElementById('wa-modal-absensi-config');
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  const modalTitle = document.getElementById('wa-modal-title');
+  const modalIcon = document.getElementById('wa-modal-icon');
+
+  const views = [
+    'wa-modal-menu', 'wa-modal-absensi', 'wa-modal-absensi-config', 'wa-modal-test',
+    'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan',
+    'wa-modal-add-ruangan', 'wa-modal-semester'
+  ];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  if (cfgView) cfgView.style.display = 'flex';
+  if (adminToggle) adminToggle.style.display = 'none';
+  if (modalTitle) modalTitle.innerText = "Kelola Opsi Data Absen";
+  if (modalIcon) {
+    modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
+  }
+
+  window.switchAbsensiConfigSubTab('lab');
+  window.loadAbsensiMasterConfig(true);
+};
+
+window.closeAbsensiConfigToMenu = function () {
+  const cfgView = document.getElementById('wa-modal-absensi-config');
+  const menuView = document.getElementById('wa-modal-menu');
+  if (cfgView) cfgView.style.display = 'none';
+  if (menuView) menuView.style.display = 'flex';
+
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) modalTitle.innerText = "Setting";
+
+  const modalIcon = document.getElementById('wa-modal-icon');
+  if (modalIcon) {
+    modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+  }
+
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  if (adminToggle) adminToggle.style.display = 'block';
+};
+
+window.switchAbsensiConfigSubTab = function (tab) {
+  const labBtn = document.getElementById('tab-btn-cfg-lab');
+  const aslabBtn = document.getElementById('tab-btn-cfg-aslab');
+  const labView = document.getElementById('cfg-subview-lab');
+  const aslabView = document.getElementById('cfg-subview-aslab');
+
+  if (tab === 'lab') {
+    if (labBtn) {
+      labBtn.style.background = 'var(--primary)';
+      labBtn.style.color = '#fff';
+      labBtn.style.fontWeight = '700';
+    }
+    if (aslabBtn) {
+      aslabBtn.style.background = 'transparent';
+      aslabBtn.style.color = 'var(--text-muted)';
+      aslabBtn.style.fontWeight = '600';
+    }
+    if (labView) labView.style.display = 'flex';
+    if (aslabView) aslabView.style.display = 'none';
+  } else {
+    if (aslabBtn) {
+      aslabBtn.style.background = 'var(--primary)';
+      aslabBtn.style.color = '#fff';
+      aslabBtn.style.fontWeight = '700';
+    }
+    if (labBtn) {
+      labBtn.style.background = 'transparent';
+      labBtn.style.color = 'var(--text-muted)';
+      labBtn.style.fontWeight = '600';
+    }
+    if (aslabView) aslabView.style.display = 'flex';
+    if (labView) labView.style.display = 'none';
+  }
+};
+
+window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
+  const labContainer = document.getElementById('cfg-lab-list-container');
+  const aslabContainer = document.getElementById('cfg-aslab-list-container');
+  const labCountBadge = document.getElementById('cfg-lab-count-badge');
+  const aslabCountBadge = document.getElementById('cfg-aslab-count-badge');
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master?_t=${Date.now()}`);
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') {
+      if (labContainer) labContainer.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 16px;">Gagal memuat master data.</div>';
+      if (aslabContainer) aslabContainer.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 16px;">Gagal memuat master asisten lab.</div>';
+      return;
+    }
+
+    const labs = data.labs_detail || [];
+    const aslabs = (data.aslab || []).map(a => ({
+      id: a.id || a.id_aslab,
+      nama: a.nama || a.nama_aslab,
+      kampus: a.kampus || a.kampus_tugas || 'Thehok',
+      role: a.role || 'aslab'
+    }));
+    window._masterLabsCache = labs;
+    window._masterAslabsCache = aslabs;
+
+    // 1. Render Labs List
+    if (labCountBadge) labCountBadge.innerText = `Daftar Lab (${labs.length})`;
+    if (labContainer) {
+      if (labs.length === 0) {
+        labContainer.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.85em;">Belum ada data lab tersimpan.</div>';
+      } else {
+        labContainer.innerHTML = labs.map((lab, idx) => {
+          const isKobar = (lab.kampus || '').toLowerCase().includes('kobar');
+          const badgeColor = isKobar ? '#3b82f6' : '#10b981';
+          const bgBadge = isKobar ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+          return `
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                </div>
+                <div style="min-width: 0;">
+                  <div style="font-weight: 700; font-size: 0.9em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeCfgText(lab.nama_lab)}</div>
+                  <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                    <span style="font-size: 0.72em; font-weight: 700; color: ${badgeColor}; background: ${bgBadge}; padding: 2px 6px; border-radius: 4px;">${sanitizeCfgText(lab.kampus || 'Thehok')}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                <button type="button" onclick="window.handleEditCfgLabByIndex(${idx})"
+                  title="Edit Nama Lab"
+                  style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.78em; font-weight: 600;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  <span>Edit</span>
+                </button>
+                <button type="button" onclick="window.handleDeleteCfgLabByIndex(${idx})"
+                  title="Hapus Lab"
+                  style="padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: #ef4444; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.78em; font-weight: 600;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span>Hapus</span>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 2. Render Aslab List
+    if (aslabCountBadge) aslabCountBadge.innerText = `Daftar Aslab (${aslabs.length})`;
+    if (aslabContainer) {
+      if (aslabs.length === 0) {
+        aslabContainer.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.85em;">Belum ada asisten lab tersimpan.</div>';
+      } else {
+        aslabContainer.innerHTML = aslabs.map((aslab, idx) => {
+          const isKobar = (aslab.kampus || '').toLowerCase().includes('kobar');
+          const badgeColor = isKobar ? '#3b82f6' : '#10b981';
+          const bgBadge = isKobar ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+          return `
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); color: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                </div>
+                <div style="min-width: 0;">
+                  <div style="font-weight: 700; font-size: 0.9em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeCfgText(aslab.nama)}</div>
+                  <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                    <span style="font-size: 0.72em; font-weight: 700; color: ${badgeColor}; background: ${bgBadge}; padding: 2px 6px; border-radius: 4px;">${sanitizeCfgText(aslab.kampus || 'Thehok')}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                <button type="button" onclick="window.handleEditCfgAslabByIndex(${idx})"
+                  title="Edit Aslab"
+                  style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.78em; font-weight: 600;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  <span>Edit</span>
+                </button>
+                <button type="button" onclick="window.handleDeleteCfgAslabByIndex(${idx})"
+                  title="Hapus Aslab"
+                  style="padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: #ef4444; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.78em; font-weight: 600;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span>Hapus</span>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 3. Update Dropdowns in Absensi Form if requested
+    if (refreshFormDropdowns) {
+      window.updateAbsensiFormDropdowns(labs, aslabs);
+    }
+  } catch (err) {
+    console.error('Error in loadAbsensiMasterConfig:', err);
+  }
+};
+
+window.updateAbsensiFormDropdowns = function (labs, aslabs) {
+  // Update #dropdown-absensi-nomor-lab
+  const labDropdown = document.getElementById('dropdown-absensi-nomor-lab');
+  if (labDropdown && Array.isArray(labs) && labs.length > 0) {
+    const kobarLabs = labs.filter(l => (l.kampus || '').toLowerCase().includes('kobar'));
+    const thehokLabs = labs.filter(l => !(l.kampus || '').toLowerCase().includes('kobar'));
+
+    let html = `<div class="aslab-list-item" data-value="" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '', '-- Pilih Lab --')">-- Pilih Lab --</div>`;
+    if (kobarLabs.length > 0) {
+      html += `<div class="custom-select-group-header">Kampus Kobar</div>`;
+      kobarLabs.forEach(l => {
+        const valSafe = sanitizeCfgText(l.nama_lab);
+        html += `<div class="aslab-list-item" data-value="${valSafe}" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '${valSafe.replace(/'/g, "\\'")}', '${valSafe.replace(/'/g, "\\'")}')">${valSafe}</div>`;
+      });
+    }
+    if (thehokLabs.length > 0) {
+      html += `<div class="custom-select-group-header">Kampus Thehok</div>`;
+      thehokLabs.forEach(l => {
+        const valSafe = sanitizeCfgText(l.nama_lab);
+        html += `<div class="aslab-list-item" data-value="${valSafe}" onclick="selectAbsensiCustomOption('absensi-nomor-lab', '${valSafe.replace(/'/g, "\\'")}', '${valSafe.replace(/'/g, "\\'")}')">${valSafe}</div>`;
+      });
+    }
+    labDropdown.innerHTML = html;
+  }
+
+  // Update #dropdown-absensi-nama-aslab
+  const aslabDropdown = document.getElementById('dropdown-absensi-nama-aslab');
+  if (aslabDropdown && Array.isArray(aslabs) && aslabs.length > 0) {
+    const kobarAslab = aslabs.filter(a => (a.kampus || '').toLowerCase().includes('kobar'));
+    const thehokAslab = aslabs.filter(a => !(a.kampus || '').toLowerCase().includes('kobar'));
+
+    let html = `<div class="aslab-list-item" data-value="" onclick="selectAbsensiCustomOption('absensi-nama-aslab', '', '-- Pilih Nama Asisten --', '')">-- Pilih Nama Asisten --</div>`;
+    if (kobarAslab.length > 0) {
+      html += `<div class="custom-select-group-header">Asisten Lab Kobar</div>`;
+      kobarAslab.forEach(a => {
+        const fullLabel = `${a.nama} (${a.kampus || 'Kobar'})`;
+        const valSafe = sanitizeCfgText(a.nama);
+        const lblSafe = sanitizeCfgText(fullLabel);
+        const kmpSafe = sanitizeCfgText(a.kampus || 'Kobar');
+        html += `<div class="aslab-list-item" data-value="${valSafe}" data-kampus="${kmpSafe}" onclick="selectAbsensiCustomOption('absensi-nama-aslab', '${valSafe.replace(/'/g, "\\'")}', '${lblSafe.replace(/'/g, "\\'")}', '${kmpSafe.replace(/'/g, "\\'")}')">${lblSafe}</div>`;
+      });
+    }
+    if (thehokAslab.length > 0) {
+      html += `<div class="custom-select-group-header">Asisten Lab Thehok</div>`;
+      thehokAslab.forEach(a => {
+        const fullLabel = `${a.nama} (${a.kampus || 'Thehok'})`;
+        const valSafe = sanitizeCfgText(a.nama);
+        const lblSafe = sanitizeCfgText(fullLabel);
+        const kmpSafe = sanitizeCfgText(a.kampus || 'Thehok');
+        html += `<div class="aslab-list-item" data-value="${valSafe}" data-kampus="${kmpSafe}" onclick="selectAbsensiCustomOption('absensi-nama-aslab', '${valSafe.replace(/'/g, "\\'")}', '${lblSafe.replace(/'/g, "\\'")}', '${kmpSafe.replace(/'/g, "\\'")}')">${lblSafe}</div>`;
+      });
+    }
+    html += `
+      <div class="aslab-list-item" data-value="custom" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'custom', 'Ketik Nama Sendiri (Custom)...')" style="font-weight: 700; color: var(--primary); border-top: 1px dashed var(--border); background: rgba(99, 102, 241, 0.05);">
+        Ketik Nama Sendiri (Custom)...
+      </div>
+    `;
+    aslabDropdown.innerHTML = html;
+  }
+};
+
+window.handleAddNewCfgLab = async function () {
+  const nameInput = document.getElementById('cfg-input-lab-name');
+  const kampusSelect = document.getElementById('cfg-select-lab-kampus');
+  const namaLab = (nameInput ? nameInput.value : '').trim();
+  const kampus = kampusSelect ? kampusSelect.value : 'Thehok';
+
+  if (!namaLab) {
+    alert('Silakan masukkan nama lab terlebih dahulu.');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nama_lab: namaLab, kampus: kampus })
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      if (nameInput) nameInput.value = '';
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert('Gagal menambah lab: ' + (json.message || 'Terjadi kesalahan'));
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan.');
+  }
+};
+
+window.handleEditCfgLabByIndex = async function (idx) {
+  const lab = window._masterLabsCache[idx];
+  if (!lab) return;
+
+  const newName = prompt(`Ubah nama lab:`, lab.nama_lab);
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) {
+    alert('Nama lab tidak boleh kosong.');
+    return;
+  }
+
+  const newKampus = prompt(`Ubah kampus (Thehok / Kobar):`, lab.kampus || 'Thehok');
+  if (newKampus === null) return;
+  const trimmedKampus = newKampus.trim() || 'Thehok';
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab/${lab.id_lab_opsi}`, {
+      method: 'PUT',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nama_lab: trimmedName, kampus: trimmedKampus })
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert('Gagal mengubah lab: ' + (json.message || 'Terjadi kesalahan'));
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan.');
+  }
+};
+
+window.handleDeleteCfgLabByIndex = async function (idx) {
+  const lab = window._masterLabsCache[idx];
+  if (!lab) return;
+
+  if (!confirm(`Yakin ingin menghapus pilihan lab '${lab.nama_lab}'?`)) return;
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab/${lab.id_lab_opsi}`, {
+      method: 'DELETE',
+      headers: getAdminHeaders()
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert('Gagal menghapus lab: ' + (json.message || 'Terjadi kesalahan'));
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan.');
+  }
+};
+
+window.handleAddNewCfgAslab = async function () {
+  const nameInput = document.getElementById('cfg-input-aslab-name');
+  const kampusSelect = document.getElementById('cfg-select-aslab-kampus');
+  const namaAslab = (nameInput ? nameInput.value : '').trim();
+  const kampus = kampusSelect ? kampusSelect.value : 'Thehok';
+
+  if (!namaAslab) {
+    alert('Silakan masukkan nama asisten lab terlebih dahulu.');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nama_aslab: namaAslab, kampus_tugas: kampus })
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      if (nameInput) nameInput.value = '';
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert('Gagal menambah aslab: ' + (json.message || 'Terjadi kesalahan'));
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan.');
+  }
+};
+
+window.handleEditCfgAslabByIndex = async function (idx) {
+  const aslab = window._masterAslabsCache[idx];
+  if (!aslab) return;
+
+  const newName = prompt(`Ubah nama asisten lab:`, aslab.nama);
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) {
+    alert('Nama asisten lab tidak boleh kosong.');
+    return;
+  }
+
+  const newKampus = prompt(`Ubah kampus tugas (Thehok / Kobar):`, aslab.kampus || 'Thehok');
+  if (newKampus === null) return;
+  const trimmedKampus = newKampus.trim() || 'Thehok';
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab/${aslab.id}`, {
+      method: 'PUT',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nama_aslab: trimmedName, kampus_tugas: trimmedKampus })
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert('Gagal mengubah aslab: ' + (json.message || 'Terjadi kesalahan'));
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan.');
+  }
+};
+
+window.handleDeleteCfgAslabByIndex = async function (idx) {
+  const aslab = window._masterAslabsCache[idx];
+  if (!aslab) return;
+
+  if (!confirm(`Yakin ingin menghapus asisten lab '${aslab.nama}' dari daftar?`)) return;
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab/${aslab.id}`, {
+      method: 'DELETE',
+      headers: getAdminHeaders()
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert('Gagal menghapus aslab: ' + (json.message || 'Terjadi kesalahan'));
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan.');
+  }
 };
 
 // Toggle Info Mase Inline Panel
