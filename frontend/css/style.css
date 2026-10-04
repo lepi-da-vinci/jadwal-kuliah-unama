@@ -737,6 +737,16 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   z-index: 2147483649 !important;
 }
 
+#btn-check-google-form:hover {
+  background: var(--primary, #6366f1) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+#btn-check-google-form:active {
+  transform: translateY(0);
+}
+
 /* ─── Fullscreen Filter, Info & Detail Modal Dedicated Styles ─── */
 #modal-fs-filter,
 #room-detail-modal,

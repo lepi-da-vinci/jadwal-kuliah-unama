@@ -6051,8 +6051,52 @@ window.triggerAbsensiScheduleLookup = function () {
   window.handleAbsensiDateOrLabChange();
 };
 
-window.applyAutofillDataToForm = function () {
-  window.handleAbsensiSessionSelected();
+window.generateGoogleFormPrefillUrl = function () {
+  const baseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/viewform";
+
+  const namaDosen = document.getElementById('absensi-nama-dosen')?.value.trim() || '';
+  const namaMk = document.getElementById('absensi-nama-mk')?.value.trim() || '';
+  const kodeKelas = document.getElementById('absensi-kode-kelas')?.value.trim() || '';
+  const tanggal = document.getElementById('absensi-tanggal')?.value.trim() || '';
+  const jamMasuk = document.getElementById('absensi-jam-masuk')?.value.trim() || '';
+  const statusKuliah = document.getElementById('absensi-status-select')?.value.trim() || 'Tatap Muka';
+  const namaAslab = document.getElementById('absensi-nama-aslab')?.value.trim() || '';
+  const nomorLab = document.getElementById('absensi-nomor-lab')?.value.trim() || '';
+
+  let year = '', month = '', day = '';
+  if (tanggal) {
+    const parts = tanggal.split('-');
+    if (parts.length === 3) {
+      year = parts[0];
+      month = parts[1];
+      day = parts[2];
+    }
+  }
+
+  const params = new URLSearchParams();
+  params.append('usp', 'pp_url');
+  if (namaDosen) params.append('entry.146029558', namaDosen);
+  if (namaMk) params.append('entry.404112387', namaMk);
+  if (kodeKelas) params.append('entry.380055525', kodeKelas);
+  if (statusKuliah) params.append('entry.1558064062', statusKuliah);
+  if (tanggal) {
+    params.append('entry.1210016936', tanggal);
+    if (year && month && day) {
+      params.append('entry.1210016936_year', year);
+      params.append('entry.1210016936_month', month);
+      params.append('entry.1210016936_day', day);
+    }
+  }
+  if (jamMasuk) params.append('entry.1292956818', jamMasuk);
+  if (namaAslab) params.append('entry.1658465425', namaAslab);
+  if (nomorLab) params.append('entry.1487398951', nomorLab);
+
+  return `${baseUrl}?${params.toString()}`;
+};
+
+window.checkAbsensiGoogleFormAction = function () {
+  const url = window.generateGoogleFormPrefillUrl();
+  window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 window.submitAbsensiAslabAction = async function () {
