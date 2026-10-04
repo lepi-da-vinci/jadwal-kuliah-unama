@@ -3179,6 +3179,52 @@ def submit_absensi(data: AbsensiInput):
             cursor.close()
             conn.close()
 
+class AbsensiEditInput(BaseModel):
+    nama_aslab: str
+    status_perkuliahan: Optional[str] = None
+    keterangan: Optional[str] = None
+
+@app.put("/api/absensi/{id_absensi}")
+def edit_absensi(id_absensi: int, data: AbsensiEditInput, admin: str = Depends(verify_admin_token)):
+    """Koreksi nama aslab / status / catatan pada absensi yang sudah tercatat (khusus Admin)"""
+    try:
+        nama = (data.nama_aslab or "").strip()
+        if not nama:
+            return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
+
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT * FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
+        current = cursor.fetchone()
+        if not current:
+            return {"status": "error", "message": "Data absensi tidak ditemukan."}
+
+        id_aslab = None
+        kampus = current.get("kampus")
+        cursor.execute("SELECT id_aslab, kampus_tugas FROM asisten_lab WHERE nama_aslab = %s LIMIT 1", (nama,))
+        row = cursor.fetchone()
+        if row:
+            id_aslab = row["id_aslab"]
+            if row.get("kampus_tugas"):
+                kampus = row["kampus_tugas"]
+
+        status = (data.status_perkuliahan or current.get("status_perkuliahan") or "Tatap Muka").strip()
+        keterangan = data.keterangan.strip() if data.keterangan is not None and data.keterangan.strip() else current.get("keterangan")
+
+        cursor.execute(
+            "UPDATE absensi_aslab SET id_aslab = %s, nama_aslab = %s, kampus = %s, status_perkuliahan = %s, keterangan = %s WHERE id_absensi = %s",
+            (id_aslab, nama, kampus, status, keterangan, id_absensi)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Data absensi berhasil dikoreksi."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 @app.get("/api/absensi")
 def get_absensi_list(tanggal: str = None, nomor_lab: str = None, kampus: str = None, nama_aslab: str = None, limit: int = 100):
     """Mengambil rekap/riwayat absensi aslab"""

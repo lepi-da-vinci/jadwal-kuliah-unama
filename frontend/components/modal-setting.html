@@ -183,8 +183,22 @@
       <!-- Kategori 3: Master Data Admin -->
       <div class="admin-only"
         style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
-        Kelola Master Data (Admin)
+        Kelola Master Data & Absensi (Admin)
       </div>
+      <button class="btn btn-secondary admin-only" id="btn-show-absensi-history-menu" onclick="window.openAbsensiHistoryDirectly()"
+        style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid #10b981; color: var(--text); background: rgba(16, 185, 129, 0.08); align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; border-radius: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+          <div style="text-align: left;">
+            <div style="font-weight: 700; color: var(--text);">Riwayat & Edit Absensi Lab</div>
+            <div style="font-size: 0.78em; color: var(--text-muted);">Lihat, koreksi nama aslab, atau hapus absensi</div>
+          </div>
+        </div>
+        <span style="font-size: 0.72em; font-weight: 800; background: #10b981; color: #fff; padding: 3px 8px; border-radius: 6px;">ADMIN</span>
+      </button>
       <button class="btn btn-secondary admin-only" id="btn-show-add-wa"
         style="display:none; padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05); align-items: center; justify-content: center; gap: 10px;">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"

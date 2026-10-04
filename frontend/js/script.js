@@ -5562,6 +5562,32 @@ window.switchAbsensiTab = function (tab) {
   }
 };
 
+window.openAbsensiHistoryDirectly = function () {
+  const menuView = document.getElementById('wa-modal-menu');
+  const absensiView = document.getElementById('wa-modal-absensi');
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  const modalTitle = document.getElementById('wa-modal-title');
+  const modalIcon = document.getElementById('wa-modal-icon');
+
+  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  if (absensiView) absensiView.style.display = 'flex';
+  if (adminToggle) adminToggle.style.display = 'none';
+  if (modalTitle) modalTitle.innerText = "Riwayat & Koreksi Absensi";
+  if (modalIcon) modalIcon.innerHTML = (window.SVG_WA_ICONS && window.SVG_WA_ICONS.absensi) ? window.SVG_WA_ICONS.absensi : '';
+
+  const tabSwitcher = document.getElementById('absensi-tab-switcher');
+  if (tabSwitcher) tabSwitcher.style.display = 'flex';
+
+  if (typeof window.switchAbsensiTab === 'function') {
+    window.switchAbsensiTab('history');
+  }
+};
+
 function formatJamAbsensi(jam) {
   if (!jam) return '';
   const str = String(jam).trim();
@@ -6284,6 +6310,11 @@ window.loadAbsensiHistoryList = async function () {
                   ${safeEscapeAbsensi(item.status_perkuliahan || 'Tatap Muka')}
                 </span>
               </div>
+              <div style="display: flex; align-items: center; gap: 2px;">
+              <button type="button" onclick="openEditAbsensiDialog(${item.id_absensi})" title="Edit nama aslab / data absensi"
+                style="background: transparent; border: none; color: var(--primary); cursor: pointer; padding: 4px; opacity: 0.8; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
               <button type="button" onclick="deleteAbsensiRecord(${item.id_absensi})" title="Hapus absensi ini"
                 style="background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 4px; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -6291,6 +6322,7 @@ window.loadAbsensiHistoryList = async function () {
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
               </button>
+              </div>
             </div>
             <div>
               <b style="font-size: 0.94em; color: var(--text);">${safeEscapeAbsensi(item.nama_mk || '-')}</b>
@@ -6307,6 +6339,7 @@ window.loadAbsensiHistoryList = async function () {
           </div>
         `;
       }
+      window._absensiHistoryCache = list;
       container.innerHTML = html;
     } else {
       container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ef4444; font-size: 0.88em;">Gagal mengambil data absensi.</div>';
@@ -6314,6 +6347,90 @@ window.loadAbsensiHistoryList = async function () {
   } catch (err) {
     console.error("Load absensi error:", err);
     container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ef4444; font-size: 0.88em;">Terjadi kesalahan jaringan.</div>';
+  }
+};
+
+window.closeEditAbsensiDialog = function () {
+  const el = document.getElementById('edit-absensi-overlay');
+  if (el) el.remove();
+};
+
+window.openEditAbsensiDialog = function (id) {
+  const item = (window._absensiHistoryCache || []).find(r => Number(r.id_absensi) === Number(id));
+  if (!item) return;
+  window.closeEditAbsensiDialog();
+
+  const names = [];
+  document.querySelectorAll('#dropdown-absensi-nama-aslab .aslab-list-item').forEach(el => {
+    const v = el.getAttribute('data-value');
+    if (v && v !== 'custom' && !names.includes(v)) names.push(v);
+  });
+  if (item.nama_aslab && !names.includes(item.nama_aslab)) names.unshift(item.nama_aslab);
+
+  const opts = names.map(n => `<option value="${safeEscapeAbsensi(n)}" ${n === item.nama_aslab ? 'selected' : ''}>${safeEscapeAbsensi(n)}</option>`).join('');
+  const statuses = ['Tatap Muka', 'Online', 'Cancel'];
+  const statusOpts = statuses.map(s => `<option value="${s}" ${s === (item.status_perkuliahan || 'Tatap Muka') ? 'selected' : ''}>${s}</option>`).join('');
+  const fieldStyle = 'width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size:0.92em; box-sizing:border-box; font-family:inherit;';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'edit-absensi-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:2147483650; background:rgba(15,23,42,0.6); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:16px;';
+  overlay.addEventListener('click', e => { if (e.target === overlay) window.closeEditAbsensiDialog(); });
+  overlay.innerHTML = `
+    <div style="background: var(--bg-card); border:1px solid var(--border); border-radius:18px; padding:20px; width:100%; max-width:420px; display:flex; flex-direction:column; gap:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">
+      <div>
+        <div style="font-weight:800; font-size:1.05em; color: var(--text);">Koreksi Data Absensi #${item.id_absensi}</div>
+        <div style="font-size:0.8em; color: var(--text-muted); margin-top:3px;">${safeEscapeAbsensi(item.nomor_lab || '-')} &bull; ${safeEscapeAbsensi(item.jam_masuk || '-')} &bull; ${safeEscapeAbsensi(item.nama_mk || '-')}</div>
+      </div>
+      <label style="font-size:0.82em; font-weight:700; color: var(--text);">Asisten Lab yang bertugas
+        <select id="edit-absensi-aslab" style="${fieldStyle} margin-top:5px;">${opts}</select>
+      </label>
+      <label style="font-size:0.82em; font-weight:700; color: var(--text);">Status Kuliah
+        <select id="edit-absensi-status" style="${fieldStyle} margin-top:5px;">${statusOpts}</select>
+      </label>
+      <label style="font-size:0.82em; font-weight:700; color: var(--text);">Catatan (opsional)
+        <input id="edit-absensi-ket" type="text" value="${safeEscapeAbsensi(item.keterangan || '')}" placeholder="Contoh: Koreksi nama aslab" style="${fieldStyle} margin-top:5px;">
+      </label>
+      <div style="display:flex; gap:8px; margin-top:4px;">
+        <button type="button" onclick="closeEditAbsensiDialog()" style="flex:1; padding:11px; border-radius:10px; border:1.5px solid var(--border); background:transparent; color: var(--text); font-weight:700; cursor:pointer;">Batal</button>
+        <button type="button" id="edit-absensi-save" onclick="saveEditAbsensi(${item.id_absensi})" style="flex:1.4; padding:11px; border-radius:10px; border:none; background:#10b981; color:#fff; font-weight:700; cursor:pointer;">Simpan Perubahan</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.saveEditAbsensi = async function (id) {
+  const btn = document.getElementById('edit-absensi-save');
+  const payload = {
+    nama_aslab: document.getElementById('edit-absensi-aslab')?.value || '',
+    status_perkuliahan: document.getElementById('edit-absensi-status')?.value || null,
+    keterangan: document.getElementById('edit-absensi-ket')?.value || null
+  };
+  if (!payload.nama_aslab) { alert('Pilih nama aslab terlebih dahulu.'); return; }
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  if (btn) { btn.disabled = true; btn.innerText = 'Menyimpan...'; }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/${id}`, {
+      method: 'PUT',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      window.closeEditAbsensiDialog();
+      window.loadAbsensiHistoryList();
+    } else {
+      alert('Gagal menyimpan: ' + (json.message || json.detail || 'Terjadi kesalahan'));
+      if (btn) { btn.disabled = false; btn.innerText = 'Simpan Perubahan'; }
+    }
+  } catch (e) {
+    alert('Terjadi kesalahan jaringan saat menyimpan.');
+    if (btn) { btn.disabled = false; btn.innerText = 'Simpan Perubahan'; }
   }
 };
 
