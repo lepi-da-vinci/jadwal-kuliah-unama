@@ -4808,7 +4808,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           detectedUrls.forEach((item, idx) => {
             const opt = document.createElement('option');
             opt.value = item.url;
-            opt.textContent = `${item.label} ➔ ${item.url}`;
+            opt.textContent = `${item.label} -> ${item.url}`;
             urlSelect.appendChild(opt);
 
             const lowerLabel = item.label.toLowerCase();
@@ -4922,15 +4922,9 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
           } catch (e) {}
         }
 
-        // Atur visibilitas tab switcher: Hanya tampil jika Admin ON
-        const tabSwitcher = document.getElementById('absensi-tab-switcher');
-        if (tabSwitcher) {
-          tabSwitcher.style.display = isAslabAdmin ? 'flex' : 'none';
-        }
-
-        if (typeof window.switchAbsensiTab === 'function') {
-          window.switchAbsensiTab('form');
-        }
+        // Pastikan form absen selalu tampil sebagai form utama
+        const formView = document.getElementById('absensi-view-form');
+        if (formView) formView.style.display = 'flex';
 
         // Refresh sesi kelas di lab jika lab sudah terpilih
         if (typeof window.handleAbsensiDateOrLabChange === 'function') {
@@ -5481,9 +5475,8 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
     window.loadAbsensiMasterConfig(true);
   }
 
-  const tabSwitcher = document.getElementById('absensi-tab-switcher');
-  if (tabSwitcher) tabSwitcher.style.display = isAslabAdmin ? 'flex' : 'none';
-  if (typeof window.switchAbsensiTab === 'function') window.switchAbsensiTab('form');
+  const formView = document.getElementById('absensi-view-form');
+  if (formView) formView.style.display = 'flex';
 
   if (settingModal) settingModal.classList.add('open');
 
@@ -5572,28 +5565,9 @@ window.switchAbsensiTab = function (tab) {
 };
 
 window.openAbsensiHistoryDirectly = function () {
-  const menuView = document.getElementById('wa-modal-menu');
-  const absensiView = document.getElementById('wa-modal-absensi');
-  const adminToggle = document.getElementById('admin-mode-toggle');
-  const modalTitle = document.getElementById('wa-modal-title');
-  const modalIcon = document.getElementById('wa-modal-icon');
-
-  const views = ['wa-modal-menu', 'wa-modal-absensi', 'wa-modal-absensi-config', 'wa-modal-test', 'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan'];
-  views.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-
-  if (absensiView) absensiView.style.display = 'flex';
-  if (adminToggle) adminToggle.style.display = 'none';
-  if (modalTitle) modalTitle.innerText = "Riwayat & Koreksi Absensi";
-  if (modalIcon) modalIcon.innerHTML = (window.SVG_WA_ICONS && window.SVG_WA_ICONS.absensi) ? window.SVG_WA_ICONS.absensi : '';
-
-  const tabSwitcher = document.getElementById('absensi-tab-switcher');
-  if (tabSwitcher) tabSwitcher.style.display = 'flex';
-
-  if (typeof window.switchAbsensiTab === 'function') {
-    window.switchAbsensiTab('history');
+  window.openAbsensiConfigDirectly();
+  if (typeof window.switchAbsensiConfigSubTab === 'function') {
+    window.switchAbsensiConfigSubTab('history');
   }
 };
 
@@ -6234,13 +6208,13 @@ window.submitAbsensiAslabAction = async function () {
     const result = await res.json();
 
     if (res.ok && result.status === 'success') {
-      alert("✅ Berhasil! " + (result.message || "Absensi lab telah dicatat ke database."));
+      alert("Berhasil! " + (result.message || "Absensi lab telah dicatat ke database."));
 
       // Refresh list sesi lab agar status dan nama aslab langsung terupdate realtime
       await window.handleAbsensiDateOrLabChange();
 
       // Jika admin, refresh riwayat
-      if (isAslabAdmin && typeof window.loadAbsensiHistoryList === 'function') {
+      if (typeof window.loadAbsensiHistoryList === 'function') {
         window.loadAbsensiHistoryList();
       }
     } else {
@@ -6248,11 +6222,11 @@ window.submitAbsensiAslabAction = async function () {
       if (!errMsg && Array.isArray(result.detail)) {
         errMsg = result.detail.map(d => (d.loc ? d.loc.slice(1).join('.') + ': ' : '') + d.msg).join('\n');
       }
-      alert("❌ Gagal menyimpan absensi: " + (errMsg || "Terjadi kesalahan."));
+      alert("Gagal menyimpan absensi: " + (errMsg || "Terjadi kesalahan."));
     }
   } catch (err) {
     console.error("Submit absensi error:", err);
-    alert("❌ Terjadi kesalahan jaringan saat mengirim absensi.");
+    alert("Terjadi kesalahan jaringan saat mengirim absensi.");
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalHtml;
@@ -6282,9 +6256,11 @@ window.loadAbsensiHistoryList = async function () {
       if (list.length === 0) {
         container.innerHTML = `
           <div style="text-align: center; padding: 30px 20px; color: var(--text-muted); background: var(--bg-card); border-radius: 12px; border: 1px dashed var(--border);">
-            <div style="font-size: 1.8em; margin-bottom: 6px;">📋</div>
+            <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="10" x2="16" y2="10"></line><line x1="8" y1="14" x2="12" y2="14"></line></svg>
+            </div>
             <div style="font-weight: 600; font-size: 0.95em; color: var(--text);">Belum Ada Absensi Dicatat</div>
-            <div style="font-size: 0.8em; opacity: 0.8; margin-top: 4px;">Pilih tab Form Absen untuk mencatat kehadiran dosen masuk lab hari ini.</div>
+            <div style="font-size: 0.8em; opacity: 0.8; margin-top: 4px;">Pilih menu Absensi Asisten Lab untuk mencatat kehadiran dosen masuk lab hari ini.</div>
           </div>
         `;
         return;
@@ -6528,7 +6504,7 @@ window.openAbsensiConfigDirectly = function () {
 
   if (cfgView) cfgView.style.display = 'flex';
   if (adminToggle) adminToggle.style.display = 'none';
-  if (modalTitle) modalTitle.innerText = "Kelola Opsi Data Absen";
+  if (modalTitle) modalTitle.innerText = "Kelola & Riwayat Absen";
   if (modalIcon) {
     modalIcon.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
   }
@@ -6558,35 +6534,42 @@ window.closeAbsensiConfigToMenu = function () {
 window.switchAbsensiConfigSubTab = function (tab) {
   const labBtn = document.getElementById('tab-btn-cfg-lab');
   const aslabBtn = document.getElementById('tab-btn-cfg-aslab');
+  const histBtn = document.getElementById('tab-btn-cfg-history');
   const labView = document.getElementById('cfg-subview-lab');
   const aslabView = document.getElementById('cfg-subview-aslab');
+  const histView = document.getElementById('cfg-subview-history');
+
+  const setInactive = (btn, view) => {
+    if (btn) {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-muted)';
+      btn.style.fontWeight = '600';
+    }
+    if (view) view.style.display = 'none';
+  };
+
+  const setActive = (btn, view) => {
+    if (btn) {
+      btn.style.background = 'var(--primary)';
+      btn.style.color = '#fff';
+      btn.style.fontWeight = '700';
+    }
+    if (view) view.style.display = 'flex';
+  };
+
+  setInactive(labBtn, labView);
+  setInactive(aslabBtn, aslabView);
+  setInactive(histBtn, histView);
 
   if (tab === 'lab') {
-    if (labBtn) {
-      labBtn.style.background = 'var(--primary)';
-      labBtn.style.color = '#fff';
-      labBtn.style.fontWeight = '700';
+    setActive(labBtn, labView);
+  } else if (tab === 'aslab') {
+    setActive(aslabBtn, aslabView);
+  } else if (tab === 'history') {
+    setActive(histBtn, histView);
+    if (typeof window.loadAbsensiHistoryList === 'function') {
+      window.loadAbsensiHistoryList();
     }
-    if (aslabBtn) {
-      aslabBtn.style.background = 'transparent';
-      aslabBtn.style.color = 'var(--text-muted)';
-      aslabBtn.style.fontWeight = '600';
-    }
-    if (labView) labView.style.display = 'flex';
-    if (aslabView) aslabView.style.display = 'none';
-  } else {
-    if (aslabBtn) {
-      aslabBtn.style.background = 'var(--primary)';
-      aslabBtn.style.color = '#fff';
-      aslabBtn.style.fontWeight = '700';
-    }
-    if (labBtn) {
-      labBtn.style.background = 'transparent';
-      labBtn.style.color = 'var(--text-muted)';
-      labBtn.style.fontWeight = '600';
-    }
-    if (aslabView) aslabView.style.display = 'flex';
-    if (labView) labView.style.display = 'none';
   }
 };
 
@@ -6825,43 +6808,115 @@ window.handleAddNewCfgLab = async function () {
   }
 };
 
-window.handleEditCfgLabByIndex = async function (idx) {
+window.closeCfgEditDialog = function () {
+  const el = document.getElementById('cfg-edit-modal-overlay');
+  if (el) el.remove();
+};
+
+window.openEditCfgLabDialog = function (idx) {
   const lab = window._masterLabsCache[idx];
   if (!lab) return;
+  window.closeCfgEditDialog();
 
-  const newName = prompt(`Ubah nama lab:`, lab.nama_lab);
-  if (newName === null) return;
-  const trimmedName = newName.trim();
-  if (!trimmedName) {
+  const isKobar = (lab.kampus || '').toLowerCase().includes('kobar');
+  const fieldStyle = 'width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.9em; box-sizing: border-box; outline: none; font-family: inherit;';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cfg-edit-modal-overlay';
+  overlay.style.cssText = 'position: fixed; inset: 0; z-index: 2147483650; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px;';
+  overlay.addEventListener('click', e => { if (e.target === overlay) window.closeCfgEditDialog(); });
+
+  overlay.innerHTML = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(99, 102, 241, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </div>
+        <div>
+          <div style="font-weight: 800; font-size: 1.05em; color: var(--text);">Edit Pilihan Lab</div>
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">Sesuaikan nama lab atau lokasi kampus</div>
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.84em; font-weight: 700; color: var(--text); margin-bottom: 5px;">Nama Laboratorium</label>
+        <input type="text" id="cfg-edit-lab-name-input" value="${sanitizeCfgText(lab.nama_lab)}" placeholder="Contoh: 1.5 Kobar" style="${fieldStyle}">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.84em; font-weight: 700; color: var(--text); margin-bottom: 5px;">Lokasi Kampus</label>
+        <select id="cfg-edit-lab-kampus-select" style="${fieldStyle} cursor: pointer;">
+          <option value="Thehok" ${!isKobar ? 'selected' : ''}>Kampus Thehok</option>
+          <option value="Kobar" ${isKobar ? 'selected' : ''}>Kampus Kobar</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 6px;">
+        <button type="button" onclick="closeCfgEditDialog()"
+          style="flex: 1; padding: 11px; border-radius: 10px; border: 1.5px solid var(--border); background: transparent; color: var(--text); font-weight: 700; cursor: pointer;">
+          Batal
+        </button>
+        <button type="button" id="cfg-edit-lab-save-btn" onclick="saveEditCfgLab(${lab.id_lab_opsi})"
+          style="flex: 1.4; padding: 11px; border-radius: 10px; border: none; background: #10b981; color: #fff; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Simpan Perubahan</span>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  setTimeout(() => {
+    const inp = document.getElementById('cfg-edit-lab-name-input');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 50);
+};
+
+window.saveEditCfgLab = async function (idLab) {
+  const nameInput = document.getElementById('cfg-edit-lab-name-input');
+  const kampusSelect = document.getElementById('cfg-edit-lab-kampus-select');
+  const saveBtn = document.getElementById('cfg-edit-lab-save-btn');
+  const newName = (nameInput ? nameInput.value : '').trim();
+  const newKampus = kampusSelect ? kampusSelect.value : 'Thehok';
+
+  if (!newName) {
     alert('Nama lab tidak boleh kosong.');
+    if (nameInput) nameInput.focus();
     return;
   }
-
-  const newKampus = prompt(`Ubah kampus (Thehok / Kobar):`, lab.kampus || 'Thehok');
-  if (newKampus === null) return;
-  const trimmedKampus = newKampus.trim() || 'Thehok';
 
   if (typeof getAdminToken === 'function' && !getAdminToken()) {
     const tok = await requestAdminLogin();
     if (!tok) return;
   }
 
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Menyimpan...'; }
+
   try {
-    const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab/${lab.id_lab_opsi}`, {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab/${idLab}`, {
       method: 'PUT',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nama_lab: trimmedName, kampus: trimmedKampus })
+      body: JSON.stringify({ nama_lab: newName, kampus: newKampus })
     });
     const json = await res.json();
     if (res.ok && json.status === 'success') {
+      window.closeCfgEditDialog();
       window.loadAbsensiMasterConfig(true);
     } else {
       alert('Gagal mengubah lab: ' + (json.message || 'Terjadi kesalahan'));
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = 'Simpan Perubahan'; }
     }
   } catch (e) {
     alert('Terjadi kesalahan jaringan.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = 'Simpan Perubahan'; }
   }
 };
+
+window.handleEditCfgLabByIndex = window.openEditCfgLabDialog;
 
 window.handleDeleteCfgLabByIndex = async function (idx) {
   const lab = window._masterLabsCache[idx];
@@ -6925,43 +6980,110 @@ window.handleAddNewCfgAslab = async function () {
   }
 };
 
-window.handleEditCfgAslabByIndex = async function (idx) {
+window.openEditCfgAslabDialog = function (idx) {
   const aslab = window._masterAslabsCache[idx];
   if (!aslab) return;
+  window.closeCfgEditDialog();
 
-  const newName = prompt(`Ubah nama asisten lab:`, aslab.nama);
-  if (newName === null) return;
-  const trimmedName = newName.trim();
-  if (!trimmedName) {
+  const isKobar = (aslab.kampus || '').toLowerCase().includes('kobar');
+  const fieldStyle = 'width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.9em; box-sizing: border-box; outline: none; font-family: inherit;';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cfg-edit-modal-overlay';
+  overlay.style.cssText = 'position: fixed; inset: 0; z-index: 2147483650; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px;';
+  overlay.addEventListener('click', e => { if (e.target === overlay) window.closeCfgEditDialog(); });
+
+  overlay.innerHTML = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="8.5" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <div>
+          <div style="font-weight: 800; font-size: 1.05em; color: var(--text);">Edit Asisten Lab</div>
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">Sesuaikan nama atau penugasan kampus aslab</div>
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.84em; font-weight: 700; color: var(--text); margin-bottom: 5px;">Nama Lengkap Asisten</label>
+        <input type="text" id="cfg-edit-aslab-name-input" value="${sanitizeCfgText(aslab.nama)}" placeholder="Contoh: Nama Asisten" style="${fieldStyle}">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.84em; font-weight: 700; color: var(--text); margin-bottom: 5px;">Kampus Tugas</label>
+        <select id="cfg-edit-aslab-kampus-select" style="${fieldStyle} cursor: pointer;">
+          <option value="Thehok" ${!isKobar ? 'selected' : ''}>Kampus Thehok</option>
+          <option value="Kobar" ${isKobar ? 'selected' : ''}>Kampus Kobar</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 6px;">
+        <button type="button" onclick="closeCfgEditDialog()"
+          style="flex: 1; padding: 11px; border-radius: 10px; border: 1.5px solid var(--border); background: transparent; color: var(--text); font-weight: 700; cursor: pointer;">
+          Batal
+        </button>
+        <button type="button" id="cfg-edit-aslab-save-btn" onclick="saveEditCfgAslab(${aslab.id})"
+          style="flex: 1.4; padding: 11px; border-radius: 10px; border: none; background: var(--primary); color: #fff; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Simpan Perubahan</span>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  setTimeout(() => {
+    const inp = document.getElementById('cfg-edit-aslab-name-input');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 50);
+};
+
+window.saveEditCfgAslab = async function (idAslab) {
+  const nameInput = document.getElementById('cfg-edit-aslab-name-input');
+  const kampusSelect = document.getElementById('cfg-edit-aslab-kampus-select');
+  const saveBtn = document.getElementById('cfg-edit-aslab-save-btn');
+  const newName = (nameInput ? nameInput.value : '').trim();
+  const newKampus = kampusSelect ? kampusSelect.value : 'Thehok';
+
+  if (!newName) {
     alert('Nama asisten lab tidak boleh kosong.');
+    if (nameInput) nameInput.focus();
     return;
   }
-
-  const newKampus = prompt(`Ubah kampus tugas (Thehok / Kobar):`, aslab.kampus || 'Thehok');
-  if (newKampus === null) return;
-  const trimmedKampus = newKampus.trim() || 'Thehok';
 
   if (typeof getAdminToken === 'function' && !getAdminToken()) {
     const tok = await requestAdminLogin();
     if (!tok) return;
   }
 
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Menyimpan...'; }
+
   try {
-    const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab/${aslab.id}`, {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab/${idAslab}`, {
       method: 'PUT',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nama_aslab: trimmedName, kampus_tugas: trimmedKampus })
+      body: JSON.stringify({ nama_aslab: newName, kampus_tugas: newKampus })
     });
     const json = await res.json();
     if (res.ok && json.status === 'success') {
+      window.closeCfgEditDialog();
       window.loadAbsensiMasterConfig(true);
     } else {
       alert('Gagal mengubah aslab: ' + (json.message || 'Terjadi kesalahan'));
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = 'Simpan Perubahan'; }
     }
   } catch (e) {
     alert('Terjadi kesalahan jaringan.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = 'Simpan Perubahan'; }
   }
 };
+
+window.handleEditCfgAslabByIndex = window.openEditCfgAslabDialog;
 
 window.handleDeleteCfgAslabByIndex = async function (idx) {
   const aslab = window._masterAslabsCache[idx];
@@ -7574,7 +7696,7 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
                             (roomName || '').toLowerCase().includes('lab') ||
                             (roomName || '').toLowerCase().includes('cisco');
     const entityLabel = isLabOrComputer ? 'lab' : 'ruang';
-    const statusText = targetStatus === 'buka' ? 'dibuka 🟢' : 'ditutup 🔒';
+    const statusText = targetStatus === 'buka' ? 'dibuka' : 'ditutup';
     if (typeof showToast === 'function') {
       showToast(`Menyimpan status: ${entityLabel} ${statusText}...`, 'info');
     }
@@ -12520,7 +12642,7 @@ function showCustomAlert(title, message, icon = 'info') {
     return showModernAlert({
       title: title,
       message: message,
-      type: (icon === '✅' || icon === 'success') ? 'success' : (icon === '❌' || icon === 'error') ? 'error' : 'warning'
+      type: (icon === 'success') ? 'success' : (icon === 'error') ? 'error' : 'warning'
     });
   }
 
@@ -17609,7 +17731,7 @@ function renderLabStats() {
     return `
       <tr>
         <td style="text-align: center; font-weight: 700; color: ${isTop ? '#f59e0b' : 'var(--text-muted)'};">
-          ${isTop ? '🏆 1' : idx + 1}
+          ${isTop ? '1' : idx + 1}
         </td>
         <td>
           <div style="font-weight: 700; color: var(--text-dark);">${cleanRoomName}</div>
@@ -17829,7 +17951,7 @@ function renderDosenStats() {
         return `
           <tr>
             <td style="text-align: center; font-weight: 700; color: ${isTop ? '#f59e0b' : 'var(--text-muted)'};">
-              ${isTop ? '🥇 1' : idx + 1}
+              ${isTop ? '1' : idx + 1}
             </td>
             <td><strong>${safeEscapeStats(d.nama_dosen)}</strong></td>
             <td style="text-align: center; font-weight: 600;">${d.total_sesi} Sesi</td>

@@ -13,7 +13,7 @@
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20261004_edit_absensi_v12">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20261004_edit_absensi_v13">
 </head>
 
 <body>
@@ -3836,35 +3836,18 @@
       <!-- Kategori 3: Master Data Admin -->
       <div class="admin-only"
         style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
-        Kelola Master Data & Absensi (Admin)
+        Kelola Master Data & Absensi
       </div>
-      <button class="btn btn-secondary admin-only" id="btn-show-absensi-history-menu" onclick="window.openAbsensiHistoryDirectly()"
-        style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid #10b981; color: var(--text); background: rgba(16, 185, 129, 0.08); align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; border-radius: 12px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
-          <div style="text-align: left;">
-            <div style="font-weight: 700; color: var(--text);">Riwayat & Edit Absensi Lab</div>
-            <div style="font-size: 0.78em; color: var(--text-muted);">Lihat, koreksi nama aslab, atau hapus absensi</div>
-          </div>
-        </div>
-        <span style="font-size: 0.72em; font-weight: 800; background: #10b981; color: #fff; padding: 3px 8px; border-radius: 6px;">ADMIN</span>
-      </button>
       <button class="btn btn-secondary admin-only" id="btn-show-absensi-config-menu" onclick="window.openAbsensiConfigDirectly()"
-        style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid var(--primary); color: var(--text); background: rgba(99, 102, 241, 0.08); align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; border-radius: 12px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-          <div style="text-align: left;">
-            <div style="font-weight: 700; color: var(--text);">Kelola Opsi Data Absen</div>
-            <div style="font-size: 0.78em; color: var(--text-muted);">Edit daftar nama lab, aslab & opsi form</div>
-          </div>
+        style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid var(--primary); color: var(--text); background: rgba(99, 102, 241, 0.08); align-items: center; justify-content: flex-start; gap: 12px; cursor: pointer; border-radius: 12px;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); flex-shrink: 0;">
+          <path d="M12 20h9"></path>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+        </svg>
+        <div style="text-align: left;">
+          <div style="font-weight: 700; color: var(--text);">Kelola & Riwayat Data Absen</div>
+          <div style="font-size: 0.78em; color: var(--text-muted);">Edit master nama lab, aslab & pantau riwayat absensi</div>
         </div>
-        <span style="font-size: 0.72em; font-weight: 800; background: var(--primary); color: #fff; padding: 3px 8px; border-radius: 6px;">ADMIN</span>
       </button>
       <button class="btn btn-secondary admin-only" id="btn-show-add-wa"
         style="display:none; padding: 15px; font-size: 1.1em; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: rgba(99, 102, 241, 0.05); align-items: center; justify-content: center; gap: 10px;">
@@ -4177,18 +4160,6 @@
 
     <!-- Tampilan Form & Rekap Absensi Asisten Lab (Dosen Masuk) -->
     <div id="wa-modal-absensi" class="modal-body" style="display: none; flex-direction: column; gap: 14px;">
-      <!-- Tab Switcher: Form Input vs Riwayat (Hanya Muncul di Mode Admin) -->
-      <div id="absensi-tab-switcher" class="admin-only" style="display: none; background: var(--bg-elevated); padding: 4px; border-radius: 12px; gap: 6px; border: 1px solid var(--border);">
-        <button type="button" id="tab-btn-absensi-form" onclick="switchAbsensiTab('form')"
-          style="flex: 1; padding: 10px 14px; font-size: 0.88em; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #fff;">
-          Form Absen
-        </button>
-        <button type="button" id="tab-btn-absensi-history" onclick="switchAbsensiTab('history')"
-          style="flex: 1; padding: 10px 14px; font-size: 0.88em; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted);">
-          Riwayat Absen (Admin)
-        </button>
-      </div>
-
       <!-- TAB 1: FORM INPUT ABSENSI -->
       <div id="absensi-view-form" style="display: flex; flex-direction: column; gap: 12px;">
         <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 95, 70, 0.05)); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 12px; font-size: 0.82em; color: var(--text); line-height: 1.45;">
@@ -4439,59 +4410,43 @@
         </div>
       </div>
 
-      <!-- TAB 2: RIWAYAT ABSENSI HARI INI (HANYA MODE ADMIN) -->
-      <div id="absensi-view-history" style="display: none; flex-direction: column; gap: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-          <div style="font-size: 0.86em; font-weight: 700; color: var(--text);" id="absensi-history-count-badge">
-            Total Absen: 0
-          </div>
-          <button type="button" onclick="loadAbsensiHistoryList()"
-            style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 5px 12px; border-radius: 6px; font-size: 0.8em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-            Refresh
-          </button>
-        </div>
-
-        <div id="absensi-history-container" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
-          <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.88em;">
-            Memuat riwayat absensi...
-          </div>
-        </div>
-
-        <div style="margin-top: 8px;">
-          <button type="button" class="modal-btn" id="absensi-history-back-btn" onclick="closeAbsensiModalToMenu()"
-            style="background: var(--text-muted); padding: 10px; width: 100%; min-height: 44px; font-weight: 600;">
-            Kembali ke Menu
-          </button>
-        </div>
       </div>
     </div>
 
-    <!-- Tampilan Kelola Opsi Data Absen (Admin: Edit Nama Lab, Aslab, dll) -->
+    <!-- Tampilan Kelola & Riwayat Data Absen (Admin: Edit Nama Lab, Aslab, Riwayat) -->
     <div id="wa-modal-absensi-config" class="modal-body" style="display: none; flex-direction: column; gap: 14px;">
       <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(79, 70, 229, 0.05)); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 10px; padding: 10px 12px; font-size: 0.82em; color: var(--text); line-height: 1.45;">
-        <b style="color: var(--primary);">Pusat Pengaturan Opsi Absen:</b> Kelola master opsi nama laboratorium dan asisten lab default. Perubahan di sini akan langsung disesuaikan ke pilihan formulir absen.
+        <b style="color: var(--primary);">Pusat Pengaturan & Riwayat Absen:</b> Kelola master opsi nama lab, asisten lab, dan pantau log riwayat absensi di sini.
       </div>
 
-      <!-- Sub-Tab Switcher: Kelola Lab vs Kelola Aslab -->
-      <div style="display: flex; background: var(--bg-elevated); padding: 4px; border-radius: 12px; gap: 6px; border: 1px solid var(--border);">
+      <!-- Sub-Tab Switcher: Kelola Lab vs Kelola Aslab vs Riwayat Absen -->
+      <div style="display: flex; background: var(--bg-elevated); padding: 4px; border-radius: 12px; gap: 4px; border: 1px solid var(--border);">
         <button type="button" id="tab-btn-cfg-lab" onclick="switchAbsensiConfigSubTab('lab')"
-          style="flex: 1; padding: 9px 12px; font-size: 0.85em; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          style="flex: 1; padding: 9px 8px; font-size: 0.82em; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
             <line x1="12" y1="17" x2="12" y2="21"></line>
           </svg>
-          <span>Daftar Nama Lab</span>
+          <span>Nama Lab</span>
         </button>
         <button type="button" id="tab-btn-cfg-aslab" onclick="switchAbsensiConfigSubTab('aslab')"
-          style="flex: 1; padding: 9px 12px; font-size: 0.85em; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px;">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          style="flex: 1; padding: 9px 8px; font-size: 0.82em; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 5px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
             <circle cx="9" cy="7" r="4"></circle>
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
           </svg>
-          <span>Daftar Asisten Lab</span>
+          <span>Asisten Lab</span>
+        </button>
+        <button type="button" id="tab-btn-cfg-history" onclick="switchAbsensiConfigSubTab('history')"
+          style="flex: 1; padding: 9px 8px; font-size: 0.82em; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 5px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <polyline points="12 7 12 12 15 15"></polyline>
+          </svg>
+          <span>Riwayat Absen</span>
         </button>
       </div>
 
@@ -4507,11 +4462,11 @@
             </svg>
             <span>Tambah Pilihan Lab Baru</span>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 120px; gap: 8px;">
+          <div style="display: grid; grid-template-columns: 1fr 125px; gap: 8px;">
             <input type="text" id="cfg-input-lab-name" placeholder="Contoh: 1.5 Kobar / Lab Cyber"
               style="width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none; box-sizing: border-box;">
             <select id="cfg-select-lab-kampus"
-              style="padding: 9px 8px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none; box-sizing: border-box;">
+              style="padding: 9px 28px 9px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background-color: var(--bg-elevated); color: var(--text); font-size: 0.85em; font-weight: 600; outline: none; box-sizing: border-box; cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 10px center;">
               <option value="Thehok">Thehok</option>
               <option value="Kobar">Kobar</option>
             </select>
@@ -4561,11 +4516,11 @@
             </svg>
             <span>Tambah Asisten Lab Baru</span>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 120px; gap: 8px;">
+          <div style="display: grid; grid-template-columns: 1fr 125px; gap: 8px;">
             <input type="text" id="cfg-input-aslab-name" placeholder="Nama Lengkap Asisten Lab"
               style="width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none; box-sizing: border-box;">
             <select id="cfg-select-aslab-kampus"
-              style="padding: 9px 8px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.85em; outline: none; box-sizing: border-box;">
+              style="padding: 9px 28px 9px 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background-color: var(--bg-elevated); color: var(--text); font-size: 0.85em; font-weight: 600; outline: none; box-sizing: border-box; cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 10px center;">
               <option value="Thehok">Thehok</option>
               <option value="Kobar">Kobar</option>
             </select>
@@ -4598,6 +4553,30 @@
         <div id="cfg-aslab-list-container" style="max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
           <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.86em;">
             Memuat daftar asisten lab...
+          </div>
+        </div>
+      </div>
+
+      <!-- SUBTAB 3: RIWAYAT ABSENSI -->
+      <div id="cfg-subview-history" style="display: none; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <div style="font-size: 0.86em; font-weight: 700; color: var(--text);" id="absensi-history-count-badge">
+            Total Absen: 0
+          </div>
+          <button type="button" onclick="loadAbsensiHistoryList()"
+            style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 5px 12px; border-radius: 6px; font-size: 0.8em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        <div id="absensi-history-container" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+          <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.88em;">
+            Memuat riwayat absensi...
           </div>
         </div>
       </div>
@@ -5128,7 +5107,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261004_edit_absensi_v12"></script>
+  <script src="frontend/js/script.js?v=20261004_edit_absensi_v13"></script>
 </body>
 
 </html>
