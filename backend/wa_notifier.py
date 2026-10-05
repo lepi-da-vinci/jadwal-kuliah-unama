@@ -3577,7 +3577,139 @@ def handle_incoming_message(sender, text, msg_id=None):
 
 # =========================================================================================
 # OLD FUNCTIONS THAT ARE KEPT FOR COMPATIBILITY / BACKGROUND TASKS
-# =========================================================================================
+def extract_affected_rooms(pesan_text, rooms_list):
+    """
+    Mengekstrak daftar ruangan yang terpengaruh dari teks notifikasi info mase.
+    Mengecek nama/nomor ruangan dan kampus agar presisi (tidak tertukar antar kampus).
+    """
+    matched = []
+    text_lower = pesan_text.lower()
+    for r in rooms_list:
+        r_name = r['nama_ruangan']
+        r_kampus = r['kampus']
+        clean_num = re.sub(r'^(?:r\.|lab\w*)\s*', '', r_name, flags=re.I).strip()
+        pattern = rf'\b(?:r\.\s*|labor\s*|lab\s*)?{re.escape(clean_num)}\b'
+        if re.search(pattern, text_lower):
+            kampus_lower = r_kampus.lower()
+            if kampus_lower in text_lower or not any(k in text_lower for k in ['kobar', 'thehok']):
+                r_dict = dict(r)
+                r_dict['is_lab'] = scraper.is_lab(r_name)
+                matched.append(r_dict)
+    return matched
+
+def check_and_notify_info_mase():
+    """
+    Memeriksa dan mengirimkan notifikasi perubahan jadwal & info mase hari ini (kelas tambahan, pindah ruangan, OL, CC/batal)
+    secara presisi dan tertarget:
+    - Jika Laboratorium (Lab / Labor): Dikirimkan HANYA ke Asisten Lab yang memegang lab tersebut.
+    - Jika Ruang Kelas Teori (Bukan Lab): Dikirimkan ke ASMOT di kampus ruangan tersebut (Kobar / Thehok).
+    - Mencegah spam dengan tracking sent_notifications per ID notifikasi & target penerima.
+    """
+    now = get_wib_now()
+    today_str = now.strftime("%Y-%m-%d")
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Ambil seluruh data master ruangan
+        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan")
+        all_rooms = cursor.fetchall()
+
+        # 2. Ambil seluruh data Aslab & Asmot yang terdaftar
+        cursor.execute("""
+            SELECT a.id_aslab, a.nama_aslab, a.no_wa, a.wa_lid, a.role, a.id_ruangan, a.kampus_tugas,
+                   r.nama_ruangan, r.kampus
+            FROM asisten_lab a
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE ((a.no_wa IS NOT NULL AND a.no_wa != '') OR (a.wa_lid IS NOT NULL AND a.wa_lid != ''))
+        """)
+        users = cursor.fetchall()
+
+        aslab_by_room = collections.defaultdict(list)
+        asmot_by_campus = collections.defaultdict(list)
+
+        for u in users:
+            target_wa = u['wa_lid'] or u['no_wa']
+            role = (u.get('role') or '').lower()
+            if role == 'asmot':
+                k_tugas = (u.get('kampus_tugas') or 'Kobar').strip()
+                asmot_by_campus[k_tugas.lower()].append(target_wa)
+                asmot_by_campus['semua'].append(target_wa)
+            elif u.get('id_ruangan'):
+                aslab_by_room[u['id_ruangan']].append(target_wa)
+
+        # 3. Ambil notifikasi_lab hari ini (TAMBAHAN & PERUBAHAN)
+        cursor.execute("""
+            SELECT id, tanggal, tipe_notif, pesan, semester, created_at
+            FROM notifikasi_lab
+            WHERE tanggal = %s AND tipe_notif IN ('TAMBAHAN', 'PERUBAHAN')
+            ORDER BY id ASC
+        """, (today_str,))
+        notifs = cursor.fetchall()
+
+        for nl in notifs:
+            nl_id = nl['id']
+            pesan_raw = nl['pesan']
+
+            # Ekstrak ruangan yang terkait di teks pesan
+            affected_rooms = extract_affected_rooms(pesan_raw, all_rooms)
+            if not affected_rooms:
+                continue
+
+            for r in affected_rooms:
+                id_r = r['id_ruangan']
+                nama_r = r['nama_ruangan']
+                kampus_r = r['kampus']
+                is_lab = r.get('is_lab', False)
+
+                if is_lab:
+                    # KASUS A: Laboratorium -> Kirim HANYA ke Aslab lab tersebut!
+                    target_aslabs = aslab_by_room.get(id_r, [])
+                    if not target_aslabs:
+                        continue
+
+                    msg = (
+                        f"*INFO MASE - JADWAL LAB*\n"
+                        f"_{nama_r} ({kampus_r})_\n"
+                        f"------------------------------\n"
+                        f"{pesan_raw}\n\n"
+                        f"_Mohon sesuaikan persiapan laboratorium mas._"
+                    )
+
+                    for target_wa in set(target_aslabs):
+                        notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
+                        if notif_key not in sent_notifications:
+                            if send_wa_message(target_wa, msg):
+                                sent_notifications.add(notif_key)
+                                log_chatbot("SUCCESS", f"Info Mase Lab terkirim ke Aslab {target_wa} untuk {nama_r}", "INFO-MASE")
+                else:
+                    # KASUS B: Ruang Kelas Teori -> Kirim ke ASMOT kampus tersebut!
+                    camp_key = kampus_r.lower()
+                    target_asmots = asmot_by_campus.get(camp_key, [])
+                    if not target_asmots:
+                        continue
+
+                    msg = (
+                        f"*INFO MASE - OPERASIONAL KELAS (ASMOT)*\n"
+                        f"_{nama_r} ({kampus_r})_\n"
+                        f"------------------------------\n"
+                        f"{pesan_raw}\n\n"
+                        f"_Mohon sesuaikan kontrol AC dan ruangan ya mas._"
+                    )
+
+                    for target_wa in set(target_asmots):
+                        notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
+                        if notif_key not in sent_notifications:
+                            if send_wa_message(target_wa, msg):
+                                sent_notifications.add(notif_key)
+                                log_chatbot("SUCCESS", f"Info Mase Asmot terkirim ke {target_wa} untuk {nama_r} ({kampus_r})", "INFO-MASE")
+
+    except Exception as e:
+        log_chatbot("ERROR", f"Error in check_and_notify_info_mase: {e}", "INFO-MASE")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 def check_lab_schedules():
     now = get_wib_now()
@@ -3647,6 +3779,9 @@ def check_lab_schedules():
             room_schedules[id_ruangan].append({'nama_mk': row['nama_mk'], 'start_min': start_min, 'end_min': start_min + dur})
         
         # --- A. NOTIFIKASI UNTUK ASLAB (LAB KHUSUS) ---
+        aslab_open_batches = collections.defaultdict(list)
+        aslab_close_batches = collections.defaultdict(list)
+
         for id_room, scheds in room_schedules.items():
             if id_room not in aslab_data:
                 continue
@@ -3667,30 +3802,25 @@ def check_lab_schedules():
                     openings.append(nxt)
             closings.append({'cls': scheds[-1], 'tipe': 'SELESAI', 'gap': 0, 'nxt': None})
             
-            # 1. Pemicu Buka Lab (HANYA 1 KALI, tepat 15 menit sebelum kelas mulai)
+            # 1. Pemicu Buka Lab (15 menit sebelum kelas mulai)
             for cls in openings:
                 diff_buka = cls['start_min'] - current_total_min
                 target_diff = 15
                 if target_diff - 1 <= diff_buka <= target_diff:
                     notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
                     if notif_key not in sent_notifications:
-                        # Cek apakah lab untuk sesi ini SUDAH DIBUKA sebelumnya di sistem
                         if is_room_already_open(cursor, current_date, id_room, cls['start_min']):
                             sent_notifications.add(notif_key)
                             log_chatbot("INFO", f"Lab {room_name_full} untuk {cls['nama_mk']} sudah dibuka di sistem. Notifikasi buka lab dilewati.", "OPERASIONAL-LAB")
                             continue
-
-                        h, m = cls['start_min'] // 60, cls['start_min'] % 60
-                        msg = (
-                            f"*Buka Lab {room_name_full}*\n\n"
-                            f"Kelas *{cls['nama_mk']}* mulai jam {h:02d}:{m:02d} WIB.\n\n"
-                            f"Tolong buka lab dalam {target_diff} menit mas.\n\n"
-                            f"_Balas *'udah buka'* jika lab sudah kamu buka ya mas._"
-                        )
-                        if send_wa_message(no_wa, msg):
-                            sent_notifications.add(notif_key)
+                        aslab_open_batches[(no_wa, cls['start_min'])].append({
+                            'id_room': id_room,
+                            'room_name': room_name_full,
+                            'nama_mk': cls['nama_mk'],
+                            'notif_key': notif_key
+                        })
             
-            # 2. Pemicu Jeda Lab / Tutup Lab (HANYA 1 KALI, tepat 15 menit sebelum kelas selesai)
+            # 2. Pemicu Jeda Lab / Tutup Lab (15 menit sebelum kelas selesai)
             for item in closings:
                 cls = item['cls']
                 diff_tutup = cls['end_min'] - current_total_min
@@ -3698,7 +3828,6 @@ def check_lab_schedules():
                 if target_diff - 1 <= diff_tutup <= target_diff:
                     notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
                     if notif_key not in sent_notifications:
-                        # Cek apakah lab sudah ditutup lebih awal
                         cls_jam_str = f"{cls['start_min'] // 60:02d}:{cls['start_min'] % 60:02d}:00"
                         cursor.execute("""
                             SELECT status_lab FROM status_operasional_lab
@@ -3709,30 +3838,86 @@ def check_lab_schedules():
                         if sol and sol.get('status_lab') == 'tutup':
                             sent_notifications.add(notif_key)
                             continue
+                        aslab_close_batches[(no_wa, cls['end_min'])].append({
+                            'id_room': id_room,
+                            'room_name': room_name_full,
+                            'cls': cls,
+                            'item': item,
+                            'notif_key': notif_key
+                        })
 
-                        eh, em = cls['end_min'] // 60, cls['end_min'] % 60
-                        if item['tipe'] == 'JEDA':
-                            nxt_cls = item['nxt']
-                            nh, nm = nxt_cls['start_min'] // 60, nxt_cls['start_min'] % 60
-                            msg = (
-                                f"*Jeda Lab {room_name_full}*\n\n"
-                                f"Kelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
-                                f"• *Kondisi:* _Jeda kosong {item['gap']} menit_\n"
-                                f"• *Kelas Berikutnya:* {nxt_cls['nama_mk']} (Mulai jam {nh:02d}:{nm:02d} WIB)\n\n"
-                                f"_Catatan: Ruangan sedang jeda antar kelas, lab jangan dikunci ya mas._"
-                            )
-                        else:
-                            msg = (
-                                f"*Tutup Lab {room_name_full}*\n\n"
-                                f"Kelas terakhir hari ini *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
-                                f"Tolong tutup dan kunci lab dalam {target_diff} menit mas (ruangan selesai digunakan hari ini).\n\n"
-                                f"_Balas *'udah tutup'* jika lab sudah kamu kunci ya mas._"
-                            )
-                        if send_wa_message(no_wa, msg):
-                            sent_notifications.add(notif_key)
+        # Kirim batching notifikasi Buka Lab ke Aslab
+        for (no_wa, start_min), items in aslab_open_batches.items():
+            h, m = start_min // 60, start_min % 60
+            if len(items) == 1:
+                it = items[0]
+                msg = (
+                    f"*Buka Lab {it['room_name']}*\n\n"
+                    f"Kelas *{it['nama_mk']}* mulai jam {h:02d}:{m:02d} WIB.\n\n"
+                    f"Tolong buka lab dalam 15 menit mas.\n\n"
+                    f"_Balas *'udah buka'* jika lab sudah kamu buka ya mas._"
+                )
+            else:
+                msg = (
+                    f"*PENGINGAT BUKA LAB*\n"
+                    f"Mulai Jam: {h:02d}:{m:02d} WIB (dalam 15 menit)\n"
+                    f"------------------------------\n"
+                )
+                for it in items:
+                    msg += f"• *{it['room_name']}:* {it['nama_mk']}\n"
+                msg += f"\nTolong buka lab sebelum kelas dimulai mas.\n_Balas *'udah buka'* jika lab sudah kamu buka ya mas._"
+
+            if send_wa_message(no_wa, msg):
+                for it in items:
+                    sent_notifications.add(it['notif_key'])
+
+        # Kirim batching notifikasi Tutup / Jeda Lab ke Aslab
+        for (no_wa, end_min), items in aslab_close_batches.items():
+            eh, em = end_min // 60, end_min % 60
+            if len(items) == 1:
+                it = items[0]
+                cls = it['cls']
+                item = it['item']
+                if item['tipe'] == 'JEDA':
+                    nxt_cls = item['nxt']
+                    nh, nm = nxt_cls['start_min'] // 60, nxt_cls['start_min'] % 60
+                    msg = (
+                        f"*Jeda Lab {it['room_name']}*\n\n"
+                        f"Kelas *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
+                        f"• *Kondisi:* _Jeda kosong {item['gap']} menit_\n"
+                        f"• *Kelas Berikutnya:* {nxt_cls['nama_mk']} (Mulai jam {nh:02d}:{nm:02d} WIB)\n\n"
+                        f"_Catatan: Ruangan sedang jeda antar kelas, lab jangan dikunci ya mas._"
+                    )
+                else:
+                    msg = (
+                        f"*Tutup Lab {it['room_name']}*\n\n"
+                        f"Kelas terakhir hari ini *{cls['nama_mk']}* selesai jam {eh:02d}:{em:02d} WIB.\n\n"
+                        f"Tolong tutup dan kunci lab dalam 15 menit mas (ruangan selesai digunakan hari ini).\n\n"
+                        f"_Balas *'udah tutup'* jika lab sudah kamu kunci ya mas._"
+                    )
+            else:
+                msg = (
+                    f"*PENGINGAT TUTUP / JEDA LAB*\n"
+                    f"Selesai Jam: {eh:02d}:{em:02d} WIB\n"
+                    f"------------------------------\n"
+                )
+                for it in items:
+                    cls = it['cls']
+                    item = it['item']
+                    kondisi = f"Jeda kosong {item['gap']} menit" if item['tipe'] == 'JEDA' else "Selesai hari ini"
+                    msg += f"• *{it['room_name']}:* {cls['nama_mk']} ({kondisi})\n"
+                msg += f"\n_Mohon koordinasikan penutupan lab ya mas._"
+
+            if send_wa_message(no_wa, msg):
+                for it in items:
+                    sent_notifications.add(it['notif_key'])
 
         # --- B. NOTIFIKASI UNTUK ASMOT (PENGELOLA AC SELURUH KELAS) ---
+        # Ringkas semua ruangan pada jam yang sama menjadi 1 pesan gabungan agar tidak spam
         if asmot_data:
+            asmot_on_batches = collections.defaultdict(list)
+            asmot_off_batches = collections.defaultdict(list)
+
             for id_room, scheds in room_schedules.items():
                 r_info = room_meta.get(id_room)
                 if not r_info:
@@ -3744,7 +3929,6 @@ def check_lab_schedules():
                     continue
                 scheds = sorted(scheds, key=lambda x: x['start_min'])
 
-                # Cari asmot yang bertugas di kampus ruangan ini
                 target_asmots = []
                 for asm in asmot_data:
                     k_tugas = asm.get('kampus_tugas') or 'Kobar'
@@ -3760,82 +3944,131 @@ def check_lab_schedules():
                     curr, nxt = scheds[i], scheds[i+1]
                     gap = nxt['start_min'] - curr['end_min']
                     if gap > 60:
-                        # Jeda panjang (> 60 menit): AC dimatikan sementara, lalu dinyalakan lagi sebelum kelas berikutnya
                         closings_asmot.append({'cls': curr, 'tipe': 'JEDA', 'gap': gap, 'nxt': nxt})
                         openings_asmot.append(nxt)
-                    else:
-                        # gap <= 60 menit: Masih ada kelas lanjutan segera, AC jangan dimatikan!
-                        pass
 
-                # Kelas terakhir hari ini di ruangan tersebut
                 closings_asmot.append({'cls': scheds[-1], 'tipe': 'SELESAI', 'gap': 0, 'nxt': None})
 
-                # 1. Pengingat Hidupkan AC (20 menit sebelum kelas)
+                # 1. Kumpulkan Pengingat Hidupkan AC (20 menit sebelum kelas)
                 for cls in openings_asmot:
                     diff_buka = cls['start_min'] - current_total_min
                     if 19 <= diff_buka <= 20:
                         notif_key = f"{current_date}_{id_room}_asmot_ac_on_{cls['start_min']}"
                         if notif_key not in sent_notifications:
-                            # Cek apakah ruangan sudah dibuka di sistem (status_lab == 'buka')
                             if is_room_already_open(cursor, current_date, id_room, cls['start_min']):
                                 sent_notifications.add(notif_key)
                                 log_chatbot("INFO", f"Ruangan {r_nama} ({r_kampus}) untuk {cls['nama_mk']} sudah dibuka di sistem. Pengingat AC dilewati.", "OPERASIONAL-ASMOT")
                                 continue
-
-                            h, m = cls['start_min'] // 60, cls['start_min'] % 60
-                            msg_asmot = (
-                                f"*PENGINGAT HIDUPKAN AC*\n"
-                                f"_{r_nama} ({r_kampus})_\n"
-                                f"------------------------------\n"
-                                f"• *Kelas:* {cls['nama_mk']}\n"
-                                f"• *Mulai Jam:* {h:02d}:{m:02d} WIB\n"
-                                f"• *Waktu:* _Kelas dimulai dalam 20 menit_\n\n"
-                                f"_Mohon pastikan AC ruangan sudah dihidupkan._"
-                            )
-                            terkirim = False
                             for target_wa in target_asmots:
-                                if send_wa_message(target_wa, msg_asmot):
-                                    terkirim = True
-                            if terkirim:
-                                sent_notifications.add(notif_key)
+                                asmot_on_batches[(target_wa, cls['start_min'], r_kampus)].append({
+                                    'id_room': id_room,
+                                    'r_nama': r_nama,
+                                    'nama_mk': cls['nama_mk'],
+                                    'notif_key': notif_key
+                                })
 
-                # 2. Pengingat Matikan AC (hanya saat jeda panjang atau kelas terakhir hari ini)
+                # 2. Kumpulkan Pengingat Matikan AC (jeda kosong / kelas terakhir)
                 for item in closings_asmot:
                     cls = item['cls']
                     diff_tutup = cls['end_min'] - current_total_min
                     if 0 <= diff_tutup <= 5:
                         notif_key = f"{current_date}_{id_room}_asmot_ac_off_{cls['end_min']}"
                         if notif_key not in sent_notifications:
-                            eh, em = cls['end_min'] // 60, cls['end_min'] % 60
-                            if item['tipe'] == 'JEDA':
-                                nxt_cls = item['nxt']
-                                nh, nm = nxt_cls['start_min'] // 60, nxt_cls['start_min'] % 60
-                                msg_asmot = (
-                                    f"*PENGINGAT MATIKAN AC (JEDA KOSONG)*\n"
-                                    f"_{r_nama} ({r_kampus})_\n"
-                                    f"------------------------------\n"
-                                    f"• *Kelas:* {cls['nama_mk']}\n"
-                                    f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
-                                    f"• *Kondisi:* _Jeda kosong {item['gap']} menit_\n"
-                                    f"• *Kelas Lanjutan:* {nxt_cls['nama_mk']} (Mulai jam {nh:02d}:{nm:02d} WIB)\n\n"
-                                    f"_Mohon matikan AC sementara untuk menghemat listrik._"
-                                )
-                            else:
-                                msg_asmot = (
-                                    f"*PENGINGAT MATIKAN AC (SELESAI HARIAN)*\n"
-                                    f"_{r_nama} ({r_kampus})_\n"
-                                    f"------------------------------\n"
-                                    f"• *Kelas:* {cls['nama_mk']}\n"
-                                    f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
-                                    f"• *Kondisi:* _Kelas terakhir hari ini (ruangan selesai digunakan)_\n\n"
-                                    f"_Mohon pastikan AC dan fasilitas ruangan dimatikan._"
-                                )
-                            terkirim = False
                             for target_wa in target_asmots:
-                                if send_wa_message(target_wa, msg_asmot):
-                                    terkirim = True
-                            if terkirim:
-                                sent_notifications.add(notif_key)
+                                asmot_off_batches[(target_wa, cls['end_min'], r_kampus)].append({
+                                    'id_room': id_room,
+                                    'r_nama': r_nama,
+                                    'nama_mk': cls['nama_mk'],
+                                    'item': item,
+                                    'notif_key': notif_key
+                                })
+
+            # Kirim Pengingat Hidupkan AC Asmot (SATU PESAN GABUNGAN jika jam sama)
+            for (target_wa, start_min, r_kampus), items in asmot_on_batches.items():
+                seen_r = set()
+                unique_items = []
+                for it in items:
+                    if it['r_nama'] not in seen_r:
+                        seen_r.add(it['r_nama'])
+                        unique_items.append(it)
+
+                h, m = start_min // 60, start_min % 60
+                if len(unique_items) == 1:
+                    it = unique_items[0]
+                    msg_asmot = (
+                        f"*PENGINGAT HIDUPKAN AC*\n"
+                        f"_{it['r_nama']} ({r_kampus})_\n"
+                        f"------------------------------\n"
+                        f"• *Kelas:* {it['nama_mk']}\n"
+                        f"• *Mulai Jam:* {h:02d}:{m:02d} WIB\n"
+                        f"• *Waktu:* _Kelas dimulai dalam 20 menit_\n\n"
+                        f"_Mohon pastikan AC ruangan sudah dihidupkan._"
+                    )
+                else:
+                    msg_asmot = (
+                        f"*PENGINGAT HIDUPKAN AC ({r_kampus.upper()})*\n"
+                        f"Mulai Jam: {h:02d}:{m:02d} WIB (dalam 20 menit)\n"
+                        f"------------------------------\n"
+                    )
+                    for it in unique_items:
+                        msg_asmot += f"• *{it['r_nama']}:* {it['nama_mk']}\n"
+                    msg_asmot += f"\n_Mohon pastikan AC ruangan di atas sudah dihidupkan._"
+
+                if send_wa_message(target_wa, msg_asmot):
+                    for it in items:
+                        sent_notifications.add(it['notif_key'])
+
+            # Kirim Pengingat Matikan AC Asmot (SATU PESAN GABUNGAN jika jam sama)
+            for (target_wa, end_min, r_kampus), items in asmot_off_batches.items():
+                seen_r = set()
+                unique_items = []
+                for it in items:
+                    if it['r_nama'] not in seen_r:
+                        seen_r.add(it['r_nama'])
+                        unique_items.append(it)
+
+                eh, em = end_min // 60, end_min % 60
+                if len(unique_items) == 1:
+                    it = unique_items[0]
+                    item = it['item']
+                    if item['tipe'] == 'JEDA':
+                        nxt_cls = item['nxt']
+                        nh, nm = nxt_cls['start_min'] // 60, nxt_cls['start_min'] % 60
+                        msg_asmot = (
+                            f"*PENGINGAT MATIKAN AC (JEDA KOSONG)*\n"
+                            f"_{it['r_nama']} ({r_kampus})_\n"
+                            f"------------------------------\n"
+                            f"• *Kelas:* {it['nama_mk']}\n"
+                            f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
+                            f"• *Kondisi:* _Jeda kosong {item['gap']} menit_\n"
+                            f"• *Kelas Lanjutan:* {nxt_cls['nama_mk']} (Mulai jam {nh:02d}:{nm:02d} WIB)\n\n"
+                            f"_Mohon matikan AC sementara untuk menghemat listrik._"
+                        )
+                    else:
+                        msg_asmot = (
+                            f"*PENGINGAT MATIKAN AC (SELESAI HARIAN)*\n"
+                            f"_{it['r_nama']} ({r_kampus})_\n"
+                            f"------------------------------\n"
+                            f"• *Kelas:* {it['nama_mk']}\n"
+                            f"• *Selesai Jam:* {eh:02d}:{em:02d} WIB\n"
+                            f"• *Kondisi:* _Kelas terakhir hari ini (ruangan selesai digunakan)_\n\n"
+                            f"_Mohon pastikan AC dan fasilitas ruangan dimatikan._"
+                        )
+                else:
+                    msg_asmot = (
+                        f"*PENGINGAT MATIKAN AC ({r_kampus.upper()})*\n"
+                        f"Selesai Jam: {eh:02d}:{em:02d} WIB\n"
+                        f"------------------------------\n"
+                    )
+                    for it in unique_items:
+                        item = it['item']
+                        kondisi = f"Jeda kosong {item['gap']} menit" if item['tipe'] == 'JEDA' else "Selesai hari ini"
+                        msg_asmot += f"• *{it['r_nama']}:* {it['nama_mk']} ({kondisi})\n"
+                    msg_asmot += f"\n_Mohon pastikan AC ruangan di atas dimatikan._"
+
+                if send_wa_message(target_wa, msg_asmot):
+                    for it in items:
+                        sent_notifications.add(it['notif_key'])
     except Exception as e:
         print(f"Error checking lab schedules for WA: {e}")
     finally:
@@ -3918,6 +4151,12 @@ async def wa_notifier_loop():
             print(f"[WA Notifier Error in loop] {loop_err}")
 
         try:
+            # Otomatis pantau perubahan jadwal & info mase tertarget (Aslab & Asmot)
+            check_and_notify_info_mase()
+        except Exception as info_err:
+            print(f"[Info Mase Error in loop] {info_err}")
+
+        try:
             # Otomatis pantau apakah link Cloudflare Tunnel / Server berganti (misal sehabis mati lampu)
             check_and_broadcast_server_url_change()
         except Exception as link_err:
@@ -3926,7 +4165,7 @@ async def wa_notifier_loop():
         now = get_wib_now()
         # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak
         today_prefix = now.strftime("%Y-%m-%d")
-        stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix)}
+        stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix) and not k.startswith("info_mase_")}
         sent_notifications.difference_update(stale_keys)
         sleep_seconds = 60 - now.second
         if sleep_seconds <= 0:
