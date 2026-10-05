@@ -2532,13 +2532,14 @@ def test_wa(req: TestWARequest, admin: str = Depends(verify_admin_token)):
 class WebhookRequest(BaseModel):
     sender: str
     text: str
+    msg_id: Optional[str] = None
 
 @app.post("/api/webhook/wa")
 def wa_webhook(req: WebhookRequest, valid: bool = Depends(verify_bot_secret)):
     """Menerima pesan masuk dari WA Bot (Node.js) dengan proteksi Secret Token"""
-    wa_notifier.log_chatbot("INFO", f"Webhook menerima pesan dari {req.sender}: '{req.text}'", "WEBHOOK")
+    wa_notifier.log_chatbot("INFO", f"Webhook menerima pesan dari {req.sender}: '{req.text}' (id: {req.msg_id})", "WEBHOOK")
     try:
-        response_msg = wa_notifier.handle_incoming_message(req.sender, req.text)
+        response_msg = wa_notifier.handle_incoming_message(req.sender, req.text, msg_id=req.msg_id)
         if response_msg:
             # Kirim balasan
             wa_notifier.send_wa_message(req.sender, response_msg)

@@ -92,6 +92,24 @@ async function connectToWhatsApp () {
 
     sock.ev.on('creds.update', saveCreds);
 
+    // Cache untuk mencegah duplikasi pemrosesan pesan (Baileys replay / sync events)
+    const processedMsgIds = new Map();
+    function isMsgDuplicate(msgId) {
+        if (!msgId) return false;
+        const now = Date.now();
+        // Bersihkan ID yang lebih lama dari 2 menit
+        for (const [id, timestamp] of processedMsgIds.entries()) {
+            if (now - timestamp > 120000) {
+                processedMsgIds.delete(id);
+            }
+        }
+        if (processedMsgIds.has(msgId)) {
+            return true;
+        }
+        processedMsgIds.set(msgId, now);
+        return false;
+    }
+
     // Menerima pesan masuk dan meneruskannya ke backend Python dengan Secret Token
     sock.ev.on('messages.upsert', async (m) => {
         // Hanya proses notifikasi pesan baru (abaikan sinkronisasi riwayat chat saat reconnect)
@@ -99,6 +117,12 @@ async function connectToWhatsApp () {
 
         const msg = m.messages && m.messages[0];
         if (!msg || !msg.message || msg.key.fromMe) return;
+
+        const msgId = msg.key && msg.key.id;
+        if (isMsgDuplicate(msgId)) {
+            logChatbot('WARN', `Pesan duplikat dengan id ${msgId} diabaikan (Baileys replay/sync).`, 'GATEWAY');
+            return;
+        }
 
         try {
             // Untuk chat pribadi, remoteJid adalah identitas pengirim utama
@@ -112,14 +136,15 @@ async function connectToWhatsApp () {
                          
             if (!text || !text.trim()) return;
             
-            logChatbot('INFO', `Pesan masuk dari ${sender}: "${text}"`, 'GATEWAY');
+            logChatbot('INFO', `Pesan masuk dari ${sender} (id: ${msgId}): "${text}"`, 'GATEWAY');
 
-            // Kirim webhook ke FastAPI Python (coba endpoint docker lalu localhost)
-            const webhookUrls = [
+            // Kirim webhook ke FastAPI Python (hapus duplikat URL tujuan)
+            const rawUrls = [
                 process.env.BACKEND_WEBHOOK_URL,
                 'http://backend:8000/api/webhook/wa',
                 'http://127.0.0.1:8000/api/webhook/wa'
             ].filter(Boolean);
+            const webhookUrls = [...new Set(rawUrls)];
 
             let webhookSuccess = false;
             for (const url of webhookUrls) {
@@ -130,8 +155,12 @@ async function connectToWhatsApp () {
                             'Content-Type': 'application/json',
                             'x-bot-secret': BOT_SECRET
                         },
-                        body: JSON.stringify({ sender: sender, text: text.trim() }),
-                        signal: AbortSignal.timeout(10000)
+                        body: JSON.stringify({ 
+                            sender: sender, 
+                            text: text.trim(),
+                            msg_id: msgId || null
+                        }),
+                        signal: AbortSignal.timeout(25000)
                     });
                     if (response.ok) {
                         logChatbot('SUCCESS', `Pesan dari ${sender} berhasil diteruskan ke webhook ${url} (HTTP ${response.status})`, 'GATEWAY');

@@ -83,20 +83,35 @@ sent_notifications = set()
 
 # Anti-spam deduplication
 message_cache = {}
-def is_duplicate_message(sender, text):
+seen_msg_ids = {}
+
+def is_duplicate_message(sender, text, msg_id=None):
     now = time.time()
+    
+    # 1. Cek berdasarkan msg_id unik dari WhatsApp Baileys
+    if msg_id:
+        if msg_id in seen_msg_ids:
+            log_chatbot("WARN", f"Pesan duplikat berdasarkan msg_id '{msg_id}' dari {sender} diabaikan.", "ANTI-SPAM")
+            return True
+        seen_msg_ids[msg_id] = now
+        # Bersihkan id yang lebih lama dari 120 detik
+        for k in list(seen_msg_ids.keys()):
+            if now - seen_msg_ids[k] > 120:
+                del seen_msg_ids[k]
+
+    # 2. Cek berdasarkan sender + isi teks (de-bouncing 10 detik)
     text_clean = str(text).strip().lower()
     cache_key = f"{sender}:{text_clean}"
     if cache_key in message_cache:
         elapsed = now - message_cache[cache_key]
-        if elapsed < 2:
+        if elapsed < 10:
             log_chatbot("WARN", f"Pesan duplikat dari {sender} dalam jeda {elapsed:.2f}s diabaikan (anti-flood/double webhook): '{text}'", "ANTI-SPAM")
             return True
     message_cache[cache_key] = now
     
     # cleanup old cache
     for k in list(message_cache.keys()):
-        if now - message_cache[k] > 10:
+        if now - message_cache[k] > 30:
             del message_cache[k]
     return False
 
@@ -224,12 +239,14 @@ def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_l
             parts = jam_clean.split(':')
             start_min = int(parts[0]) * 60 + int(parts[1]) if len(parts) >= 2 else 0
             if status_lab == 'buka':
-                # Matikan notif buka untuk sesi ini
+                # Matikan notif buka untuk sesi ini (Aslab & Asmot)
+                sent_notifications.add(f"{tanggal}_{id_ruangan}_asmot_ac_on_{start_min}")
                 for diff in range(5, 30):
                     sent_notifications.add(f"{tanggal}_{id_ruangan}_buka_{start_min}_{diff}")
             elif status_lab == 'tutup':
                 dur = scraper.get_class_duration(nama_mk, kelas) if hasattr(scraper, 'get_class_duration') else 135
                 end_min = start_min + dur
+                sent_notifications.add(f"{tanggal}_{id_ruangan}_asmot_ac_off_{end_min}")
                 for diff in range(5, 30):
                     sent_notifications.add(f"{tanggal}_{id_ruangan}_tutup_{end_min}_{diff}")
         except Exception:
@@ -243,6 +260,40 @@ def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_l
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+def is_room_already_open(cursor, tanggal: str, id_ruangan: int, start_min: int = None) -> bool:
+    """
+    Mengecek apakah ruangan sudah berstatus 'buka' di tabel status_operasional_lab.
+    Mendukung format jam '08:00' maupun '08:00:00'.
+    Jika start_min diberikan, cari sesi jam tersebut atau status operasional terbaru hari itu.
+    """
+    try:
+        if start_min is not None:
+            h = start_min // 60
+            m = start_min % 60
+            prefix = f"{h:02d}:{m:02d}"
+            cursor.execute("""
+                SELECT status_lab FROM status_operasional_lab
+                WHERE tanggal = %s AND id_ruangan = %s AND (jam LIKE %s OR jam = %s)
+                ORDER BY waktu_aksi DESC, id DESC LIMIT 1
+            """, (tanggal, id_ruangan, f"{prefix}%", prefix))
+            row = cursor.fetchone()
+            if row and row.get('status_lab') == 'buka':
+                return True
+
+        cursor.execute("""
+            SELECT status_lab FROM status_operasional_lab
+            WHERE tanggal = %s AND id_ruangan = %s
+            ORDER BY waktu_aksi DESC, id DESC LIMIT 1
+        """, (tanggal, id_ruangan))
+        latest = cursor.fetchone()
+        if latest and latest.get('status_lab') == 'buka':
+            return True
+
+        return False
+    except Exception as e:
+        print(f"Error is_room_already_open: {e}")
+        return False
 
 def get_db_connection():
     ensure_db_schema()
@@ -605,9 +656,9 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
                     waktu = sol_row.get('waktu_aksi_str') or ''
                     waktu_txt = f" pukul {waktu} WIB" if waktu else ""
                     if st == 'buka':
-                        door_info = f"• Status Pintu: *DIBUKA* 🟢 (oleh {oleh}{waktu_txt})\n"
+                        door_info = f"• Status Pintu: *DIBUKA* (oleh {oleh}{waktu_txt})\n"
                     elif st == 'tutup':
-                        door_info = f"• Status Pintu: *DIKUNCI / TUTUP* 🔒 (oleh {oleh}{waktu_txt})\n"
+                        door_info = f"• Status Pintu: *DIKUNCI / TUTUP* (oleh {oleh}{waktu_txt})\n"
             except Exception:
                 pass
 
@@ -781,35 +832,37 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: boo
             cursor.close()
             conn.close()
 
-def cari_posisi_dosen(nama_dosen: str):
-    """Mencari ruangan tempat dosen mengajar pada hari ini."""
+def cari_posisi_dosen(nama_dosen: str, tanggal_YYYY_MM_DD: str = None):
+    """Mencari ruangan tempat dosen mengajar pada tanggal tertentu (default hari ini)."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        today_str = get_wib_now().strftime("%Y-%m-%d")
-        _sync_if_needed(today_str)
+        target_date = tanggal_YYYY_MM_DD or get_wib_now().strftime("%Y-%m-%d")
+        _sync_if_needed(target_date)
+        tgl_indo = format_tanggal_indo(target_date)
         cursor.execute('''
-            SELECT r.nama_ruangan, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+            SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             JOIN dosen d ON j.id_dosen = d.id_dosen
             WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
             ORDER BY j.jam
-        ''', (f"%{nama_dosen.upper()}%", today_str))
+        ''', (f"%{nama_dosen.upper()}%", target_date))
         jadwals = cursor.fetchall()
         if not jadwals:
-            return f"Nggak ketemu jadwal untuk dosen {nama_dosen} hari ini."
+            return f"Nggak ketemu jadwal untuk dosen *{nama_dosen}* pada {tgl_indo}."
             
         dosen_full = jadwals[0]['nama_dosen']
-        msg = f"Jadwal {dosen_full} Hari Ini:\n"
+        msg = f"*Jadwal {dosen_full}*\n_{tgl_indo}_\n\n"
         for j in jadwals:
             start_min = parse_jam_to_minutes(j['jam'])
             dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
             h, m = start_min // 60, start_min % 60
             eh, em = (start_min + dur) // 60, (start_min + dur) % 60
             status = get_status_label(j)
-            msg += f"• Jam {h:02d}:{m:02d}-{eh:02d}:{em:02d}: {j['nama_ruangan']} | MK: {j['nama_mk']} ({j['kelas']}) [{status}]\n"
-        return msg
+            kampus_lbl = f" ({j.get('kampus', '')})" if j.get('kampus') else ""
+            msg += f"• Jam {h:02d}:{m:02d}-{eh:02d}:{em:02d}: *{j['nama_ruangan']}*{kampus_lbl} | MK: {j['nama_mk']} ({j['kelas']}) [{status}]\n"
+        return msg.strip()
     except Exception as e:
         return f"Error: {e}"
     finally:
@@ -2034,7 +2087,7 @@ FITUR RAHASIA (TITIP / SAMPAIKAN PESAN KE ASLAB LAIN):
             genai.configure(api_key=assigned_key, transport='rest')
 
         model = genai.GenerativeModel(
-            model_name='gemini-flash-latest',
+            model_name='gemini-3.8-flash',
             system_instruction=system_instruction,
             tools=ai_tools
         )
@@ -2395,22 +2448,22 @@ def handle_konfirmasi_buka_tutup_lab(sender, text_clean, aslab, aksi="buka", for
 
         if aksi == "buka":
             return (
-                f"*LAB BERHASIL DIBUKA* 🟢\n\n"
+                f"*LAB BERHASIL DIBUKA*\n\n"
                 f"Halo mas *{nama}*, status operasional lab telah dicatat:\n"
                 f"• *Ruangan:* {target_nama_room} ({target_kampus})\n"
                 f"• *Kelas:* {chosen_cls['nama_mk']} ({chosen_cls['kelas']})\n"
                 f"• *Jadwal Mulai:* {jam_str} WIB\n"
-                f"• *Status:* *SUDAH DIBUKA* 🟢\n"
+                f"• *Status:* *SUDAH DIBUKA*\n"
                 f"• *Waktu Konfirmasi:* {jam_sekarang} WIB\n\n"
                 f"_Notifikasi pengingat buka lab untuk kelas ini otomatis dinonaktifkan. Terima kasih atas konfirmasinya mas!_"
             )
         else:
             return (
-                f"*LAB BERHASIL DIKUNCI / DITUTUP* 🔒\n\n"
+                f"*LAB BERHASIL DIKUNCI / DITUTUP*\n\n"
                 f"Halo mas *{nama}*, status operasional lab telah dicatat:\n"
                 f"• *Ruangan:* {target_nama_room} ({target_kampus})\n"
                 f"• *Kelas:* {chosen_cls['nama_mk']} ({chosen_cls['kelas']})\n"
-                f"• *Status:* *SUDAH DIKUNCI / DITUTUP* 🔒\n"
+                f"• *Status:* *SUDAH DIKUNCI / DITUTUP*\n"
                 f"• *Waktu Konfirmasi:* {jam_sekarang} WIB\n\n"
                 f"_Data telah diperbarui di dashboard operasional. Terima kasih mas!_"
             )
@@ -2623,6 +2676,46 @@ def fallback_python_handler(sender, text, aslab):
         return menu_teks
 
     has_specific_room = bool(re.search(r'\b\d+\.\d+\b', text_clean))
+
+    # 3.1 Deteksi Langsung Pencarian Dosen (misal: "pak usep", "bu sari", "pak usep besok", "posisi dosen usep")
+    dosen_pfx = [
+        "cari dosen ", "posisi dosen ", "dosen ",
+        "cari pak ", "posisi pak ", "pak ",
+        "cari bu ", "posisi bu ", "bu ",
+        "cari bapak ", "posisi bapak ", "bapak ",
+        "cari ibu ", "posisi ibu ", "ibu "
+    ]
+    matched_dosen_pfx = None
+    for pfx in dosen_pfx:
+        if text_clean.startswith(pfx):
+            matched_dosen_pfx = pfx
+            break
+
+    if matched_dosen_pfx:
+        query_dosen = text[len(matched_dosen_pfx):].strip()
+        target_date = extract_date_or_today(text_clean)
+        for tw in ["besok", "kemarin", "lusa", "hari ini", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]:
+            query_dosen = re.sub(rf'\b{tw}\b', '', query_dosen, flags=re.IGNORECASE).strip()
+        if query_dosen:
+            return cari_posisi_dosen(query_dosen, target_date)
+
+    # 3.2 Deteksi Pertanyaan Tanggal & Jadwal Umum (misal: "besok", "hari ini", "lusa", "jadwal besok", "cek jadwal")
+    days_names = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]
+    date_kw = ["besok", "kemarin", "lusa", "hari ini"] + days_names
+    is_pure_date_query = (
+        text_clean in date_kw or
+        re.search(r'^(kalau\s+|kalo\s+|gimana\s+|ada\s+)?(jadwal\s+)?(besok|kemarin|lusa|hari ini|senin|selasa|rabu|kamis|jumat|sabtu|minggu)\??$', text_clean) or
+        re.search(r'^(jadwal|cek jadwal|ada jadwal|jadwal kuliah|jadwal ruangan)(\s+(besok|kemarin|lusa|hari ini|senin|selasa|rabu|kamis|jumat|sabtu|minggu))?\??$', text_clean) or
+        re.search(r'^(ada\s+)?(jadwal|kelas)\s+(dak|nggak|ngga|gak|ada)?', text_clean)
+    )
+    if is_pure_date_query and not has_specific_room:
+        target_date = extract_date_or_today(text_clean)
+        if role == 'asmot':
+            return cek_semua_lab_kampus(kampus_asmot, target_date, hanya_kelas=True)
+        elif has_room:
+            return cek_jadwal_lab_tertentu(aslab['nama_ruangan'], target_date)
+        else:
+            return cek_semua_lab_kampus(kampus_default, target_date, hanya_kelas=False)
     
     # 4. Opsi 1
     if role == 'asmot' and (text_clean == "1" or any(k in text_clean for k in ["kelas aktif", "ac hidup", "aktif sekarang", "sedang aktif", "ac nyala"])):
@@ -2821,16 +2914,16 @@ def fallback_python_handler(sender, text, aslab):
 
 
 # =================== MESSAGE HANDLER ===================
-def handle_incoming_message(sender, text):
+def handle_incoming_message(sender, text, msg_id=None):
     global registration_states
     
     # Batasi panjang input maksimal 1000 karakter (Anti Flood/Buffer Exhaustion)
     text = str(text or "")[:1000]
     text_clean = text.strip().lower()
-    log_chatbot("INFO", f"Pesan masuk dari {sender}: '{text}'", "HANDLER")
+    log_chatbot("INFO", f"Pesan masuk dari {sender} [msg_id={msg_id}]: '{text}'", "HANDLER")
     
     # 1. Anti-spam / debouncing
-    if is_duplicate_message(sender, text_clean):
+    if is_duplicate_message(sender, text_clean, msg_id=msg_id):
         log_chatbot("WARN", f"Pesan duplikat dari {sender} diabaikan (anti-spam).", "HANDLER")
         return None
         
@@ -2914,7 +3007,7 @@ def handle_incoming_message(sender, text):
             return (
                 f"Login berhasil sebagai *{nama_val}* mas!\n\n"
                 f"Mase sekarang bebas memantau seluruh jadwal lab & kelas tanpa terganggu notifikasi buka/tutup rutin.\n"
-                f"🔔 *Notifikasi Pembaruan Link Server* otomatis aktif untuk nomor ini saat server restart atau link berganti.\n\n"
+                f"*Notifikasi Pembaruan Link Server* otomatis aktif untuk nomor ini saat server restart atau link berganti.\n\n"
                 f"_Ketik *inpo* untuk melihat menu & perintah yang tersedia._"
             )
         except Exception as e:
@@ -3427,6 +3520,21 @@ def handle_incoming_message(sender, text):
         # 6. Nomor lab / ruangan spesifik (misal '1.5', '1.8', 'lab 1.8', 'ruang 3.4', 'r 2.10', 'r. 2.10')
         if re.search(r'^(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?\d+\.\d+\b', cmd_text):
             return True
+        # 7. Kata kunci tanggal, hari, dan pertanyaan jadwal (besok, lusa, kemarin, hari ini, senin, dll)
+        days_kw = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]
+        date_quick_kw = ["besok", "kemarin", "lusa", "hari ini"] + days_kw
+        if any(re.search(rf'\b{dk}\b', cmd_text) for dk in date_quick_kw):
+            return True
+        if any(cmd_text.startswith(k) for k in ["jadwal", "cek jadwal", "ada jadwal"]):
+            return True
+        # 8. Panggilan nama dosen (pak ..., bu ..., bapak ..., ibu ..., dosen ...)
+        dosen_quick_pfx = [
+            "pak ", "bu ", "bapak ", "ibu ", "dosen ", 
+            "cari pak ", "posisi pak ", "cari bu ", "posisi bu ",
+            "cari dosen ", "posisi dosen "
+        ]
+        if any(cmd_text.startswith(pfx) for pfx in dosen_quick_pfx):
+            return True
         return False
 
     # 1. FAST-PATH: Jika pesan berupa shortcut menu atau nomor, langsung proses via Python engine (0.01s)
@@ -3566,17 +3674,10 @@ def check_lab_schedules():
                 if target_diff - 1 <= diff_buka <= target_diff:
                     notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
                     if notif_key not in sent_notifications:
-                        # Cek apakah lab untuk sesi ini SUDAH DIBUKA sebelumnya oleh aslab
-                        cls_jam_str = f"{cls['start_min'] // 60:02d}:{cls['start_min'] % 60:02d}:00"
-                        cursor.execute("""
-                            SELECT status_lab, diubah_oleh FROM status_operasional_lab
-                            WHERE tanggal = %s AND id_ruangan = %s AND jam = %s
-                            LIMIT 1
-                        """, (current_date, id_room, cls_jam_str))
-                        sol = cursor.fetchone()
-                        if sol and sol.get('status_lab') == 'buka':
+                        # Cek apakah lab untuk sesi ini SUDAH DIBUKA sebelumnya di sistem
+                        if is_room_already_open(cursor, current_date, id_room, cls['start_min']):
                             sent_notifications.add(notif_key)
-                            log_chatbot("INFO", f"Lab {room_name_full} untuk {cls['nama_mk']} jam {cls_jam_str} sudah dibuka oleh {sol.get('diubah_oleh')}. Notifikasi buka lab dilewati.", "OPERASIONAL-LAB")
+                            log_chatbot("INFO", f"Lab {room_name_full} untuk {cls['nama_mk']} sudah dibuka di sistem. Notifikasi buka lab dilewati.", "OPERASIONAL-LAB")
                             continue
 
                         h, m = cls['start_min'] // 60, cls['start_min'] % 60
@@ -3675,6 +3776,12 @@ def check_lab_schedules():
                     if 19 <= diff_buka <= 20:
                         notif_key = f"{current_date}_{id_room}_asmot_ac_on_{cls['start_min']}"
                         if notif_key not in sent_notifications:
+                            # Cek apakah ruangan sudah dibuka di sistem (status_lab == 'buka')
+                            if is_room_already_open(cursor, current_date, id_room, cls['start_min']):
+                                sent_notifications.add(notif_key)
+                                log_chatbot("INFO", f"Ruangan {r_nama} ({r_kampus}) untuk {cls['nama_mk']} sudah dibuka di sistem. Pengingat AC dilewati.", "OPERASIONAL-ASMOT")
+                                continue
+
                             h, m = cls['start_min'] // 60, cls['start_min'] % 60
                             msg_asmot = (
                                 f"*PENGINGAT HIDUPKAN AC*\n"
