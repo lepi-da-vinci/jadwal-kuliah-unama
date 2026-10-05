@@ -236,6 +236,42 @@ def init_db_schema():
         """)
 
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS absensi_master_lab (
+                id_lab_opsi INT AUTO_INCREMENT PRIMARY KEY,
+                nama_lab VARCHAR(50) NOT NULL UNIQUE,
+                kampus VARCHAR(50) NOT NULL DEFAULT 'Thehok',
+                urutan INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        try:
+            cursor.execute("SELECT COUNT(*) as cnt FROM absensi_master_lab")
+            row_cnt = cursor.fetchone()
+            if row_cnt and (row_cnt.get("cnt", 0) if isinstance(row_cnt, dict) else row_cnt[0]) == 0:
+                default_labs = [
+                    ("1.5 Kobar", "Kobar", 1),
+                    ("1.6 Kobar", "Kobar", 2),
+                    ("1.7 Kobar", "Kobar", 3),
+                    ("1.8 Kobar", "Kobar", 4),
+                    ("1.9 Kobar", "Kobar", 5),
+                    ("1.3 Thehok", "Thehok", 6),
+                    ("1.4 Thehok", "Thehok", 7),
+                    ("1.5 Thehok", "Thehok", 8),
+                    ("2.7 Thehok", "Thehok", 9),
+                    ("3.1 Thehok", "Thehok", 10),
+                    ("3.2 Thehok", "Thehok", 11),
+                    ("3.4 Thehok", "Thehok", 12),
+                    ("4.1 Thehok", "Thehok", 13),
+                    ("4.3 Thehok", "Thehok", 14),
+                    ("Lab S2", "Thehok", 15)
+                ]
+                cursor.executemany("INSERT INTO absensi_master_lab (nama_lab, kampus, urutan) VALUES (%s, %s, %s)", default_labs)
+                conn.commit()
+        except Exception:
+            pass
+
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (
                 id_log INT AUTO_INCREMENT PRIMARY KEY,
                 tanggal_kuliah DATE NOT NULL,

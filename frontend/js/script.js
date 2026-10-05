@@ -6583,8 +6583,27 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
     const res = await fetch(`${API_BASE_URL}/api/absensi/master?_t=${Date.now()}`);
     const data = await res.json();
     if (!res.ok || data.status !== 'success') {
-      if (labContainer) labContainer.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 16px;">Gagal memuat master data.</div>';
-      if (aslabContainer) aslabContainer.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 16px;">Gagal memuat master asisten lab.</div>';
+      const errMsg = (data && data.message) ? data.message : (res.statusText || 'Gagal memuat master data.');
+      if (labContainer) {
+        labContainer.innerHTML = `
+          <div style="text-align: center; color: #ef4444; padding: 18px; font-size: 0.88em;">
+            <div>${sanitizeCfgText(errMsg)}</div>
+            <button type="button" onclick="loadAbsensiMasterConfig()" style="margin-top: 10px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-weight: 600; cursor: pointer;">
+              Coba Lagi
+            </button>
+          </div>
+        `;
+      }
+      if (aslabContainer) {
+        aslabContainer.innerHTML = `
+          <div style="text-align: center; color: #ef4444; padding: 18px; font-size: 0.88em;">
+            <div>${sanitizeCfgText(errMsg)}</div>
+            <button type="button" onclick="loadAbsensiMasterConfig()" style="margin-top: 10px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-weight: 600; cursor: pointer;">
+              Coba Lagi
+            </button>
+          </div>
+        `;
+      }
       return;
     }
 
@@ -6709,6 +6728,26 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
     }
   } catch (err) {
     console.error('Error in loadAbsensiMasterConfig:', err);
+    if (labContainer) {
+      labContainer.innerHTML = `
+        <div style="text-align: center; color: #ef4444; padding: 18px; font-size: 0.88em;">
+          <div>Gagal terhubung ke server backend.</div>
+          <button type="button" onclick="loadAbsensiMasterConfig()" style="margin-top: 10px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-weight: 600; cursor: pointer;">
+            Coba Lagi
+          </button>
+        </div>
+      `;
+    }
+    if (aslabContainer) {
+      aslabContainer.innerHTML = `
+        <div style="text-align: center; color: #ef4444; padding: 18px; font-size: 0.88em;">
+          <div>Gagal terhubung ke server backend.</div>
+          <button type="button" onclick="loadAbsensiMasterConfig()" style="margin-top: 10px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-weight: 600; cursor: pointer;">
+            Coba Lagi
+          </button>
+        </div>
+      `;
+    }
   }
 };
 
