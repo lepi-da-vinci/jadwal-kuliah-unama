@@ -13,7 +13,19 @@ import pymysql
 PRODI_NAMES = {
     'TI': 'Teknik Informatika',
     'SI': 'Sistem Informasi',
-    'SK': 'Sistem Komputer'
+    'SK': 'Sistem Komputer',
+    'KWU': 'Kewirausahaan',
+    'MN': 'Manajemen',
+    'BD': 'Bisnis Digital'
+}
+
+NAME_TO_PRODI_CODE = {
+    'teknik informatika': 'TI',
+    'sistem informasi': 'SI',
+    'sistem komputer': 'SK',
+    'kewirausahaan': 'KWU',
+    'manajemen': 'MN',
+    'bisnis digital': 'BD'
 }
 
 def get_db_connections():
@@ -86,13 +98,13 @@ def determine_kategori(kode_mk, status_mk):
         return 'Universitas'
     elif prefix == 'FK':
         return 'Fakultas'
-    elif prefix == 'PR':
+    elif prefix in ['PR', 'PD']:
         return 'Program Studi'
     elif prefix == 'KP':
         return 'Kompetensi Pendukung'
-    elif prefix == 'MP' or status_mk == 'Pilihan':
+    elif prefix in ['MP', 'KN', 'KK', 'KS', 'KO'] or status_mk == 'Pilihan':
         return 'Pilihan'
-    return 'Lainnya'
+    return 'Program Studi'
 
 def parse_markdown(filepath):
     """Membaca dan mem-parsing isi markdown rekap kurikulum."""
@@ -103,7 +115,7 @@ def parse_markdown(filepath):
         lines = f.readlines()
 
     current_prodi = None
-    current_tahun = None
+    current_tahun = '2025'
     in_perubahan = False
 
     courses = []
@@ -113,10 +125,16 @@ def parse_markdown(filepath):
         line_s = line.strip()
 
         # Deteksi Prodi
-        m_prodi = re.search(r'#\s*\d+\.\s*Program Studi:\s*(.+?)\s*\(([A-Z]+)\)', line_s)
+        m_prodi = re.search(r'#+\s*(?:\d+\.\s*)?Program Studi:\s*([^\n\r(]+?)(?:\s*\(([A-Z]+)\))?$', line_s, re.IGNORECASE)
         if m_prodi:
-            current_prodi = m_prodi.group(2).upper()
+            p_name = m_prodi.group(1).strip()
+            p_code = m_prodi.group(2)
+            if p_code:
+                current_prodi = p_code.upper()
+            else:
+                current_prodi = NAME_TO_PRODI_CODE.get(p_name.lower(), p_name[:3].upper())
             in_perubahan = False
+            current_tahun = '2025'
             continue
 
         # Deteksi Mode Perubahan vs Rekap SKS vs Daftar MK
@@ -126,7 +144,7 @@ def parse_markdown(filepath):
         elif 'Rekapitulasi Beban SKS' in line_s:
             in_perubahan = False
             continue
-        elif 'Daftar Mata Kuliah Kurikulum' in line_s:
+        elif 'Daftar Mata Kuliah' in line_s or 'Kurikulum Angkatan' in line_s:
             in_perubahan = False
             if '2024' in line_s:
                 current_tahun = '2024'
@@ -138,7 +156,7 @@ def parse_markdown(filepath):
         if line_s.startswith('|') and not line_s.startswith('|---'):
             parts = [p.strip() for p in line_s.split('|')[1:-1]]
 
-            # Jika di bagian Analisis Perubahan
+            # 1. Jika di bagian Analisis Perubahan
             if in_perubahan and len(parts) == 4 and current_prodi:
                 aspek, k24, k25, catatan = parts
                 if aspek not in ['Aspek Perubahan', 'Semester / Kategori'] and not aspek.startswith('**TOTAL'):
@@ -149,14 +167,59 @@ def parse_markdown(filepath):
                         'kurikulum_2025': k25,
                         'catatan_dampak': catatan
                     })
+                continue
 
-            # Jika di bagian Daftar Mata Kuliah
-            elif not in_perubahan and len(parts) == 4 and current_prodi and current_tahun:
-                sem_label, kode_mk, nama_mk, sks_str = parts
-                if sem_label != 'Semester / Status' and kode_mk and kode_mk != '-' and sks_str.isdigit():
-                    sks = int(sks_str)
-                    
-                    # Cek semester angka & status
+            if not current_prodi:
+                continue
+
+            # 2. Jika tabel 5 kolom: | Semester | Kode MK | Nama Mata Kuliah | SKS | Status |
+            if len(parts) == 5:
+                sem_col, kode_col, nama_col, sks_col, status_col = parts
+                if kode_col.lower() in ['kode mk', 'kode'] or not sks_col.isdigit():
+                    continue
+
+                sks = int(sks_col)
+                status = status_col if status_col in ['Wajib', 'Pilihan'] else ('Wajib' if 'semester' in sem_col.lower() else 'Pilihan')
+                m_sem = re.search(r'Semester\s+(\d+)', sem_col, re.IGNORECASE)
+                sem_angka = int(m_sem.group(1)) if m_sem else None
+                sem_label = sem_col if sem_col else ('Mata Kuliah Pilihan' if status == 'Pilihan' else 'Semester 1')
+
+                kategori = determine_kategori(kode_col, status)
+                courses.append({
+                    'prodi': current_prodi,
+                    'nama_prodi': PRODI_NAMES.get(current_prodi, f"Prodi {current_prodi}"),
+                    'tahun_kurikulum': current_tahun,
+                    'semester_label': sem_label,
+                    'semester_angka': sem_angka,
+                    'status_mk': status,
+                    'kategori_mk': kategori,
+                    'kode_mk': kode_col,
+                    'nama_mk': nama_col,
+                    'sks': sks
+                })
+
+            # 3. Jika tabel 4 kolom:
+            # Varian A (Pilihan baru): | Kode MK | Nama Mata Kuliah | SKS | Status |
+            # Varian B (Prodi lama):   | Semester / Status | Kode MK | Nama Mata Kuliah | SKS |
+            elif len(parts) == 4:
+                col0, col1, col2, col3 = parts
+                if col0.lower() in ['kode mk', 'semester / status', 'semester', 'aspek perubahan']:
+                    continue
+
+                # Varian A: col2 adalah angka SKS dan col3 adalah 'Pilihan'/'Wajib'
+                if col2.isdigit() and col3 in ['Pilihan', 'Wajib']:
+                    kode_mk = col0
+                    nama_mk = col1
+                    sks = int(col2)
+                    status = col3
+                    sem_label = 'Mata Kuliah Pilihan' if status == 'Pilihan' else 'Mata Kuliah Wajib'
+                    sem_angka = None
+                # Varian B: col3 adalah angka SKS
+                elif col3.isdigit():
+                    sem_label = col0
+                    kode_mk = col1
+                    nama_mk = col2
+                    sks = int(col3)
                     m_sem = re.search(r'Semester\s+(\d+)', sem_label, re.IGNORECASE)
                     if m_sem:
                         sem_angka = int(m_sem.group(1))
@@ -164,21 +227,22 @@ def parse_markdown(filepath):
                     else:
                         sem_angka = None
                         status = 'Pilihan'
+                else:
+                    continue
 
-                    kategori = determine_kategori(kode_mk, status)
-
-                    courses.append({
-                        'prodi': current_prodi,
-                        'nama_prodi': PRODI_NAMES.get(current_prodi, f"Prodi {current_prodi}"),
-                        'tahun_kurikulum': current_tahun,
-                        'semester_label': sem_label,
-                        'semester_angka': sem_angka,
-                        'status_mk': status,
-                        'kategori_mk': kategori,
-                        'kode_mk': kode_mk,
-                        'nama_mk': nama_mk,
-                        'sks': sks
-                    })
+                kategori = determine_kategori(kode_mk, status)
+                courses.append({
+                    'prodi': current_prodi,
+                    'nama_prodi': PRODI_NAMES.get(current_prodi, f"Prodi {current_prodi}"),
+                    'tahun_kurikulum': current_tahun,
+                    'semester_label': sem_label,
+                    'semester_angka': sem_angka,
+                    'status_mk': status,
+                    'kategori_mk': kategori,
+                    'kode_mk': kode_mk,
+                    'nama_mk': nama_mk,
+                    'sks': sks
+                })
 
     return courses, perubahan_list
 

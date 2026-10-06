@@ -17212,6 +17212,9 @@ function closeSettingAndOpenKurikulumMode() {
 function setKurikulumProdi(prodi) {
   if (currentKurikulumProdi === prodi) return;
   currentKurikulumProdi = prodi;
+  if (['KWU', 'MN', 'BD'].includes(prodi) && currentKurikulumTahun !== '2025') {
+    currentKurikulumTahun = '2025';
+  }
   updateKurikulumSelectorUI();
   loadKurikulumData();
 }
@@ -17229,7 +17232,13 @@ function updateKurikulumSelectorUI() {
     btn.classList.toggle('active', btn.getAttribute('data-prodi') === currentKurikulumProdi);
   });
 
-  // Update Tahun Buttons
+  // Update Tahun Buttons & visibility for prodi with only 2025 curriculum
+  const btn2024 = document.querySelector('.kuri-year-btn[data-tahun="2024"]');
+  if (btn2024) {
+    const has2024 = ['TI', 'SI', 'SK'].includes(currentKurikulumProdi);
+    btn2024.style.display = has2024 ? 'inline-flex' : 'none';
+  }
+
   document.querySelectorAll('.kuri-year-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-tahun') === currentKurikulumTahun);
   });
@@ -17237,7 +17246,14 @@ function updateKurikulumSelectorUI() {
   // Update Badge in Perubahan
   const badgePerubahan = document.getElementById('kuri-perubahan-active-prodi-badge');
   if (badgePerubahan) {
-    const pNames = { 'TI': 'Prodi Teknik Informatika', 'SI': 'Prodi Sistem Informasi', 'SK': 'Prodi Sistem Komputer' };
+    const pNames = { 
+      'TI': 'Prodi Teknik Informatika', 
+      'SI': 'Prodi Sistem Informasi', 
+      'SK': 'Prodi Sistem Komputer',
+      'KWU': 'Prodi Kewirausahaan',
+      'MN': 'Prodi Manajemen',
+      'BD': 'Prodi Bisnis Digital'
+    };
     badgePerubahan.textContent = pNames[currentKurikulumProdi] || `Prodi ${currentKurikulumProdi}`;
   }
 }
@@ -17344,9 +17360,21 @@ function renderKurikulumKPIs(dataCourses) {
     } else if (currentKurikulumProdi === 'SI') {
       fokusTitle.textContent = 'Business Intel & BI';
       fokusDesc.textContent = 'Data Warehouse, Data Mining & Enterprise SI';
-    } else {
+    } else if (currentKurikulumProdi === 'SK') {
       fokusTitle.textContent = 'IoT & Robotika';
       fokusDesc.textContent = 'Mekatronika, Robotika, Edge AI & Embedded System';
+    } else if (currentKurikulumProdi === 'KWU') {
+      fokusTitle.textContent = 'Inovasi & Startup Bisnis';
+      fokusDesc.textContent = 'Digital Entrepreneurship, Business Modeling, Venture & Inovasi';
+    } else if (currentKurikulumProdi === 'MN') {
+      fokusTitle.textContent = 'Manajemen & Strategi';
+      fokusDesc.textContent = 'Financial, Marketing, Operations & Strategic Management';
+    } else if (currentKurikulumProdi === 'BD') {
+      fokusTitle.textContent = 'E-Commerce & Digital Business';
+      fokusDesc.textContent = 'Fintech, Digital Marketing, Analytics & Digital Business Platform';
+    } else {
+      fokusTitle.textContent = 'Kompetensi Program Studi';
+      fokusDesc.textContent = 'Kurikulum Berbasis Kebutuhan Industri Modern';
     }
   }
 }

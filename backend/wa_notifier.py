@@ -1609,7 +1609,7 @@ def get_statistik_akademik(kategori: str):
             conn.close()
 
 def get_info_kurikulum(prodi: str = None, tahun: str = None, semester: str = None, kata_kunci: str = None):
-    """Mencari data kurikulum resmi (TI, SI, SK untuk Kurikulum 2024 & 2025): cek daftar mata kuliah per semester, bobot SKS, mata kuliah pilihan, atau analisis perbandingan kurikulum."""
+    """Mencari data kurikulum resmi (TI, SI, SK, KWU, MN, BD untuk Kurikulum 2024 & 2025): cek daftar mata kuliah per semester, bobot SKS, mata kuliah pilihan, atau analisis perbandingan kurikulum."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1625,6 +1625,12 @@ def get_info_kurikulum(prodi: str = None, tahun: str = None, semester: str = Non
                 query += " AND prodi = 'SI'"
             elif 'KOMPUTER' in p_clean or p_clean == 'SK':
                 query += " AND prodi = 'SK'"
+            elif 'WIRAUSAHA' in p_clean or p_clean == 'KWU':
+                query += " AND prodi = 'KWU'"
+            elif 'MANAJEMEN' in p_clean or p_clean == 'MN':
+                query += " AND prodi = 'MN'"
+            elif 'BISNIS' in p_clean or p_clean == 'BD':
+                query += " AND prodi = 'BD'"
 
         if tahun and tahun.strip() != '':
             t_clean = tahun.strip()
@@ -2213,8 +2219,8 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
 9. STATISTIK PENGGUNAAN LAB, KELAS, & DOSEN (SANGAT PENTING):
    - DEFAULT (JIKA TIDAK DIMINTA SPESIFIK): Jika aslab bertanya tentang statistik (misal: "statistik lab", "statistik penggunaan", "seberapa sering lab dipakai", "data statistik", dll), PANGGIL TOOL `get_statistik_lab_saya()` dan HANYA TAMPILKAN statistik lab aslab itu sendiri ('{nama_ruangan}'). JANGAN PERNAH menambahkan statistik kelas atau dosen pada jawaban default ini.
    - STATISTIK KELAS / DOSEN: HANYA panggil tool `get_statistik_akademik(kategori='dosen' atau 'kelas')` jika aslab secara spesifik/eksplisit memintanya (misal: "siapa dosen paling sibuk?", "statistik dosen", "statistik kelas terpadat").
-10. INFORMASI KURIKULUM & MATA KULIAH (TI, SI, SK - KURIKULUM 2024 & 2025):
-   - Jika aslab bertanya tentang kurikulum, daftar mata kuliah per semester, bobot SKS, atau mata kuliah pilihan, panggil tool `get_info_kurikulum(prodi, tahun, semester, kata_kunci)`.
+10. INFORMASI KURIKULUM & MATA KULIAH (TI, SI, SK, KWU, MN, BD - KURIKULUM 2024 & 2025):
+   - Jika aslab bertanya tentang kurikulum, daftar mata kuliah per semester, bobot SKS, atau mata kuliah pilihan, panggil tool `get_info_kurikulum(prodi, tahun, semester, kata_kunci)`. Program studi yang didukung: TI (Teknik Informatika), SI (Sistem Informasi), SK (Sistem Komputer), KWU (Kewirausahaan), MN (Manajemen), BD (Bisnis Digital).
    - Jika aslab bertanya tentang perbedaan/perubahan kurikulum 2024 vs 2025 (misal: "apa beda kurikulum 2024 dan 2025 di TI?"), panggil tool `get_perubahan_kurikulum(prodi)`.
 11. JADWAL JAGA MALAM ASLAB (TA GANJIL 2026/2027):
    - Jika aslab bertanya jadwal jaga malam, piket malam, siapa yang jaga malam ini/besok/hari tertentu, panggil tool `get_jadwal_jaga_malam(hari)`.
