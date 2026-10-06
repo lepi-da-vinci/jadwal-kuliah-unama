@@ -747,12 +747,17 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   transform: translateY(0);
 }
 
-/* ─── Fullscreen Filter, Info & Detail Modal Dedicated Styles ─── */
+/* ─── Fullscreen Filter, Info, Absensi & Detail Modal Dedicated Styles ─── */
 #modal-fs-filter,
 #room-detail-modal,
 #modal-fs-info,
 #modal-fitur,
-#lab-modal {
+#lab-modal,
+#test-wa-modal,
+#custom-alert-modal,
+#custom-confirm-modal,
+#password-modal,
+#danger-modal {
   position: fixed !important;
   inset: 0 !important;
   top: 0 !important;
@@ -784,7 +789,22 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 #modal-fitur[style*="display: flex"],
 #lab-modal.open,
 #lab-modal[style*="display: block"],
-#lab-modal[style*="display: flex"] {
+#lab-modal[style*="display: flex"],
+#test-wa-modal.open,
+#test-wa-modal[style*="display: block"],
+#test-wa-modal[style*="display: flex"],
+#custom-alert-modal.open,
+#custom-alert-modal[style*="display: block"],
+#custom-alert-modal[style*="display: flex"],
+#custom-confirm-modal.open,
+#custom-confirm-modal[style*="display: block"],
+#custom-confirm-modal[style*="display: flex"],
+#password-modal.open,
+#password-modal[style*="display: block"],
+#password-modal[style*="display: flex"],
+#danger-modal.open,
+#danger-modal[style*="display: block"],
+#danger-modal[style*="display: flex"] {
   display: flex !important;
 }
 

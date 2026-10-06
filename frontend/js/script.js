@@ -5163,10 +5163,17 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     const qrBack = document.getElementById('qr-back-btn');
     if (qrBack) qrBack.onclick = showMenu;
     const absBack = document.getElementById('absensi-back-btn');
-    if (absBack) absBack.onclick = showMenu;
+    if (absBack) {
+      absBack.onclick = () => {
+        if (typeof window.closeAbsensiModalToMenu === 'function' && window._openedAbsensiFromDetail) {
+          window.closeAbsensiModalToMenu();
+        } else {
+          showMenu();
+        }
+      };
+    }
     const absHistBack = document.getElementById('absensi-history-back-btn');
     if (absHistBack) absHistBack.onclick = showMenu;
-    window.closeAbsensiModalToMenu = showMenu;
 
     // Submit Edit Data WA
     document.getElementById('edit-wa-submit-btn').onclick = async () => {
@@ -5454,6 +5461,17 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
 
   // Buka test-wa-modal di tab Absensi
   const settingModal = document.getElementById('test-wa-modal');
+  if (typeof ensureModalInFullscreen === 'function' && settingModal) {
+    ensureModalInFullscreen(settingModal);
+  } else if (settingModal) {
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.getElementById('section-status-ruangan')?.classList.contains('is-fullscreen'));
+    const section = document.getElementById('section-status-ruangan');
+    const targetParent = document.fullscreenElement || (isFs && section ? section : null);
+    if (targetParent && !targetParent.contains(settingModal)) {
+      targetParent.appendChild(settingModal);
+    }
+  }
+
   const menuView = document.getElementById('wa-modal-menu');
   const absensiView = document.getElementById('wa-modal-absensi');
   const modalTitle = document.getElementById('wa-modal-title');
@@ -5484,6 +5502,9 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
   const tglInput = document.getElementById('absensi-tanggal');
   if (tglInput && activeDate) {
     tglInput.value = activeDate;
+    if (tglInput._flatpickr) {
+      tglInput._flatpickr.setDate(activeDate, false);
+    }
   }
 
   // 2. Petakan Nomor Lab ke opsi dropdown absensi
@@ -5508,7 +5529,11 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
 };
 
 window.openAbsensiModal = function () {
-  const settingBtn = document.getElementById('setting-btn') || document.getElementById('btn-setting');
+  const settingModal = document.getElementById('test-wa-modal');
+  if (typeof ensureModalInFullscreen === 'function' && settingModal) {
+    ensureModalInFullscreen(settingModal);
+  }
+  const settingBtn = document.getElementById('setting-btn') || document.getElementById('btn-setting') || document.getElementById('test-wa-btn');
   if (settingBtn) {
     settingBtn.click();
     setTimeout(() => {
@@ -6216,6 +6241,14 @@ window.submitAbsensiAslabAction = async function () {
       // Jika admin, refresh riwayat
       if (typeof window.loadAbsensiHistoryList === 'function') {
         window.loadAbsensiHistoryList();
+      }
+
+      // Refresh panel status ruangan dan status lab realtime
+      if (typeof updateActiveLabPanel === 'function') {
+        updateActiveLabPanel();
+      }
+      if (typeof fetchRoomStatus === 'function') {
+        fetchRoomStatus();
       }
     } else {
       let errMsg = result.message;
@@ -8457,6 +8490,9 @@ function initDbClearModalEvents() {
       if (!modal) {
         return resolve(confirm(title + "\n\n" + subtitle));
       }
+      if (typeof ensureModalInFullscreen === 'function') {
+        ensureModalInFullscreen(modal);
+      }
 
       const titleEl = document.getElementById('custom-confirm-title');
       const subtitleEl = document.getElementById('custom-confirm-subtitle');
@@ -8654,6 +8690,9 @@ function initDbClearModalEvents() {
       if (!modal) {
         alert(title + "\n\n" + message);
         return resolve();
+      }
+      if (typeof ensureModalInFullscreen === 'function') {
+        ensureModalInFullscreen(modal);
       }
 
       const titleEl = document.getElementById('custom-alert-title');
@@ -13306,9 +13345,44 @@ window.initFsInfoDragToDismiss = function () {
   });
 };
 
+function ensureModalInFullscreen(modalEl) {
+  if (!modalEl) return;
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.getElementById('section-status-ruangan')?.classList.contains('is-fullscreen'));
+  const section = document.getElementById('section-status-ruangan');
+  const targetParent = document.fullscreenElement || (isFs && section ? section : null);
+  if (targetParent && !targetParent.contains(modalEl)) {
+    targetParent.appendChild(modalEl);
+  }
+}
+window.ensureModalInFullscreen = ensureModalInFullscreen;
+
+function restoreModalFromFullscreen(modalEl) {
+  if (!modalEl) return;
+  if (modalEl.parentElement && modalEl.parentElement !== document.body) {
+    document.body.appendChild(modalEl);
+  }
+}
+window.restoreModalFromFullscreen = restoreModalFromFullscreen;
+
+const FULLSCREEN_PORTAL_MODAL_IDS = [
+  'test-wa-modal',
+  'custom-alert-modal',
+  'custom-confirm-modal',
+  'password-modal',
+  'danger-modal'
+];
+
 function onFullscreenEnter() {
   const section = document.getElementById('section-status-ruangan');
   if (section) section.classList.add('is-fullscreen');
+
+  // Pindahkan modal penting ke dalam container fullscreen agar bisa dibuka tanpa keluar mode fullscreen
+  FULLSCREEN_PORTAL_MODAL_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && section && !section.contains(el)) {
+      section.appendChild(el);
+    }
+  });
 
   const iconEnter = document.getElementById('icon-fs-enter');
   const iconExit = document.getElementById('icon-fs-exit');
@@ -13330,6 +13404,14 @@ function onFullscreenEnter() {
 function onFullscreenExit() {
   const section = document.getElementById('section-status-ruangan');
   if (section) section.classList.remove('is-fullscreen');
+
+  // Kembalikan modal ke document.body agar tetap dapat diakses di mode tampilan lainnya
+  FULLSCREEN_PORTAL_MODAL_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.parentElement && el.parentElement !== document.body) {
+      document.body.appendChild(el);
+    }
+  });
 
   const iconEnter = document.getElementById('icon-fs-enter');
   const iconExit = document.getElementById('icon-fs-exit');
@@ -13430,6 +13512,16 @@ flatpickr("input[type='date'], #filter-tanggal", {
     });
   },
   onOpen: function (selectedDates, dateStr, instance) {
+    if (instance && instance.calendarContainer) {
+      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.getElementById('section-status-ruangan')?.classList.contains('is-fullscreen'));
+      const section = document.getElementById('section-status-ruangan');
+      const targetParent = document.fullscreenElement || (isFs && section ? section : null);
+      if (targetParent && !targetParent.contains(instance.calendarContainer)) {
+        targetParent.appendChild(instance.calendarContainer);
+      }
+      instance.calendarContainer.style.zIndex = '2147483649';
+    }
+
     attachFlatpickrFooter(instance, {
       onClear: () => {
         const mainTanggal = document.getElementById('filter-tanggal');
@@ -13447,6 +13539,12 @@ flatpickr("input[type='date'], #filter-tanggal", {
   },
   onChange: function (selectedDates, dateStr, instance) {
     if (instance) instance.close();
+    if (instance && instance.element && instance.element.id === 'absensi-tanggal') {
+      if (typeof window.handleAbsensiDateOrLabChange === 'function') {
+        window.handleAbsensiDateOrLabChange();
+      }
+      return;
+    }
     const mainTanggal = document.getElementById('filter-tanggal');
     if (dateStr) {
       if (mainTanggal) mainTanggal.value = dateStr;
