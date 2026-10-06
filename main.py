@@ -44,6 +44,10 @@ async def startup_event():
         except Exception as e:
             print(f"Auto-build HTML notice: {e}")
     scraper.init_db_schema()
+    try:
+        wa_notifier.init_sent_notifications_on_startup()
+    except Exception as e:
+        print(f"[Startup] Error init wa notifications: {e}")
     asyncio.create_task(wa_notifier.wa_notifier_loop())
 
 # ==================== SECURITY & CACHE HEADERS MIDDLEWARE (SEC-10) ====================

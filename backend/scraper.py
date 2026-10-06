@@ -375,6 +375,14 @@ def init_db_schema():
                 INDEX idx_perubahan_prodi (prodi)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS log_sent_notifications (
+                notif_key VARCHAR(191) PRIMARY KEY,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_sent_at (sent_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
         
         cursor.execute("SELECT COUNT(*) FROM ruangan")
         if cursor.fetchone()[0] == 0:

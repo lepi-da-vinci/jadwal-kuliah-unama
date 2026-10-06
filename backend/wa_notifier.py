@@ -81,6 +81,90 @@ registration_states = {}
 aslab_session_states = {}
 sent_notifications = set()
 
+def mark_notification_sent(key: str):
+    """Mencatat notifikasi telah terkirim baik di RAM maupun di database MySQL agar kebal restart server"""
+    if not key:
+        return
+    sent_notifications.add(key)
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT IGNORE INTO log_sent_notifications (notif_key) VALUES (%s)", (key,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+def is_notification_sent(key: str) -> bool:
+    """Memeriksa apakah notifikasi sudah terkirim (cek di RAM, fallback ke database MySQL)"""
+    if not key:
+        return False
+    if key in sent_notifications:
+        return True
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM log_sent_notifications WHERE notif_key = %s LIMIT 1", (key,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if row:
+            sent_notifications.add(key)
+            return True
+    except Exception:
+        pass
+    return False
+
+def init_sent_notifications_on_startup():
+    """
+    Memuat riwayat notifikasi yang sudah terkirim dari database agar kebal restart server.
+    Mencegah pengiriman ulang (spam) Info Mase atau reminder kelas saat server restart.
+    """
+    global sent_notifications
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS log_sent_notifications (
+                notif_key VARCHAR(191) PRIMARY KEY,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_sent_at (sent_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        conn.commit()
+
+        # 1. Muat key yang sudah terkirim hari ini & kemarin ke memory
+        cursor.execute("SELECT notif_key FROM log_sent_notifications WHERE sent_at >= CURDATE() - INTERVAL 1 DAY")
+        for row in cursor.fetchall():
+            sent_notifications.add(row['notif_key'])
+
+        # 2. Tangkal kirim ulang Info Mase: tandai SEMUA notifikasi_lab yang sudah ada sebelum restart sebagai SEEN
+        cursor.execute("SELECT id FROM notifikasi_lab WHERE tanggal = CURDATE()")
+        existing_nl_ids = [row['id'] for row in cursor.fetchall()]
+
+        if existing_nl_ids:
+            cursor.execute("SELECT id_ruangan FROM ruangan")
+            all_r_ids = [r['id_ruangan'] for r in cursor.fetchall()]
+            
+            cursor.execute("SELECT no_wa, wa_lid FROM asisten_lab WHERE (no_wa IS NOT NULL AND no_wa != '') OR (wa_lid IS NOT NULL AND wa_lid != '')")
+            all_targets = [u['wa_lid'] or u['no_wa'] for u in cursor.fetchall()]
+
+            for nl_id in existing_nl_ids:
+                for rid in all_r_ids:
+                    for t_wa in all_targets:
+                        k = f"info_mase_nl_{nl_id}_{rid}_{t_wa}"
+                        sent_notifications.add(k)
+                        cursor.execute("INSERT IGNORE INTO log_sent_notifications (notif_key) VALUES (%s)", (k,))
+            conn.commit()
+            print(f"[WA Notifier] Startup: Berhasil memproteksi {len(existing_nl_ids)} Info Mase lama agar tidak dikirim ulang.")
+    except Exception as e:
+        print(f"[WA Notifier] Startup init error: {e}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 # Anti-spam deduplication
 message_cache = {}
 seen_msg_ids = {}
@@ -3759,9 +3843,9 @@ def check_and_notify_info_mase():
 
                     for target_wa in set(target_aslabs):
                         notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
-                        if notif_key not in sent_notifications:
+                        if not is_notification_sent(notif_key):
                             if send_wa_message(target_wa, msg):
-                                sent_notifications.add(notif_key)
+                                mark_notification_sent(notif_key)
                                 log_chatbot("SUCCESS", f"Info Mase Lab terkirim ke Aslab {target_wa} untuk {nama_r}", "INFO-MASE")
                 else:
                     # KASUS B: Ruang Kelas Teori -> Kirim ke ASMOT kampus tersebut!
@@ -3780,9 +3864,9 @@ def check_and_notify_info_mase():
 
                     for target_wa in set(target_asmots):
                         notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
-                        if notif_key not in sent_notifications:
+                        if not is_notification_sent(notif_key):
                             if send_wa_message(target_wa, msg):
-                                sent_notifications.add(notif_key)
+                                mark_notification_sent(notif_key)
                                 log_chatbot("SUCCESS", f"Info Mase Asmot terkirim ke {target_wa} untuk {nama_r} ({kampus_r})", "INFO-MASE")
 
     except Exception as e:
@@ -3889,9 +3973,9 @@ def check_lab_schedules():
                 target_diff = 15
                 if target_diff - 1 <= diff_buka <= target_diff:
                     notif_key = f"{current_date}_{id_room}_buka_{cls['start_min']}_{target_diff}"
-                    if notif_key not in sent_notifications:
+                    if not is_notification_sent(notif_key):
                         if is_room_already_open(cursor, current_date, id_room, cls['start_min']):
-                            sent_notifications.add(notif_key)
+                            mark_notification_sent(notif_key)
                             log_chatbot("INFO", f"Lab {room_name_full} untuk {cls['nama_mk']} sudah dibuka di sistem. Notifikasi buka lab dilewati.", "OPERASIONAL-LAB")
                             continue
                         aslab_open_batches[(no_wa, cls['start_min'])].append({
@@ -3908,7 +3992,7 @@ def check_lab_schedules():
                 target_diff = 15
                 if target_diff - 1 <= diff_tutup <= target_diff:
                     notif_key = f"{current_date}_{id_room}_tutup_{cls['end_min']}_{target_diff}"
-                    if notif_key not in sent_notifications:
+                    if not is_notification_sent(notif_key):
                         cls_jam_str = f"{cls['start_min'] // 60:02d}:{cls['start_min'] % 60:02d}:00"
                         cursor.execute("""
                             SELECT status_lab FROM status_operasional_lab
@@ -3917,7 +4001,7 @@ def check_lab_schedules():
                         """, (current_date, id_room, cls_jam_str))
                         sol = cursor.fetchone()
                         if sol and sol.get('status_lab') == 'tutup':
-                            sent_notifications.add(notif_key)
+                            mark_notification_sent(notif_key)
                             continue
                         aslab_close_batches[(no_wa, cls['end_min'])].append({
                             'id_room': id_room,
@@ -3950,7 +4034,7 @@ def check_lab_schedules():
 
             if send_wa_message(no_wa, msg):
                 for it in items:
-                    sent_notifications.add(it['notif_key'])
+                    mark_notification_sent(it['notif_key'])
 
         # Kirim batching notifikasi Tutup / Jeda Lab ke Aslab
         for (no_wa, end_min), items in aslab_close_batches.items():
@@ -3991,7 +4075,7 @@ def check_lab_schedules():
 
             if send_wa_message(no_wa, msg):
                 for it in items:
-                    sent_notifications.add(it['notif_key'])
+                    mark_notification_sent(it['notif_key'])
 
         # --- B. NOTIFIKASI UNTUK ASMOT (PENGELOLA AC SELURUH KELAS) ---
         # Ringkas semua ruangan pada jam yang sama menjadi 1 pesan gabungan agar tidak spam
@@ -4035,9 +4119,9 @@ def check_lab_schedules():
                     diff_buka = cls['start_min'] - current_total_min
                     if 19 <= diff_buka <= 20:
                         notif_key = f"{current_date}_{id_room}_asmot_ac_on_{cls['start_min']}"
-                        if notif_key not in sent_notifications:
+                        if not is_notification_sent(notif_key):
                             if is_room_already_open(cursor, current_date, id_room, cls['start_min']):
-                                sent_notifications.add(notif_key)
+                                mark_notification_sent(notif_key)
                                 log_chatbot("INFO", f"Ruangan {r_nama} ({r_kampus}) untuk {cls['nama_mk']} sudah dibuka di sistem. Pengingat AC dilewati.", "OPERASIONAL-ASMOT")
                                 continue
                             for target_wa in target_asmots:
@@ -4054,7 +4138,7 @@ def check_lab_schedules():
                     diff_tutup = cls['end_min'] - current_total_min
                     if 0 <= diff_tutup <= 5:
                         notif_key = f"{current_date}_{id_room}_asmot_ac_off_{cls['end_min']}"
-                        if notif_key not in sent_notifications:
+                        if not is_notification_sent(notif_key):
                             for target_wa in target_asmots:
                                 asmot_off_batches[(target_wa, cls['end_min'], r_kampus)].append({
                                     'id_room': id_room,
@@ -4097,7 +4181,7 @@ def check_lab_schedules():
 
                 if send_wa_message(target_wa, msg_asmot):
                     for it in items:
-                        sent_notifications.add(it['notif_key'])
+                        mark_notification_sent(it['notif_key'])
 
             # Kirim Pengingat Matikan AC Asmot (SATU PESAN GABUNGAN jika jam sama)
             for (target_wa, end_min, r_kampus), items in asmot_off_batches.items():
@@ -4149,7 +4233,7 @@ def check_lab_schedules():
 
                 if send_wa_message(target_wa, msg_asmot):
                     for it in items:
-                        sent_notifications.add(it['notif_key'])
+                        mark_notification_sent(it['notif_key'])
     except Exception as e:
         print(f"Error checking lab schedules for WA: {e}")
     finally:
