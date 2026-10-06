@@ -25,17 +25,22 @@ import collections
 from datetime import datetime, timedelta, date
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)
 
 def get_db():
+    is_docker = os.path.exists("/.dockerenv")
     pwd = os.getenv("DB_PASSWORD", "")
-    host = os.getenv("DB_HOST", "127.0.0.1")
-    configured_port = int(os.getenv("DB_PORT", 3307))
+    host = os.getenv("DB_HOST", "db" if is_docker else "127.0.0.1")
+    if is_docker and host in ["127.0.0.1", "localhost"]:
+        host = "db"
+    configured_port = int(os.getenv("DB_PORT", 3306 if is_docker else 3307))
+    if is_docker and configured_port == 3307:
+        configured_port = 3306
     user = os.getenv("DB_USER", "root")
     db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
 
     ports_to_try = [configured_port]
-    for p in [3307, 3306]:
+    for p in ([3306, 3307] if is_docker else [3307, 3306]):
         if p not in ports_to_try:
             ports_to_try.append(p)
 
@@ -214,6 +219,44 @@ def init_db_schema():
             pass
 
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS absensi_master_aslab (
+                id_aslab INT AUTO_INCREMENT PRIMARY KEY,
+                nama_aslab VARCHAR(100) NOT NULL UNIQUE,
+                kampus_tugas VARCHAR(50) NOT NULL DEFAULT 'Thehok',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        try:
+            cursor.execute("SELECT COUNT(*) as cnt FROM absensi_master_aslab")
+            row_aslab_cnt = cursor.fetchone()
+            if row_aslab_cnt and (row_aslab_cnt.get("cnt", 0) if isinstance(row_aslab_cnt, dict) else row_aslab_cnt[0]) == 0:
+                default_aslabs = [
+                    ("Dwi Cahya Medika", "Kobar"),
+                    ("Iqbal Prasetyo", "Kobar"),
+                    ("M. Ghalih. M", "Kobar"),
+                    ("Haykal Wais Alqorni", "Kobar"),
+                    ("M.Raffi Pra Diestyawan", "Kobar"),
+                    ("Muhammad Reza Fahlevi", "Kobar"),
+                    ("Isodorus Bakti Pangestu", "Thehok"),
+                    ("Ahmad Idris", "Thehok"),
+                    ("Delvio Pasha", "Thehok"),
+                    ("Bayu Zaidan Azizi", "Thehok"),
+                    ("Rezky Cahya Gandana", "Thehok"),
+                    ("Andi Noor", "Thehok"),
+                    ("Zuan Vivaldi", "Thehok"),
+                    ("Trio Prananda", "Thehok"),
+                    ("Rafli Maulana", "Thehok"),
+                    ("Farrel Algazel", "Thehok"),
+                    ("Yeremias Laga", "Thehok"),
+                ]
+                cursor.executemany("INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas) VALUES (%s, %s)", default_aslabs)
+                conn.commit()
+        except Exception:
+            pass
+
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS absensi_aslab (
                 id_absensi INT AUTO_INCREMENT PRIMARY KEY,
                 id_aslab INT NULL,
@@ -228,12 +271,19 @@ def init_db_schema():
                 status_perkuliahan ENUM('Tatap Muka', 'Online', 'Cancel') NOT NULL DEFAULT 'Tatap Muka',
                 keterangan TEXT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (id_aslab) REFERENCES asisten_lab(id_aslab) ON DELETE SET NULL,
+                FOREIGN KEY (id_aslab) REFERENCES absensi_master_aslab(id_aslab) ON DELETE SET NULL,
                 INDEX idx_absensi_tgl (tanggal),
                 INDEX idx_absensi_lab (nomor_lab),
                 INDEX idx_absensi_aslab (id_aslab)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
+
+        # Pastikan relasi FK terpisah total dari tabel kontak asisten_lab
+        try:
+            cursor.execute("ALTER TABLE absensi_aslab DROP FOREIGN KEY absensi_aslab_ibfk_1")
+            cursor.execute("ALTER TABLE absensi_aslab ADD CONSTRAINT fk_absensi_master_aslab FOREIGN KEY (id_aslab) REFERENCES absensi_master_aslab (id_aslab) ON DELETE SET NULL")
+        except Exception:
+            pass
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS absensi_master_lab (
@@ -270,6 +320,8 @@ def init_db_schema():
                 conn.commit()
         except Exception:
             pass
+
+
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS log_notifikasi_perubahan (

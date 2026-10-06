@@ -115,8 +115,15 @@ def is_duplicate_message(sender, text, msg_id=None):
             del message_cache[k]
     return False
 
+_last_wa_bot_failure_time = 0
+
 # Basic old functions
 def send_wa_message(no_wa, pesan):
+    global _last_wa_bot_failure_time
+    now = time.time()
+    if now - _last_wa_bot_failure_time < 30:
+        return False
+
     try:
         url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
@@ -126,7 +133,7 @@ def send_wa_message(no_wa, pesan):
         }
         data = {'target': no_wa, 'message': pesan}
         log_chatbot("INFO", f"Mengirim permintaan kirim pesan ke Gateway WA ({url}) -> Target: {no_wa} (Panjang: {len(pesan)} chars)", "WA-SENDER")
-        response = requests.post(url, headers=headers, json=data, timeout=12)
+        response = requests.post(url, headers=headers, json=data, timeout=2)
         if response.status_code == 200:
             log_chatbot("SUCCESS", f"Pesan berhasil terkirim ke {no_wa} via Gateway WA", "WA-SENDER")
             return True
@@ -134,11 +141,14 @@ def send_wa_message(no_wa, pesan):
             log_chatbot("ERROR", f"Gateway WA gagal mengirim ke {no_wa} | HTTP {response.status_code}: {response.text}", "WA-SENDER")
             return False
     except Exception as e:
+        _last_wa_bot_failure_time = time.time()
         log_chatbot("ERROR", f"Exception saat kirim pesan ke {no_wa} via {url}: {e}", "WA-SENDER")
         return False
 
 def send_wa_typing(target, state='composing'):
     """Mengirim sinyal animasi 'sedang mengetik' (composing) atau 'paused' ke WhatsApp penerima"""
+    if time.time() - _last_wa_bot_failure_time < 30:
+        return
     try:
         base_send_url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         url = os.getenv("WA_BOT_TYPING_URL", base_send_url.replace('/send', '/typing'))
@@ -148,7 +158,7 @@ def send_wa_typing(target, state='composing'):
             'x-bot-secret': secret
         }
         data = {'target': target, 'state': state}
-        requests.post(url, headers=headers, json=data, timeout=3)
+        requests.post(url, headers=headers, json=data, timeout=1)
     except Exception:
         pass
 
@@ -1794,52 +1804,60 @@ def check_and_broadcast_server_url_change(force_broadcast: bool = False):
         """)
         recipients = cursor.fetchall()
 
-        sent_count = 0
-        for rec in recipients:
-            # Tentukan target pengiriman WhatsApp (prioritaskan wa_lid untuk akun privasi @lid)
-            target_wa = None
-            if rec.get('wa_lid') and '@lid' in str(rec['wa_lid']):
-                target_wa = str(rec['wa_lid']).strip()
-            elif rec.get('no_wa'):
-                raw_no = str(rec['no_wa']).strip()
-                if '@' in raw_no:
-                    target_wa = raw_no
-                else:
-                    clean_wa = re.sub(r'[^0-9]', '', raw_no)
-                    if clean_wa.startswith('08'):
-                        clean_wa = '628' + clean_wa[2:]
-                    elif clean_wa.startswith('8'):
-                        clean_wa = '628' + clean_wa[1:]
-                    if len(clean_wa) >= 9:
-                        target_wa = clean_wa
+        def _broadcast_worker(recs, c_url):
+            sent = 0
+            for rec in recs:
+                target_wa = None
+                if rec.get('wa_lid') and '@lid' in str(rec['wa_lid']):
+                    target_wa = str(rec['wa_lid']).strip()
+                elif rec.get('no_wa'):
+                    raw_no = str(rec['no_wa']).strip()
+                    if '@' in raw_no:
+                        target_wa = raw_no
+                    else:
+                        clean_wa = re.sub(r'[^0-9]', '', raw_no)
+                        if clean_wa.startswith('08'):
+                            clean_wa = '628' + clean_wa[2:]
+                        elif clean_wa.startswith('8'):
+                            clean_wa = '628' + clean_wa[1:]
+                        if len(clean_wa) >= 9:
+                            target_wa = clean_wa
 
-            if not target_wa:
-                continue
+                if not target_wa:
+                    continue
 
-            pesan_wa = (
-                f"*Server Jadwal UNAMA Restart*\n\n"
-                f"Server jadwal kuliah baru saja restart. Silakan akses melalui link baru berikut:\n"
-                f"{current_url}"
-            )
+                pesan_wa = (
+                    f"*Server Jadwal UNAMA Restart*\n\n"
+                    f"Server jadwal kuliah baru saja restart. Silakan akses melalui link baru berikut:\n"
+                    f"{c_url}"
+                )
+
+                try:
+                    sukses = send_wa_message(target_wa, pesan_wa)
+                    if sukses:
+                        sent += 1
+                        time.sleep(1.5)
+                except Exception as e_send:
+                    print(f"[Server Link WA Error] Gagal kirim ke {target_wa}: {e_send}")
 
             try:
-                sukses = send_wa_message(target_wa, pesan_wa)
-                if sukses:
-                    sent_count += 1
-                    time.sleep(1.5)  # Jeda aman antar pesan WA
-            except Exception as e_send:
-                print(f"[Server Link WA Error] Gagal kirim ke {target_wa}: {e_send}")
+                c_conn = get_db_connection()
+                c_cur = c_conn.cursor()
+                c_cur.execute("""
+                    UPDATE server_link_history 
+                    SET total_kontak_dikirim = %s 
+                    WHERE url_baru = %s 
+                    ORDER BY id DESC LIMIT 1
+                """, (sent, c_url))
+                c_conn.commit()
+                c_cur.close()
+                c_conn.close()
+            except Exception:
+                pass
+            print(f"[Server Link Monitor] Sukses mengirim notifikasi link server baru ke {sent} kontak.")
 
-        # Update total terkirim di riwayat terakhir
-        cursor.execute("""
-            UPDATE server_link_history 
-            SET total_kontak_dikirim = %s 
-            WHERE url_baru = %s 
-            ORDER BY id DESC LIMIT 1
-        """, (sent_count, current_url))
-        conn.commit()
+        threading.Thread(target=_broadcast_worker, args=(recipients, current_url), daemon=True).start()
 
-        print(f"[Server Link Monitor] Sukses mengirim notifikasi link server baru ke {sent_count} kontak.")
         return {
             "status": "broadcasted",
             "url_lama": prev_url,
