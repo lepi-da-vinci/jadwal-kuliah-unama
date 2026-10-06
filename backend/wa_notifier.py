@@ -2031,13 +2031,65 @@ def kirim_pesan_ke_aslab(nama_atau_ruangan_target: str, isi_pesan: str):
             cursor.close()
             conn.close()
 
+JADWAL_JAGA_MALAM_ASLAB = {
+    "Senin": ["Haykal Wais Alqorni", "Rafli Maulana", "M.Raffi Pra Diestyawan", "Farrel Algazel", "Andi Noor", "Ahmad Idris", "Zuan Vivaldi"],
+    "Selasa": ["Rezky Cahya Gandana", "Delvio Pasha", "Iqbal Prasetyo", "M. Ghalih. M", "Muhammad Reza Fahlevi", "Dwi Cahya Medika"],
+    "Rabu": ["Zuan Vivaldi", "Bayu Zaidan Azizi", "Trio Prananda", "Haykal Wais Alqorni", "Dwi Cahya Medika", "Iqbal Prasetyo", "Yeremias Laga"],
+    "Kamis": ["Farrel Algazel", "Andi Noor", "Ahmad Idris", "M. Ghalih. M", "Isodorus Bakti Pangestu", "Muhammad Reza Fahlevi", "M.Raffi Pra Diestyawan"],
+    "Jum'at": ["Rezky Cahya Gandana", "Delvio Pasha", "Rafli Maulana", "Yeremias Laga", "Bayu Zaidan Azizi", "Trio Prananda", "Isodorus Bakti Pangestu"],
+    "Sabtu": ["Semua Aslab"]
+}
+
+def get_jadwal_jaga_malam(hari: str = None) -> str:
+    """Mengambil informasi jadwal jaga malam aslab tahun ajaran ganjil 2026/2027 berdasarkan hari tertentu (Senin-Sabtu) atau hari ini"""
+    now = get_wib_now()
+    nama_hari_map = {
+        0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jum'at", 5: "Sabtu", 6: "Minggu"
+    }
+    target_hari = None
+    if hari:
+        h_clean = hari.strip().lower()
+        for k in JADWAL_JAGA_MALAM_ASLAB:
+            if k.lower() in h_clean:
+                target_hari = k
+                break
+        if not target_hari and "jumat" in h_clean:
+            target_hari = "Jum'at"
+    
+    if not target_hari:
+        target_hari = nama_hari_map.get(now.weekday(), "Senin")
+
+    if target_hari == "Minggu":
+        return "*JADWAL JAGA MALAM ASLAB (MINGGU)*\nHari Minggu libur jaga malam mas."
+
+    aslabs = JADWAL_JAGA_MALAM_ASLAB.get(target_hari, [])
+    daftar_txt = "\n".join([f"• {nama}" for nama in aslabs])
+    return (
+        f"*JADWAL JAGA MALAM ASLAB (TA GANJIL 2026/2027)*\n"
+        f"*Hari:* {target_hari}\n"
+        f"------------------------------\n"
+        f"{daftar_txt}\n"
+        f"------------------------------\n"
+        f"_Ketik 'jadwal jaga malam semua' untuk melihat jadwal sepekan penuh._"
+    )
+
+def get_semua_jadwal_jaga_malam() -> str:
+    """Mengambil rekap lengkap jadwal jaga malam sepekan"""
+    res = ["*REKAP JADWAL JAGA MALAM ASLAB GANJIL 2026/2027*\n------------------------------"]
+    for hari, aslabs in JADWAL_JAGA_MALAM_ASLAB.items():
+        daftar = ", ".join(aslabs)
+        res.append(f"*{hari}:*\n{daftar}\n")
+    res.append("------------------------------")
+    return "\n".join(res)
+
 ai_tools = [
     cek_jadwal_lab_tertentu, kelas_berikutnya, status_lab_sekarang,
     cek_semua_lab_kampus, cek_lab_kosong, cari_posisi_dosen,
     get_info_mase, get_ngrok_link, update_profil_aslab,
     list_aslab_lain, kirim_pesan_ke_aslab,
     get_statistik_lab_saya, get_statistik_akademik,
-    get_info_kurikulum, get_perubahan_kurikulum
+    get_info_kurikulum, get_perubahan_kurikulum,
+    get_jadwal_jaga_malam
 ]
 
 chat_sessions = {}
@@ -2045,7 +2097,7 @@ def get_or_create_chat_session(sender, nama_aslab, nama_ruangan, kampus):
     if sender not in chat_sessions:
         system_instruction = f"""Kamu adalah bot operasional jadwal kampus UNAMA untuk WhatsApp.
 Lawan bicaramu: Aslab '{nama_aslab}' ({nama_ruangan} {kampus}).
-Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab, statistik lab, info kurikulum mata kuliah.
+Tugas: cek jadwal, kelas berikutnya, status real-time lab, lab kosong, posisi dosen, ubah profil, titip pesan aslab, statistik lab, info kurikulum mata kuliah, cek jadwal jaga malam aslab.
 Selalu gunakan tools/functions untuk mengambil data, jangan pernah mengarang data.
 Tanggal acuan: {get_wib_now().strftime('%Y-%m-%d')} ({format_tanggal_indo(get_wib_now())}).
 
@@ -2072,6 +2124,8 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
 10. INFORMASI KURIKULUM & MATA KULIAH (TI, SI, SK - KURIKULUM 2024 & 2025):
    - Jika aslab bertanya tentang kurikulum, daftar mata kuliah per semester, bobot SKS, atau mata kuliah pilihan, panggil tool `get_info_kurikulum(prodi, tahun, semester, kata_kunci)`.
    - Jika aslab bertanya tentang perbedaan/perubahan kurikulum 2024 vs 2025 (misal: "apa beda kurikulum 2024 dan 2025 di TI?"), panggil tool `get_perubahan_kurikulum(prodi)`.
+11. JADWAL JAGA MALAM ASLAB (TA GANJIL 2026/2027):
+   - Jika aslab bertanya jadwal jaga malam, piket malam, siapa yang jaga malam ini/besok/hari tertentu, panggil tool `get_jadwal_jaga_malam(hari)`.
 
 FITUR RAHASIA (TITIP / SAMPAIKAN PESAN KE ASLAB LAIN):
 - Fitur ini adalah fitur rahasia AI (TIDAK DITAMPILKAN di daftar menu manapun).
@@ -2668,6 +2722,15 @@ def fallback_python_handler(sender, text, aslab):
         if role == 'asmot':
             return get_info_mase(role='asmot', kampus=kampus_asmot)
         return get_info_mase(role='aslab', lab_saya=aslab.get('nama_ruangan'))
+
+    # 2.6 Cek Pertanyaan Jadwal Jaga Malam Aslab
+    if any(k in text_clean for k in ["jaga malam", "piket malam", "jadwal jaga", "jadwal piket"]):
+        if any(k in text_clean for k in ["semua", "lengkap", "sepekan", "seminggu", "rekap", "full"]):
+            return get_semua_jadwal_jaga_malam()
+        for h in ["senin", "selasa", "rabu", "kamis", "jumat", "jum'at", "sabtu"]:
+            if h in text_clean:
+                return get_jadwal_jaga_malam(h)
+        return get_jadwal_jaga_malam()
 
     # 3. Cek Menu / Bantuan / Sapaan
     if (re.search(r'^(menu|bantuan|help|\?)$', text_clean) or 

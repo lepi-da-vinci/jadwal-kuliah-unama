@@ -5320,6 +5320,29 @@ function safeEscapeAbsensi(str) {
     .replace(/'/g, '&#039;');
 }
 
+// Pemetaan 17 Asisten Lab Resmi (Tahun Ajaran Ganjil 2026/2027)
+const DEFAULT_OFFICIAL_ASLABS = [
+  // Kampus Kobar (5 Lab + 1 Remote)
+  { nama: "Dwi Cahya Medika", kampus: "Kobar", lab: "1.5" },
+  { nama: "Iqbal Prasetyo", kampus: "Kobar", lab: "1.6" },
+  { nama: "M. Ghalih. M", kampus: "Kobar", lab: "1.7" },
+  { nama: "Haykal Wais Alqorni", kampus: "Kobar", lab: "1.8" },
+  { nama: "M.Raffi Pra Diestyawan", kampus: "Kobar", lab: "1.9" },
+  { nama: "Muhammad Reza Fahlevi", kampus: "Kobar", lab: "Remote" },
+  // Kampus Thehok (9 Lab + 2 Remote)
+  { nama: "Isodorus Bakti Pangestu", kampus: "Thehok", lab: "1.3" },
+  { nama: "Ahmad Idris", kampus: "Thehok", lab: "1.4" },
+  { nama: "Delvio Pasha", kampus: "Thehok", lab: "1.5" },
+  { nama: "Bayu Zaidan Azizi", kampus: "Thehok", lab: "2.7" },
+  { nama: "Rezky Cahya Gandana", kampus: "Thehok", lab: "3.1" },
+  { nama: "Andi Noor", kampus: "Thehok", lab: "3.2" },
+  { nama: "Zuan Vivaldi", kampus: "Thehok", lab: "3.4" },
+  { nama: "Trio Prananda", kampus: "Thehok", lab: "4.1" },
+  { nama: "Rafli Maulana", kampus: "Thehok", lab: "4.3" },
+  { nama: "Farrel Algazel", kampus: "Thehok", lab: "Remote" },
+  { nama: "Yeremias Laga", kampus: "Thehok", lab: "Remote" }
+];
+
 // Pemetaan Asisten Lab yang memegang masing-masing Labor
 const DEFAULT_LAB_ASLAB_MAP = {
   // Kampus Kobar
@@ -6641,12 +6664,21 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
     }
 
     const labs = data.labs_detail || [];
-    const aslabs = (data.aslab || []).map(a => ({
+    let aslabs = (data.aslab || []).map(a => ({
       id: a.id || a.id_aslab,
       nama: a.nama || a.nama_aslab,
       kampus: a.kampus || a.kampus_tugas || 'Thehok',
       role: a.role || 'aslab'
     }));
+
+    if (aslabs.length === 0 && typeof DEFAULT_OFFICIAL_ASLABS !== 'undefined') {
+      aslabs = DEFAULT_OFFICIAL_ASLABS.map((a, i) => ({
+        id: i + 1,
+        nama: a.nama,
+        kampus: a.kampus,
+        role: 'aslab'
+      }));
+    }
     window._masterLabsCache = labs;
     window._masterAslabsCache = aslabs;
 
@@ -7181,6 +7213,31 @@ window.handleDeleteCfgAslabByIndex = async function (idx) {
     }
   } catch (e) {
     alert('Terjadi kesalahan jaringan.');
+  }
+};
+
+window.handleResetCfgAslabToOfficial = async function () {
+  if (!confirm("Pulihkan 17 Asisten Lab Resmi (Tahun Ajaran Ganjil 2026/2027) ke database?")) return;
+
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab/reset`, {
+      method: 'POST',
+      headers: getAdminHeaders()
+    });
+    const json = await res.json();
+    if (res.ok && json.status === 'success') {
+      alert(json.message || "Berhasil memulihkan 17 aslab resmi.");
+      window.loadAbsensiMasterConfig(true);
+    } else {
+      alert("Gagal reset aslab: " + (json.message || "Terjadi kesalahan"));
+    }
+  } catch (e) {
+    alert("Terjadi kesalahan jaringan.");
   }
 };
 

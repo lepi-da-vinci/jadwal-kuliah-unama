@@ -704,6 +704,7 @@
               <div class="aslab-list-item" data-value="M. Ghalih. M" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'M. Ghalih. M', 'M. Ghalih. M (Kobar)', 'Kobar')">M. Ghalih. M (Kobar)</div>
               <div class="aslab-list-item" data-value="Haykal Wais Alqorni" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Haykal Wais Alqorni', 'Haykal Wais Alqorni (Kobar)', 'Kobar')">Haykal Wais Alqorni (Kobar)</div>
               <div class="aslab-list-item" data-value="M.Raffi Pra Diestyawan" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'M.Raffi Pra Diestyawan', 'M.Raffi Pra Diestyawan (Kobar)', 'Kobar')">M.Raffi Pra Diestyawan (Kobar)</div>
+              <div class="aslab-list-item" data-value="Muhammad Reza Fahlevi" data-kampus="Kobar" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Muhammad Reza Fahlevi', 'Muhammad Reza Fahlevi (Kobar - Remote)', 'Kobar')">Muhammad Reza Fahlevi (Kobar - Remote)</div>
               <div class="custom-select-group-header">Asisten Lab Thehok</div>
               <div class="aslab-list-item" data-value="Isodorus Bakti Pangestu" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Isodorus Bakti Pangestu', 'Isodorus Bakti Pangestu (Thehok)', 'Thehok')">Isodorus Bakti Pangestu (Thehok)</div>
               <div class="aslab-list-item" data-value="Ahmad Idris" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Ahmad Idris', 'Ahmad Idris (Thehok)', 'Thehok')">Ahmad Idris (Thehok)</div>
@@ -714,6 +715,8 @@
               <div class="aslab-list-item" data-value="Zuan Vivaldi" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Zuan Vivaldi', 'Zuan Vivaldi (Thehok)', 'Thehok')">Zuan Vivaldi (Thehok)</div>
               <div class="aslab-list-item" data-value="Trio Prananda" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Trio Prananda', 'Trio Prananda (Thehok)', 'Thehok')">Trio Prananda (Thehok)</div>
               <div class="aslab-list-item" data-value="Rafli Maulana" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Rafli Maulana', 'Rafli Maulana (Thehok)', 'Thehok')">Rafli Maulana (Thehok)</div>
+              <div class="aslab-list-item" data-value="Farrel Algazel" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Farrel Algazel', 'Farrel Algazel (Thehok - Remote)', 'Thehok')">Farrel Algazel (Thehok - Remote)</div>
+              <div class="aslab-list-item" data-value="Yeremias Laga" data-kampus="Thehok" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'Yeremias Laga', 'Yeremias Laga (Thehok - Remote)', 'Thehok')">Yeremias Laga (Thehok - Remote)</div>
               <div class="aslab-list-item" data-value="custom" onclick="selectAbsensiCustomOption('absensi-nama-aslab', 'custom', 'Ketik Nama Sendiri (Custom)...')" style="font-weight: 700; color: var(--primary); border-top: 1px dashed var(--border); background: rgba(99, 102, 241, 0.05);">
                 Ketik Nama Sendiri (Custom)...
               </div>
@@ -884,15 +887,28 @@
           <div style="font-size: 0.84em; font-weight: 700; color: var(--text);" id="cfg-aslab-count-badge">
             Daftar Aslab (0)
           </div>
-          <button type="button" onclick="loadAbsensiMasterConfig()"
-            style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 4px 10px; border-radius: 6px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-            <span>Refresh</span>
-          </button>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button type="button" onclick="window.handleResetCfgAslabToOfficial()"
+              title="Pulihkan 17 Asisten Lab Resmi (Ganjil 2026/2027)"
+              style="background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; color: #10b981; padding: 4px 10px; border-radius: 6px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                <path d="M3 21v-5h5"></path>
+              </svg>
+              <span>Reset 17 Aslab</span>
+            </button>
+            <button type="button" onclick="loadAbsensiMasterConfig()"
+              style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); color: var(--primary); padding: 4px 10px; border-radius: 6px; font-size: 0.78em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
 
         <div id="cfg-aslab-list-container" style="max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
