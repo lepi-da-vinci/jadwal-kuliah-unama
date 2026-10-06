@@ -218,6 +218,38 @@ def init_db_schema():
         except Exception:
             pass
 
+        try:
+            cursor.execute("SELECT COUNT(*) as cnt FROM asisten_lab")
+            row_cnt = cursor.fetchone()
+            cnt_val = (row_cnt.get("cnt", 0) if isinstance(row_cnt, dict) else row_cnt[0]) if row_cnt else 0
+            if cnt_val == 0:
+                default_aslab_kontak = [
+                    ('Isodorus Bakti Pangestu', 'Thehok', 4),
+                    ('Ahmad Idris', 'Thehok', 2),
+                    ('Delvio Pasha', 'Thehok', 1),
+                    ('Bayu Zaidan Azizi', 'Thehok', 11),
+                    ('Rezky Cahya Gandana', 'Thehok', 17),
+                    ('Andi Noor', 'Thehok', 3),
+                    ('Zuan Vivaldi', 'Thehok', 7),
+                    ('Trio Prananda', 'Thehok', 38),
+                    ('Rafli Maulana', 'Thehok', 30),
+                    ('Dwi Cahya Medika', 'Kobar', 10),
+                    ('Iqbal Prasetyo', 'Kobar', 6),
+                    ('M. Ghalih. M', 'Kobar', 28),
+                    ('Haykal Wais Alqorni', 'Kobar', 13),
+                    ('M.Raffi Pra Diestyawan', 'Kobar', 31),
+                    ('Muhammad Reza Fahlevi', 'Kobar', None),
+                ]
+                for nama, kmp, id_r in default_aslab_kontak:
+                    cursor.execute("""
+                        INSERT INTO asisten_lab (nama_aslab, no_wa, kampus_tugas, role, id_ruangan)
+                        VALUES (%s, '', %s, 'aslab', %s)
+                    """, (nama, kmp, id_r))
+                conn.commit()
+                print("[DB] Auto-seeded default asisten_lab contacts.")
+        except Exception as e:
+            print(f"[DB] Seed asisten_lab error: {e}")
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS absensi_master_aslab (
                 id_aslab INT AUTO_INCREMENT PRIMARY KEY,

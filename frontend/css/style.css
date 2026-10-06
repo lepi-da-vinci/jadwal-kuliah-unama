@@ -812,12 +812,41 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
 #room-detail-modal .modal-box,
 #modal-fs-info .modal-box,
 #modal-fitur .modal-box,
-#lab-modal .modal-box {
+#lab-modal .modal-box,
+#test-wa-modal .modal-box,
+#test-wa-modal .setting-modal-box {
   margin: auto !important;
   position: relative !important;
-  z-index: 2147483647 !important;
+  z-index: 2147483649 !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border) !important;
   max-height: 90vh !important;
+}
+
+/* Explicit Fullscreen Overlay Scoping Rules */
+.status-ruangan-section:fullscreen #test-wa-modal,
+.status-ruangan-section:-webkit-full-screen #test-wa-modal,
+.status-ruangan-section.is-fullscreen #test-wa-modal,
+.status-ruangan-section:fullscreen #room-detail-modal,
+.status-ruangan-section:-webkit-full-screen #room-detail-modal,
+.status-ruangan-section.is-fullscreen #room-detail-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 2147483648 !important;
+}
+
+.status-ruangan-section:fullscreen #test-wa-modal.open,
+.status-ruangan-section:-webkit-full-screen #test-wa-modal.open,
+.status-ruangan-section.is-fullscreen #test-wa-modal.open,
+.status-ruangan-section:fullscreen #room-detail-modal.open,
+.status-ruangan-section:-webkit-full-screen #room-detail-modal.open,
+.status-ruangan-section.is-fullscreen #room-detail-modal.open {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 #lab-modal .modal-box {

@@ -199,15 +199,8 @@ def is_duplicate_message(sender, text, msg_id=None):
             del message_cache[k]
     return False
 
-_last_wa_bot_failure_time = 0
-
 # Basic old functions
 def send_wa_message(no_wa, pesan):
-    global _last_wa_bot_failure_time
-    now = time.time()
-    if now - _last_wa_bot_failure_time < 30:
-        return False
-
     try:
         url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
@@ -215,9 +208,9 @@ def send_wa_message(no_wa, pesan):
             'Content-Type': 'application/json',
             'x-bot-secret': secret
         }
-        data = {'target': no_wa, 'message': pesan}
+        data = {'target': no_wa, 'message': pesan, 'typing': False}
         log_chatbot("INFO", f"Mengirim permintaan kirim pesan ke Gateway WA ({url}) -> Target: {no_wa} (Panjang: {len(pesan)} chars)", "WA-SENDER")
-        response = requests.post(url, headers=headers, json=data, timeout=2)
+        response = requests.post(url, headers=headers, json=data, timeout=15)
         if response.status_code == 200:
             log_chatbot("SUCCESS", f"Pesan berhasil terkirim ke {no_wa} via Gateway WA", "WA-SENDER")
             return True
@@ -225,14 +218,11 @@ def send_wa_message(no_wa, pesan):
             log_chatbot("ERROR", f"Gateway WA gagal mengirim ke {no_wa} | HTTP {response.status_code}: {response.text}", "WA-SENDER")
             return False
     except Exception as e:
-        _last_wa_bot_failure_time = time.time()
         log_chatbot("ERROR", f"Exception saat kirim pesan ke {no_wa} via {url}: {e}", "WA-SENDER")
         return False
 
 def send_wa_typing(target, state='composing'):
     """Mengirim sinyal animasi 'sedang mengetik' (composing) atau 'paused' ke WhatsApp penerima"""
-    if time.time() - _last_wa_bot_failure_time < 30:
-        return
     try:
         base_send_url = os.getenv("WA_BOT_URL", "http://localhost:3000/send")
         url = os.getenv("WA_BOT_TYPING_URL", base_send_url.replace('/send', '/typing'))
@@ -242,7 +232,7 @@ def send_wa_typing(target, state='composing'):
             'x-bot-secret': secret
         }
         data = {'target': target, 'state': state}
-        requests.post(url, headers=headers, json=data, timeout=1)
+        requests.post(url, headers=headers, json=data, timeout=3)
     except Exception:
         pass
 
@@ -3092,8 +3082,14 @@ def handle_incoming_message(sender, text, msg_id=None):
         log_chatbot("WARN", f"Pesan duplikat dari {sender} diabaikan (anti-spam).", "HANDLER")
         return None
         
-    no_wa = re.sub(r'\D', '', sender)
-    if no_wa.startswith('0'): no_wa = '62' + no_wa[1:]
+    no_wa_clean = re.sub(r'\D', '', sender)
+    if no_wa_clean.startswith('0'):
+        no_wa = '62' + no_wa_clean[1:]
+    else:
+        no_wa = no_wa_clean
+    no_wa_0 = ('0' + no_wa[2:]) if no_wa.startswith('62') else no_wa
+    no_wa_plus = '+' + no_wa
+    no_wa_jid = f"{no_wa}@s.whatsapp.net"
 
     # 1. Perintah Tautkan Nomor / Link Akun (Sangat berguna untuk akun WhatsApp dengan format privasi @lid)
     match_link = re.search(r'^(?:!link|!taut|!nomor)\s+(\+?62\d+|08\d+)', text_clean)
@@ -3147,8 +3143,8 @@ def handle_incoming_message(sender, text, msg_id=None):
             cursor.execute('''
                 SELECT a.id_aslab, a.nama_aslab, a.no_wa, a.wa_lid, a.id_ruangan, a.role 
                 FROM asisten_lab a
-                WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
-            ''', (no_wa, sender, sender))
+                WHERE a.no_wa IN (%s, %s, %s, %s) OR a.wa_lid = %s OR a.no_wa = %s
+            ''', (no_wa, no_wa_0, no_wa_plus, no_wa_jid, sender, sender))
             existing_admin = cursor.fetchone()
             
             wa_lid_val = sender if '@lid' in sender else (existing_admin.get('wa_lid') if existing_admin else None)
@@ -3191,8 +3187,8 @@ def handle_incoming_message(sender, text, msg_id=None):
             SELECT a.id_aslab, a.nama_aslab, a.role, a.kampus_tugas, r.id_ruangan, r.nama_ruangan, r.kampus 
             FROM asisten_lab a
             LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
-            WHERE a.no_wa = %s OR a.no_wa = %s OR a.wa_lid = %s
-        ''', (no_wa, sender, sender))
+            WHERE a.no_wa IN (%s, %s, %s, %s) OR a.wa_lid = %s OR a.no_wa = %s
+        ''', (no_wa, no_wa_0, no_wa_plus, no_wa_jid, sender, sender))
         aslab = cursor.fetchone()
     except Exception as e:
         log_chatbot("ERROR", f"Database error saat memeriksa asisten_lab untuk {sender}: {e}", "DATABASE")
@@ -3601,12 +3597,14 @@ def handle_incoming_message(sender, text, msg_id=None):
                         return f"Token salah mas. Sisa percobaan: {sisa}.\n\nKetik *minta token lagi* buat minta token baru, atau *daftar ulang* kalau mau ubah data."
 
         # Jika sender BELUM ada di registration_states:
-        # Syarat wajib: Chat pertama dari nomor tidak terdaftar HARUS diawali '!inpo' atau '!info'
+        # Syarat pendaftaran langsung: Chat diawali '!inpo', 'inpo', '!info', 'info', atau '!daftar'
         is_secret_cmd = (
-            text_clean == "!inpo" or 
-            text_clean == "!info" or 
+            text_clean in ["!inpo", "!info", "inpo", "info", "!daftar", "daftar"] or 
             text_clean.startswith("!inpo") or 
-            text_clean.startswith("!info")
+            text_clean.startswith("!info") or
+            text_clean.startswith("inpo ") or
+            text_clean.startswith("info ") or
+            text_clean.startswith("!daftar")
         )
         if is_secret_cmd:
             send_wa_typing(sender, 'composing')
@@ -3620,9 +3618,15 @@ def handle_incoming_message(sender, text, msg_id=None):
                 "_Ketik 1 atau 2 untuk melanjutkan._"
             )
 
-        # Jika tanpa kata kunci untuk pesan pertama dari nomor tidak terdaftar -> abaikan (bot tidak bersuara)
-        log_chatbot("WARN", f"Diabaikan: Nomor {sender} belum terdaftar dan tidak memakai kata kunci: '{text}'", "AUTH")
-        return None
+        # Untuk pesan sapaan atau chat lain dari nomor yang belum terdaftar: berikan panduan agar bot tidak bungkam
+        send_wa_typing(sender, 'composing')
+        log_chatbot("INFO", f"Memberikan petunjuk registrasi/login untuk nomor baru {sender}: '{text}'", "AUTH")
+        return (
+            "Halo mas! Nomor WhatsApp kamu belum terdaftar di sistem Jadwal UNAMA.\n\n"
+            "*1.* Ketik *inpo* untuk mendaftar sebagai Asisten Lab / Asmot.\n"
+            "*2.* Ketik *!pantau* atau *!admin* untuk langsung melihat menu jadwal tanpa mendaftar (bebas notifikasi lab).\n"
+            "*3.* Ketik *!taut <nomor_hp>* jika nomor kamu sudah didaftarkan admin tapi belum tersambung."
+        )
 
     # Jika TERDAFTAR
     if aslab.get('role') == 'asmot':

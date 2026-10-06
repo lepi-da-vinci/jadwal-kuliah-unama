@@ -5390,28 +5390,11 @@ function mapRoomToAbsensiLabValue(roomName, campusStr) {
 
 function getAssignedAslabForRoom(roomName, campusLabel) {
   if (!roomName) return { nama: '', kampus: '' };
-  const cleanTargetRoom = typeof normalizeRoomKey === 'function' ? normalizeRoomKey(roomName) : roomName.toLowerCase().replace(/[^a-z0-9]/g, '');
   const cleanRoomStr = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName.toLowerCase());
   const targetCamp = (campusLabel || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : '') || '').trim().toLowerCase();
+  const campusDisplay = targetCamp.includes('kobar') ? 'Kobar' : 'Thehok';
 
-  // 1. Cek dari data asisten_lab di database / API (globalAslabData)
-  if (Array.isArray(globalAslabData) && globalAslabData.length > 0) {
-    const found = globalAslabData.find(a => {
-      if (!a.nama_ruangan) return false;
-      const aClean = typeof normalizeRoomKey === 'function' ? normalizeRoomKey(a.nama_ruangan) : a.nama_ruangan.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const roomMatch = (aClean === cleanTargetRoom) || (cleanRoomStr && a.nama_ruangan.toLowerCase().includes(cleanRoomStr));
-      if (!roomMatch) return false;
-      if (a.kampus && targetCamp) {
-        return a.kampus.trim().toLowerCase() === targetCamp;
-      }
-      return true;
-    });
-    if (found && found.nama_aslab) {
-      return { nama: found.nama_aslab, kampus: found.kampus || (targetCamp.includes('kobar') ? 'Kobar' : 'Thehok') };
-    }
-  }
-
-  // 2. Gunakan pemetaan default resmi
+  // 1. Gunakan pemetaan default nama lengkap resmi laboratorium
   const mappedLab = mapRoomToAbsensiLabValue(roomName, campusLabel);
   const searchKeys = [
     (mappedLab || '').toLowerCase().trim(),
@@ -5419,26 +5402,39 @@ function getAssignedAslabForRoom(roomName, campusLabel) {
     cleanRoomStr
   ];
 
+  let officialName = '';
   for (const key of searchKeys) {
     if (!key) continue;
     if (DEFAULT_LAB_ASLAB_MAP[key]) {
-      return {
-        nama: DEFAULT_LAB_ASLAB_MAP[key],
-        kampus: targetCamp.includes('kobar') ? 'Kobar' : 'Thehok'
-      };
+      officialName = DEFAULT_LAB_ASLAB_MAP[key];
+      break;
     }
   }
 
-  for (const [k, v] of Object.entries(DEFAULT_LAB_ASLAB_MAP)) {
-    if (searchKeys.some(sk => sk && (sk.includes(k) || k.includes(sk)))) {
-      return {
-        nama: v,
-        kampus: targetCamp.includes('kobar') ? 'Kobar' : 'Thehok'
-      };
+  if (!officialName) {
+    for (const [k, v] of Object.entries(DEFAULT_LAB_ASLAB_MAP)) {
+      if (searchKeys.some(sk => sk && (sk.includes(k) || k.includes(sk)))) {
+        officialName = v;
+        break;
+      }
     }
   }
 
-  return { nama: '', kampus: targetCamp.includes('kobar') ? 'Kobar' : 'Thehok' };
+  // 2. Cocokkan dengan cache master data aslab absensi resmi jika ada agar formatnya seragam
+  if (officialName && Array.isArray(window._masterAslabsCache) && window._masterAslabsCache.length > 0) {
+    const matchedInMaster = window._masterAslabsCache.find(m => 
+      m.nama_aslab && (m.nama_aslab.toLowerCase() === officialName.toLowerCase() || m.nama_aslab.toLowerCase().includes(officialName.toLowerCase()))
+    );
+    if (matchedInMaster) {
+      return { nama: matchedInMaster.nama_aslab, kampus: matchedInMaster.kampus_tugas || campusDisplay };
+    }
+  }
+
+  if (officialName) {
+    return { nama: officialName, kampus: campusDisplay };
+  }
+
+  return { nama: '', kampus: campusDisplay };
 }
 window.getAssignedAslabForRoom = getAssignedAslabForRoom;
 window.mapRoomToAbsensiLabValue = mapRoomToAbsensiLabValue;
@@ -5484,15 +5480,33 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
 
   // Buka test-wa-modal di tab Absensi
   const settingModal = document.getElementById('test-wa-modal');
-  if (typeof ensureModalInFullscreen === 'function' && settingModal) {
-    ensureModalInFullscreen(settingModal);
-  } else if (settingModal) {
-    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.getElementById('section-status-ruangan')?.classList.contains('is-fullscreen'));
-    const section = document.getElementById('section-status-ruangan');
-    const targetParent = document.fullscreenElement || (isFs && section ? section : null);
-    if (targetParent && !targetParent.contains(settingModal)) {
-      targetParent.appendChild(settingModal);
+  if (settingModal) {
+    if (typeof ensureModalInFullscreen === 'function') {
+      ensureModalInFullscreen(settingModal);
+    } else {
+      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.getElementById('section-status-ruangan')?.classList.contains('is-fullscreen'));
+      const section = document.getElementById('section-status-ruangan');
+      const targetParent = document.fullscreenElement || (isFs && section ? section : null);
+      if (targetParent && settingModal.parentElement !== targetParent) {
+        targetParent.appendChild(settingModal);
+      }
     }
+
+    const sBox = settingModal.querySelector('.setting-modal-box') || settingModal.querySelector('.modal-box');
+    if (sBox) {
+      sBox.style.removeProperty('transform');
+      sBox.style.removeProperty('transition');
+      sBox.style.removeProperty('opacity');
+      sBox.style.removeProperty('will-change');
+      sBox.style.removeProperty('animation');
+      sBox.style.setProperty('transform', 'none', 'important');
+      sBox.style.setProperty('opacity', '1', 'important');
+    }
+    settingModal.style.removeProperty('background-color');
+    settingModal.style.removeProperty('transition');
+    settingModal.style.setProperty('display', 'flex', 'important');
+    settingModal.style.setProperty('z-index', '2147483648', 'important');
+    settingModal.classList.add('open');
   }
 
   const menuView = document.getElementById('wa-modal-menu');
@@ -5519,7 +5533,10 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
   const formView = document.getElementById('absensi-view-form');
   if (formView) formView.style.display = 'flex';
 
-  if (settingModal) settingModal.classList.add('open');
+  if (settingModal) {
+    settingModal.style.setProperty('display', 'flex', 'important');
+    settingModal.classList.add('open');
+  }
 
   // 1. Tentukan Tanggal
   const tglInput = document.getElementById('absensi-tanggal');
@@ -5553,8 +5570,21 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
 
 window.openAbsensiModal = function () {
   const settingModal = document.getElementById('test-wa-modal');
-  if (typeof ensureModalInFullscreen === 'function' && settingModal) {
-    ensureModalInFullscreen(settingModal);
+  if (settingModal) {
+    if (typeof ensureModalInFullscreen === 'function') {
+      ensureModalInFullscreen(settingModal);
+    }
+    const sBox = settingModal.querySelector('.setting-modal-box') || settingModal.querySelector('.modal-box');
+    if (sBox) {
+      sBox.style.removeProperty('transform');
+      sBox.style.removeProperty('transition');
+      sBox.style.removeProperty('opacity');
+      sBox.style.setProperty('transform', 'none', 'important');
+      sBox.style.setProperty('opacity', '1', 'important');
+    }
+    settingModal.style.removeProperty('background-color');
+    settingModal.style.setProperty('display', 'flex', 'important');
+    settingModal.style.setProperty('z-index', '2147483648', 'important');
   }
   const settingBtn = document.getElementById('setting-btn') || document.getElementById('btn-setting') || document.getElementById('test-wa-btn');
   if (settingBtn) {
@@ -7774,6 +7804,9 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
   const roomModalEl = document.getElementById('room-detail-modal');
   if (roomModalEl) {
+    if (typeof ensureModalInFullscreen === 'function') {
+      ensureModalInFullscreen(roomModalEl);
+    }
     const boxEl = roomModalEl.querySelector('.modal-box');
     if (boxEl) {
       boxEl.style.removeProperty('transform');
@@ -7782,7 +7815,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     }
     roomModalEl.style.removeProperty('background-color');
     roomModalEl.style.removeProperty('transition');
-    roomModalEl.style.display = 'flex';
+    roomModalEl.style.setProperty('display', 'flex', 'important');
     roomModalEl.classList.add('open');
 
     if (typeof window.initRoomDetailDragToDismiss === 'function') {
@@ -13407,8 +13440,11 @@ function ensureModalInFullscreen(modalEl) {
   const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || document.getElementById('section-status-ruangan')?.classList.contains('is-fullscreen'));
   const section = document.getElementById('section-status-ruangan');
   const targetParent = document.fullscreenElement || (isFs && section ? section : null);
-  if (targetParent && !targetParent.contains(modalEl)) {
+  if (targetParent && modalEl.parentElement !== targetParent) {
     targetParent.appendChild(modalEl);
+  }
+  if (isFs) {
+    modalEl.style.setProperty('z-index', '2147483648', 'important');
   }
 }
 window.ensureModalInFullscreen = ensureModalInFullscreen;
@@ -13423,6 +13459,9 @@ window.restoreModalFromFullscreen = restoreModalFromFullscreen;
 
 const FULLSCREEN_PORTAL_MODAL_IDS = [
   'test-wa-modal',
+  'room-detail-modal',
+  'modal-fs-filter',
+  'modal-fs-info',
   'custom-alert-modal',
   'custom-confirm-modal',
   'password-modal',
