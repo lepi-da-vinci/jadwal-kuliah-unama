@@ -5110,6 +5110,29 @@ body.dark-theme .room-detail-pill.lock.is-tutup {
   color: var(--text-dark);
 }
 
+.modal-close-header-btn {
+  background: var(--bg-elevated, rgba(148, 163, 184, 0.15));
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.modal-close-header-btn:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  transform: scale(1.05);
+}
+
 .room-detail-subline {
   display: flex;
   align-items: center;

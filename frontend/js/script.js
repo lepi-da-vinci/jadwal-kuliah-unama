@@ -4009,7 +4009,8 @@ function closeSettingModal(keepAdminSession = false, skipAnimation = false) {
   const testModal = document.getElementById('test-wa-modal');
   if (!testModal) return;
 
-  if (!testModal.classList.contains('open')) {
+  // Jika modal sudah tertutup dan tidak terlihat sama sekali
+  if (!testModal.classList.contains('open') && testModal.style.display === 'none') {
     testModal.style.removeProperty('background-color');
     testModal.style.removeProperty('transition');
     return;
@@ -4019,8 +4020,12 @@ function closeSettingModal(keepAdminSession = false, skipAnimation = false) {
 
   const finalizeClose = () => {
     testModal.classList.remove('open');
+    testModal.style.removeProperty('display');
+    testModal.style.removeProperty('z-index');
     testModal.style.removeProperty('background-color');
     testModal.style.removeProperty('transition');
+    testModal.style.setProperty('display', 'none', 'important');
+    testModal.style.display = 'none';
     if (modalBox) {
       modalBox.style.removeProperty('transform');
       modalBox.style.removeProperty('transition');
@@ -4030,6 +4035,7 @@ function closeSettingModal(keepAdminSession = false, skipAnimation = false) {
       modalBox.classList.remove('dragging');
     }
     isClosingSettingModal = false;
+    window._openedAbsensiFromDetail = null;
 
     if (!keepAdminSession && !isTestingPopupNotif) {
       exitAdminMode();
@@ -4040,7 +4046,7 @@ function closeSettingModal(keepAdminSession = false, skipAnimation = false) {
     if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
   };
 
-  if (!skipAnimation && modalBox && !isClosingSettingModal) {
+  if (!skipAnimation && modalBox && !isClosingSettingModal && testModal.classList.contains('open')) {
     isClosingSettingModal = true;
     modalBox.style.setProperty('transition', 'transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.22s ease', 'important');
     modalBox.style.setProperty('transform', 'translateY(115%) scale(0.95)', 'important');
@@ -4894,6 +4900,10 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         modalTitle.innerText = "Absensi Asisten Lab";
         modalIcon.innerHTML = SVG_WA_ICONS.absensi;
 
+        window._openedAbsensiFromDetail = null;
+        const backBtn = document.getElementById('absensi-back-btn');
+        if (backBtn) backBtn.textContent = "Kembali ke Menu";
+
         if (typeof window.loadAbsensiMasterConfig === 'function') {
           window.loadAbsensiMasterConfig(true);
         }
@@ -5532,6 +5542,9 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
 
   const formView = document.getElementById('absensi-view-form');
   if (formView) formView.style.display = 'flex';
+
+  const backBtn = document.getElementById('absensi-back-btn');
+  if (backBtn) backBtn.textContent = "← Kembali ke Jadwal Ruangan";
 
   if (settingModal) {
     settingModal.style.setProperty('display', 'flex', 'important');
@@ -6525,8 +6538,18 @@ window.closeAbsensiModalToMenu = function () {
   if (window._openedAbsensiFromDetail) {
     const { roomName, campusLabel, activeDate } = window._openedAbsensiFromDetail;
     window._openedAbsensiFromDetail = null;
-    if (typeof closeSettingModal === 'function') closeSettingModal();
-    else document.getElementById('test-wa-modal')?.classList.remove('open');
+    if (typeof closeSettingModal === 'function') {
+      closeSettingModal(false, true);
+    } else {
+      const sm = document.getElementById('test-wa-modal');
+      if (sm) {
+        sm.classList.remove('open');
+        sm.style.removeProperty('display');
+        sm.style.removeProperty('z-index');
+        sm.style.setProperty('display', 'none', 'important');
+        sm.style.display = 'none';
+      }
+    }
     if (typeof window.showRoomDetail === 'function') {
       window.showRoomDetail(roomName, campusLabel, activeDate);
     }
@@ -12787,7 +12810,10 @@ function closeAnyModal(modal) {
   if (id === 'modal-fitur') document.getElementById('modal-close')?.click();
   else if (id === 'password-modal') document.getElementById('password-cancel-btn')?.click();
   else if (id === 'danger-modal') document.getElementById('danger-cancel-btn')?.click();
-  else if (id === 'test-wa-modal') document.getElementById('wa-modal-close-btn')?.click();
+  else if (id === 'test-wa-modal') {
+    if (typeof closeSettingModal === 'function') closeSettingModal(false);
+    else document.getElementById('wa-modal-close-btn')?.click();
+  }
   else if (id === 'room-detail-modal') document.getElementById('room-detail-close-btn')?.click();
   else if (id === 'modal-fs-info') closeFullscreenInfoModal();
   // lab-modal is already handled by its own listeners, but we can fallback here:
