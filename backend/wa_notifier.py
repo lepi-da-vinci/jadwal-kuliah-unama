@@ -479,12 +479,116 @@ def _sync_if_needed(tanggal):
     except Exception as e:
         log_chatbot("WARN", f"Sync check error: {e}", "SYNC")
 
+def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None, conn=None):
+    """
+    Mencari daftar ruangan target secara cerdas, presisi, dan bebas ambigu.
+    Mencegah bug fatal di mana '3.1' mencocokkan '3.10',
+    serta membedakan antara 'lab' (Laboratorium) dan 'kelas/ruang' (R.).
+    Mengembalikan list of dict: [{'id_ruangan': ..., 'nama_ruangan': ..., 'kampus': ...}]
+    """
+    sender_aslab = get_sender_aslab()
+    raw_str = str(nama_ruangan_or_keyword or "").strip()
+    if not raw_str and sender_aslab:
+        raw_str = sender_aslab.get('nama_ruangan', '')
+        if not kampus:
+            kampus = sender_aslab.get('kampus')
+            
+    if not raw_str:
+        return []
+
+    q_lower = raw_str.lower()
+    
+    # 1. Deteksi kampus eksplisit dari string
+    target_kampus = kampus
+    if "kobar" in q_lower:
+        target_kampus = "Kobar"
+    elif "thehok" in q_lower or "tehok" in q_lower:
+        target_kampus = "Thehok"
+    elif not target_kampus and sender_aslab and sender_aslab.get('kampus'):
+        target_kampus = sender_aslab.get('kampus')
+
+    # Khusus Lab 1.5 jika tidak ada indikasi Thehok dan belum ditentukan: default Kobar
+    if ("1.5" in q_lower or q_lower == "1.5") and not target_kampus:
+        target_kampus = "Kobar"
+
+    # 2. Deteksi preferensi tipe: Lab vs Ruang Kelas Teori
+    is_lab = bool(re.search(r'\b(lab|labor|laboratorium)\b', q_lower))
+    is_kelas = bool(re.search(r'\b(ruang|ruangan|kelas|r\.?)\b', q_lower))
+
+    # 3. Bersihkan kata-kata kampus dan prefix
+    clean = re.sub(r'\b(thehok|tehok|kobar)\b', '', q_lower, flags=re.I).strip()
+    clean = re.sub(r'^(?:laboratorium|labor|lab|ruangan|ruang|kelas|r\.?)\s*', '', clean, flags=re.I).strip()
+    clean = re.sub(r'\s+', ' ', clean).strip()
+
+    # Ekstrak nomor/kode ruangan (misal '3.1', '3.10', 'b2.3', '4.3', dll)
+    num_match = re.search(r'([bB]?\d+(?:\.\d+)?)', clean)
+    num_str = num_match.group(1) if num_match else clean
+
+    close_conn = False
+    if not conn:
+        conn = get_db_connection()
+        close_conn = True
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan ORDER BY kampus, nama_ruangan")
+        all_rooms = cursor.fetchall()
+        cursor.close()
+    finally:
+        if close_conn and conn.is_connected():
+            conn.close()
+
+    candidates = []
+    for r in all_rooms:
+        if target_kampus and r['kampus'].lower() != target_kampus.lower():
+            continue
+            
+        r_name = r['nama_ruangan']
+        r_is_lab = ('labor' in r_name.lower() or 'lab' in r_name.lower())
+
+        matched = False
+        exact_score = 0
+        
+        if num_match and num_str:
+            # Gunakan regex boundary digit agar '3.1' TIDAK mencocokkan '3.10'!
+            pattern = rf'(?<!\d){re.escape(num_str)}(?!\d)'
+            if re.search(pattern, r_name, flags=re.I):
+                matched = True
+                exact_score = 30
+        else:
+            if clean and clean.lower() in r_name.lower():
+                matched = True
+                exact_score = 15
+
+        if not matched:
+            continue
+
+        score = exact_score
+        if is_lab and r_is_lab:
+            score += 25
+        elif is_kelas and not r_is_lab:
+            score += 25
+        elif is_lab and not r_is_lab:
+            score -= 15 # penalti jika minta lab tapi ini kelas biasa
+        elif is_kelas and r_is_lab:
+            score -= 15 # penalti jika minta kelas tapi ini lab
+        elif r_is_lab:
+            score += 5 # aslab bot default prioritas lab
+
+        candidates.append((score, r))
+
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    valid_candidates = [c[1] for c in candidates if c[0] > 0]
+    
+    # Jika kandidat teratas memiliki skor jauh lebih unggul, pilih yang teratas
+    if candidates and len(candidates) > 1 and candidates[0][0] > candidates[1][0] + 10:
+        return [candidates[0][1]]
+
+    return valid_candidates
+
 def normalize_lab_and_kampus(nama_ruangan: str = None, kampus: str = None):
     """
-    Normalisasi nama ruangan dan kampus untuk query database.
-    Khusus UNAMA: 'Labor 1.5' / '1.5' hanya berada di Kampus Kobar.
-    Jika ada nama kampus di dalam string nama_ruangan (misal '1.5 kobar' atau 'ruang 2.10 thehok'),
-    ekstrak kampus tersebut secara otomatis.
+    Normalisasi nama ruangan dan kampus untuk backward compatibility.
     """
     sender_aslab = get_sender_aslab()
     if not nama_ruangan and sender_aslab:
@@ -497,7 +601,6 @@ def normalize_lab_and_kampus(nama_ruangan: str = None, kampus: str = None):
         
     raw_str = str(nama_ruangan).strip()
     
-    # Deteksi kampus eksplisit jika disebutkan dalam teks
     if "kobar" in raw_str.lower():
         kampus = "Kobar"
         raw_str = re.sub(r'\bkobar\b', '', raw_str, flags=re.I).strip()
@@ -507,76 +610,72 @@ def normalize_lab_and_kampus(nama_ruangan: str = None, kampus: str = None):
     elif not kampus and sender_aslab and sender_aslab.get('kampus'):
         kampus = sender_aslab.get('kampus')
         
-    # Bersihkan prefix umum seperti "laboratorium", "labor", "lab", "ruangan", "ruang", "r."
-    clean_keyword = re.sub(r'^(?:laboratorium|labor|lab|ruangan|ruang|r\.)\s*', '', raw_str, flags=re.I).strip()
+    clean_keyword = re.sub(r'^(?:laboratorium|labor|lab|ruangan|ruang|kelas|r\.?)\s*', '', raw_str, flags=re.I).strip()
     if not clean_keyword:
         clean_keyword = raw_str
         
     return clean_keyword, kampus
 
 def cek_jadwal_lab_tertentu(nama_lab: str = None, tanggal_YYYY_MM_DD: str = None, kampus: str = None):
-    """Mengecek jadwal sebuah lab/ruangan spesifik (misal '1.5', '1.8', '2.11', atau '3.4') pada tanggal tertentu (format YYYY-MM-DD).
+    """Mengecek jadwal sebuah lab/ruangan spesifik (misal '3.1', 'Labor 3.1', '3.10', '1.5', atau '2.11') pada tanggal tertentu (format YYYY-MM-DD).
     Parameter:
-    - nama_lab: nama lab atau nomor ruangan (misal '1.5', 'Labor 1.5', '2.11'). Khusus '1.5' hanya ada di Kampus Kobar.
+    - nama_lab: nama lab atau nomor ruangan (misal '3.1', 'Labor 3.1', 'R. 3.10', '1.5'). Khusus '1.5' default Kampus Kobar.
     - tanggal_YYYY_MM_DD: tanggal jadwal format YYYY-MM-DD.
-    - kampus: 'Kobar' atau 'Thehok'. Khusus Lab 1.5 selalu gunakan 'Kobar'.
+    - kampus: 'Kobar' atau 'Thehok'.
     """
     if not tanggal_YYYY_MM_DD:
         tanggal_YYYY_MM_DD = get_wib_now().strftime("%Y-%m-%d")
         
-    clean_lab, target_kampus = normalize_lab_and_kampus(nama_lab, kampus)
-    if not clean_lab:
+    if not nama_lab or not str(nama_lab).strip():
+        sender_aslab = get_sender_aslab()
+        if sender_aslab:
+            nama_lab = sender_aslab.get('nama_ruangan')
+            if not kampus:
+                kampus = sender_aslab.get('kampus')
+                
+    if not nama_lab:
         return "Sebutkan nama lab atau ruangan yang ingin dicek jadwalnya."
 
     _sync_if_needed(tanggal_YYYY_MM_DD)
     tgl_indo = format_tanggal_indo(tanggal_YYYY_MM_DD)
     try:
         conn = get_db_connection()
+        matched_rooms = resolve_target_rooms(nama_lab, kampus, conn=conn)
+        if not matched_rooms:
+            lokasi_teks = f" ({kampus})" if kampus else ""
+            return f"Lab atau ruangan {nama_lab}{lokasi_teks} tidak ditemukan di database."
+
         cursor = conn.cursor(dictionary=True)
-        
-        where_sql = "UPPER(r.nama_ruangan) LIKE %s"
-        params = [tanggal_YYYY_MM_DD, f"%{clean_lab.upper()}%"]
-        if target_kampus:
-            where_sql += " AND LOWER(r.kampus) = LOWER(%s)"
-            params.append(target_kampus)
+        msg_parts = []
+        for r in matched_rooms:
+            r_id = r['id_ruangan']
+            r_name = r['nama_ruangan']
+            r_kampus = r['kampus']
+            
+            cursor.execute('''
+                SELECT j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+                FROM jadwal j
+                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE j.id_ruangan = %s AND j.tanggal = %s
+                ORDER BY j.jam ASC
+            ''', (r_id, tanggal_YYYY_MM_DD))
+            jadwals = cursor.fetchall()
+            
+            if not jadwals:
+                msg_parts.append(f"Jadwal {r_name} ({r_kampus}) {tgl_indo}:\n(Kosong / tidak ada perkuliahan)")
+            else:
+                lines = [f"Jadwal {r_name} ({r_kampus}) {tgl_indo}:"]
+                for j in jadwals:
+                    start_min = parse_jam_to_minutes(j['jam'])
+                    dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
+                    h, m = start_min // 60, start_min % 60
+                    eh, em = (start_min + dur) // 60, (start_min + dur) % 60
+                    dosen = j['nama_dosen'] or '-'
+                    status = get_status_label(j)
+                    lines.append(f"• {h:02d}:{m:02d}-{eh:02d}:{em:02d}: {j['nama_mk']} ({j['kelas']}) [{status}] - {dosen}")
+                msg_parts.append("\n".join(lines))
 
-        cursor.execute(f'''
-            SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
-            FROM ruangan r
-            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE {where_sql}
-            ORDER BY r.kampus, r.nama_ruangan, j.jam
-        ''', params)
-        jadwals = cursor.fetchall()
-        if not jadwals:
-            lokasi_teks = f" ({target_kampus})" if target_kampus else ""
-            return f"Lab {clean_lab}{lokasi_teks} tidak ditemukan atau kosong (tidak ada jadwal) pada {tgl_indo}."
-        
-        valid_jadwals = [j for j in jadwals if j['jam'] is not None]
-        if not valid_jadwals:
-            return f"Lab {jadwals[0]['nama_ruangan']} ({jadwals[0]['kampus']}) kosong / tidak ada perkuliahan pada {tgl_indo}."
-
-        # Kelompokkan per kampus jika tanpa filter kampus tertentu agar jadwal tidak tercampur
-        kampus_groups = {}
-        for j in valid_jadwals:
-            k = j.get('kampus') or 'Kampus'
-            kampus_groups.setdefault(k, []).append(j)
-
-        msg = ""
-        for k_nama, items in kampus_groups.items():
-            r_name = items[0]['nama_ruangan']
-            msg += f"Jadwal {r_name} ({k_nama}) {tgl_indo}:\n"
-            for j in items:
-                start_min = parse_jam_to_minutes(j['jam'])
-                dur = scraper.get_class_duration(j.get('nama_mk', '')) if hasattr(scraper, 'get_class_duration') else 135
-                h, m = start_min // 60, start_min % 60
-                eh, em = (start_min + dur) // 60, (start_min + dur) % 60
-                dosen = j['nama_dosen'] or '-'
-                status = get_status_label(j)
-                msg += f"• {h:02d}:{m:02d}-{eh:02d}:{em:02d}: {j['nama_mk']} ({j['kelas']}) [{status}] - {dosen}\n"
-            msg += "\n"
-        return msg.strip()
+        return "\n\n".join(msg_parts)
     except Exception as e:
         return f"Error database: {e}"
     finally:
@@ -586,11 +685,7 @@ def cek_jadwal_lab_tertentu(nama_lab: str = None, tanggal_YYYY_MM_DD: str = None
 
 def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
     """Melihat jadwal kelas berikutnya yang akan masuk di lab/ruangan hari ini, lengkap dengan status kelas (TM/OL/CC) dan sisa waktu hitung mundur.
-    Khusus Lab 1.5, otomatis menggunakan kampus Kobar."""
-    clean_room, target_kampus = normalize_lab_and_kampus(nama_ruangan, kampus)
-    if not clean_room:
-        return "Ruangan belum ditentukan. Sebutkan nama lab/ruangan yang ingin dicek."
-    
+    Khusus Lab 1.5, default menggunakan kampus Kobar."""
     now = get_wib_now()
     today_str = now.strftime("%Y-%m-%d")
     now_min = now.hour * 60 + now.minute
@@ -598,29 +693,28 @@ def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
     
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        where_sql = "UPPER(r.nama_ruangan) LIKE %s"
-        params = [today_str, f"%{clean_room.upper()}%"]
-        if target_kampus:
-            where_sql += " AND LOWER(r.kampus) = LOWER(%s)"
-            params.append(target_kampus)
+        matched = resolve_target_rooms(nama_ruangan, kampus, conn=conn)
+        if not matched:
+            lokasi_teks = f" ({kampus})" if kampus else ""
+            return f"Ruangan {nama_ruangan or ''}{lokasi_teks} tidak ditemukan di database."
+            
+        target_r = matched[0]
+        r_id = target_r['id_ruangan']
+        r_info = f"{target_r['nama_ruangan']} ({target_r['kampus']})"
+        tgl_indo = format_tanggal_indo(today_str)
 
-        cursor.execute(f'''
-            SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
-            FROM ruangan r
-            JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+            FROM jadwal j
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE {where_sql}
+            WHERE j.id_ruangan = %s AND j.tanggal = %s
             ORDER BY j.jam ASC
-        ''', params)
+        ''', (r_id, today_str))
         jadwals = cursor.fetchall()
         
         if not jadwals:
-            lokasi_teks = f" ({target_kampus})" if target_kampus else ""
-            return f"Tidak ada jadwal kuliah hari ini ({format_tanggal_indo(today_str)}) di {clean_room}{lokasi_teks}."
-            
-        r_info = f"{jadwals[0]['nama_ruangan']} ({jadwals[0]['kampus']})"
-        tgl_indo = format_tanggal_indo(today_str)
+            return f"Tidak ada jadwal kuliah hari ini ({format_tanggal_indo(today_str)}) di {r_info}."
         
         ongoing = None
         upcoming = []
@@ -685,11 +779,7 @@ def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
 
 def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
     """Mengecek status real-time suatu lab/ruangan saat ini: apakah sedang ada kuliah, dosen siapa, kapan selesai, atau sedang kosong.
-    Khusus Lab 1.5, otomatis menggunakan kampus Kobar."""
-    clean_room, target_kampus = normalize_lab_and_kampus(nama_ruangan, kampus)
-    if not clean_room:
-        return "Sebutkan nama lab atau ruangan yang ingin dicek statusnya."
-        
+    Khusus Lab 1.5, default menggunakan kampus Kobar."""
     now = get_wib_now()
     today_str = now.strftime("%Y-%m-%d")
     now_min = now.hour * 60 + now.minute
@@ -697,29 +787,25 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
     
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        where_sql = "UPPER(r.nama_ruangan) LIKE %s"
-        params = [today_str, f"%{clean_room.upper()}%"]
-        if target_kampus:
-            where_sql += " AND LOWER(r.kampus) = LOWER(%s)"
-            params.append(target_kampus)
-
-        cursor.execute(f'''
-            SELECT r.id_ruangan, r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
-            FROM ruangan r
-            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan AND j.tanggal = %s
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE {where_sql}
-            ORDER BY j.jam ASC
-        ''', params)
-        jadwals = cursor.fetchall()
-        
-        if not jadwals:
-            lokasi_teks = f" ({target_kampus})" if target_kampus else ""
-            return f"Ruangan {clean_room}{lokasi_teks} tidak ditemukan di database."
+        matched = resolve_target_rooms(nama_ruangan, kampus, conn=conn)
+        if not matched:
+            lokasi_teks = f" ({kampus})" if kampus else ""
+            return f"Ruangan {nama_ruangan or ''}{lokasi_teks} tidak ditemukan di database."
             
-        r_info = f"{jadwals[0]['nama_ruangan']} ({jadwals[0]['kampus']})"
+        target_r = matched[0]
+        room_id = target_r['id_ruangan']
+        r_info = f"{target_r['nama_ruangan']} ({target_r['kampus']})"
         tgl_indo = format_tanggal_indo(today_str)
+
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+            FROM jadwal j
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.id_ruangan = %s AND j.tanggal = %s
+            ORDER BY j.jam ASC
+        ''', (room_id, today_str))
+        jadwals = cursor.fetchall()
         
         # Cek status pintu operasional lab/ruang hari ini
         door_info = ""
@@ -2213,6 +2299,10 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
    LANGSUNG panggil tool untuk mengecek jadwal ruangan yang dipegang aslab tersebut ('{nama_ruangan}').
    Sesuaikan jawaban dengan tepat sesuai konteks pertanyaan. Jika aslab secara spesifik meminta ruangan/lab lain (misal "jadwal lab 2.11" atau "ruang 3.4"), baru cek ruangan yang diminta tersebut.
    - ATURAN KHUSUS LAB 1.5: Di UNAMA, 'Labor 1.5' terdaftar di DUA kampus, yaitu Kampus Kobar dan Kampus Thehok. Jika pengguna menanyakan Lab 1.5 tanpa menyebutkan kampus, cek keduanya atau sesuaikan dengan kampus pengguna. Jika pengguna menyebut '1.5 kobar' atau '1.5 thehok', arahkan ke kampus tersebut.
+   - ATURAN KHUSUS LAB VS RUANG KELAS & KETELITIAN NOMOR RUANGAN:
+     Nomor ruangan adalah angka desimal eksak: nomor '3.1' (tiga titik satu) BERBEDA MUTLAK dengan '3.10' (tiga titik sepuluh).
+     Jika pengguna menanyakan "lab 3.1" atau "3.1", targetnya adalah Laboratorium 3.1 (Labor 3.1), BUKAN ruang kelas teori (R. 3.10).
+     Jangan pernah mencocokkan '3.1' ke '3.10' atau sebaliknya. Panggil tool dengan nama persis sesuai yang diminta pengguna.
 8. KELAS BERIKUTNYA & STATUS LAB REAL-TIME:
    - Jika ditanya "kelas berikutnya", "habis ini kelas apa", "setelah ini ada kelas apa", panggil tool `kelas_berikutnya(nama_ruangan='{nama_ruangan}')`.
    - Jika ditanya status lab ("lagi dipakai dak?", "status lab sekarang", "kondisi lab"), panggil tool `status_lab_sekarang(nama_ruangan='{nama_ruangan}')`.
@@ -2978,9 +3068,9 @@ def fallback_python_handler(sender, text, aslab):
         return f"Nih rekap statistik lab {target_room} untuk mas {nama}:\n\n{stat_res}"
 
     # 13. Cek Ruangan / Lab Langsung (misal "1.8", "lab 1.8", "jadwal 2.11", "ruang 3.4", "r 2.10", "r. 2.10")
-    match_room = re.search(r'\b(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?(\d+\.\d+)\b', text_clean)
+    match_room = re.search(r'\b(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?([bB]?\d+\.\d+)\b', text_clean)
     if match_room:
-        room_no = match_room.group(1)
+        room_query = match_room.group(0)
         target_date = extract_date_or_today(text_clean)
         k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
         if not k_target and aslab.get('kampus'):
@@ -2995,19 +3085,13 @@ def fallback_python_handler(sender, text, aslab):
             try:
                 conn_chk = scraper.get_db()
                 cur_chk = conn_chk.cursor(dictionary=True)
-                clean_kw, detected_camp = normalize_lab_and_kampus(room_no, k_target)
-                q_r = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
-                p_r = [f"%{clean_kw}%"]
-                if detected_camp:
-                    q_r += " AND kampus = %s"
-                    p_r.append(detected_camp)
-                cur_chk.execute(q_r, tuple(p_r))
-                r_found = cur_chk.fetchone()
-                if r_found:
+                matched_chk = resolve_target_rooms(room_query, k_target, conn=conn_chk)
+                if matched_chk:
+                    r_found = matched_chk[0]
                     cur_chk.execute("""
                         SELECT status_lab FROM status_operasional_lab
                         WHERE tanggal = %s AND id_ruangan = %s
-                        ORDER BY id DESC LIMIT 1
+                        ORDER BY waktu_aksi DESC, id DESC LIMIT 1
                     """, (target_date, r_found['id_ruangan']))
                     sol_chk = cur_chk.fetchone()
                     if sol_chk and sol_chk.get('status_lab') == 'tutup':
@@ -3026,7 +3110,7 @@ def fallback_python_handler(sender, text, aslab):
             except Exception:
                 pass
 
-        return cek_jadwal_lab_tertentu(room_no, target_date, kampus=k_target)
+        return cek_jadwal_lab_tertentu(room_query, target_date, kampus=k_target)
 
     # 14. Default Fallback yang Ramah & Interaktif
     if role == 'asmot':
