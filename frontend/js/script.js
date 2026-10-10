@@ -5837,10 +5837,17 @@ window.handleAbsensiDateOrLabChange = async function (preferredSessionMatch = nu
     const isThehok = nomorLab.toLowerCase().includes('thehok') || cleanLab === 's2';
     const isKobar = nomorLab.toLowerCase().includes('kobar');
 
+    const labRegex = cleanLab === 's2'
+      ? /(?<![a-z0-9])s2(?![a-z0-9])/i
+      : new RegExp(`(?<!\\d)${cleanLab.replace(/\./g, '\\.')}(?!\\d)`, 'i');
+
     const matchedJadwal = allJadwal.filter(item => {
       if (item.tanggal !== tanggal) return false;
       const rName = (item.nama_ruangan || '').toLowerCase();
-      if (!rName.includes(cleanLab)) return false;
+      // Pastikan HANYA ruangan bertipe laboratorium (bukan ruang teori seperti R. 3.10)
+      if (!rName.includes('lab') && !rName.includes('labor')) return false;
+      // Cocokkan nomor lab secara presisi tanpa salah mencocokkan desimal lain (misal 3.1 tidak boleh cocok ke 3.10)
+      if (!labRegex.test(rName)) return false;
       if (isThehok && item.kampus && !item.kampus.toLowerCase().includes('thehok')) return false;
       if (isKobar && item.kampus && !item.kampus.toLowerCase().includes('kobar')) return false;
       return true;

@@ -3511,19 +3511,41 @@ def autofill_absensi(nomor_lab: str, jam: str, tanggal: str = None):
         if not tanggal:
             tanggal = datetime.date.today().strftime("%Y-%m-%d")
         
-        clean_lab = nomor_lab.replace("Thehok", "").replace("Kobar", "").replace("Labor", "").replace("Lab", "").strip()
+        clean_lab_match = re.search(r'(?:\d+\.\d+|S2)', nomor_lab, re.IGNORECASE)
+        clean_lab = clean_lab_match.group(0) if clean_lab_match else nomor_lab.replace("Thehok", "").replace("Kobar", "").replace("Labor", "").replace("Lab", "").strip()
         clean_jam = jam.replace("WIB", "").replace(".", ":").strip()
         
+        kampus = None
+        if "thehok" in nomor_lab.lower() or "s2" in nomor_lab.lower():
+            kampus = "Thehok"
+        elif "kobar" in nomor_lab.lower():
+            kampus = "Kobar"
+
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT d.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam
+        query = """
+            SELECT d.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam, r.nama_ruangan, r.kampus
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE j.tanggal = %s AND (r.nama_ruangan LIKE %s OR r.nama_ruangan LIKE %s)
-        """, (tanggal, f"%{clean_lab}%", f"%{clean_lab}%"))
-        results = cursor.fetchall()
+            WHERE j.tanggal = %s
+              AND (LOWER(r.nama_ruangan) LIKE '%labor%' OR LOWER(r.nama_ruangan) LIKE '%lab%')
+        """
+        params = [tanggal]
+        if kampus:
+            query += " AND r.kampus LIKE %s"
+            params.append(f"%{kampus}%")
+
+        cursor.execute(query, tuple(params))
+        raw_results = cursor.fetchall()
+
+        clean_lab_escaped = re.escape(clean_lab)
+        if clean_lab.upper() == 'S2':
+            lab_pattern = re.compile(rf'(?<![a-zA-Z0-9]){clean_lab_escaped}(?![a-zA-Z0-9])', re.IGNORECASE)
+        else:
+            lab_pattern = re.compile(rf'(?<!\d){clean_lab_escaped}(?!\d)', re.IGNORECASE)
+
+        results = [row for row in raw_results if lab_pattern.search(row.get("nama_ruangan") or "")]
         
         matched = None
         for row in results:
@@ -3572,16 +3594,26 @@ def get_lab_sessions(nomor_lab: str, tanggal: str = None):
             FROM jadwal j
             JOIN ruangan r ON j.id_ruangan = r.id_ruangan
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE j.tanggal = %s AND (r.nama_ruangan LIKE %s)
+            WHERE j.tanggal = %s
+              AND (LOWER(r.nama_ruangan) LIKE '%labor%' OR LOWER(r.nama_ruangan) LIKE '%lab%')
         """
-        params_jadwal = [tanggal, f"%{clean_lab}%"]
+        params_jadwal = [tanggal]
         if kampus:
             query_jadwal += " AND r.kampus LIKE %s"
             params_jadwal.append(f"%{kampus}%")
         query_jadwal += " ORDER BY j.jam ASC"
 
         cursor.execute(query_jadwal, tuple(params_jadwal))
-        schedules = cursor.fetchall()
+        raw_schedules = cursor.fetchall()
+
+        # Filter presisi: ruangan lab harus cocok eksak dengan nomor lab (tanpa false-positive misal 3.1 cocok ke 3.10)
+        clean_lab_escaped = re.escape(clean_lab)
+        if clean_lab.upper() == 'S2':
+            lab_pattern = re.compile(rf'(?<![a-zA-Z0-9]){clean_lab_escaped}(?![a-zA-Z0-9])', re.IGNORECASE)
+        else:
+            lab_pattern = re.compile(rf'(?<!\d){clean_lab_escaped}(?!\d)', re.IGNORECASE)
+
+        schedules = [row for row in raw_schedules if lab_pattern.search(row.get("nama_ruangan") or "")]
 
         # Ambil seluruh absensi di lab dan tanggal tersebut
         cursor.execute("""
