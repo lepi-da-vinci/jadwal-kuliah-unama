@@ -1010,6 +1010,15 @@ def cari_posisi_dosen(nama_dosen: str, tanggal_YYYY_MM_DD: str = None):
         target_date = tanggal_YYYY_MM_DD or get_wib_now().strftime("%Y-%m-%d")
         _sync_if_needed(target_date)
         tgl_indo = format_tanggal_indo(target_date)
+
+        # Bersihkan sapaan dosen: pak, bapak, bu, ibu, ibuk, buk, miss, mem, mam, ms, mrs, bunda, dll
+        clean_nama = re.sub(r'^(?:cari\s+|posisi\s+|jadwal\s+)?(?:dosen\s+)?(?:pak|bapak|bu|ibu|ibuk|buk|miss|mem|mam|ms|mrs|bunda|dr\.?|prof\.?)\s+', '', nama_dosen, flags=re.IGNORECASE).strip()
+        clean_nama = re.sub(r'\b(?:pak|bapak|bu|ibu|ibuk|buk|miss|mem|mam|ms|mrs|bunda)\b', '', clean_nama, flags=re.IGNORECASE).strip()
+        for tw in ["besok", "kemarin", "lusa", "hari ini", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]:
+            clean_nama = re.sub(rf'\b{tw}\b', '', clean_nama, flags=re.IGNORECASE).strip()
+
+        target_search = clean_nama if clean_nama else nama_dosen.strip()
+
         cursor.execute('''
             SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
             FROM jadwal j
@@ -1017,10 +1026,28 @@ def cari_posisi_dosen(nama_dosen: str, tanggal_YYYY_MM_DD: str = None):
             JOIN dosen d ON j.id_dosen = d.id_dosen
             WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
             ORDER BY j.jam
-        ''', (f"%{nama_dosen.upper()}%", target_date))
+        ''', (f"%{target_search.upper()}%", target_date))
         jadwals = cursor.fetchall()
+
+        # Fallback pencarian: jika belum ketemu dan query lebih dari satu kata, coba cari per kata
+        if not jadwals and ' ' in target_search:
+            for word in target_search.split():
+                if len(word) >= 3:
+                    cursor.execute('''
+                        SELECT r.nama_ruangan, r.kampus, j.jam, j.nama_mk, j.kelas, d.nama_dosen, j.metode_pembelajaran, j.status_jadwal
+                        FROM jadwal j
+                        JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                        JOIN dosen d ON j.id_dosen = d.id_dosen
+                        WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
+                        ORDER BY j.jam
+                    ''', (f"%{word.upper()}%", target_date))
+                    jadwals = cursor.fetchall()
+                    if jadwals:
+                        break
+
         if not jadwals:
-            return f"Nggak ketemu jadwal untuk dosen *{nama_dosen}* pada {tgl_indo}."
+            display_name = target_search if target_search else nama_dosen
+            return f"Nggak ketemu jadwal untuk dosen *{display_name}* pada {tgl_indo}."
             
         dosen_full = jadwals[0]['nama_dosen']
         msg = f"*Jadwal {dosen_full}*\n_{tgl_indo}_\n\n"
@@ -2928,27 +2955,39 @@ def fallback_python_handler(sender, text, aslab):
 
     has_specific_room = bool(re.search(r'\b\d+\.\d+\b', text_clean))
 
-    # 3.1 Deteksi Langsung Pencarian Dosen (misal: "pak usep", "bu sari", "pak usep besok", "posisi dosen usep")
+    # 3.1 Deteksi Langsung Pencarian Dosen (misal: "pak usep", "bu imelda", "ibuk imelda", "buk imelda", "miss imelda", "mem imelda", "mam imelda", dll)
     dosen_pfx = [
-        "cari dosen ", "posisi dosen ", "dosen ",
-        "cari pak ", "posisi pak ", "pak ",
-        "cari bu ", "posisi bu ", "bu ",
-        "cari bapak ", "posisi bapak ", "bapak ",
-        "cari ibu ", "posisi ibu ", "ibu "
+        "cari dosen ", "posisi dosen ", "jadwal dosen ", "dosen ",
+        "cari pak ", "posisi pak ", "jadwal pak ", "pak ",
+        "cari bapak ", "posisi bapak ", "jadwal bapak ", "bapak ",
+        "cari bu ", "posisi bu ", "jadwal bu ", "bu ",
+        "cari ibu ", "posisi ibu ", "jadwal ibu ", "ibu ",
+        "cari ibuk ", "posisi ibuk ", "jadwal ibuk ", "ibuk ",
+        "cari buk ", "posisi buk ", "jadwal buk ", "buk ",
+        "cari miss ", "posisi miss ", "jadwal miss ", "miss ",
+        "cari mem ", "posisi mem ", "jadwal mem ", "mem ",
+        "cari mam ", "posisi mam ", "jadwal mam ", "mam ",
+        "cari ms ", "posisi ms ", "jadwal ms ", "ms ",
+        "cari mrs ", "posisi mrs ", "jadwal mrs ", "mrs ",
+        "cari bunda ", "posisi bunda ", "jadwal bunda ", "bunda "
     ]
-    matched_dosen_pfx = None
+    matched_dosen_query = None
     for pfx in dosen_pfx:
         if text_clean.startswith(pfx):
-            matched_dosen_pfx = pfx
+            matched_dosen_query = text[len(pfx):].strip()
             break
 
-    if matched_dosen_pfx:
-        query_dosen = text[len(matched_dosen_pfx):].strip()
+    if not matched_dosen_query:
+        rgx_dosen = re.search(r'^(?:cari\s+|posisi\s+|jadwal\s+)?(?:dosen\s+)?(?:pak|bapak|bu|ibu|ibuk|buk|miss|mem|mam|ms|mrs|bunda)\s+(.+)$', text_clean, re.IGNORECASE)
+        if rgx_dosen:
+            matched_dosen_query = rgx_dosen.group(1).strip()
+
+    if matched_dosen_query:
         target_date = extract_date_or_today(text_clean)
         for tw in ["besok", "kemarin", "lusa", "hari ini", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]:
-            query_dosen = re.sub(rf'\b{tw}\b', '', query_dosen, flags=re.IGNORECASE).strip()
-        if query_dosen:
-            return cari_posisi_dosen(query_dosen, target_date)
+            matched_dosen_query = re.sub(rf'\b{tw}\b', '', matched_dosen_query, flags=re.IGNORECASE).strip()
+        if matched_dosen_query:
+            return cari_posisi_dosen(matched_dosen_query, target_date)
 
     # 3.2 Deteksi Pertanyaan Tanggal & Jadwal Umum (misal: "besok", "hari ini", "lusa", "jadwal besok", "cek jadwal")
     days_names = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]
@@ -3786,13 +3825,24 @@ def handle_incoming_message(sender, text, msg_id=None):
             return True
         if any(cmd_text.startswith(k) for k in ["jadwal", "cek jadwal", "ada jadwal"]):
             return True
-        # 8. Panggilan nama dosen (pak ..., bu ..., bapak ..., ibu ..., dosen ...)
+        # 8. Panggilan nama dosen (pak, bu, bapak, ibu, ibuk, buk, miss, mem, mam, ms, mrs, bunda, dosen)
         dosen_quick_pfx = [
-            "pak ", "bu ", "bapak ", "ibu ", "dosen ", 
-            "cari pak ", "posisi pak ", "cari bu ", "posisi bu ",
+            "pak ", "bapak ", "bu ", "ibu ", "ibuk ", "buk ", 
+            "miss ", "mem ", "mam ", "ms ", "mrs ", "bunda ",
+            "dosen ", "jadwal dosen ",
+            "cari pak ", "posisi pak ", "jadwal pak ",
+            "cari bu ", "posisi bu ", "jadwal bu ",
+            "cari ibuk ", "posisi ibuk ", "jadwal ibuk ",
+            "cari buk ", "posisi buk ", "jadwal buk ",
+            "cari ibu ", "posisi ibu ", "jadwal ibu ",
+            "cari miss ", "posisi miss ", "jadwal miss ",
+            "cari mem ", "posisi mem ", "jadwal mem ",
+            "cari mam ", "posisi mam ", "jadwal mam ",
             "cari dosen ", "posisi dosen "
         ]
         if any(cmd_text.startswith(pfx) for pfx in dosen_quick_pfx):
+            return True
+        if re.search(r'^(?:cari\s+|posisi\s+|jadwal\s+)?(?:dosen\s+)?(?:pak|bapak|bu|ibu|ibuk|buk|miss|mem|mam|ms|mrs|bunda)\b', cmd_text):
             return True
         return False
 
@@ -3856,15 +3906,61 @@ def extract_affected_rooms(pesan_text, rooms_list):
                 matched.append(r_dict)
     return matched
 
+def format_info_mase_simple(pesan_raw: str, nama_ruangan: str, kampus: str, is_lab: bool = False) -> str:
+    """
+    Mengubah pesan notifikasi mentah menjadi format to-the-point dan simpel sesuai permintaan:
+    Contoh: R. 1.1 (Kobar) jam 08:00 *TM* jadi *OL* ruang kosong jam segitu
+    """
+    clean_pesan = pesan_raw.strip()
+    room_tag = f"{nama_ruangan} ({kampus})" if kampus and kampus.lower() not in nama_ruangan.lower() else nama_ruangan
+    jam_match = re.search(r'\bjam\s+(\d{1,2}[:.]\d{2})\b', clean_pesan, re.IGNORECASE)
+    jam_str = f"jam {jam_match.group(1).replace('.', ':')}" if jam_match else ""
+
+    if 'ONLINE (OL)' in clean_pesan or 'dialihkan ke ONLINE' in clean_pesan or 'jadi OL' in clean_pesan:
+        kosong_note = "lab kosong jam segitu" if is_lab else "ruang kosong jam segitu"
+        return f"{room_tag} {jam_str} *TM* jadi *OL* {kosong_note}".strip()
+
+    if 'DIBATALKAN (CC)' in clean_pesan or 'batal' in clean_pesan.lower():
+        kosong_note = "lab kosong jam segitu" if is_lab else "ruang kosong jam segitu"
+        return f"{room_tag} {jam_str} *BATAL (CC)* {kosong_note}".strip()
+
+    if 'TATAP MUKA (TM)' in clean_pesan or 'kembali TM' in clean_pesan:
+        pakai_note = "lab digunakan jam segitu" if is_lab else "ruangan digunakan jam segitu"
+        return f"{room_tag} {jam_str} *KEMBALI TM* {pakai_note}".strip()
+
+    if 'dipindahkan KELUAR' in clean_pesan or 'PINDAH KELUAR' in clean_pesan:
+        tujuan_m = re.search(r'ke\s+((?:R\.\s*|Labor\s*|Lab\s*)?\d+\.\d+(?:\s*\([^)]+\))?)', clean_pesan, re.IGNORECASE)
+        tujuan = f" ke {tujuan_m.group(1).strip()}" if tujuan_m else ""
+        kosong_note = "lab kosong jam segitu" if is_lab else "ruang kosong jam segitu"
+        return f"{room_tag} {jam_str} *PINDAH KELUAR*{tujuan} {kosong_note}".strip()
+
+    if 'dipindahkan MASUK' in clean_pesan or 'PINDAH MASUK' in clean_pesan:
+        asal_m = re.search(r'(?:sebelumnya di|dari)\s+((?:R\.\s*|Labor\s*|Lab\s*)?\d+\.\d+(?:\s*\([^)]+\))?)', clean_pesan, re.IGNORECASE)
+        asal = f" dari {asal_m.group(1).strip()}" if asal_m else ""
+        pakai_note = "lab digunakan jam segitu" if is_lab else "ruangan digunakan jam segitu"
+        return f"{room_tag} {jam_str} *PINDAH MASUK*{asal} {pakai_note}".strip()
+
+    if 'KELAS TAMBAHAN' in clean_pesan or 'kelas tambahan' in clean_pesan.lower():
+        pakai_note = "lab digunakan jam segitu" if is_lab else "ruangan digunakan jam segitu"
+        return f"{room_tag} {jam_str} *KELAS TAMBAHAN* {pakai_note}".strip()
+
+    fallback = clean_pesan.replace("PERUBAHAN STATUS:", "").replace("PERUBAHAN STATUS :", "").strip()
+    return f"{room_tag} {jam_str}: {fallback}".strip()
+
 def check_and_notify_info_mase():
     """
     Memeriksa dan mengirimkan notifikasi perubahan jadwal & info mase hari ini (kelas tambahan, pindah ruangan, OL, CC/batal)
     secara presisi dan tertarget:
-    - Jika Laboratorium (Lab / Labor): Dikirimkan HANYA ke Asisten Lab yang memegang lab tersebut.
-    - Jika Ruang Kelas Teori (Bukan Lab): Dikirimkan ke ASMOT di kampus ruangan tersebut (Kobar / Thehok).
-    - Mencegah spam dengan tracking sent_notifications per ID notifikasi & target penerima.
+    - Tidak mengirim di malam/dini hari (00:00 - 06:59). Pengiriman baru aktif mulai jam 07:00 pagi agar tidak mengganggu istirahat.
+    - Format to the point: '{ruangan} ({kampus}) jam {jam} *TM* jadi *OL* ruang kosong jam segitu'
+    - Pengiriman di-batch per nomor penerima (Asmot / Aslab) sehingga tidak spam chat terpisah.
+    - Penutup: 'Kondisikan AC mas' (Asmot) atau 'Kondisikan lab mas' (Aslab).
     """
     now = get_wib_now()
+    # Jangan kirim notifikasi Info Mase di malam/dini hari (00:00 - 06:59) karena mengganggu istirahat, kirim mulai jam 07:00 pagi
+    if now.hour < 7:
+        return
+
     today_str = now.strftime("%Y-%m-%d")
     try:
         conn = scraper.get_db()
@@ -3906,6 +4002,9 @@ def check_and_notify_info_mase():
         """, (today_str,))
         notifs = cursor.fetchall()
 
+        # Struktur batching: target_wa -> {'role': str, 'items': [str], 'keys': [str]}
+        pending_batches = collections.defaultdict(lambda: {'role': 'asmot', 'items': [], 'keys': []})
+
         for nl in notifs:
             nl_id = nl['id']
             pesan_raw = nl['pesan']
@@ -3921,47 +4020,54 @@ def check_and_notify_info_mase():
                 kampus_r = r['kampus']
                 is_lab = r.get('is_lab', False)
 
+                simple_line = format_info_mase_simple(pesan_raw, nama_r, kampus_r, is_lab=is_lab)
+
                 if is_lab:
                     # KASUS A: Laboratorium -> Kirim HANYA ke Aslab lab tersebut!
                     target_aslabs = aslab_by_room.get(id_r, [])
-                    if not target_aslabs:
-                        continue
-
-                    msg = (
-                        f"*INFO MASE - JADWAL LAB*\n"
-                        f"_{nama_r} ({kampus_r})_\n"
-                        f"------------------------------\n"
-                        f"{pesan_raw}\n\n"
-                        f"_Mohon sesuaikan persiapan laboratorium mas._"
-                    )
-
                     for target_wa in set(target_aslabs):
                         notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
                         if not is_notification_sent(notif_key):
-                            if send_wa_message(target_wa, msg):
-                                mark_notification_sent(notif_key)
-                                log_chatbot("SUCCESS", f"Info Mase Lab terkirim ke Aslab {target_wa} untuk {nama_r}", "INFO-MASE")
+                            pending_batches[target_wa]['role'] = 'aslab'
+                            pending_batches[target_wa]['items'].append(simple_line)
+                            pending_batches[target_wa]['keys'].append(notif_key)
                 else:
                     # KASUS B: Ruang Kelas Teori -> Kirim ke ASMOT kampus tersebut!
                     camp_key = kampus_r.lower()
                     target_asmots = asmot_by_campus.get(camp_key, [])
-                    if not target_asmots:
-                        continue
-
-                    msg = (
-                        f"*INFO MASE - OPERASIONAL KELAS (ASMOT)*\n"
-                        f"_{nama_r} ({kampus_r})_\n"
-                        f"------------------------------\n"
-                        f"{pesan_raw}\n\n"
-                        f"_Mohon sesuaikan kontrol AC dan ruangan ya mas._"
-                    )
-
                     for target_wa in set(target_asmots):
                         notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
                         if not is_notification_sent(notif_key):
-                            if send_wa_message(target_wa, msg):
-                                mark_notification_sent(notif_key)
-                                log_chatbot("SUCCESS", f"Info Mase Asmot terkirim ke {target_wa} untuk {nama_r} ({kampus_r})", "INFO-MASE")
+                            pending_batches[target_wa]['role'] = 'asmot'
+                            pending_batches[target_wa]['items'].append(simple_line)
+                            pending_batches[target_wa]['keys'].append(notif_key)
+
+        # Kirim batch per target_wa
+        for target_wa, batch in pending_batches.items():
+            if not batch['items']:
+                continue
+
+            # Hilangkan baris duplikat jika ada
+            unique_items = list(dict.fromkeys(batch['items']))
+            items_body = "\n".join(unique_items)
+
+            if batch['role'] == 'asmot':
+                msg = (
+                    f"*INFO MASE - OPERASIONAL KELAS*\n\n"
+                    f"{items_body}\n\n"
+                    f"Kondisikan AC mas"
+                )
+            else:
+                msg = (
+                    f"*INFO MASE - JADWAL LAB*\n\n"
+                    f"{items_body}\n\n"
+                    f"Kondisikan lab mas"
+                )
+
+            if send_wa_message(target_wa, msg):
+                for k in batch['keys']:
+                    mark_notification_sent(k)
+                log_chatbot("SUCCESS", f"Info Mase ({len(unique_items)} item) terkirim ke {target_wa}", "INFO-MASE")
 
     except Exception as e:
         log_chatbot("ERROR", f"Error in check_and_notify_info_mase: {e}", "INFO-MASE")
