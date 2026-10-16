@@ -3977,32 +3977,6 @@ tr.table-row-conflict td:first-child {
   color: #ef4444;
 }
 
-/* 3. Smart Room Finder (Cari Ruang Kosong) */
-.room-finder-card {
-  background: var(--bg-card);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-shadow: var(--shadow-xs);
-}
-
-.room-finder-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary);
-}
-
-.room-finder-card.is-free {
-  border-left: 4px solid #10b981;
-}
-
-.room-finder-card.is-busy {
-  border-left: 4px solid #f59e0b;
-}
 
 .room-status-badge {
   display: inline-flex;

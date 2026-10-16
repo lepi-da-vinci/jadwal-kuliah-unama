@@ -792,10 +792,6 @@ def get_class_sks(nama_mk: str, kelas: str = None) -> int:
         
     return 3
 
-def is_2_sks(nama_mk: str, kelas: str = None) -> bool:
-    """Mendeteksi apakah suatu mata kuliah adalah 2 SKS (90 menit) atau bukan."""
-    return get_class_sks(nama_mk, kelas) == 2
-
 def get_class_duration(nama_mk: str, kelas: str = None) -> int:
     """Mengembalikan durasi perkuliahan dalam menit berbasis SKS (2 SKS = 90 menit, 3 SKS = 135 menit)."""
     sks = get_class_sks(nama_mk, kelas)
