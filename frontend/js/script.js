@@ -369,11 +369,19 @@ function toggleCustomSelect(id, event) {
   });
 
   if (!isCurrentlyOpen) {
+    if (id === 'absensi-nama-aslab' || id === 'absensi-nomor-lab') {
+      if (typeof window.updateAbsensiFormDropdowns === 'function' && Array.isArray(window._masterAslabsCache) && window._masterAslabsCache.length > 0) {
+        window.updateAbsensiFormDropdowns(window._masterLabsCache || [], window._masterAslabsCache || []);
+      } else if (typeof window.loadAbsensiMasterConfig === 'function') {
+        window.loadAbsensiMasterConfig(true);
+      }
+    }
     dropdown.classList.add('open');
     const wrapper = dropdown.closest('.custom-select-wrapper');
     if (wrapper) wrapper.style.zIndex = '10060';
   }
 }
+
 
 function selectCustomOption(id, value, label) {
   const filterInput = document.getElementById(`filter-${id}`);
@@ -4892,7 +4900,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     // Navigasi ke Form Absensi Aslab (Dosen Masuk Lab)
     const btnShowAbsensi = document.getElementById('btn-show-absensi-aslab');
     if (btnShowAbsensi) {
-      btnShowAbsensi.onclick = () => {
+      btnShowAbsensi.onclick = async () => {
         menuView.style.display = 'none';
         const absensiView = document.getElementById('wa-modal-absensi');
         if (absensiView) absensiView.style.display = 'flex';
@@ -4904,9 +4912,14 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
         const backBtn = document.getElementById('absensi-back-btn');
         if (backBtn) backBtn.textContent = "Kembali ke Menu";
 
-        if (typeof window.loadAbsensiMasterConfig === 'function') {
-          window.loadAbsensiMasterConfig(true);
+        // Segera render dari cache master jika ada dan fetch data master aslab terbaru
+        if (typeof window.updateAbsensiFormDropdowns === 'function' && Array.isArray(window._masterAslabsCache) && window._masterAslabsCache.length > 0) {
+          window.updateAbsensiFormDropdowns(window._masterLabsCache || [], window._masterAslabsCache || []);
         }
+        if (typeof window.loadAbsensiMasterConfig === 'function') {
+          await window.loadAbsensiMasterConfig(true);
+        }
+
 
         // Inisialisasi tanggal: default TODAY jika kosong
         const tglInput = document.getElementById('absensi-tanggal');
@@ -5432,11 +5445,16 @@ function getAssignedAslabForRoom(roomName, campusLabel) {
 
   // 2. Cocokkan dengan cache master data aslab absensi resmi jika ada agar formatnya seragam
   if (officialName && Array.isArray(window._masterAslabsCache) && window._masterAslabsCache.length > 0) {
-    const matchedInMaster = window._masterAslabsCache.find(m => 
-      m.nama_aslab && (m.nama_aslab.toLowerCase() === officialName.toLowerCase() || m.nama_aslab.toLowerCase().includes(officialName.toLowerCase()))
-    );
+    const matchedInMaster = window._masterAslabsCache.find(m => {
+      const name = (m.nama || m.nama_aslab || '').toLowerCase().trim();
+      const target = officialName.toLowerCase().trim();
+      return name === target || name.includes(target) || target.includes(name);
+    });
     if (matchedInMaster) {
-      return { nama: matchedInMaster.nama_aslab, kampus: matchedInMaster.kampus_tugas || campusDisplay };
+      return { 
+        nama: matchedInMaster.nama || matchedInMaster.nama_aslab, 
+        kampus: matchedInMaster.kampus || matchedInMaster.kampus_tugas || campusDisplay 
+      };
     }
   }
 
@@ -5536,8 +5554,12 @@ window.openAbsensiFromDetail = async function (roomName, campusLabel, activeDate
   if (modalTitle) modalTitle.innerText = "Absensi Asisten Lab";
   if (modalIcon) modalIcon.innerHTML = (window.SVG_WA_ICONS && window.SVG_WA_ICONS.absensi) ? window.SVG_WA_ICONS.absensi : '';
 
+  // Segera render dari cache master jika ada dan fetch data master aslab terbaru
+  if (typeof window.updateAbsensiFormDropdowns === 'function' && Array.isArray(window._masterAslabsCache) && window._masterAslabsCache.length > 0) {
+    window.updateAbsensiFormDropdowns(window._masterLabsCache || [], window._masterAslabsCache || []);
+  }
   if (typeof window.loadAbsensiMasterConfig === 'function') {
-    window.loadAbsensiMasterConfig(true);
+    await window.loadAbsensiMasterConfig(true);
   }
 
   const formView = document.getElementById('absensi-view-form');
@@ -6934,6 +6956,24 @@ window.updateAbsensiFormDropdowns = function (labs, aslabs) {
       </div>
     `;
     aslabDropdown.innerHTML = html;
+
+    // Sinkronkan kembali state active jika ada nilai aslab yang sedang dipilih
+    const aslabInput = document.getElementById('absensi-nama-aslab');
+    const currentVal = (aslabInput ? aslabInput.value : '').trim();
+    if (currentVal) {
+      let activeItem = aslabDropdown.querySelector(`.aslab-list-item[data-value="${currentVal}"]`);
+      if (!activeItem) {
+        const allItems = Array.from(aslabDropdown.querySelectorAll('.aslab-list-item'));
+        activeItem = allItems.find(it => (it.getAttribute('data-value') || '').toLowerCase() === currentVal.toLowerCase());
+      }
+      if (activeItem) {
+        activeItem.classList.add('active');
+        const cleanLabel = activeItem.innerText.replace(/✓$/, '').trim();
+        const labelEl = document.getElementById('label-absensi-nama-aslab');
+        if (labelEl) labelEl.innerText = cleanLabel;
+        if (aslabInput) aslabInput.value = activeItem.getAttribute('data-value') || currentVal;
+      }
+    }
   }
 };
 
@@ -13783,7 +13823,11 @@ setInterval(async () => {
 // =========================================================================
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      if (typeof reg.update === 'function') {
+        reg.update();
+      }
+    }).catch(err => {
       console.log('SW registration skipped:', err);
     });
   });
@@ -16859,6 +16903,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof initDbRestoreModalEvents === 'function') initDbRestoreModalEvents();
   if (typeof initRoomFinderEvents === 'function') initRoomFinderEvents();
   if (typeof initChangesHubEvents === 'function') initChangesHubEvents();
+
+  // Inisialisasi awal master data absensi agar dropdown form selalu sinkron dengan database
+  if (typeof window.loadAbsensiMasterConfig === 'function') {
+    window.loadAbsensiMasterConfig(true);
+  }
 });
 
 // =========================================================================

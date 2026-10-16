@@ -1,5 +1,5 @@
 // Service Worker for Jadwal Kuliah UNAMA PWA
-const CACHE_NAME = 'jadwal-unama-v20260928_v2';
+const CACHE_NAME = 'jadwal-unama-v20261016_v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -59,3 +59,4 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request))
   );
 });
+
