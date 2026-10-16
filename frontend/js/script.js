@@ -7313,6 +7313,16 @@ document.getElementById('toggle-notif-btn').addEventListener('click', () => {
 
 // Handle Modal Detail Ruangan (Spacious & Rich Cards)
 window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
+  // Simpan posisi scroll sebelum modal detail ruangan dibuka agar saat ditutup tetap stay di Status Penggunaan Ruangan
+  const curScrollY = window.pageYOffset || document.documentElement.scrollTop || window.scrollY || 0;
+  const statusSecEl = document.getElementById('section-status-ruangan');
+  let secTopY = 0;
+  if (statusSecEl) {
+    const rect = statusSecEl.getBoundingClientRect();
+    secTopY = Math.max(0, rect.top + curScrollY - 12);
+  }
+  window._savedRoomDetailScrollY = (curScrollY > 80) ? curScrollY : (secTopY > 50 ? secTopY : curScrollY);
+
   const filterTanggal = document.getElementById('filter-tanggal');
   const today = new Date();
   const currentDayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -8047,6 +8057,25 @@ window.closeRoomDetailModal = function (quick = false, fromDrag = false) {
     }
     modal.style.removeProperty('background-color');
     modal.style.removeProperty('transition');
+
+    // Kembalikan posisi scroll agar tetap stay di Status Penggunaan Ruangan (tidak kembali ke puncak)
+    const restoreRoomScrollPosition = () => {
+      const statusSec = document.getElementById('section-status-ruangan');
+      const targetY = (typeof window._savedRoomDetailScrollY === 'number' && window._savedRoomDetailScrollY > 40)
+        ? window._savedRoomDetailScrollY
+        : (statusSec ? Math.max(0, statusSec.getBoundingClientRect().top + (window.pageYOffset || document.documentElement.scrollTop || 0) - 12) : null);
+
+      if (targetY !== null && targetY > 0) {
+        window.scrollTo({ top: targetY, behavior: 'instant' });
+      } else if (statusSec) {
+        statusSec.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+    };
+
+    restoreRoomScrollPosition();
+    requestAnimationFrame(restoreRoomScrollPosition);
+    setTimeout(restoreRoomScrollPosition, 40);
+    setTimeout(restoreRoomScrollPosition, 180);
   };
 
   if (!quick && !fromDrag && modalBox && modal.classList.contains('open')) {
@@ -16878,10 +16907,13 @@ function isAnyOverlayOpen() {
   return false;
 }
 
+let _bodyScrollLockScrollY = 0;
+
 function updateBodyScrollLock() {
   const shouldLock = isAnyOverlayOpen();
   if (shouldLock) {
     if (!document.body.classList.contains('modal-open')) {
+      _bodyScrollLockScrollY = window.pageYOffset || document.documentElement.scrollTop || window.scrollY || 0;
       document.body.classList.add('modal-open');
       document.documentElement.classList.add('modal-open');
     }
@@ -16889,6 +16921,13 @@ function updateBodyScrollLock() {
     if (document.body.classList.contains('modal-open')) {
       document.body.classList.remove('modal-open');
       document.documentElement.classList.remove('modal-open');
+      // Jika ada modal ruangan yang menyimpan posisi spesifik, prioritaskan itu
+      const targetY = (typeof window._savedRoomDetailScrollY === 'number' && window._savedRoomDetailScrollY > 40)
+        ? window._savedRoomDetailScrollY
+        : _bodyScrollLockScrollY;
+      if (targetY > 0) {
+        window.scrollTo({ top: targetY, behavior: 'instant' });
+      }
     }
   }
 }
