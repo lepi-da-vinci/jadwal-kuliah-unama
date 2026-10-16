@@ -926,8 +926,8 @@ def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kela
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
             WHERE r.kampus LIKE %s AND j.tanggal = %s 
               AND {ruang_cond}
-              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%' 
-              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
+              AND INSTR(LOWER(r.nama_ruangan), 'pasca') = 0 
+              AND INSTR(LOWER(r.nama_ruangan), 's2') = 0
             ORDER BY r.nama_ruangan, j.jam
         ''', (f"%{kampus}%", tanggal_YYYY_MM_DD))
         jadwals = cursor.fetchall()
@@ -975,8 +975,8 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: boo
                                AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
             WHERE r.kampus LIKE %s 
               AND {ruang_cond}
-              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%' 
-              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
+              AND INSTR(LOWER(r.nama_ruangan), 'pasca') = 0 
+              AND INSTR(LOWER(r.nama_ruangan), 's2') = 0
             ORDER BY r.nama_ruangan, j.jam
         ''', (tanggal_YYYY_MM_DD, f"%{kampus}%"))
         results = cursor.fetchall()
@@ -1280,8 +1280,8 @@ def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
             WHERE j.tanggal = %s AND j.semester = %s
               AND j.metode_pembelajaran = 'TM'
               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
-              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%'
-              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
+              AND INSTR(LOWER(r.nama_ruangan), 'pasca') = 0
+              AND INSTR(LOWER(r.nama_ruangan), 's2') = 0
         """
         params = [today_str, sem_target]
         if kampus_tugas and kampus_tugas.lower() != 'semua':
@@ -1351,8 +1351,8 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
             WHERE j.tanggal = %s AND j.semester = %s
               AND j.metode_pembelajaran = 'TM'
               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
-              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%'
-              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
+              AND INSTR(LOWER(r.nama_ruangan), 'pasca') = 0
+              AND INSTR(LOWER(r.nama_ruangan), 's2') = 0
         """
         params = [today_str, sem_target]
         if kampus_tugas and kampus_tugas.lower() != 'semua':
@@ -1438,8 +1438,8 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
             WHERE j.tanggal = %s AND j.semester = %s
               AND j.metode_pembelajaran = 'TM'
               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
-              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%'
-              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
+              AND INSTR(LOWER(r.nama_ruangan), 'pasca') = 0
+              AND INSTR(LOWER(r.nama_ruangan), 's2') = 0
         """
         params = [today_str, sem_target]
         if kampus_tugas and kampus_tugas.lower() != 'semua':
@@ -4005,7 +4005,7 @@ def check_and_notify_info_mase():
         cursor = conn.cursor(dictionary=True)
 
         # 1. Ambil seluruh data master ruangan (Eksklusikan Gedung Pasca / S2 karena tidak dipegang Aslab/Asmot)
-        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%pasca%' AND LOWER(nama_ruangan) NOT LIKE '%s2%'")
+        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE INSTR(LOWER(nama_ruangan), 'pasca') = 0 AND INSTR(LOWER(nama_ruangan), 's2') = 0")
         all_rooms = cursor.fetchall()
 
         # 2. Ambil seluruh data Aslab & Asmot yang terdaftar
