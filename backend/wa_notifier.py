@@ -479,11 +479,24 @@ def _sync_if_needed(tanggal):
     except Exception as e:
         log_chatbot("WARN", f"Sync check error: {e}", "SYNC")
 
+def is_pasca_or_s2_room(room_name: str) -> bool:
+    """Mengecek apakah ruangan merupakan bagian dari Gedung Pasca / S2 yang tidak dipegang oleh Aslab/Asmot."""
+    if not room_name:
+        return False
+    r = str(room_name).lower()
+    return (
+        'pasca' in r or 
+        's2' in r or 
+        r.startswith('gedung pasca') or 
+        bool(re.search(r'\bb\d+\.\d+\b', r))
+    )
+
 def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None, conn=None):
     """
     Mencari daftar ruangan target secara cerdas, presisi, dan bebas ambigu.
     Mencegah bug fatal di mana '3.1' mencocokkan '3.10',
     serta membedakan antara 'lab' (Laboratorium) dan 'kelas/ruang' (R.).
+    Mengecualikan Gedung Pasca / S2 karena tidak dipegang oleh Aslab/Asmot.
     Mengembalikan list of dict: [{'id_ruangan': ..., 'nama_ruangan': ..., 'kampus': ...}]
     """
     sender_aslab = get_sender_aslab()
@@ -532,7 +545,9 @@ def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan ORDER BY kampus, nama_ruangan")
-        all_rooms = cursor.fetchall()
+        all_rooms_raw = cursor.fetchall()
+        # Filter ketat: Eksklusikan seluruh ruangan Gedung Pasca / S2 dari chatbot
+        all_rooms = [r for r in all_rooms_raw if not is_pasca_or_s2_room(r['nama_ruangan'])]
         cursor.close()
     finally:
         if close_conn and conn.is_connected():
@@ -911,6 +926,8 @@ def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kela
             LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
             WHERE r.kampus LIKE %s AND j.tanggal = %s 
               AND {ruang_cond}
+              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%' 
+              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
             ORDER BY r.nama_ruangan, j.jam
         ''', (f"%{kampus}%", tanggal_YYYY_MM_DD))
         jadwals = cursor.fetchall()
@@ -958,6 +975,8 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: boo
                                AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
             WHERE r.kampus LIKE %s 
               AND {ruang_cond}
+              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%' 
+              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
             ORDER BY r.nama_ruangan, j.jam
         ''', (tanggal_YYYY_MM_DD, f"%{kampus}%"))
         results = cursor.fetchall()
@@ -1261,6 +1280,8 @@ def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
             WHERE j.tanggal = %s AND j.semester = %s
               AND j.metode_pembelajaran = 'TM'
               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%'
+              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
         """
         params = [today_str, sem_target]
         if kampus_tugas and kampus_tugas.lower() != 'semua':
@@ -1330,6 +1351,8 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
             WHERE j.tanggal = %s AND j.semester = %s
               AND j.metode_pembelajaran = 'TM'
               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%'
+              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
         """
         params = [today_str, sem_target]
         if kampus_tugas and kampus_tugas.lower() != 'semua':
@@ -1415,6 +1438,8 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
             WHERE j.tanggal = %s AND j.semester = %s
               AND j.metode_pembelajaran = 'TM'
               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+              AND LOWER(r.nama_ruangan) NOT LIKE '%pasca%'
+              AND LOWER(r.nama_ruangan) NOT LIKE '%s2%'
         """
         params = [today_str, sem_target]
         if kampus_tugas and kampus_tugas.lower() != 'semua':
@@ -3747,6 +3772,19 @@ def handle_incoming_message(sender, text, msg_id=None):
                 "_Ketik 1 atau 2 untuk melanjutkan._"
             )
 
+        # Fast-query untuk nomor ruangan spesifik meskipun nomor belum login/terdaftar (contoh: 'lab 3.4', '3.4', 'r 2.10', '1.8')
+        match_room_guest = re.search(r'\b(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?([bB]?\d+\.\d+)\b', text_clean)
+        if match_room_guest:
+            send_wa_typing(sender, 'composing')
+            room_q = match_room_guest.group(0)
+            target_date = extract_date_or_today(text_clean)
+            k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
+            res_jadwal = cek_jadwal_lab_tertentu(room_q, target_date, kampus=k_target)
+            return (
+                f"{res_jadwal}\n\n"
+                f"_Catatan: Ketik *!pantau* jika ingin melihat semua jadwal tanpa daftar atau *inpo* untuk mendaftar resmi aslab/asmot._"
+            )
+
         # Untuk pesan sapaan atau chat lain dari nomor yang belum terdaftar: berikan panduan agar bot tidak bungkam
         send_wa_typing(sender, 'composing')
         log_chatbot("INFO", f"Memberikan petunjuk registrasi/login untuk nomor baru {sender}: '{text}'", "AUTH")
@@ -3966,8 +4004,8 @@ def check_and_notify_info_mase():
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 1. Ambil seluruh data master ruangan
-        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan")
+        # 1. Ambil seluruh data master ruangan (Eksklusikan Gedung Pasca / S2 karena tidak dipegang Aslab/Asmot)
+        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%pasca%' AND LOWER(nama_ruangan) NOT LIKE '%s2%'")
         all_rooms = cursor.fetchall()
 
         # 2. Ambil seluruh data Aslab & Asmot yang terdaftar
