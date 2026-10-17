@@ -15843,7 +15843,7 @@ function switchStatsTab(tabName) {
   if (currentStatsViewMode !== 'bar') {
     setStatsViewMode('bar');
   }
-  const tabs = ['lab', 'kelas', 'dosen'];
+  const tabs = ['lab', 'kelas', 'dosen', 'ruang_mk'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-stats-${t}`);
     const pane = document.getElementById(`stats-pane-${t}`);
@@ -17954,10 +17954,16 @@ function renderStatsView() {
     if (currentStatsTab === 'lab') renderLabStats();
     else if (currentStatsTab === 'kelas') renderKelasStats();
     else if (currentStatsTab === 'dosen') renderDosenStats();
+    else if (currentStatsTab === 'ruang_mk') renderRuangMkStats();
   } else if (currentStatsViewMode === 'donut') {
     renderDonutStats();
   } else if (currentStatsViewMode === 'card') {
-    renderStatsMatrixCards();
+    if (currentStatsTab === 'ruang_mk') {
+      setStatsViewMode('bar');
+      renderRuangMkStats();
+    } else {
+      renderStatsMatrixCards();
+    }
   } else if (currentStatsViewMode === 'table') {
     renderStatsFullTable();
   }
@@ -17969,6 +17975,10 @@ function renderStatsView() {
 window.switchStatsTab = function (tabName) {
   currentStatsTab = tabName;
 
+  if (currentStatsViewMode !== 'bar') {
+    setStatsViewMode('bar');
+  }
+
   document.querySelectorAll('.stats-category-tabs .stats-tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.id === `tab-btn-stats-${tabName}`);
   });
@@ -17976,10 +17986,12 @@ window.switchStatsTab = function (tabName) {
   const paneLab = document.getElementById('stats-pane-lab');
   const paneKelas = document.getElementById('stats-pane-kelas');
   const paneDosen = document.getElementById('stats-pane-dosen');
+  const paneRuangMk = document.getElementById('stats-pane-ruang-mk');
 
   if (paneLab) paneLab.style.display = (tabName === 'lab') ? 'block' : 'none';
   if (paneKelas) paneKelas.style.display = (tabName === 'kelas') ? 'block' : 'none';
   if (paneDosen) paneDosen.style.display = (tabName === 'dosen') ? 'block' : 'none';
+  if (paneRuangMk) paneRuangMk.style.display = (tabName === 'ruang_mk') ? 'block' : 'none';
 
   renderStatsView();
 };
@@ -18396,6 +18408,175 @@ function renderDosenStats() {
     }
   }
 }
+
+// ==================== RENDERING TAB 4: DETAIL MATA KULIAH PER RUANGAN ====================
+let currentRuangMkCategory = 'all';
+let currentRuangMkCampus = 'all';
+let currentRuangMkSearch = '';
+
+window.filterRuangMkCategory = function (cat) {
+  currentRuangMkCategory = cat;
+  const btns = [
+    { id: 'btn-ruang-mk-filter-all', val: 'all' },
+    { id: 'btn-ruang-mk-filter-lab', val: 'Labor' },
+    { id: 'btn-ruang-mk-filter-kelas', val: 'Ruang Kelas' }
+  ];
+  btns.forEach(b => {
+    const el = document.getElementById(b.id);
+    if (el) el.classList.toggle('active', b.val === cat);
+  });
+  renderRuangMkStats();
+};
+
+window.filterRuangMkCampus = function (camp) {
+  currentRuangMkCampus = camp;
+  const btns = [
+    { id: 'btn-ruang-mk-campus-all', val: 'all' },
+    { id: 'btn-ruang-mk-campus-thehok', val: 'Thehok' },
+    { id: 'btn-ruang-mk-campus-kobar', val: 'Kobar' }
+  ];
+  btns.forEach(b => {
+    const el = document.getElementById(b.id);
+    if (el) el.classList.toggle('active', b.val === camp);
+  });
+  renderRuangMkStats();
+};
+
+window.onSearchRuangMkChange = function (val) {
+  currentRuangMkSearch = (val || '').trim().toLowerCase();
+  renderRuangMkStats();
+};
+
+function renderRuangMkStats() {
+  const container = document.getElementById('container-ruang-mk-grid');
+  if (!container || !currentStatsData) return;
+
+  const rawList = currentStatsData.ruang_mk_stats || [];
+
+  // Update counter pills
+  const cntAllEl = document.getElementById('count-ruang-mk-all');
+  const cntLabEl = document.getElementById('count-ruang-mk-lab');
+  const cntKelasEl = document.getElementById('count-ruang-mk-kelas');
+
+  const countAll = rawList.length;
+  const countLab = rawList.filter(r => r.tipe === 'Labor' || r.tipe === 'Laboratorium').length;
+  const countKelas = rawList.filter(r => r.tipe === 'Ruang Kelas').length;
+
+  if (cntAllEl) cntAllEl.innerText = countAll;
+  if (cntLabEl) cntLabEl.innerText = countLab;
+  if (cntKelasEl) cntKelasEl.innerText = countKelas;
+
+  // Filter list
+  const filtered = rawList.filter(room => {
+    // 1. Kategori
+    if (currentRuangMkCategory === 'Labor' && !(room.tipe === 'Labor' || room.tipe === 'Laboratorium')) return false;
+    if (currentRuangMkCategory === 'Ruang Kelas' && room.tipe !== 'Ruang Kelas') return false;
+
+    // 2. Kampus
+    if (currentRuangMkCampus !== 'all') {
+      const roomCamp = (room.kampus || '').toLowerCase();
+      if (!roomCamp.includes(currentRuangMkCampus.toLowerCase())) return false;
+    }
+
+    // 3. Search query
+    if (currentRuangMkSearch) {
+      const matchRoom = (room.nama_ruangan || '').toLowerCase().includes(currentRuangMkSearch);
+      const matchMk = (room.mata_kuliah || []).some(m =>
+        (m.nama_mk || '').toLowerCase().includes(currentRuangMkSearch) ||
+        (m.kelas || []).some(k => k.toLowerCase().includes(currentRuangMkSearch)) ||
+        (m.dosen || []).some(d => d.toLowerCase().includes(currentRuangMkSearch))
+      );
+      if (!matchRoom && !matchMk) return false;
+    }
+
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="stats-ruang-empty-state">
+        <div class="stats-ruang-empty-title">Tidak ada ruangan yang cocok</div>
+        <p>Coba sesuaikan kata kunci pencarian atau ubah filter kategori/kampus.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(room => {
+    const isLab = room.tipe === 'Labor' || room.tipe === 'Laboratorium';
+    const cleanRoomName = safeEscapeStats(room.nama_ruangan || '-');
+    const isThehok = (room.kampus || '').toLowerCase().includes('thehok');
+    const kampusLabel = isThehok ? 'Kampus Thehok' : 'Kampus Kobar';
+
+    const mkList = room.mata_kuliah || [];
+    const totJam = room.total_jam || 0;
+    const totSesi = room.total_sesi || 0;
+    const totMk = room.total_mk || mkList.length;
+
+    const mkItemsHtml = mkList.map(mk => {
+      const mkName = safeEscapeStats(mk.nama_mk || 'Mata Kuliah');
+      const jamVal = mk.total_jam || 0;
+      const sesiVal = mk.total_sesi || 0;
+      const pct = mk.persentase || (totJam > 0 ? Math.round((jamVal / totJam) * 100) : 0);
+
+      const kelasChips = (mk.kelas || []).slice(0, 4).map(k => `
+        <span class="stats-ruang-chip-kelas">${safeEscapeStats(k)}</span>
+      `).join('');
+      const moreKelas = (mk.kelas || []).length > 4 ? `<span class="stats-ruang-chip-kelas">+${mk.kelas.length - 4}</span>` : '';
+
+      const dosenList = (mk.dosen || []).slice(0, 2).map(d => safeEscapeStats(d)).join(', ');
+      const moreDosen = (mk.dosen || []).length > 2 ? ' & lainnya' : '';
+
+      return `
+        <div class="stats-ruang-mk-item">
+          <div class="stats-ruang-mk-top">
+            <div class="stats-ruang-mk-name">${mkName}</div>
+            <div class="stats-ruang-mk-hours">
+              <span class="stats-ruang-mk-hours-val">${jamVal} Jam</span>
+              <span class="stats-ruang-mk-pct">${pct}%</span>
+            </div>
+          </div>
+          <div class="stats-ruang-mk-progress-track">
+            <div class="stats-ruang-mk-progress-fill" style="width: ${Math.min(pct, 100)}%;"></div>
+          </div>
+          <div class="stats-ruang-mk-subinfo">
+            <span style="font-weight: 600; color: var(--text-dark);">${sesiVal} Sesi</span>
+            <span>•</span>
+            ${kelasChips}${moreKelas}
+            ${dosenList ? `<span>•</span><span class="stats-ruang-chip-dosen" title="${safeEscapeStats((mk.dosen || []).join(', '))}">${dosenList}${moreDosen}</span>` : ''}
+            <div class="stats-ruang-method-breakdown">
+              ${mk.tm ? `<span class="method-mini-tag tag-tm" title="Tatap Muka">${mk.tm} TM</span>` : ''}
+              ${mk.ol ? `<span class="method-mini-tag tag-ol" title="Online">${mk.ol} OL</span>` : ''}
+              ${mk.cc ? `<span class="method-mini-tag tag-cc" title="Dibatalkan">${mk.cc} CC</span>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="stats-ruang-card">
+        <div class="stats-ruang-card-header">
+          <div>
+            <div class="stats-ruang-title-group">
+              <span class="stats-ruang-name">${cleanRoomName}</span>
+              <span class="stats-ruang-badge-type ${isLab ? 'type-lab' : 'type-kelas'}">${isLab ? 'Laboratorium' : 'Ruang Kelas'}</span>
+              <span class="stats-ruang-badge-campus">${kampusLabel}</span>
+            </div>
+            <div class="stats-ruang-meta-summary">
+              <strong>${totJam} Jam</strong> Operasional • <strong>${totSesi} Sesi</strong> Perkuliahan • <strong>${totMk}</strong> Mata Kuliah
+            </div>
+          </div>
+        </div>
+        <div class="stats-ruang-mk-list">
+          ${mkItemsHtml || '<div style="padding: 12px; text-align: center; color: var(--text-muted);">Tidak ada mata kuliah terjadwal.</div>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.renderRuangMkStats = renderRuangMkStats;
 
 // ==================== RENDERING MODE 3: KARTU METRIK VISUAL ====================
 function renderStatsMatrixCards() {

@@ -168,6 +168,14 @@
           </svg>
           <span>Statistik Dosen Pengajar</span>
         </button>
+        <button type="button" class="stats-tab-btn" id="tab-btn-stats-ruang-mk" onclick="switchStatsTab('ruang_mk')">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+            <line x1="9" y1="21" x2="9" y2="9"></line>
+          </svg>
+          <span>Detail MK per Ruangan</span>
+        </button>
       </div>
 
       <!-- View Mode Selector (Right) -->
@@ -503,6 +511,65 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB PANE 4: DETAIL MATA KULIAH PER RUANGAN -->
+  <div class="stats-tab-pane" id="stats-pane-ruang-mk" style="display: none;">
+    <div class="stats-card-box stats-ruang-mk-card-box">
+      <!-- Toolbar Header -->
+      <div class="stats-ruang-mk-header-wrap">
+        <div>
+          <h3 class="stats-card-title">Perincian Mata Kuliah per Ruangan</h3>
+          <span class="stats-card-meta">Daftar mata kuliah yang dijadwalkan pada masing-masing ruangan perkuliahan & laboratorium beserta durasi jam dan rombel</span>
+        </div>
+        
+        <!-- Filter Bar -->
+        <div class="stats-ruang-mk-toolbar">
+          <!-- Filter Kategori Ruangan -->
+          <div class="stats-subfilter-group">
+            <button type="button" class="subfilter-pill-btn active" id="btn-ruang-mk-filter-all" onclick="filterRuangMkCategory('all')">
+              <span>Semua Ruang</span>
+              <span class="pill-counter" id="count-ruang-mk-all">0</span>
+            </button>
+            <button type="button" class="subfilter-pill-btn" id="btn-ruang-mk-filter-lab" onclick="filterRuangMkCategory('Labor')">
+              <span>Laboratorium</span>
+              <span class="pill-counter" id="count-ruang-mk-lab">0</span>
+            </button>
+            <button type="button" class="subfilter-pill-btn" id="btn-ruang-mk-filter-kelas" onclick="filterRuangMkCategory('Ruang Kelas')">
+              <span>Ruang Kelas</span>
+              <span class="pill-counter" id="count-ruang-mk-kelas">0</span>
+            </button>
+          </div>
+
+          <!-- Filter Kampus -->
+          <div class="stats-subfilter-group">
+            <button type="button" class="subfilter-pill-btn active" id="btn-ruang-mk-campus-all" onclick="filterRuangMkCampus('all')">
+              <span>Semua Kampus</span>
+            </button>
+            <button type="button" class="subfilter-pill-btn" id="btn-ruang-mk-campus-thehok" onclick="filterRuangMkCampus('Thehok')">
+              <span>Thehok</span>
+            </button>
+            <button type="button" class="subfilter-pill-btn" id="btn-ruang-mk-campus-kobar" onclick="filterRuangMkCampus('Kobar')">
+              <span>Kobar</span>
+            </button>
+          </div>
+
+          <!-- Search Input -->
+          <div class="stats-ruang-mk-search-box">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="input-search-ruang-mk" placeholder="Cari ruangan atau mata kuliah..." oninput="onSearchRuangMkChange(this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Container Grid Kartu Ruangan MK -->
+      <div class="stats-ruang-mk-grid" id="container-ruang-mk-grid">
+        <!-- Injected by JS -->
       </div>
     </div>
   </div>

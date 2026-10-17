@@ -1028,6 +1028,18 @@ def get_statistics(semester: str = None):
             "kode_prodi": "", "nama_prodi": "", "kelas_set": set(),
             "total_sesi": 0, "total_jam": 0.0
         })
+        ruang_mk_dict = collections.defaultdict(lambda: {
+            "nama_ruangan": "", "kampus": "", "tipe": "Ruang Kelas",
+            "total_sesi": 0, "total_jam": 0.0,
+            "mk_dict": collections.defaultdict(lambda: {
+                "nama_mk": "",
+                "total_sesi": 0,
+                "total_jam": 0.0,
+                "kelas_set": set(),
+                "dosen_set": set(),
+                "tm": 0, "ol": 0, "cc": 0
+            })
+        })
         prodi_names = {
             "PS": "Sistem Informasi (S1)",
             "PT": "Teknik Informatika (S1)",
@@ -1185,6 +1197,28 @@ def get_statistics(semester: str = None):
                 p_entry["total_sesi"] += 1
                 p_entry["total_jam"] = round(p_entry["total_jam"] + dur_hour, 2)
 
+            # 7. Agregasi Mata Kuliah per Ruangan
+            if ruang:
+                rm_entry = ruang_mk_dict[room_key]
+                rm_entry["nama_ruangan"] = clean_ruang
+                rm_entry["kampus"] = kampus
+                rm_entry["tipe"] = tipe_ruang
+                rm_entry["total_sesi"] += 1
+                rm_entry["total_jam"] = round(rm_entry["total_jam"] + dur_hour, 2)
+
+                if mk_name:
+                    mk_rm = rm_entry["mk_dict"][mk_name]
+                    mk_rm["nama_mk"] = mk_name
+                    mk_rm["total_sesi"] += 1
+                    mk_rm["total_jam"] = round(mk_rm["total_jam"] + dur_hour, 2)
+                    if kelas and kelas != "Lainnya":
+                        mk_rm["kelas_set"].add(kelas)
+                    if dosen and dosen != "Belum Ditentukan":
+                        mk_rm["dosen_set"].add(dosen)
+                    if metode == "TM": mk_rm["tm"] += 1
+                    elif metode == "OL": mk_rm["ol"] += 1
+                    elif metode == "CC": mk_rm["cc"] += 1
+
         # Format Ruangan Rankings (Semua Ruangan: Lab + Ruang Kelas)
         all_ruangan_rankings = sorted(all_ruangan_data.values(), key=lambda x: x["total_jam"], reverse=True)
         max_ruang_jam = all_ruangan_rankings[0]["total_jam"] if all_ruangan_rankings else 1.0
@@ -1257,6 +1291,37 @@ def get_statistics(semester: str = None):
         total_dosen_sesi = sum(d["total_sesi"] for d in dosen_data.values())
         rata_sesi_dosen = round(total_dosen_sesi / dosen_aktif_count, 1) if dosen_aktif_count > 0 else 0
 
+        # Format Detail Mata Kuliah per Ruangan
+        ruang_mk_list = []
+        for rm_k, rm_v in ruang_mk_dict.items():
+            mk_list = []
+            tot_rm_jam = rm_v["total_jam"]
+            for m in sorted(rm_v["mk_dict"].values(), key=lambda x: x["total_jam"], reverse=True):
+                jam_mk = round(m["total_jam"], 2)
+                pct = round((jam_mk / tot_rm_jam) * 100, 1) if tot_rm_jam > 0 else 0
+                mk_list.append({
+                    "nama_mk": m["nama_mk"],
+                    "total_sesi": m["total_sesi"],
+                    "total_jam": jam_mk,
+                    "persentase": pct,
+                    "kelas": sorted(list(m["kelas_set"])),
+                    "dosen": sorted(list(m["dosen_set"])),
+                    "tm": m["tm"],
+                    "ol": m["ol"],
+                    "cc": m["cc"]
+                })
+            ruang_mk_list.append({
+                "nama_ruangan": rm_v["nama_ruangan"],
+                "kampus": rm_v["kampus"],
+                "tipe": rm_v["tipe"],
+                "total_sesi": rm_v["total_sesi"],
+                "total_jam": round(rm_v["total_jam"], 2),
+                "total_mk": len(mk_list),
+                "mata_kuliah": mk_list
+            })
+
+        ruang_mk_list.sort(key=lambda x: x["total_jam"], reverse=True)
+
         total_rows = len(rows)
         total_ruang_aktif_cnt = len(all_ruangan_rankings)
         total_lab_cnt = len(lab_rankings)
@@ -1313,7 +1378,8 @@ def get_statistics(semester: str = None):
                 "top_jam": top_dosen_jam,
                 "top_ol": top_dosen_ol,
                 "top_cc": top_dosen_cc
-            }
+            },
+            "ruang_mk_stats": ruang_mk_list
         }
     except Exception as e:
         print(f"[API Statistics Error] {e}")
