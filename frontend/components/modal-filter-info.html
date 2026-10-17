@@ -319,6 +319,17 @@
         </div>
       </div>
 
+      <!-- Tombol Pintas: Detail Lengkap Penggunaan Ruangan -->
+      <div style="display: flex; justify-content: flex-end; padding: 0 24px 8px 24px;">
+        <button type="button" class="btn-info-mase-detail-trigger" onclick="openInfoMaseDetail({ type: 'all' })"
+          title="Lihat Rekap Lengkap Penggunaan Ruangan (OL, CC, Jeda)"
+          style="font-size: 0.8em; padding: 6px 14px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          <span>Detail Penggunaan Ruangan (OL, CC, Jeda)</span>
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
       <div style="padding: 16px 24px; text-align: left; max-height: 65vh; overflow-y: auto; margin-bottom: 0;">
         <div id="fs-live-warnings"></div>
         <div id="fs-notifikasi-lab-list" class="panel-content">
@@ -329,6 +340,113 @@
         style="padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: rgba(0,0,0,0.02);">
         <button class="btn btn-ghost" onclick="closeFullscreenInfoModal()"
           style="border-radius: var(--radius-sm); font-size: 0.85em; padding: 8px 20px;">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL DETAIL INFO MASE & REKAP PENGGUNAAN RUANGAN (OL, CC, JEDA, DLL)    -->
+  <!-- ========================================================================= -->
+  <div id="modal-info-mase-detail" class="modal-overlay" role="dialog" aria-modal="true"
+    aria-label="Detail Info Mase & Penggunaan Ruangan" style="display: none; position: fixed; z-index: 10006; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.65); backdrop-filter: blur(5px);">
+    <div class="modal-box im-detail-modal-box"
+      style="margin: 1.5vh auto; width: 95%; max-width: 1100px; padding: 0; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); overflow: hidden; display: flex; flex-direction: column; max-height: 94vh;">
+
+      <!-- Header Modal -->
+      <div style="padding: 16px 22px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(245, 158, 11, 0.12); color: #d97706; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </div>
+          <div>
+            <h2 style="margin: 0; font-size: 1.2em; color: var(--text); font-family: var(--font-heading);">Detail Info Mase & Penggunaan Ruangan</h2>
+            <p id="im-detail-subtitle" style="margin: 2px 0 0 0; font-size: 0.82em; color: var(--text-muted);">Detail status perkuliahan daring (OL), kelas batal (CC), jeda waktu, dan ketersediaan ruangan.</p>
+          </div>
+        </div>
+        <span onclick="closeInfoMaseDetailModal()" style="cursor: pointer; opacity: 0.7; transition: opacity 0.2s; padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 8px;" title="Tutup">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </span>
+      </div>
+
+      <!-- Controls & Filter Toolbar -->
+      <div style="padding: 14px 22px; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px;">
+        <!-- Baris 1: Subtab Jenis Info -->
+        <div style="display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;" id="im-detail-type-tabs">
+          <button type="button" class="im-type-pill active" data-type="all" onclick="setInfoMaseDetailType('all')">
+            <span>Semua Info</span>
+            <span class="db-mini-badge badge-slate" id="cnt-im-all">0</span>
+          </button>
+          <button type="button" class="im-type-pill" data-type="ol" onclick="setInfoMaseDetailType('ol')">
+            <span>Kuliah Daring (OL)</span>
+            <span class="db-mini-badge badge-blue" id="cnt-im-ol">0</span>
+          </button>
+          <button type="button" class="im-type-pill" data-type="cc" onclick="setInfoMaseDetailType('cc')">
+            <span>Kelas Batal (CC)</span>
+            <span class="db-mini-badge badge-red" id="cnt-im-cc">0</span>
+          </button>
+          <button type="button" class="im-type-pill" data-type="jeda" onclick="setInfoMaseDetailType('jeda')">
+            <span>Jeda Kosong</span>
+            <span class="db-mini-badge badge-amber" id="cnt-im-jeda">0</span>
+          </button>
+          <button type="button" class="im-type-pill" data-type="tambahan" onclick="setInfoMaseDetailType('tambahan')">
+            <span>Kelas Tambahan</span>
+            <span class="db-mini-badge badge-green" id="cnt-im-tambahan">0</span>
+          </button>
+          <button type="button" class="im-type-pill" data-type="perubahan" onclick="setInfoMaseDetailType('perubahan')">
+            <span>Pergeseran Jadwal</span>
+            <span class="db-mini-badge badge-purple" id="cnt-im-perubahan">0</span>
+          </button>
+        </div>
+
+        <!-- Baris 2: Filter Kategori Ruangan (All, Labor, Kelas) + Filter Kampus + Search -->
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <!-- Category Toggle: All, Lab, Kelas -->
+            <div class="im-category-toggle-group" style="display: flex; background: var(--bg-elevated); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+              <button type="button" class="im-cat-btn active" data-cat="all" onclick="setInfoMaseDetailCategory('all')">Semua Ruangan</button>
+              <button type="button" class="im-cat-btn" data-cat="lab" onclick="setInfoMaseDetailCategory('lab')">Laboratorium</button>
+              <button type="button" class="im-cat-btn" data-cat="ruang" onclick="setInfoMaseDetailCategory('ruang')">Ruang Kelas</button>
+            </div>
+
+            <!-- Campus Toggle: Semua, Thehok, Kobar -->
+            <div class="im-campus-toggle-group" style="display: flex; background: var(--bg-elevated); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+              <button type="button" class="im-campus-btn active" data-campus="semua" onclick="setInfoMaseDetailCampus('semua')">Semua Kampus</button>
+              <button type="button" class="im-campus-btn" data-campus="thehok" onclick="setInfoMaseDetailCampus('thehok')">Thehok</button>
+              <button type="button" class="im-campus-btn" data-campus="kobar" onclick="setInfoMaseDetailCampus('kobar')">Kobar</button>
+            </div>
+          </div>
+
+          <!-- Quick Search Box -->
+          <div style="flex: 1; min-width: 220px; max-width: 380px;">
+            <input type="text" id="im-detail-search-input" placeholder="Cari ruangan, mata kuliah, dosen..."
+              style="width: 100%; padding: 7px 12px; font-size: 0.85em; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); outline: none;">
+          </div>
+        </div>
+
+        <!-- Banner jika sedang difilter ke 1 ruangan tertentu -->
+        <div id="im-detail-room-filter-banner" style="display: none; padding: 6px 12px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: var(--radius-sm); font-size: 0.82em; color: var(--primary); display: flex; align-items: center; justify-content: space-between;">
+          <span id="im-detail-room-filter-text">Menampilkan detail untuk ruangan ...</span>
+          <button type="button" onclick="clearInfoMaseDetailRoomFilter()" style="background: none; border: none; color: var(--primary); font-weight: 700; cursor: pointer; text-decoration: underline; font-size: 0.9em;">Tampilkan Semua Ruangan</button>
+        </div>
+      </div>
+
+      <!-- Modal Body (List Kartu Detail) -->
+      <div style="padding: 18px 22px; overflow-y: auto; flex: 1; min-height: 0; background: var(--bg-card);">
+        <div id="im-detail-list-container" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="padding: 12px 22px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-elevated);">
+        <span id="im-detail-footer-summary" style="font-size: 0.82em; color: var(--text-muted);">Memuat data detail...</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeInfoMaseDetailModal()" style="border-radius: var(--radius-sm); font-size: 0.84em; padding: 6px 18px;">Tutup</button>
       </div>
     </div>
   </div>

@@ -195,19 +195,26 @@ function renderHighlightedInfoMaseCard(n) {
     let badgeClass = 'im-badge-ol';
     let cardType = 'im-type-ol';
     let badgeLabel = 'ONLINE (OL)';
+    let itemType = 'ol';
 
     if (/batal|cancel|cc/i.test(statusText)) {
       badgeClass = 'im-badge-batal';
       cardType = 'im-type-batal';
       badgeLabel = 'DIBATALKAN (CC)';
+      itemType = 'cc';
     } else if (/tatap\s*muka|tm/i.test(statusText)) {
       badgeClass = 'im-badge-tm';
       cardType = 'im-type-tm';
       badgeLabel = 'TATAP MUKA (TM)';
+      itemType = 'tambahan';
     }
 
+    const clickAttr1 = parsedRoom
+      ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, '${itemType}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, '${itemType}');}" role="button" tabindex="0"`
+      : `onclick="handleNotifCardClick('', '', '${escapeHtml(notifDate)}', '${itemType}')" role="button" tabindex="0"`;
+
     return `
-      <div class="im-card ${cardType}" ${clickAttr} title="${parsedRoom ? `Klik untuk melihat jadwal ruangan ${escapeHtml(parsedRoom)}` : ''}">
+      <div class="im-card ${cardType}" ${clickAttr1} title="${parsedRoom ? `Klik untuk melihat detail penggunaan ruangan ${escapeHtml(parsedRoom)}` : 'Klik untuk melihat detail'}">
         <div class="im-card-header">
           <span class="im-badge ${badgeClass}">${badgeLabel}</span>
           <span class="im-tag-room">
@@ -241,8 +248,12 @@ function renderHighlightedInfoMaseCard(n) {
     const pindahDesc = m2[4].trim();
     const note = m2[5].trim();
 
+    const clickAttr2 = parsedRoom
+      ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, 'perubahan')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, 'perubahan');}" role="button" tabindex="0"`
+      : `onclick="handleNotifCardClick('', '', '${escapeHtml(notifDate)}', 'perubahan')" role="button" tabindex="0"`;
+
     return `
-      <div class="im-card im-type-pindah" ${clickAttr}>
+      <div class="im-card im-type-pindah" ${clickAttr2} title="${parsedRoom ? `Klik untuk melihat detail penggunaan ruangan ${escapeHtml(parsedRoom)}` : 'Klik untuk melihat detail'}">
         <div class="im-card-header">
           <span class="im-badge im-badge-pindah">PINDAH RUANGAN</span>
           <span class="im-tag-time">
@@ -3285,23 +3296,490 @@ function parseRoomAndCampus(raw = '') {
   return { room: s, campus: campus };
 }
 
-window.handleNotifCardClick = function (roomName, kampusStr, targetDate) {
-  if (!roomName) return;
-
-  // 1. Tutup modal Info Mase jika terbuka (fullscreen maupun inline popup)
-  if (typeof window.closeFullscreenInfoModal === 'function') {
-    window.closeFullscreenInfoModal();
-  }
-  const labModal = document.getElementById('lab-modal');
-  if (labModal && (labModal.classList.contains('open') || labModal.style.display === 'flex' || labModal.style.display === 'block')) {
-    if (typeof closeModal === 'function') closeModal();
-  }
-
-  // 2. Buka modal detail ruangan untuk ruangan dan tanggal terkait
-  if (typeof window.showRoomDetail === 'function') {
-    window.showRoomDetail(roomName, kampusStr, targetDate);
-  }
+window.handleNotifCardClick = function (roomName, kampusStr, targetDate, notifType = 'all') {
+  openInfoMaseDetail({
+    type: notifType || 'all',
+    room: roomName || '',
+    campus: kampusStr || '',
+    date: targetDate || ''
+  });
 };
+
+// =========================================================================
+// FITUR DETAIL INFO MASE & REKAP PENGGUNAAN RUANGAN (OL, CC, JEDA, DLL)
+// =========================================================================
+let _imDetailActiveType = 'all';       // 'all', 'ol', 'cc', 'jeda', 'tambahan', 'perubahan'
+let _imDetailActiveCategory = 'all';   // 'all', 'lab', 'ruang'
+let _imDetailActiveCampus = 'semua';   // 'semua', 'thehok', 'kobar'
+let _imDetailActiveRoom = '';          // optional filter ruangan spesifik
+let _imDetailTargetDate = '';
+
+window.openInfoMaseDetail = function (options = {}) {
+  const { type = 'all', room = '', campus = '', date = '', isLab = null } = options;
+  _imDetailActiveType = type || 'all';
+  _imDetailActiveRoom = room ? room.trim() : '';
+
+  if (campus) {
+    const cLow = campus.toLowerCase();
+    if (cLow.includes('thehok')) _imDetailActiveCampus = 'thehok';
+    else if (cLow.includes('kobar')) _imDetailActiveCampus = 'kobar';
+    else _imDetailActiveCampus = 'semua';
+  } else {
+    _imDetailActiveCampus = 'semua';
+  }
+
+  if (isLab !== null) {
+    _imDetailActiveCategory = isLab ? 'lab' : 'ruang';
+  } else if (_imDetailActiveRoom) {
+    _imDetailActiveCategory = (typeof window.isLab === 'function' && window.isLab(_imDetailActiveRoom)) ? 'lab' : 'ruang';
+  } else {
+    _imDetailActiveCategory = 'all';
+  }
+
+  const filterTanggal = document.getElementById('filter-tanggal');
+  const today = new Date();
+  const currentDayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  _imDetailTargetDate = date || (filterTanggal && filterTanggal.value ? filterTanggal.value : currentDayStr);
+
+  const modal = document.getElementById('modal-info-mase-detail');
+  if (!modal) return;
+
+  // Tutup Info Mase modal fullscreen jika terbuka agar tidak bertumpuk
+  if (typeof window.closeFullscreenInfoModal === 'function') {
+    window.closeFullscreenInfoModal(true);
+  }
+
+  // Update controls UI state
+  updateInfoMaseDetailControlsUI();
+
+  // Reset input pencarian
+  const searchInput = document.getElementById('im-detail-search-input');
+  if (searchInput) searchInput.value = '';
+
+  // Render items
+  renderInfoMaseDetailList();
+
+  modal.style.display = 'block';
+  modal.classList.add('open');
+  document.body.classList.add('modal-open');
+  if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
+};
+
+window.closeInfoMaseDetailModal = function () {
+  const modal = document.getElementById('modal-info-mase-detail');
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.classList.remove('open');
+  document.body.classList.remove('modal-open');
+  if (typeof updateBodyScrollLock === 'function') updateBodyScrollLock();
+};
+
+window.setInfoMaseDetailType = function (type) {
+  _imDetailActiveType = type;
+  updateInfoMaseDetailControlsUI();
+  renderInfoMaseDetailList();
+};
+
+window.setInfoMaseDetailCategory = function (cat) {
+  _imDetailActiveCategory = cat;
+  updateInfoMaseDetailControlsUI();
+  renderInfoMaseDetailList();
+};
+
+window.setInfoMaseDetailCampus = function (camp) {
+  _imDetailActiveCampus = camp;
+  updateInfoMaseDetailControlsUI();
+  renderInfoMaseDetailList();
+};
+
+window.clearInfoMaseDetailRoomFilter = function () {
+  _imDetailActiveRoom = '';
+  updateInfoMaseDetailControlsUI();
+  renderInfoMaseDetailList();
+};
+
+function updateInfoMaseDetailControlsUI() {
+  // Update Type pills
+  document.querySelectorAll('#im-detail-type-tabs .im-type-pill').forEach(pill => {
+    const pType = pill.getAttribute('data-type');
+    pill.classList.toggle('active', pType === _imDetailActiveType);
+  });
+
+  // Update Category buttons
+  document.querySelectorAll('.im-category-toggle-group .im-cat-btn').forEach(btn => {
+    const cat = btn.getAttribute('data-cat');
+    btn.classList.toggle('active', cat === _imDetailActiveCategory);
+  });
+
+  // Update Campus buttons
+  document.querySelectorAll('.im-campus-toggle-group .im-campus-btn').forEach(btn => {
+    const camp = btn.getAttribute('data-campus');
+    btn.classList.toggle('active', camp === _imDetailActiveCampus);
+  });
+
+  // Room filter banner
+  const roomBanner = document.getElementById('im-detail-room-filter-banner');
+  const roomBannerText = document.getElementById('im-detail-room-filter-text');
+  if (roomBanner && roomBannerText) {
+    if (_imDetailActiveRoom) {
+      roomBanner.style.display = 'flex';
+      roomBannerText.innerHTML = `Memfilter khusus ruangan <strong>${escapeHtml(_imDetailActiveRoom)}</strong>`;
+    } else {
+      roomBanner.style.display = 'none';
+    }
+  }
+
+  // Subtitle
+  const subEl = document.getElementById('im-detail-subtitle');
+  if (subEl) {
+    const tglIndo = typeof formatTanggalIndo === 'function' ? formatTanggalIndo(_imDetailTargetDate) : _imDetailTargetDate;
+    subEl.textContent = `${tglIndo} • Status perkuliahan daring (OL), batal (CC), jeda waktu, dan penggunaan ruangan.`;
+  }
+}
+
+function renderInfoMaseDetailList() {
+  const container = document.getElementById('im-detail-list-container');
+  const footerSummary = document.getElementById('im-detail-footer-summary');
+  if (!container) return;
+
+  const targetDate = _imDetailTargetDate || (document.getElementById('filter-tanggal')?.value || '');
+  const searchInput = document.getElementById('im-detail-search-input');
+  const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+  // Kumpulkan seluruh data penggunaan ruangan untuk tanggal terkait
+  const rawJadwal = (Array.isArray(allJadwal) ? allJadwal : []).filter(j => j.tanggal === targetDate);
+  const items = [];
+
+  // 1. KULIAH DARING (OL)
+  rawJadwal.filter(j => (j.metode_pembelajaran || '').toUpperCase() === 'OL').forEach(j => {
+    const room = j.nama_ruangan || '-';
+    const camp = formatCampusName(j.kampus || getRoomCampus(room));
+    const roomIsLab = typeof isLab === 'function' ? isLab(room) : false;
+    items.push({
+      id: `ol_${j.id || Math.random()}`,
+      type: 'ol',
+      typeLabel: 'Kuliah Daring (OL)',
+      typeClass: 'badge-blue',
+      badgeClass: 'type-ol',
+      room: room,
+      isLab: roomIsLab,
+      campus: camp,
+      jam: j.jam || '-',
+      nama_mk: j.nama_mk || 'Mata Kuliah',
+      kode_mk: j.kode_mk || '',
+      kelas: j.kelas || '',
+      dosen: j.nama_dosen || '-',
+      sks: typeof getSks === 'function' ? getSks(j) : 3,
+      desc: `Perkuliahan berlangsung secara Daring (Online). Ruangan fisik ${room} bebas/kosong dan dapat dimanfaatkan untuk kegiatan lain atau praktikum mandiri.`,
+      insightClass: 'insight-ol',
+      sortMin: parseTimeToMinutes((j.jam || '').split(/[-–—]/)[0]) || 0
+    });
+  });
+
+  // 2. KELAS BATAL (CC)
+  rawJadwal.filter(j => (j.metode_pembelajaran || '').toUpperCase() === 'CC' ||
+    (j.status_jadwal && (j.status_jadwal.toLowerCase().includes('batal') || j.status_jadwal.toLowerCase().includes('cancel')))).forEach(j => {
+    const room = j.nama_ruangan || '-';
+    const camp = formatCampusName(j.kampus || getRoomCampus(room));
+    const roomIsLab = typeof isLab === 'function' ? isLab(room) : false;
+    items.push({
+      id: `cc_${j.id || Math.random()}`,
+      type: 'cc',
+      typeLabel: 'Kelas Batal (CC)',
+      typeClass: 'badge-red',
+      badgeClass: 'type-cc',
+      room: room,
+      isLab: roomIsLab,
+      campus: camp,
+      jam: j.jam || '-',
+      nama_mk: j.nama_mk || 'Mata Kuliah',
+      kode_mk: j.kode_mk || '',
+      kelas: j.kelas || '',
+      dosen: j.nama_dosen || '-',
+      sks: typeof getSks === 'function' ? getSks(j) : 3,
+      desc: `Sesi perkuliahan dibatalkan (Cancel). Ruangan ${room} tidak terpakai pada slot jam ini dan bebas jadwal.`,
+      insightClass: 'insight-cc',
+      sortMin: parseTimeToMinutes((j.jam || '').split(/[-–—]/)[0]) || 0
+    });
+  });
+
+  // 3. JEDA KOSONG RUANGAN
+  const gaps = typeof calculateClientSideGaps === 'function' ? calculateClientSideGaps(targetDate) : [];
+  const serverJeda = (latestNotifikasiLabData || []).filter(n => n.tipe_notif === 'JEDA' && (!n.tanggal || n.tanggal === targetDate));
+
+  const seenGaps = new Set();
+  [...gaps, ...serverJeda].forEach(g => {
+    const room = g.ruangan || getRoomFromNotification(g.pesan) || '-';
+    const jam = g.jam || (g.pesan ? (g.pesan.match(/([0-2]?[0-9]:[0-5][0-9]\s*-\s*[0-2]?[0-9]:[0-5][0-9])/) || [''])[0] : '-');
+    const key = `${room.toLowerCase()}___${jam}`;
+    if (seenGaps.has(key)) return;
+    seenGaps.add(key);
+
+    const camp = formatCampusName(getRoomCampus(room));
+    const roomIsLab = typeof isLab === 'function' ? isLab(room) : false;
+    const durStr = g.durasi || 'Jeda Waktu';
+
+    let noteDesc = `Ruangan ${room} kosong dan siap digunakan pada rentang waktu ini.`;
+    if (g.pesan && g.pesan.includes('Kuliah OL')) {
+      noteDesc = `Ruangan ${room} kosong karena terdapat kelas daring (OL). Siap digunakan.`;
+    } else if (g.pesan && g.pesan.includes('Buka Lab')) {
+      noteDesc = `Laboratorium bebas jadwal pada pagi hari (Buka lab sesuai jam sesi pertama).`;
+    }
+
+    items.push({
+      id: `jeda_${Math.random()}`,
+      type: 'jeda',
+      typeLabel: durStr.includes('jam') ? `Jeda Kosong (${durStr})` : 'Jeda Kosong Ruangan',
+      typeClass: 'badge-amber',
+      badgeClass: 'type-jeda',
+      room: room,
+      isLab: roomIsLab,
+      campus: camp,
+      jam: jam,
+      nama_mk: `Jeda Waktu Kosong Ruangan`,
+      kode_mk: '',
+      kelas: durStr,
+      dosen: '-',
+      sks: 0,
+      desc: noteDesc,
+      insightClass: 'insight-jeda',
+      sortMin: parseTimeToMinutes((jam || '').split(/[-–—]/)[0]) || 0
+    });
+  });
+
+  // 4. KELAS TAMBAHAN
+  rawJadwal.filter(j => j.status_jadwal && (j.status_jadwal.toLowerCase().includes('tambahan') || j.status_jadwal.toLowerCase().includes('pengganti'))).forEach(j => {
+    const room = j.nama_ruangan || '-';
+    const camp = formatCampusName(j.kampus || getRoomCampus(room));
+    const roomIsLab = typeof isLab === 'function' ? isLab(room) : false;
+    items.push({
+      id: `tambahan_${j.id || Math.random()}`,
+      type: 'tambahan',
+      typeLabel: 'Kelas Tambahan',
+      typeClass: 'badge-green',
+      badgeClass: 'type-tambahan',
+      room: room,
+      isLab: roomIsLab,
+      campus: camp,
+      jam: j.jam || '-',
+      nama_mk: j.nama_mk || 'Mata Kuliah',
+      kode_mk: j.kode_mk || '',
+      kelas: j.kelas || '',
+      dosen: j.nama_dosen || '-',
+      sks: typeof getSks === 'function' ? getSks(j) : 3,
+      desc: `Penggunaan ruangan untuk sesi perkuliahan tambahan atau kelas pengganti (${j.status_jadwal}).`,
+      insightClass: 'insight-tambahan',
+      sortMin: parseTimeToMinutes((j.jam || '').split(/[-–—]/)[0]) || 0
+    });
+  });
+
+  // Tambahan dari notifikasi perubahan OL ke tatap muka
+  const extraClasses = window._currentExtraAddedClasses || [];
+  extraClasses.forEach(j => {
+    const room = j.nama_ruangan || '-';
+    const camp = formatCampusName(j.kampus || getRoomCampus(room));
+    const roomIsLab = typeof isLab === 'function' ? isLab(room) : false;
+    items.push({
+      id: `extra_${j.id || Math.random()}`,
+      type: 'tambahan',
+      typeLabel: 'Kelas Tambahan (Perubahan OL)',
+      typeClass: 'badge-green',
+      badgeClass: 'type-tambahan',
+      room: room,
+      isLab: roomIsLab,
+      campus: camp,
+      jam: j.jam || '-',
+      nama_mk: j.nama_mk || 'Mata Kuliah',
+      kode_mk: j.kode_mk || '',
+      kelas: j.kelas || '',
+      dosen: j.nama_dosen || '-',
+      sks: typeof getSks === 'function' ? getSks(j) : 3,
+      desc: `Perubahan jadwal tatap muka tambahan (sebelumnya online). Bukan bentrok, diselenggarakan di ${room}.`,
+      insightClass: 'insight-tambahan',
+      sortMin: parseTimeToMinutes((j.jam || '').split(/[-–—]/)[0]) || 0
+    });
+  });
+
+  // 5. PERGESERAN JADWAL
+  (latestNotifikasiLabData || []).filter(n => n.tipe_notif === 'PERUBAHAN' && (!n.tanggal || n.tanggal === targetDate)).forEach(n => {
+    const rawRoomInfo = n.ruangan || getRoomFromNotification(n.pesan);
+    const { room: parsedRoom, campus: parsedCampus } = parseRoomAndCampus(rawRoomInfo);
+    const room = parsedRoom || '-';
+    const camp = formatCampusName(parsedCampus || getRoomCampus(room));
+    const roomIsLab = typeof isLab === 'function' ? isLab(room) : false;
+    const timeStr = extractTimeFromNotification(n.pesan) || '-';
+
+    items.push({
+      id: `perubahan_${n.id || Math.random()}`,
+      type: 'perubahan',
+      typeLabel: 'Pergeseran Jadwal',
+      typeClass: 'badge-purple',
+      badgeClass: 'type-perubahan',
+      room: room,
+      isLab: roomIsLab,
+      campus: camp,
+      jam: timeStr,
+      nama_mk: `Perubahan Jadwal Ruangan`,
+      kode_mk: '',
+      kelas: '',
+      dosen: '-',
+      sks: 0,
+      desc: n.pesan || `Terdapat penyesuaian jam atau pemindahan ruangan untuk sesi ini.`,
+      insightClass: 'insight-perubahan',
+      sortMin: parseTimeToMinutes(timeStr) || 0
+    });
+  });
+
+  // Update counts pada subtab badge
+  const cntAll = items.length;
+  const cntOL = items.filter(i => i.type === 'ol').length;
+  const cntCC = items.filter(i => i.type === 'cc').length;
+  const cntJeda = items.filter(i => i.type === 'jeda').length;
+  const cntTambahan = items.filter(i => i.type === 'tambahan').length;
+  const cntPerubahan = items.filter(i => i.type === 'perubahan').length;
+
+  const elCntAll = document.getElementById('cnt-im-all');
+  const elCntOL = document.getElementById('cnt-im-ol');
+  const elCntCC = document.getElementById('cnt-im-cc');
+  const elCntJeda = document.getElementById('cnt-im-jeda');
+  const elCntTambahan = document.getElementById('cnt-im-tambahan');
+  const elCntPerubahan = document.getElementById('cnt-im-perubahan');
+
+  if (elCntAll) elCntAll.textContent = cntAll;
+  if (elCntOL) elCntOL.textContent = cntOL;
+  if (elCntCC) elCntCC.textContent = cntCC;
+  if (elCntJeda) elCntJeda.textContent = cntJeda;
+  if (elCntTambahan) elCntTambahan.textContent = cntTambahan;
+  if (elCntPerubahan) elCntPerubahan.textContent = cntPerubahan;
+
+  // Terapkan filter tipe
+  let filtered = items;
+  if (_imDetailActiveType !== 'all') {
+    filtered = filtered.filter(i => i.type === _imDetailActiveType);
+  }
+
+  // Terapkan filter kategori ruangan (All, Lab, Ruang)
+  if (_imDetailActiveCategory === 'lab') {
+    filtered = filtered.filter(i => i.isLab);
+  } else if (_imDetailActiveCategory === 'ruang') {
+    filtered = filtered.filter(i => !i.isLab);
+  }
+
+  // Terapkan filter kampus (Semua, Thehok, Kobar)
+  if (_imDetailActiveCampus === 'thehok') {
+    filtered = filtered.filter(i => (i.campus || '').toLowerCase().includes('thehok'));
+  } else if (_imDetailActiveCampus === 'kobar') {
+    filtered = filtered.filter(i => (i.campus || '').toLowerCase().includes('kobar'));
+  }
+
+  // Terapkan filter ruangan jika sedang spesifik
+  if (_imDetailActiveRoom) {
+    const cleanR = _imDetailActiveRoom.trim().toLowerCase();
+    filtered = filtered.filter(i => (i.room || '').trim().toLowerCase().includes(cleanR) || cleanR.includes((i.room || '').trim().toLowerCase()));
+  }
+
+  // Terapkan filter search input
+  if (query) {
+    filtered = filtered.filter(i =>
+      (i.room || '').toLowerCase().includes(query) ||
+      (i.nama_mk || '').toLowerCase().includes(query) ||
+      (i.dosen || '').toLowerCase().includes(query) ||
+      (i.kelas || '').toLowerCase().includes(query) ||
+      (i.desc || '').toLowerCase().includes(query)
+    );
+  }
+
+  // Urutkan berdasarkan waktu
+  filtered.sort((a, b) => a.sortMin - b.sortMin);
+
+  if (footerSummary) {
+    footerSummary.textContent = `Menampilkan ${filtered.length} dari ${cntAll} catatan penggunaan ruangan`;
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 48px 16px; color: var(--text-muted);">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 10px; opacity: 0.5;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <div style="font-weight: 700; font-size: 1.05em; color: var(--text); margin-bottom: 4px;">Tidak Ada Data yang Sesuai Filter</div>
+        <div style="font-size: 0.85em;">Silakan pilih tab lain atau bersihkan kata kunci pencarian.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => {
+    const categoryBadgeText = item.isLab ? 'Laboratorium' : 'Ruang Kelas';
+    const categoryBadgeClass = item.isLab ? 'badge-purple' : 'badge-slate';
+
+    return `
+      <div class="im-detail-card ${item.badgeClass}">
+        <!-- Header Kartu -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span class="db-mini-badge ${item.typeClass}" style="font-weight: 700; font-size: 0.8em; padding: 3px 8px;">${escapeHtml(item.typeLabel)}</span>
+            <span class="db-mini-badge ${categoryBadgeClass}" style="font-size: 0.76em; padding: 3px 8px;">${categoryBadgeText}</span>
+            <span style="font-size: 0.78em; color: var(--text-muted); font-weight: 500;">• Kampus ${escapeHtml(item.campus)}</span>
+          </div>
+          <div style="font-weight: 700; font-size: 0.88em; color: var(--text); background: var(--bg-card); padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+            ${escapeHtml(item.jam)}
+          </div>
+        </div>
+
+        <!-- Nama Ruangan & Detail MK -->
+        <div>
+          <div style="font-size: 1.1em; font-weight: 700; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+            <span>${formatRoomNameHtml(item.room)}</span>
+          </div>
+
+          ${item.nama_mk && item.nama_mk !== 'Jeda Waktu Kosong Ruangan' && item.nama_mk !== 'Perubahan Jadwal Ruangan' ? `
+            <div style="font-size: 0.95em; font-weight: 600; color: var(--text); margin-bottom: 2px;">
+              ${escapeHtml(item.nama_mk)} ${item.kelas ? `<span style="color: var(--primary); font-size: 0.9em;">(${escapeHtml(item.kelas)})</span>` : ''}
+            </div>
+            <div style="font-size: 0.82em; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px;">
+              ${item.dosen !== '-' ? `<span>Dosen: <strong>${escapeHtml(item.dosen)}</strong></span>` : ''}
+              ${item.kode_mk ? `<span>Kode: <code>${escapeHtml(item.kode_mk)}</code></span>` : ''}
+              ${item.sks ? `<span>${item.sks} SKS</span>` : ''}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Box Insight Penggunaan Ruangan -->
+        <div class="im-room-usage-insight ${item.insightClass}">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <div style="flex: 1;">
+            ${escapeHtml(item.desc)}
+          </div>
+        </div>
+
+        <!-- Aksi Cepat -->
+        <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 2px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showRoomDetail('${escapeHtml(item.room)}', '${escapeHtml(item.campus)}', '${escapeHtml(targetDate)}')" style="font-size: 0.8em; padding: 5px 12px; display: inline-flex; align-items: center; gap: 5px;" title="Buka timeline dan seluruh sesi ruangan ini">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Timeline Ruangan</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="filterMainTableToRoom('${escapeHtml(item.room)}'); closeInfoMaseDetailModal();" style="font-size: 0.8em; padding: 5px 12px; display: inline-flex; align-items: center; gap: 5px;" title="Lihat jadwal ruangan ini pada tabel utama">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <span>Lihat di Tabel Jadwal</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Bind search input on Detail Info Mase Modal
+document.getElementById('im-detail-search-input')?.addEventListener('input', () => {
+  renderInfoMaseDetailList();
+});
+
 
 function isLabNotification(itemOrPesan = '') {
   let pesan = '';
@@ -3715,20 +4193,33 @@ function renderInfoMaseNotifications(showPopup = false) {
     // Dapatkan info ruangan dan kampus untuk aksi klik detail kelas
     const rawRoomInfo = n.ruangan || getRoomFromNotification(n.pesan);
     const { room: parsedRoom, campus: parsedCampus } = parseRoomAndCampus(rawRoomInfo);
-    const notifDate = n.tanggal || (document.getElementById('filter-tanggal')?.value || '');
+    // Deteksi tipe notifikasi untuk diteruskan ke modal detail penggunaan ruangan
+    let targetType = 'all';
+    const msgLower = (n.pesan || '').toLowerCase();
+    if (msgLower.includes('kuliah ol') || msgLower.includes('ol,') || msgLower.includes('daring') || msgLower.includes('online')) {
+      targetType = 'ol';
+    } else if (msgLower.includes('kuliah cc') || msgLower.includes('cc,') || msgLower.includes('batal') || msgLower.includes('cancel')) {
+      targetType = 'cc';
+    } else if (n.tipe_notif === 'TAMBAHAN' || msgLower.includes('tambahan') || msgLower.includes('pengganti')) {
+      targetType = 'tambahan';
+    } else if (n.tipe_notif === 'PERUBAHAN' || msgLower.includes('pindah') || msgLower.includes('geser')) {
+      targetType = 'perubahan';
+    } else if (n.tipe_notif === 'JEDA' || msgLower.includes('jeda') || msgLower.includes('kosong')) {
+      targetType = 'jeda';
+    }
 
     const clickAttr = parsedRoom
-      ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date);}" role="button" tabindex="0"`
-      : '';
+      ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" data-type="${targetType}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, this.dataset.type)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, this.dataset.type);}" role="button" tabindex="0"`
+      : `data-type="${targetType}" onclick="handleNotifCardClick('', '', '${escapeHtml(notifDate)}', this.dataset.type)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick('', '', '${escapeHtml(notifDate)}', this.dataset.type);}" role="button" tabindex="0"`;
 
-    const actionBadge = parsedRoom ? `
-      <span class="notif-item-action" title="Lihat jadwal ruangan ${escapeHtml(parsedRoom)}">
+    const actionBadge = `
+      <span class="notif-item-action" title="${parsedRoom ? `Lihat detail penggunaan ruangan ${escapeHtml(parsedRoom)}` : 'Lihat detail penggunaan ruangan'}">
         <span>Detail</span>
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </span>
-    ` : '';
+    `;
 
     const highlightedBody = formatHighlightedInfoMaseBody(msgText);
 
@@ -3738,7 +4229,7 @@ function renderInfoMaseNotifications(showPopup = false) {
     }
 
     html += `
-      <div class="notif-item ${cls}" ${clickAttr} title="${parsedRoom ? `Klik untuk melihat detail ruangan ${escapeHtml(parsedRoom)}` : ''}">
+      <div class="notif-item ${cls}" ${clickAttr} title="${parsedRoom ? `Klik untuk melihat detail penggunaan ruangan ${escapeHtml(parsedRoom)}` : 'Klik untuk melihat detail'}">
         <div class="notif-header">
           <div style="display:flex; align-items:center;">
             <span>${n.tipe_notif}</span>
