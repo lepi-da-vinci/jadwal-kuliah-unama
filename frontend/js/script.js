@@ -60,7 +60,7 @@ function formatRoomName(rawName, isMobile = null) {
     .replace(/\bRuang\s+(\d)/gi, 'R. $1');
 
   // 2. Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
-  if (!name.toLowerCase().includes('b3.4')) {
+  if (!name.toLowerCase().includes('b3.4') && !name.toLowerCase().includes('pasca') && !name.toLowerCase().includes('s2')) {
     name = name.replace(/\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b/gi, 'Labor $1');
   }
 
@@ -2298,7 +2298,7 @@ function isLab(namaRuangan) {
   if (!namaRuangan) return false;
   const name = namaRuangan.toLowerCase();
   // Ruang S2 / Gedung Pasca B3.4 adalah ruang kelas biasa, bukan labor
-  if (name.includes('b3.4')) return false;
+  if (name.includes('b3.4') || (name.includes('pasca') && !name.includes('b2.3')) || (name.includes('s2') && !name.includes('b2.3'))) return false;
   // Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
   if (/\b3\.[14]\b/.test(name) && !name.includes('3.10')) return true;
   if (name.includes('b2.3')) return true;
@@ -3799,7 +3799,7 @@ function isLabNotification(itemOrPesan = '') {
 
   const p = pesan.toLowerCase();
   // Ruang S2 / Gedung Pasca B3.4 adalah ruang kelas biasa, bukan labor
-  if (p.includes('b3.4')) return false;
+  if (p.includes('b3.4') || (p.includes('pasca') && !p.includes('b2.3')) || (p.includes('s2') && !p.includes('b2.3'))) return false;
   // Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
   if (/\b3\.[14]\b/.test(p) && !p.includes('3.10')) return true;
 

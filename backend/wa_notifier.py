@@ -161,9 +161,12 @@ def init_sent_notifications_on_startup():
     except Exception as e:
         print(f"[WA Notifier] Startup init error: {e}")
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 # Anti-spam deduplication
 message_cache = {}
@@ -341,9 +344,12 @@ def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_l
         print(f"Error set_status_operasional_lab: {e}")
         return False
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def is_room_already_open(cursor, tanggal: str, id_ruangan: int, start_min: int = None) -> bool:
     """
@@ -404,9 +410,12 @@ def get_sender_aslab(sender=None):
     except Exception:
         return None
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 NAMA_HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 NAMA_BULAN = [
@@ -524,9 +533,14 @@ def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None
     if ("1.5" in q_lower or q_lower == "1.5") and not target_kampus:
         target_kampus = "Kobar"
 
+    # Khusus Ruang 3.4 dan 3.1 (Lab SK S1): HANYA ada di Kampus Thehok
+    if any(k in q_lower for k in ["3.4", "3.1"]) and "3.10" not in q_lower and "kobar" not in q_lower:
+        target_kampus = "Thehok"
+
     # 2. Deteksi preferensi tipe: Lab vs Ruang Kelas Teori
     is_lab = bool(re.search(r'\b(lab|labor|laboratorium)\b', q_lower))
     is_kelas = bool(re.search(r'\b(ruang|ruangan|kelas|r\.?)\b', q_lower))
+    is_explicit_pasca = bool(re.search(r'\b(pasca|s2)\b', q_lower))
 
     # 3. Bersihkan kata-kata kampus dan prefix
     clean = re.sub(r'\b(thehok|tehok|kobar)\b', '', q_lower, flags=re.I).strip()
@@ -546,8 +560,11 @@ def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan ORDER BY kampus, nama_ruangan")
         all_rooms_raw = cursor.fetchall()
-        # Filter ketat: Eksklusikan seluruh ruangan Gedung Pasca / S2 dari chatbot
-        all_rooms = [r for r in all_rooms_raw if not is_pasca_or_s2_room(r['nama_ruangan'])]
+        # Filter ketat: Eksklusikan seluruh ruangan Gedung Pasca / S2 dari chatbot KECUALI jika pengguna eksplisit menyebut pasca/s2
+        if is_explicit_pasca:
+            all_rooms = all_rooms_raw
+        else:
+            all_rooms = [r for r in all_rooms_raw if not is_pasca_or_s2_room(r['nama_ruangan'])]
         cursor.close()
     finally:
         if close_conn and conn.is_connected():
@@ -565,8 +582,9 @@ def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None
         exact_score = 0
         
         if num_match and num_str:
-            # Gunakan regex boundary digit agar '3.1' TIDAK mencocokkan '3.10'!
-            pattern = rf'(?<!\d){re.escape(num_str)}(?!\d)'
+            # Gunakan regex boundary alfanumerik agar '3.1' TIDAK mencocokkan '3.10',
+            # dan '3.4' TIDAK mencocokkan 'B3.4' di Gedung Pasca/S2!
+            pattern = rf'(?<![a-zA-Z0-9]){re.escape(num_str)}(?![a-zA-Z0-9])'
             if re.search(pattern, r_name, flags=re.I):
                 matched = True
                 exact_score = 30
@@ -579,6 +597,13 @@ def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None
             continue
 
         score = exact_score
+        # ATURAN PRIORITAS MUTLAK RUANG 3.4 (LAB SK S1 THEHOK)
+        # Ruang 3.4 di S1 Thehok adalah Laboratorium Sistem Komputer (Labor 3.4).
+        # Pengguna sering menyebut 'ruang 3.4', jadi jangan diberi penalti kelas!
+        if num_str in ['3.4', '3.1'] and 'thehok' in r['kampus'].lower():
+            if '3.4' in r_name or '3.1' in r_name:
+                score += 50 # Prioritas mutlak untuk Lab SK S1 Thehok
+
         if is_lab and r_is_lab:
             score += 25
         elif is_kelas and not r_is_lab:
@@ -586,7 +611,8 @@ def resolve_target_rooms(nama_ruangan_or_keyword: str = None, kampus: str = None
         elif is_lab and not r_is_lab:
             score -= 15 # penalti jika minta lab tapi ini kelas biasa
         elif is_kelas and r_is_lab:
-            score -= 15 # penalti jika minta kelas tapi ini lab
+            if num_str not in ['3.4', '3.1']:
+                score -= 15 # penalti jika minta kelas tapi ini lab (kecuali 3.4 & 3.1 yang merupakan Lab SK)
         elif r_is_lab:
             score += 5 # aslab bot default prioritas lab
 
@@ -694,9 +720,12 @@ def cek_jadwal_lab_tertentu(nama_lab: str = None, tanggal_YYYY_MM_DD: str = None
     except Exception as e:
         return f"Error database: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
     """Melihat jadwal kelas berikutnya yang akan masuk di lab/ruangan hari ini, lengkap dengan status kelas (TM/OL/CC) dan sisa waktu hitung mundur.
@@ -788,9 +817,12 @@ def kelas_berikutnya(nama_ruangan: str = None, kampus: str = None):
     except Exception as e:
         return f"Error database: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
     """Mengecek status real-time suatu lab/ruangan saat ini: apakah sedang ada kuliah, dosen siapa, kapan selesai, atau sedang kosong.
@@ -904,9 +936,12 @@ def status_lab_sekarang(nama_ruangan: str = None, kampus: str = None):
     except Exception as e:
         return f"Error status lab: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: bool = False):
     """Mengecek jadwal seluruh lab (atau seluruh ruang kelas jika hanya_kelas=True) di kampus tertentu pada tanggal tertentu."""
@@ -951,9 +986,12 @@ def cek_semua_lab_kampus(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kela
     except Exception as e:
         return f"Error: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: bool = False):
     """Mengecek daftar lab (atau seluruh ruang kelas jika hanya_kelas=True) yang kosong di kampus tertentu pada tanggal tertentu."""
@@ -1017,9 +1055,12 @@ def cek_lab_kosong(kampus: str, tanggal_YYYY_MM_DD: str = None, hanya_kelas: boo
     except Exception as e:
         return f"Error: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def cari_posisi_dosen(nama_dosen: str, tanggal_YYYY_MM_DD: str = None):
     """Mencari ruangan tempat dosen mengajar pada tanggal tertentu (default hari ini)."""
@@ -1082,9 +1123,12 @@ def cari_posisi_dosen(nama_dosen: str, tanggal_YYYY_MM_DD: str = None):
     except Exception as e:
         return f"Error: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
     """Mengambil pengumuman dan informasi penting hari ini yang terstruktur rapi untuk aslab dan asmot."""
@@ -1256,9 +1300,12 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
     except Exception as e:
         return f"Error mengambil Info Mase: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
     """Mengecek semua kelas tatap muka yang sedang berlangsung saat ini untuk asmot."""
@@ -1327,9 +1374,12 @@ def asmot_cek_kelas_aktif(kampus_tugas="Kobar"):
     except Exception as e:
         return f"Error cek kelas aktif: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
     """Mengecek kelas tatap muka yang akan dimulai dalam 45 menit ke depan untuk persiapan menyalakan AC."""
@@ -1415,9 +1465,12 @@ def asmot_cek_kelas_mau_mulai(kampus_tugas="Kobar"):
     except Exception as e:
         return f"Error cek kelas mau mulai: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
     """Mengecek kelas yang baru saja selesai atau sebentar lagi selesai tanpa kelas lanjutan (atau jeda panjang) untuk persiapan mematikan AC."""
@@ -1527,9 +1580,12 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
     except Exception as e:
         return f"Error cek kelas selesai: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def get_statistik_lab_saya(nama_lab: str = None, kampus: str = None):
     """Mengambil data statistik penggunaan laboratorium (total jam, jumlah sesi tatap muka/online/batal, hari & jam tersibuk). Jika nama_lab tidak diisi, otomatis menghitung statistik lab yang dipegang aslab pengirim.
@@ -1624,9 +1680,12 @@ def get_statistik_lab_saya(nama_lab: str = None, kampus: str = None):
     except Exception as e:
         return f"Error statistik lab: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def get_statistik_akademik(kategori: str):
     """Melihat data statistik akademik secara luas: 'dosen' (dosen teraktif mengajar, paling sering OL/batal) atau 'kelas' (total kelas aktif, hari dan jam paling padat). Gunakan tool ini HANYA JIKA aslab secara khusus meminta data dosen atau kelas."""
@@ -1742,9 +1801,12 @@ def get_statistik_akademik(kategori: str):
     except Exception as e:
         return f"Error statistik akademik: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def get_info_kurikulum(prodi: str = None, tahun: str = None, semester: str = None, kata_kunci: str = None):
     """Mencari data kurikulum resmi (TI, SI, SK, KWU, MN, BD untuk Kurikulum 2024 & 2025): cek daftar mata kuliah per semester, bobot SKS, mata kuliah pilihan, atau analisis perbandingan kurikulum."""
@@ -1817,9 +1879,12 @@ def get_info_kurikulum(prodi: str = None, tahun: str = None, semester: str = Non
     except Exception as e:
         return f"Error mengambil kurikulum: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def get_perubahan_kurikulum(prodi: str = None):
     """Melihat analisis perbedaan / perubahan kurikulum 2024 (lama) ke 2025 (baru) untuk prodi TI, SI, atau SK."""
@@ -1853,9 +1918,12 @@ def get_perubahan_kurikulum(prodi: str = None):
     except Exception as e:
         return f"Error perubahan kurikulum: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def init_server_link_tables(cursor):
     """Membuat tabel pemantau link server jika belum ada di database."""
@@ -2152,9 +2220,12 @@ def update_profil_aslab(nama_panggilan_baru: str = None, ruangan_baru: str = Non
     except Exception as e:
         return f"Error: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def list_aslab_lain():
     """Melihat daftar asisten lab (aslab) lain yang terdaftar di sistem untuk tujuan pengiriman/titip pesan."""
@@ -2186,9 +2257,12 @@ def list_aslab_lain():
     except Exception as e:
         return f"Error mengambil daftar aslab: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def kirim_pesan_ke_aslab(nama_atau_ruangan_target: str, isi_pesan: str):
     """Mengirim pesan WhatsApp ke aslab lain yang dituju. Gunakan tool ini setelah aslab tujuan dan isi pesan sudah jelas.
@@ -2263,9 +2337,12 @@ def kirim_pesan_ke_aslab(nama_atau_ruangan_target: str, isi_pesan: str):
     except Exception as e:
         return f"Error saat mengirim pesan ke aslab: {e}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 JADWAL_JAGA_MALAM_ASLAB = {
     "Senin": ["Haykal Wais Alqorni", "Rafli Maulana", "M.Raffi Pra Diestyawan", "Farrel Algazel", "Andi Noor", "Ahmad Idris", "Zuan Vivaldi"],
@@ -2355,6 +2432,10 @@ ATURAN FORMAT & EFISIENSI KETAT (HEMAT TOKEN):
      Nomor ruangan adalah angka desimal eksak: nomor '3.1' (tiga titik satu) BERBEDA MUTLAK dengan '3.10' (tiga titik sepuluh).
      Jika pengguna menanyakan "lab 3.1" atau "3.1", targetnya adalah Laboratorium 3.1 (Labor 3.1), BUKAN ruang kelas teori (R. 3.10).
      Jangan pernah mencocokkan '3.1' ke '3.10' atau sebaliknya. Panggil tool dengan nama persis sesuai yang diminta pengguna.
+    - ATURAN KHUSUS RUANG 3.4 (LAB SK S1 THEHOK) VS GEDUNG S2 (B3.4):
+      Ruang 3.4 di S1 Kampus Thehok adalah Laboratorium Sistem Komputer (Labor 3.4 / Lab SK). Meskipun di BAAK terkadang dicatat sebagai kelas biasa (R. 3.4), hakikatnya adalah LAB (Labor 3.4).
+      Ruangan di Gedung S2 (Gedung Pasca, R. B3.4 / S2) TIDAK dipegang oleh aslab.
+      Oleh karena itu, jika pengguna menanyakan "3.4", "lab 3.4", atau "ruang 3.4", TARGET PRIORITAS UTAMA MUTLAK adalah 'Labor 3.4' (Kampus Thehok). JANGAN PERNAH mengarahkan ke Gedung S2 B3.4 kecuali pengguna secara eksplisit menyebut "S2" atau "Pasca".
 8. KELAS BERIKUTNYA & STATUS LAB REAL-TIME:
    - Jika ditanya "kelas berikutnya", "habis ini kelas apa", "setelah ini ada kelas apa", panggil tool `kelas_berikutnya(nama_ruangan='{nama_ruangan}')`.
    - Jika ditanya status lab ("lagi dipakai dak?", "status lab sekarang", "kondisi lab"), panggil tool `status_lab_sekarang(nama_ruangan='{nama_ruangan}')`.
@@ -2765,9 +2846,12 @@ def handle_konfirmasi_buka_tutup_lab(sender, text_clean, aslab, aksi="buka", for
         print(f"Error handle_konfirmasi_buka_tutup_lab: {err}")
         return f"Terjadi kendala saat memperbarui status lab: {err}"
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def fallback_python_handler(sender, text, aslab):
     global aslab_session_states
@@ -3348,9 +3432,12 @@ def handle_incoming_message(sender, text, msg_id=None):
         log_chatbot("ERROR", f"Database error saat memeriksa asisten_lab untuk {sender}: {e}", "DATABASE")
         return None
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
     # Jika TIDAK terdaftar
     if not aslab:
@@ -3947,43 +4034,53 @@ def extract_affected_rooms(pesan_text, rooms_list):
 def format_info_mase_simple(pesan_raw: str, nama_ruangan: str, kampus: str, is_lab: bool = False) -> str:
     """
     Mengubah pesan notifikasi mentah menjadi format to-the-point dan simpel sesuai permintaan:
-    Contoh: R. 1.1 (Kobar) jam 08:00 *TM* jadi *OL* ruang kosong jam segitu
+    Contoh: R. 1.1 (Kobar) jam 08:00 *TM* jadi *OL* ruang kosong jam 08:00
     """
     clean_pesan = pesan_raw.strip()
     room_tag = f"{nama_ruangan} ({kampus})" if kampus and kampus.lower() not in nama_ruangan.lower() else nama_ruangan
-    jam_match = re.search(r'\bjam\s+(\d{1,2}[:.]\d{2})\b', clean_pesan, re.IGNORECASE)
-    jam_str = f"jam {jam_match.group(1).replace('.', ':')}" if jam_match else ""
+    
+    # Ekstraksi jam: cari setelah 'jam', 'pada', 'pukul', atau pola jam HH:MM / HH.MM
+    jam_match = re.search(r'\b(?:jam|pada|pukul)\s+([0-2]?[0-9][:.]\d{2})\b', clean_pesan, re.IGNORECASE)
+    if not jam_match:
+        jam_match = re.search(r'\b([0-2]?[0-9][:.]\d{2})\b', clean_pesan)
+    
+    jam_val = jam_match.group(1).replace('.', ':') if jam_match else ""
+    if jam_val and len(jam_val) == 4 and jam_val[1] == ':':
+        jam_val = "0" + jam_val
+
+    jam_str = f"jam {jam_val}" if jam_val else ""
+    target_entitas = "lab" if is_lab else "ruangan"
+    target_entitas_short = "lab" if is_lab else "ruang"
+
+    # Jika jam diketahui, tampilkan jam secara eksplisit agar informatif.
+    # Jika jam tidak ada, HINDARI teks 'jam segitu' yang membingungkan.
+    kosong_note = f"{target_entitas_short} kosong {jam_str}".strip() if jam_str else f"{target_entitas_short} kosong"
+    pakai_note = f"{target_entitas} digunakan {jam_str}".strip() if jam_str else f"{target_entitas} digunakan"
 
     if 'ONLINE (OL)' in clean_pesan or 'dialihkan ke ONLINE' in clean_pesan or 'jadi OL' in clean_pesan:
-        kosong_note = "lab kosong jam segitu" if is_lab else "ruang kosong jam segitu"
-        return f"{room_tag} {jam_str} *TM* jadi *OL* {kosong_note}".strip()
+        return f"{room_tag} {jam_str} *TM* jadi *OL* {kosong_note}".replace("  ", " ").strip()
 
     if 'DIBATALKAN (CC)' in clean_pesan or 'batal' in clean_pesan.lower():
-        kosong_note = "lab kosong jam segitu" if is_lab else "ruang kosong jam segitu"
-        return f"{room_tag} {jam_str} *BATAL (CC)* {kosong_note}".strip()
+        return f"{room_tag} {jam_str} *BATAL (CC)* {kosong_note}".replace("  ", " ").strip()
 
     if 'TATAP MUKA (TM)' in clean_pesan or 'kembali TM' in clean_pesan:
-        pakai_note = "lab digunakan jam segitu" if is_lab else "ruangan digunakan jam segitu"
-        return f"{room_tag} {jam_str} *KEMBALI TM* {pakai_note}".strip()
+        return f"{room_tag} {jam_str} *KEMBALI TM* {pakai_note}".replace("  ", " ").strip()
 
     if 'dipindahkan KELUAR' in clean_pesan or 'PINDAH KELUAR' in clean_pesan:
         tujuan_m = re.search(r'ke\s+((?:R\.\s*|Labor\s*|Lab\s*)?\d+\.\d+(?:\s*\([^)]+\))?)', clean_pesan, re.IGNORECASE)
         tujuan = f" ke {tujuan_m.group(1).strip()}" if tujuan_m else ""
-        kosong_note = "lab kosong jam segitu" if is_lab else "ruang kosong jam segitu"
-        return f"{room_tag} {jam_str} *PINDAH KELUAR*{tujuan} {kosong_note}".strip()
+        return f"{room_tag} {jam_str} *PINDAH KELUAR*{tujuan} {kosong_note}".replace("  ", " ").strip()
 
     if 'dipindahkan MASUK' in clean_pesan or 'PINDAH MASUK' in clean_pesan:
         asal_m = re.search(r'(?:sebelumnya di|dari)\s+((?:R\.\s*|Labor\s*|Lab\s*)?\d+\.\d+(?:\s*\([^)]+\))?)', clean_pesan, re.IGNORECASE)
         asal = f" dari {asal_m.group(1).strip()}" if asal_m else ""
-        pakai_note = "lab digunakan jam segitu" if is_lab else "ruangan digunakan jam segitu"
-        return f"{room_tag} {jam_str} *PINDAH MASUK*{asal} {pakai_note}".strip()
+        return f"{room_tag} {jam_str} *PINDAH MASUK*{asal} {pakai_note}".replace("  ", " ").strip()
 
     if 'KELAS TAMBAHAN' in clean_pesan or 'kelas tambahan' in clean_pesan.lower():
-        pakai_note = "lab digunakan jam segitu" if is_lab else "ruangan digunakan jam segitu"
-        return f"{room_tag} {jam_str} *KELAS TAMBAHAN* {pakai_note}".strip()
+        return f"{room_tag} {jam_str} *KELAS TAMBAHAN* {pakai_note}".replace("  ", " ").strip()
 
     fallback = clean_pesan.replace("PERUBAHAN STATUS:", "").replace("PERUBAHAN STATUS :", "").strip()
-    return f"{room_tag} {jam_str}: {fallback}".strip()
+    return f"{room_tag} {jam_str}: {fallback}".replace("  ", " ").strip()
 
 def check_and_notify_info_mase():
     """
@@ -4110,9 +4207,12 @@ def check_and_notify_info_mase():
     except Exception as e:
         log_chatbot("ERROR", f"Error in check_and_notify_info_mase: {e}", "INFO-MASE")
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def check_lab_schedules():
     now = get_wib_now()
@@ -4475,9 +4575,12 @@ def check_lab_schedules():
     except Exception as e:
         print(f"Error checking lab schedules for WA: {e}")
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 def test_send(id_aslab=None, action_type="test", ngrok_link=None):
     try:
@@ -4541,9 +4644,12 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
         print(f"Error testing WA: {e}")
         return []
     finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
 
 async def wa_notifier_loop():
     print("WA Notifier Loop Started. (Automatic notifications & Server Link Monitor ENABLED - Timezone: Asia/Jakarta)")

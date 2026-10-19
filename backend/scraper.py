@@ -421,8 +421,8 @@ def init_db_schema():
             default_rooms = [
                 ('Thehok', 'Gedung Pasca, Lab. B2.3'), ('Thehok', 'Labor 1.3'), ('Thehok', 'Labor 1.4'),
                 ('Thehok', 'Labor 1.5'), ('Thehok', 'Labor 2.7'), ('Thehok', 'Labor 3.2'),
-                ('Thehok', 'Labor 4.1'), ('Thehok', 'Labor Cisco 4.3'), ('Thehok', 'R. 3.1'),
-                ('Thehok', 'R. 3.4'), ('Thehok', 'Gedung Pasca, R. B1.3'), ('Thehok', 'Gedung Pasca, R. B3.4'),
+                ('Thehok', 'Labor 4.1'), ('Thehok', 'Labor Cisco 4.3'), ('Thehok', 'Labor 3.1'),
+                ('Thehok', 'Labor 3.4'), ('Thehok', 'Gedung Pasca, R. B1.3'), ('Thehok', 'Gedung Pasca, R. B3.4'),
                 ('Thehok', 'R. 1.6'), ('Thehok', 'R. 1.7'), ('Thehok', 'R. 2.10'),
                 ('Thehok', 'R. 3.10'), ('Thehok', 'R. 3.5'), ('Thehok', 'R. 3.6'),
                 ('Thehok', 'R. 3.7'), ('Thehok', 'R. 3.8'), ('Thehok', 'R. 3.9'),
@@ -435,6 +435,13 @@ def init_db_schema():
             ]
             cursor.executemany("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", default_rooms)
             conn.commit()
+
+        # Pastikan Labor 3.4 dan Labor 3.1 (Thehok) selalu terdaftar sebagai Lab SK
+        for sk_room in [('Thehok', 'Labor 3.4'), ('Thehok', 'Labor 3.1')]:
+            cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s AND kampus = %s", (sk_room[1], sk_room[0]))
+            if not cursor.fetchone():
+                cursor.execute("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", sk_room)
+                conn.commit()
             
         # ─── TABEL CADANGAN PERMANEN (KEBAL RESET & PERSISTEN) ──────
         ensure_permanent_table_exists(cursor)
@@ -632,8 +639,9 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
 
         # Normalisasi kampus: hapus kata 'Kampus ' (cukup 'Thehok' atau 'Kobar')
         kampus = re.sub(r'\bKampus\s+', '', kampus, flags=re.I).strip()
-        # Normalisasi ruang: 3.1 dan 3.4 adalah Laboratorium SK
-        nama_ruangan = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', nama_ruangan, flags=re.I)
+        # Normalisasi ruang: 3.1 dan 3.4 S1 Thehok adalah Laboratorium SK (kecuali S2 / B3.4)
+        if 'b3.4' not in nama_ruangan.lower() and not any(p in (kampus + " " + nama_ruangan).lower() for p in ['pasca', 's2']):
+            nama_ruangan = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', nama_ruangan, flags=re.I)
             
         # 4. Parsing Kolom STATUS (TM, OL, CC)
         status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
@@ -811,7 +819,7 @@ def is_lab(nama_ruangan):
     if not nama_ruangan: return False
     name = nama_ruangan.lower()
     # Ruang S2 / Gedung Pasca B3.4 adalah ruang kelas biasa, bukan labor
-    if 'b3.4' in name:
+    if 'b3.4' in name or ('pasca' in name and 'b2.3' not in name) or ('s2' in name and 'b2.3' not in name):
         return False
     # Ruang 3.1 dan 3.4 Thehok adalah Laboratorium SK
     if re.search(r'\b3\.[14]\b', name) and '3.10' not in name:
@@ -824,8 +832,8 @@ def format_room_clean(room_name: str) -> str:
     if not room_name:
         return ""
     r = str(room_name).strip()
-    # 3.1 dan 3.4 adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
-    if 'b3.4' not in r.lower():
+    # 3.1 dan 3.4 S1 Thehok adalah Laboratorium SK (kecuali S2 / Gedung Pasca B3.4 yang merupakan ruang kelas)
+    if 'b3.4' not in r.lower() and 'pasca' not in r.lower() and 's2' not in r.lower():
         r = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', r, flags=re.IGNORECASE)
     # Bersihkan prefix "Ruang " atau "R. " sebelum "R.", "Labor", "Lab", atau "Ruang"
     r = re.sub(r'^(?:(?:Ruang|R\.)\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', r, flags=re.IGNORECASE)
@@ -1284,11 +1292,15 @@ def save_to_db(data, target_date=None, page="1", target_semester=None):
 
             # Insert atau ignore ruangan
             if item.get('ruangan'):
-                alt_ruangan = item['ruangan'].replace('Labor ', 'R. ') if 'Labor ' in item['ruangan'] else item['ruangan'].replace('R. ', 'Labor ')
-                cursor.execute("SELECT id_ruangan FROM ruangan WHERE (nama_ruangan = %s OR nama_ruangan = %s) AND kampus = %s", (item['ruangan'], alt_ruangan, item.get('kampus', '')))
+                r_item = item['ruangan']
+                # Pastikan ruang 3.1 dan 3.4 S1 Thehok selalu dicatat sebagai Laboratorium SK
+                if 'b3.4' not in r_item.lower() and not any(p in (item.get('kampus', '') + " " + r_item).lower() for p in ['pasca', 's2']):
+                    r_item = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', r_item, flags=re.I)
+                alt_ruangan = r_item.replace('Labor ', 'R. ') if 'Labor ' in r_item else r_item.replace('R. ', 'Labor ')
+                cursor.execute("SELECT id_ruangan FROM ruangan WHERE (nama_ruangan = %s OR nama_ruangan = %s) AND kampus = %s", (r_item, alt_ruangan, item.get('kampus', '')))
                 res = cursor.fetchone()
                 if not res:
-                    cursor.execute("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", (item.get('kampus', ''), item['ruangan']))
+                    cursor.execute("INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", (item.get('kampus', ''), r_item))
                     id_ruangan = cursor.lastrowid
                 else:
                     id_ruangan = res[0]
