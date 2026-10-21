@@ -7226,11 +7226,18 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
       return;
     }
 
-    const labs = data.labs_detail || [];
+    const labs = (data.labs_detail || []).map(l => ({
+      id_lab_opsi: l.id_lab_opsi,
+      nama_lab: l.nama_lab,
+      kampus: l.kampus || 'Thehok',
+      urutan: l.urutan || 0,
+      aslab_tugas: l.aslab_tugas || ''
+    }));
     let aslabs = (data.aslab || []).map(a => ({
       id: a.id || a.id_aslab,
       nama: a.nama || a.nama_aslab,
       kampus: a.kampus || a.kampus_tugas || 'Thehok',
+      lab_tugas: a.lab_tugas || '',
       role: a.role || 'aslab'
     }));
 
@@ -7239,11 +7246,44 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
         id: i + 1,
         nama: a.nama,
         kampus: a.kampus,
+        lab_tugas: a.lab ? (a.lab !== 'Remote' ? `${a.lab} ${a.kampus}` : `Remote (${a.kampus})`) : '',
         role: 'aslab'
       }));
     }
+
+    // Hubungkan relasi dua arah jika salah satu belum terisi
+    aslabs.forEach(a => {
+      if (!a.lab_tugas) {
+        const foundLab = labs.find(l => l.aslab_tugas && l.aslab_tugas.trim().toLowerCase() === a.nama.trim().toLowerCase());
+        if (foundLab) a.lab_tugas = foundLab.nama_lab;
+      }
+    });
+    labs.forEach(l => {
+      if (!l.aslab_tugas) {
+        const foundAslab = aslabs.find(a => a.lab_tugas && a.lab_tugas.trim().toLowerCase() === l.nama_lab.trim().toLowerCase());
+        if (foundAslab) l.aslab_tugas = foundAslab.nama;
+      }
+    });
+
     window._masterLabsCache = labs;
     window._masterAslabsCache = aslabs;
+
+    // Sinkronkan pilihan dropdown form tambah baru jika ada di DOM
+    const addLabAslabSelect = document.getElementById('cfg-select-lab-aslab');
+    if (addLabAslabSelect) {
+      const currentVal = addLabAslabSelect.value;
+      addLabAslabSelect.innerHTML = `<option value="">Pilih Aslab (Opsional)</option>` +
+        aslabs.map(a => `<option value="${sanitizeCfgText(a.nama)}">${sanitizeCfgText(a.nama)} (${sanitizeCfgText(a.kampus || 'Thehok')})</option>`).join('');
+      if (currentVal) addLabAslabSelect.value = currentVal;
+    }
+    const addAslabLabSelect = document.getElementById('cfg-select-aslab-lab');
+    if (addAslabLabSelect) {
+      const currentVal = addAslabLabSelect.value;
+      addAslabLabSelect.innerHTML = `<option value="">Pilih Lab Tugas (Opsional)</option>` +
+        `<option value="Remote">Remote (Daring)</option>` +
+        labs.map(l => `<option value="${sanitizeCfgText(l.nama_lab)}">${sanitizeCfgText(l.nama_lab)} (${sanitizeCfgText(l.kampus || 'Thehok')})</option>`).join('');
+      if (currentVal) addAslabLabSelect.value = currentVal;
+    }
 
     // 1. Render Labs List
     if (labCountBadge) labCountBadge.innerText = `Daftar Lab (${labs.length})`;
@@ -7255,26 +7295,37 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
           const isKobar = (lab.kampus || '').toLowerCase().includes('kobar');
           const badgeColor = isKobar ? '#3b82f6' : '#10b981';
           const bgBadge = isKobar ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+          const hasAslab = Boolean(lab.aslab_tugas && lab.aslab_tugas.trim());
+          const aslabBadgeColor = hasAslab ? 'var(--primary)' : 'var(--text-muted)';
+          const aslabBgBadge = hasAslab ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-elevated)';
+
           return `
             <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
-                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(99, 102, 241, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                <div style="width: 34px; height: 34px; border-radius: 9px; background: rgba(99, 102, 241, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
                     <line x1="8" y1="21" x2="16" y2="21"></line>
                     <line x1="12" y1="17" x2="12" y2="21"></line>
                   </svg>
                 </div>
                 <div style="min-width: 0;">
-                  <div style="font-weight: 700; font-size: 0.9em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeCfgText(lab.nama_lab)}</div>
-                  <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                  <div style="font-weight: 700; font-size: 0.92em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeCfgText(lab.nama_lab)}</div>
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px;">
                     <span style="font-size: 0.72em; font-weight: 700; color: ${badgeColor}; background: ${bgBadge}; padding: 2px 6px; border-radius: 4px;">${sanitizeCfgText(lab.kampus || 'Thehok')}</span>
+                    <span style="font-size: 0.72em; font-weight: 600; color: ${aslabBadgeColor}; background: ${aslabBgBadge}; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid ${hasAslab ? 'rgba(99, 102, 241, 0.25)' : 'var(--border)'};">
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                      <span>${hasAslab ? 'Aslab: ' + sanitizeCfgText(lab.aslab_tugas) : 'Aslab: Belum ditugaskan'}</span>
+                    </span>
                   </div>
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                 <button type="button" onclick="window.handleEditCfgLabByIndex(${idx})"
-                  title="Edit Nama Lab"
+                  title="Edit Nama Lab \u0026 Aslab Bertugas"
                   style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.78em; font-weight: 600;">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -7308,25 +7359,37 @@ window.loadAbsensiMasterConfig = async function (refreshFormDropdowns = true) {
           const isKobar = (aslab.kampus || '').toLowerCase().includes('kobar');
           const badgeColor = isKobar ? '#3b82f6' : '#10b981';
           const bgBadge = isKobar ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+          const hasLab = Boolean(aslab.lab_tugas && aslab.lab_tugas.trim());
+          const labBadgeColor = hasLab ? '#10b981' : 'var(--text-muted)';
+          const labBgBadge = hasLab ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-elevated)';
+
           return `
             <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
-                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); color: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                <div style="width: 34px; height: 34px; border-radius: 9px; background: rgba(16, 185, 129, 0.12); color: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                     <circle cx="12" cy="7" r="4"></circle>
                   </svg>
                 </div>
                 <div style="min-width: 0;">
-                  <div style="font-weight: 700; font-size: 0.9em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeCfgText(aslab.nama)}</div>
-                  <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                  <div style="font-weight: 700; font-size: 0.92em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeCfgText(aslab.nama)}</div>
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px;">
                     <span style="font-size: 0.72em; font-weight: 700; color: ${badgeColor}; background: ${bgBadge}; padding: 2px 6px; border-radius: 4px;">${sanitizeCfgText(aslab.kampus || 'Thehok')}</span>
+                    <span style="font-size: 0.72em; font-weight: 600; color: ${labBadgeColor}; background: ${labBgBadge}; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid ${hasLab ? 'rgba(16, 185, 129, 0.25)' : 'var(--border)'};">
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                      </svg>
+                      <span>${hasLab ? 'Tugas: ' + sanitizeCfgText(aslab.lab_tugas) : 'Tugas: Belum ada lab'}</span>
+                    </span>
                   </div>
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                 <button type="button" onclick="window.handleEditCfgAslabByIndex(${idx})"
-                  title="Edit Aslab"
+                  title="Edit Nama Aslab \u0026 Lab Tugas"
                   style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.78em; font-weight: 600;">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -7461,8 +7524,10 @@ window.updateAbsensiFormDropdowns = function (labs, aslabs) {
 window.handleAddNewCfgLab = async function () {
   const nameInput = document.getElementById('cfg-input-lab-name');
   const kampusSelect = document.getElementById('cfg-select-lab-kampus');
+  const aslabSelect = document.getElementById('cfg-select-lab-aslab');
   const namaLab = (nameInput ? nameInput.value : '').trim();
   const kampus = kampusSelect ? kampusSelect.value : 'Thehok';
+  const aslabTugas = aslabSelect ? aslabSelect.value.trim() : '';
 
   if (!namaLab) {
     alert('Silakan masukkan nama lab terlebih dahulu.');
@@ -7479,11 +7544,12 @@ window.handleAddNewCfgLab = async function () {
     const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab`, {
       method: 'POST',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nama_lab: namaLab, kampus: kampus })
+      body: JSON.stringify({ nama_lab: namaLab, kampus: kampus, aslab_tugas: aslabTugas || null })
     });
     const json = await res.json();
     if (res.ok && json.status === 'success') {
       if (nameInput) nameInput.value = '';
+      if (aslabSelect) aslabSelect.value = '';
       window.loadAbsensiMasterConfig(true);
     } else {
       alert('Gagal menambah lab: ' + (json.message || 'Terjadi kesalahan'));
@@ -7506,23 +7572,30 @@ window.openEditCfgLabDialog = function (idx) {
   const isKobar = (lab.kampus || '').toLowerCase().includes('kobar');
   const fieldStyle = 'width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.9em; box-sizing: border-box; outline: none; font-family: inherit;';
 
+  const currentAslab = (lab.aslab_tugas || '').trim().toLowerCase();
+  const aslabOptions = (window._masterAslabsCache || []).map(a => {
+    const isSelected = currentAslab && currentAslab === a.nama.trim().toLowerCase();
+    const labInfo = a.lab_tugas ? ` - Lab: ${sanitizeCfgText(a.lab_tugas)}` : '';
+    return `<option value="${sanitizeCfgText(a.nama)}" ${isSelected ? 'selected' : ''}>${sanitizeCfgText(a.nama)} (${sanitizeCfgText(a.kampus || 'Thehok')}${labInfo})</option>`;
+  }).join('');
+
   const overlay = document.createElement('div');
   overlay.id = 'cfg-edit-modal-overlay';
   overlay.style.cssText = 'position: fixed; inset: 0; z-index: 2147483650; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px;';
   overlay.addEventListener('click', e => { if (e.target === overlay) window.closeCfgEditDialog(); });
 
   overlay.innerHTML = `
-    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
       <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(99, 102, 241, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
         </div>
         <div>
           <div style="font-weight: 800; font-size: 1.05em; color: var(--text);">Edit Pilihan Lab</div>
-          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">Sesuaikan nama lab atau lokasi kampus</div>
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">Sesuaikan nama lab, kampus, atau asisten lab yang bertugas</div>
         </div>
       </div>
 
@@ -7537,6 +7610,18 @@ window.openEditCfgLabDialog = function (idx) {
           <option value="Thehok" ${!isKobar ? 'selected' : ''}>Kampus Thehok</option>
           <option value="Kobar" ${isKobar ? 'selected' : ''}>Kampus Kobar</option>
         </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.84em; font-weight: 700; color: var(--text); margin-bottom: 5px;">
+          Asisten Lab Bertugas
+          <span style="font-weight: 500; font-size: 0.82em; color: var(--text-muted);">(Penanggung Jawab Ruangan)</span>
+        </label>
+        <select id="cfg-edit-lab-aslab-select" style="${fieldStyle} cursor: pointer;">
+          <option value="">-- Belum Ditugaskan / Kosongkan --</option>
+          ${aslabOptions}
+        </select>
+        <div style="font-size: 0.76em; color: var(--text-muted); margin-top: 4px;">Pilih nama asisten lab yang bertanggung jawab di ruangan ini.</div>
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 6px;">
@@ -7564,9 +7649,11 @@ window.openEditCfgLabDialog = function (idx) {
 window.saveEditCfgLab = async function (idLab) {
   const nameInput = document.getElementById('cfg-edit-lab-name-input');
   const kampusSelect = document.getElementById('cfg-edit-lab-kampus-select');
+  const aslabSelect = document.getElementById('cfg-edit-lab-aslab-select');
   const saveBtn = document.getElementById('cfg-edit-lab-save-btn');
   const newName = (nameInput ? nameInput.value : '').trim();
   const newKampus = kampusSelect ? kampusSelect.value : 'Thehok';
+  const newAslab = aslabSelect ? aslabSelect.value.trim() : '';
 
   if (!newName) {
     alert('Nama lab tidak boleh kosong.');
@@ -7585,7 +7672,7 @@ window.saveEditCfgLab = async function (idLab) {
     const res = await fetch(`${API_BASE_URL}/api/absensi/master/lab/${idLab}`, {
       method: 'PUT',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nama_lab: newName, kampus: newKampus })
+      body: JSON.stringify({ nama_lab: newName, kampus: newKampus, aslab_tugas: newAslab || null })
     });
     const json = await res.json();
     if (res.ok && json.status === 'success') {
@@ -7633,8 +7720,10 @@ window.handleDeleteCfgLabByIndex = async function (idx) {
 window.handleAddNewCfgAslab = async function () {
   const nameInput = document.getElementById('cfg-input-aslab-name');
   const kampusSelect = document.getElementById('cfg-select-aslab-kampus');
+  const labSelect = document.getElementById('cfg-select-aslab-lab');
   const namaAslab = (nameInput ? nameInput.value : '').trim();
   const kampus = kampusSelect ? kampusSelect.value : 'Thehok';
+  const labTugas = labSelect ? labSelect.value.trim() : '';
 
   if (!namaAslab) {
     alert('Silakan masukkan nama asisten lab terlebih dahulu.');
@@ -7651,11 +7740,12 @@ window.handleAddNewCfgAslab = async function () {
     const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab`, {
       method: 'POST',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nama_aslab: namaAslab, kampus_tugas: kampus })
+      body: JSON.stringify({ nama_aslab: namaAslab, kampus_tugas: kampus, lab_tugas: labTugas || null })
     });
     const json = await res.json();
     if (res.ok && json.status === 'success') {
       if (nameInput) nameInput.value = '';
+      if (labSelect) labSelect.value = '';
       window.loadAbsensiMasterConfig(true);
     } else {
       alert('Gagal menambah aslab: ' + (json.message || 'Terjadi kesalahan'));
@@ -7673,23 +7763,32 @@ window.openEditCfgAslabDialog = function (idx) {
   const isKobar = (aslab.kampus || '').toLowerCase().includes('kobar');
   const fieldStyle = 'width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.9em; box-sizing: border-box; outline: none; font-family: inherit;';
 
+  const currentLab = (aslab.lab_tugas || '').trim().toLowerCase();
+  const isRemote = currentLab.startsWith('remote');
+
+  const labOptions = (window._masterLabsCache || []).map(l => {
+    const isSelected = currentLab && currentLab === l.nama_lab.trim().toLowerCase();
+    const aslabInfo = l.aslab_tugas ? ` - Aslab: ${sanitizeCfgText(l.aslab_tugas)}` : '';
+    return `<option value="${sanitizeCfgText(l.nama_lab)}" ${isSelected ? 'selected' : ''}>${sanitizeCfgText(l.nama_lab)} (${sanitizeCfgText(l.kampus || 'Thehok')}${aslabInfo})</option>`;
+  }).join('');
+
   const overlay = document.createElement('div');
   overlay.id = 'cfg-edit-modal-overlay';
   overlay.style.cssText = 'position: fixed; inset: 0; z-index: 2147483650; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px;';
   overlay.addEventListener('click', e => { if (e.target === overlay) window.closeCfgEditDialog(); });
 
   overlay.innerHTML = `
-    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
       <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(16, 185, 129, 0.12); color: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
             <circle cx="8.5" cy="7" r="4"></circle>
           </svg>
         </div>
         <div>
           <div style="font-weight: 800; font-size: 1.05em; color: var(--text);">Edit Asisten Lab</div>
-          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">Sesuaikan nama atau penugasan kampus aslab</div>
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 2px;">Sesuaikan nama, kampus tugas, atau penugasan lab aslab</div>
         </div>
       </div>
 
@@ -7704,6 +7803,19 @@ window.openEditCfgAslabDialog = function (idx) {
           <option value="Thehok" ${!isKobar ? 'selected' : ''}>Kampus Thehok</option>
           <option value="Kobar" ${isKobar ? 'selected' : ''}>Kampus Kobar</option>
         </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.84em; font-weight: 700; color: var(--text); margin-bottom: 5px;">
+          Penugasan Lab
+          <span style="font-weight: 500; font-size: 0.82em; color: var(--text-muted);">(Lab Berapa Bertugas)</span>
+        </label>
+        <select id="cfg-edit-aslab-lab-select" style="${fieldStyle} cursor: pointer;">
+          <option value="">-- Belum Ditugaskan / Kosongkan --</option>
+          <option value="Remote (${aslab.kampus || 'Thehok'})" ${isRemote ? 'selected' : ''}>Remote (Bekerja Daring / Non-Lab)</option>
+          ${labOptions}
+        </select>
+        <div style="font-size: 0.76em; color: var(--text-muted); margin-top: 4px;">Pilih ruangan atau laboratorium tempat asisten ini bertugas.</div>
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 6px;">
@@ -7731,9 +7843,11 @@ window.openEditCfgAslabDialog = function (idx) {
 window.saveEditCfgAslab = async function (idAslab) {
   const nameInput = document.getElementById('cfg-edit-aslab-name-input');
   const kampusSelect = document.getElementById('cfg-edit-aslab-kampus-select');
+  const labSelect = document.getElementById('cfg-edit-aslab-lab-select');
   const saveBtn = document.getElementById('cfg-edit-aslab-save-btn');
   const newName = (nameInput ? nameInput.value : '').trim();
   const newKampus = kampusSelect ? kampusSelect.value : 'Thehok';
+  const newLab = labSelect ? labSelect.value.trim() : '';
 
   if (!newName) {
     alert('Nama asisten lab tidak boleh kosong.');
@@ -7752,7 +7866,7 @@ window.saveEditCfgAslab = async function (idAslab) {
     const res = await fetch(`${API_BASE_URL}/api/absensi/master/aslab/${idAslab}`, {
       method: 'PUT',
       headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nama_aslab: newName, kampus_tugas: newKampus })
+      body: JSON.stringify({ nama_aslab: newName, kampus_tugas: newKampus, lab_tugas: newLab || null })
     });
     const json = await res.json();
     if (res.ok && json.status === 'success') {

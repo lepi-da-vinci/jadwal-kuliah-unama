@@ -3092,10 +3092,12 @@ class AbsensiInput(BaseModel):
 class MasterLabInput(BaseModel):
     nama_lab: str
     kampus: Optional[str] = "Thehok"
+    aslab_tugas: Optional[str] = None
 
 class MasterAslabInput(BaseModel):
     nama_aslab: str
     kampus_tugas: Optional[str] = "Thehok"
+    lab_tugas: Optional[str] = None
 
 OFFICIAL_ASLAB_MASTER = [
     # Kampus Kobar (5 Lab + 1 Remote)
@@ -3121,7 +3123,7 @@ OFFICIAL_ASLAB_MASTER = [
 
 @app.get("/api/absensi/master")
 def get_absensi_master():
-    """Mengambil master data aslab dan opsi lab absensi dinamis dari database"""
+    """Mengambil master data aslab dan opsi lab absensi dinamis dari database beserta info penugasan lab"""
     fallback_labs = [
         "1.5 Kobar", "1.6 Kobar", "1.7 Kobar", "1.8 Kobar", "1.9 Kobar",
         "1.3 Thehok", "1.4 Thehok", "1.5 Thehok", "2.7 Thehok", 
@@ -3148,51 +3150,106 @@ def get_absensi_master():
                     id_aslab INT AUTO_INCREMENT PRIMARY KEY,
                     nama_aslab VARCHAR(100) NOT NULL UNIQUE,
                     kampus_tugas VARCHAR(50) NOT NULL DEFAULT 'Thehok',
+                    lab_tugas VARCHAR(100) DEFAULT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
-            cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
+            try:
+                cursor.execute("ALTER TABLE absensi_master_aslab ADD COLUMN lab_tugas VARCHAR(100) DEFAULT NULL")
+            except Exception:
+                pass
+
+            cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
             aslab_list = cursor.fetchall()
             
             # Jika tabel kosong atau kurang dari master resmi, auto-seed
             if not aslab_list:
                 for o in OFFICIAL_ASLAB_MASTER:
+                    assigned_lab = f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
                     cursor.execute("""
-                        INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas)
-                        VALUES (%s, %s)
-                        ON DUPLICATE KEY UPDATE kampus_tugas = VALUES(kampus_tugas)
-                    """, (o["nama"], o["kampus"]))
+                        INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE kampus_tugas = VALUES(kampus_tugas), lab_tugas = VALUES(lab_tugas)
+                    """, (o["nama"], o["kampus"], assigned_lab))
                 conn.commit()
-                cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
+                cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
                 aslab_list = cursor.fetchall()
+            else:
+                # Cek jika ada lab_tugas yang masih null, coba lengkapi dari data resmi
+                has_null_lab = any(not row.get("lab_tugas") for row in aslab_list)
+                if has_null_lab:
+                    for o in OFFICIAL_ASLAB_MASTER:
+                        assigned_lab = f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
+                        cursor.execute("""
+                            UPDATE absensi_master_aslab 
+                            SET lab_tugas = %s 
+                            WHERE nama_aslab = %s AND (lab_tugas IS NULL OR lab_tugas = '')
+                        """, (assigned_lab, o["nama"]))
+                    conn.commit()
+                    cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
+                    aslab_list = cursor.fetchall()
         except Exception:
             pass
         
         labs_data = []
         try:
-            cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
-            labs_data = cursor.fetchall()
-        except Exception:
-            # Jika tabel belum ada, buat sekarang
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS absensi_master_lab (
+                    id_lab_opsi INT AUTO_INCREMENT PRIMARY KEY,
+                    nama_lab VARCHAR(50) NOT NULL UNIQUE,
+                    kampus VARCHAR(50) NOT NULL DEFAULT 'Thehok',
+                    urutan INT DEFAULT 0,
+                    aslab_tugas VARCHAR(100) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
             try:
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS absensi_master_lab (
-                        id_lab_opsi INT AUTO_INCREMENT PRIMARY KEY,
-                        nama_lab VARCHAR(50) NOT NULL UNIQUE,
-                        kampus VARCHAR(50) NOT NULL DEFAULT 'Thehok',
-                        urutan INT DEFAULT 0,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-                """)
-                cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
-                labs_data = cursor.fetchall()
+                cursor.execute("ALTER TABLE absensi_master_lab ADD COLUMN aslab_tugas VARCHAR(100) DEFAULT NULL")
             except Exception:
                 pass
 
+            cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan, aslab_tugas FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
+            labs_data = cursor.fetchall()
+
+            if not labs_data:
+                for idx, name in enumerate(fallback_labs):
+                    kmp = "Kobar" if "kobar" in name.lower() else "Thehok"
+                    # Cari aslab resmi untuk lab ini
+                    aslab_match = None
+                    for o in OFFICIAL_ASLAB_MASTER:
+                        if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower():
+                            aslab_match = o["nama"]
+                            break
+                    cursor.execute("""
+                        INSERT INTO absensi_master_lab (nama_lab, kampus, urutan, aslab_tugas)
+                        VALUES (%s, %s, %s, %s)
+                    """, (name, kmp, idx + 1, aslab_match))
+                conn.commit()
+                cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan, aslab_tugas FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
+                labs_data = cursor.fetchall()
+            else:
+                # Lengkapi aslab_tugas jika masih kosong dari aslab_list
+                for lab_row in labs_data:
+                    if not lab_row.get("aslab_tugas"):
+                        for aslab_item in aslab_list:
+                            if aslab_item.get("lab_tugas") and aslab_item.get("lab_tugas").strip().lower() == (lab_row.get("nama_lab") or "").strip().lower():
+                                cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE id_lab_opsi = %s", (aslab_item.get("nama_aslab"), lab_row["id_lab_opsi"]))
+                                lab_row["aslab_tugas"] = aslab_item.get("nama_aslab")
+                                break
+                conn.commit()
+        except Exception:
+            pass
+
         if not labs_data:
             labs_data = [
-                {"id_lab_opsi": idx + 1, "nama_lab": name, "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", "urutan": idx + 1}
+                {
+                    "id_lab_opsi": idx + 1, 
+                    "nama_lab": name, 
+                    "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", 
+                    "urutan": idx + 1,
+                    "aslab_tugas": next((o["nama"] for o in OFFICIAL_ASLAB_MASTER if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower()), None)
+                }
                 for idx, name in enumerate(fallback_labs)
             ]
         
@@ -3208,7 +3265,12 @@ def get_absensi_master():
         }
     except Exception as e:
         fallback_aslab = [
-            {"id_aslab": idx + 1, "nama_aslab": o["nama"], "kampus_tugas": o["kampus"]}
+            {
+                "id_aslab": idx + 1, 
+                "nama_aslab": o["nama"], 
+                "kampus_tugas": o["kampus"],
+                "lab_tugas": f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
+            }
             for idx, o in enumerate(OFFICIAL_ASLAB_MASTER)
         ]
         return {
@@ -3216,7 +3278,13 @@ def get_absensi_master():
             "aslab": fallback_aslab,
             "labs": fallback_labs,
             "labs_detail": [
-                {"id_lab_opsi": idx + 1, "nama_lab": name, "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", "urutan": idx + 1}
+                {
+                    "id_lab_opsi": idx + 1, 
+                    "nama_lab": name, 
+                    "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", 
+                    "urutan": idx + 1,
+                    "aslab_tugas": next((o["nama"] for o in OFFICIAL_ASLAB_MASTER if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower()), None)
+                }
                 for idx, name in enumerate(fallback_labs)
             ],
             "jam_options": jam_options,
@@ -3233,10 +3301,14 @@ def add_master_lab(data: MasterLabInput, admin: str = Depends(verify_admin_token
     if not nama:
         return {"status": "error", "message": "Nama lab tidak boleh kosong."}
     kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
+    aslab_tugas = (data.aslab_tugas or "").strip() or None
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO absensi_master_lab (nama_lab, kampus) VALUES (%s, %s)", (nama, kampus))
+        cursor.execute("INSERT INTO absensi_master_lab (nama_lab, kampus, aslab_tugas) VALUES (%s, %s, %s)", (nama, kampus, aslab_tugas))
+        if aslab_tugas:
+            # Hubungkan juga di master aslab
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE nama_aslab = %s", (nama, aslab_tugas))
         conn.commit()
         return {"status": "success", "message": f"Lab '{nama}' berhasil ditambahkan."}
     except Exception as e:
@@ -3252,12 +3324,30 @@ def edit_master_lab(id_lab_opsi: int, data: MasterLabInput, admin: str = Depends
     if not nama:
         return {"status": "error", "message": "Nama lab tidak boleh kosong."}
     kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
+    aslab_tugas = (data.aslab_tugas or "").strip() or None
     try:
         conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE absensi_master_lab SET nama_lab = %s, kampus = %s WHERE id_lab_opsi = %s", (nama, kampus, id_lab_opsi))
+        cursor = conn.cursor(dictionary=True)
+        # Ambil data lab sebelumnya
+        cursor.execute("SELECT nama_lab, aslab_tugas FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
+        old_lab = cursor.fetchone()
+        old_lab_name = old_lab["nama_lab"] if old_lab else nama
+        old_aslab = old_lab.get("aslab_tugas") if old_lab else None
+
+        cursor.execute("UPDATE absensi_master_lab SET nama_lab = %s, kampus = %s, aslab_tugas = %s WHERE id_lab_opsi = %s", (nama, kampus, aslab_tugas, id_lab_opsi))
+        
+        # Sinkronisasi ke master aslab:
+        # 1. Jika nama lab berubah, update aslab yang sebelumnya bertugas di lab ini
+        if old_lab_name != nama:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE lab_tugas = %s", (nama, old_lab_name))
+        # 2. Jika aslab tugas berubah:
+        if old_aslab and old_aslab != aslab_tugas:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = NULL WHERE nama_aslab = %s AND lab_tugas = %s", (old_aslab, nama))
+        if aslab_tugas:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE nama_aslab = %s", (nama, aslab_tugas))
+            
         conn.commit()
-        return {"status": "success", "message": "Nama lab berhasil diperbarui."}
+        return {"status": "success", "message": "Data lab dan penugasan aslab berhasil diperbarui."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
@@ -3269,7 +3359,12 @@ def edit_master_lab(id_lab_opsi: int, data: MasterLabInput, admin: str = Depends
 def delete_master_lab(id_lab_opsi: int, admin: str = Depends(verify_admin_token)):
     try:
         conn = scraper.get_db()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_lab FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
+        row = cursor.fetchone()
+        lab_name = row["nama_lab"] if row else ""
+        if lab_name:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = NULL WHERE lab_tugas = %s", (lab_name,))
         cursor.execute("DELETE FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
         conn.commit()
         return {"status": "success", "message": "Opsi lab berhasil dihapus."}
@@ -3286,10 +3381,14 @@ def add_master_aslab(data: MasterAslabInput, admin: str = Depends(verify_admin_t
     if not nama:
         return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
     kampus = data.kampus_tugas or "Thehok"
+    lab_tugas = (data.lab_tugas or "").strip() or None
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas) VALUES (%s, %s)", (nama, kampus))
+        cursor.execute("INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas) VALUES (%s, %s, %s)", (nama, kampus, lab_tugas))
+        if lab_tugas and not lab_tugas.lower().startswith("remote"):
+            # Update aslab tugas di lab terkait
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE nama_lab = %s", (nama, lab_tugas))
         conn.commit()
         return {"status": "success", "message": f"Asisten lab '{nama}' berhasil ditambahkan ke master absensi."}
     except Exception as e:
@@ -3305,12 +3404,29 @@ def edit_master_aslab(id_aslab: int, data: MasterAslabInput, admin: str = Depend
     if not nama:
         return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
     kampus = data.kampus_tugas or "Thehok"
+    lab_tugas = (data.lab_tugas or "").strip() or None
     try:
         conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE absensi_master_aslab SET nama_aslab = %s, kampus_tugas = %s WHERE id_aslab = %s", (nama, kampus, id_aslab))
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_aslab, lab_tugas FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
+        old_aslab = cursor.fetchone()
+        old_nama = old_aslab["nama_aslab"] if old_aslab else nama
+        old_lab = old_aslab.get("lab_tugas") if old_aslab else None
+
+        cursor.execute("UPDATE absensi_master_aslab SET nama_aslab = %s, kampus_tugas = %s, lab_tugas = %s WHERE id_aslab = %s", (nama, kampus, lab_tugas, id_aslab))
+
+        # Sinkronisasi ke master lab:
+        # 1. Jika nama aslab berubah, update lab yang sebelumnya menunjuk nama lama
+        if old_nama != nama:
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE aslab_tugas = %s", (nama, old_nama))
+        # 2. Jika lab_tugas berubah:
+        if old_lab and old_lab != lab_tugas:
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL WHERE nama_lab = %s AND aslab_tugas = %s", (old_lab, nama))
+        if lab_tugas and not lab_tugas.lower().startswith("remote"):
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE nama_lab = %s", (nama, lab_tugas))
+
         conn.commit()
-        return {"status": "success", "message": "Data asisten lab berhasil diperbarui."}
+        return {"status": "success", "message": "Data asisten lab dan penugasan lab berhasil diperbarui."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
@@ -3328,6 +3444,8 @@ def delete_master_aslab(id_aslab: int, admin: str = Depends(verify_admin_token))
         if not row:
             return {"status": "error", "message": "Data tidak ditemukan."}
         nama = row.get("nama_aslab", "")
+        if nama:
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL WHERE aslab_tugas = %s", (nama,))
         cursor.execute("DELETE FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
         conn.commit()
         return {"status": "success", "message": f"Asisten lab '{nama}' berhasil dihapus dari master absensi."}
@@ -3340,20 +3458,28 @@ def delete_master_aslab(id_aslab: int, admin: str = Depends(verify_admin_token))
 
 @app.post("/api/absensi/master/aslab/reset")
 def reset_official_aslab(admin: str = Depends(verify_admin_token)):
-    """Memulihkan 17 asisten lab resmi (Tahun Ajaran Ganjil 2026/2027) ke tabel master absensi (absensi_master_aslab)"""
+    """Memulihkan 17 asisten lab resmi (Tahun Ajaran Ganjil 2026/2027) ke tabel master absensi (absensi_master_aslab) beserta penugasan lab"""
     try:
         conn = scraper.get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM absensi_master_aslab")
+        cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL")
         for item in OFFICIAL_ASLAB_MASTER:
+            assigned_lab = f"{item['lab']} {item['kampus']}" if item["lab"] != "Remote" else f"Remote ({item['kampus']})"
             cursor.execute("""
-                INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas)
-                VALUES (%s, %s)
-            """, (item["nama"], item["kampus"]))
+                INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas)
+                VALUES (%s, %s, %s)
+            """, (item["nama"], item["kampus"], assigned_lab))
+            if item["lab"] != "Remote":
+                cursor.execute("""
+                    UPDATE absensi_master_lab 
+                    SET aslab_tugas = %s 
+                    WHERE LOWER(TRIM(nama_lab)) = LOWER(TRIM(%s))
+                """, (item["nama"], assigned_lab))
         conn.commit()
         return {
             "status": "success", 
-            "message": "Berhasil sinkronisasi dan reset 17 Asisten Lab Resmi ke tabel master absensi."
+            "message": "Berhasil sinkronisasi dan reset 17 Asisten Lab Resmi beserta penugasan lab ke tabel master absensi."
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
