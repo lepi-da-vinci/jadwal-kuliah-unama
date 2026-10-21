@@ -4898,6 +4898,257 @@ tr.table-row-conflict td:first-child {
   transform: scale(1.1);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   BADGE JENIS KELAS (TERJADWAL / KELAS TAMBAHAN / PERUBAHAN)
+   ══════════════════════════════════════════════════════════════ */
+.badge-jenis-kelas {
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+  font-size: 0.78em;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.badge-jenis-kelas.is-terjadwal {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+}
+
+[data-theme="dark"] .badge-jenis-kelas.is-terjadwal {
+  background: rgba(99, 102, 241, 0.22);
+  color: #a5b4fc;
+  border-color: rgba(165, 180, 252, 0.35);
+}
+
+.badge-jenis-kelas.is-tambahan {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.32);
+}
+
+[data-theme="dark"] .badge-jenis-kelas.is-tambahan {
+  background: rgba(16, 185, 129, 0.22);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.38);
+}
+
+.badge-jenis-kelas.is-perubahan {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="dark"] .badge-jenis-kelas.is-perubahan {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   KOTAK JEDA ANTAR SESI JADWAL RUANGAN
+   ══════════════════════════════════════════════════════════════ */
+.room-schedule-gap-box {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0;
+}
+
+.room-schedule-gap-box.is-gap {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.04) 100%);
+  border: 1.5px dashed rgba(245, 158, 11, 0.45);
+  border-radius: var(--radius-sm);
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.05);
+  transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .room-schedule-gap-box.is-gap {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14) 0%, rgba(30, 41, 59, 0.6) 100%);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.room-schedule-gap-box.is-gap.active-gap-now {
+  border-style: solid;
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(245, 158, 11, 0.08) 100%);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.22);
+}
+
+.room-schedule-gap-box.is-gap.early-gap {
+  border-style: dotted;
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.gap-box-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.gap-box-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.18);
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .gap-box-icon {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+}
+
+.gap-box-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gap-box-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gap-box-label {
+  font-family: var(--font-heading);
+  font-size: 0.84em;
+  font-weight: 800;
+  color: #b45309;
+  letter-spacing: 0.2px;
+}
+
+[data-theme="dark"] .gap-box-label {
+  color: #fbbf24;
+}
+
+.gap-box-dur-pill {
+  font-size: 0.72em;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.2);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+[data-theme="dark"] .gap-box-dur-pill {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fef3c7;
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.gap-box-time {
+  font-size: 0.78em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.gap-box-live {
+  font-size: 0.72em;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.2);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+[data-theme="dark"] .gap-box-live {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.dot-amber {
+  background: #f59e0b !important;
+  box-shadow: 0 0 6px #f59e0b !important;
+}
+
+/* Kotak / Indikator Tanpa Jeda */
+.room-schedule-gap-box.is-no-gap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.no-gap-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.no-gap-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
+
+.no-gap-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.no-gap-pill svg {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+/* Kotak Jadwal Bersinggungan / Overlap */
+.room-schedule-gap-box.is-overlap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.gap-overlap-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74em;
+  font-weight: 700;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+.overlap-icon {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #ef4444 !important;
+}
+
 .room-card-time.clickable-time {
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);

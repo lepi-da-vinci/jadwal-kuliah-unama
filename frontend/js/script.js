@@ -8144,35 +8144,135 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const isToday = (activeDate === currentDayStr);
 
-    listContainer.innerHTML = schedules.map((s, idx) => {
-      // 1. Waktu & Durasi
-      let startTimeStr = s.jam || '08:00';
-      let endTimeStr = 'Selesai';
-      let startM = 0, endM = 0;
-      let durationMins = 135;
+    // Helper format durasi jeda yang human-readable
+    function formatGapDuration(mins) {
+      if (mins >= 60) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return m > 0 ? `${h} Jam ${m} Menit` : `${h} Jam`;
+      }
+      return `${mins} Menit`;
+    }
 
-      const parts = (s.jam || '').split(/[-–—]/).map(p => p.trim());
-      if (parts.length >= 1 && parts[0].includes(':')) {
-        const [sh, sm] = parts[0].split(':').map(Number);
+    // Pra-kalkulasi waktu & durasi seluruh sesi untuk konsistensi perhitungan jeda
+    schedules.forEach(s => {
+      let sStart = 0, sEnd = 0;
+      let sStartStr = s.jam || '08:00';
+      let sEndStr = 'Selesai';
+      let sDur = 135;
+
+      const p = (s.jam || '').split(/[-–—]/).map(x => x.trim());
+      if (p.length >= 1 && p[0].includes(':')) {
+        const [sh, sm] = p[0].split(':').map(Number);
         if (!isNaN(sh) && !isNaN(sm)) {
-          startM = sh * 60 + sm;
-          startTimeStr = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
-
-          if (parts.length >= 2 && parts[1].includes(':')) {
-            const [eh, em] = parts[1].split(':').map(Number);
+          sStart = sh * 60 + sm;
+          sStartStr = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+          if (p.length >= 2 && p[1].includes(':')) {
+            const [eh, em] = p[1].split(':').map(Number);
             if (!isNaN(eh) && !isNaN(em)) {
-              endM = eh * 60 + em;
-              endTimeStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-              durationMins = endM - startM;
+              sEnd = eh * 60 + em;
+              sEndStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+              sDur = sEnd - sStart;
             }
           } else {
-            durationMins = (typeof getClassDuration === 'function') ? getClassDuration(s) : 135;
-            endM = startM + durationMins;
-            const eh = Math.floor(endM / 60);
-            const em = endM % 60;
-            endTimeStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+            sDur = (typeof getClassDuration === 'function') ? getClassDuration(s) : 135;
+            sEnd = sStart + sDur;
+            const eh = Math.floor(sEnd / 60);
+            const em = sEnd % 60;
+            sEndStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
           }
         }
+      }
+      s._startM = sStart;
+      s._endM = sEnd;
+      s._startTimeStr = sStartStr;
+      s._endTimeStr = sEndStr;
+      s._durationMins = sDur;
+    });
+
+    listContainer.innerHTML = schedules.map((s, idx) => {
+      // 1. Waktu & Durasi
+      const startTimeStr = s._startTimeStr || '08:00';
+      const endTimeStr = s._endTimeStr || 'Selesai';
+      const startM = s._startM || 0;
+      const endM = s._endM || 0;
+      const durationMins = s._durationMins || 135;
+
+      // Kotak Jeda Antar Jam Sesi (atau Jeda Pagi sebelum Sesi 1)
+      let gapBoxHtml = '';
+      if (idx > 0) {
+        const prevS = schedules[idx - 1];
+        const prevEndM = prevS._endM;
+        const prevEndTimeStr = prevS._endTimeStr || 'Selesai';
+        const gapMins = startM - prevEndM;
+
+        if (gapMins > 0) {
+          const isGapActiveNow = isToday && (currentMinutes >= prevEndM && currentMinutes < startM);
+          gapBoxHtml = `
+            <div class="room-schedule-gap-box is-gap ${isGapActiveNow ? 'active-gap-now' : ''}">
+              <div class="gap-box-main">
+                <div class="gap-box-icon">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <div class="gap-box-info">
+                  <div class="gap-box-title-row">
+                    <span class="gap-box-label">Jeda Ruangan Kosong</span>
+                    <span class="gap-box-dur-pill">${formatGapDuration(gapMins)}</span>
+                    ${isGapActiveNow ? `<span class="gap-box-live"><span class="tv-pulse-dot dot-amber"></span> Sedang Jeda Kosong</span>` : ''}
+                  </div>
+                  <div class="gap-box-time">${prevEndTimeStr} - ${startTimeStr} WIB • Ruangan Kosong</div>
+                </div>
+              </div>
+            </div>
+          `;
+        } else if (gapMins === 0) {
+          gapBoxHtml = `
+            <div class="room-schedule-gap-box is-no-gap">
+              <div class="no-gap-content">
+                <span class="no-gap-line"></span>
+                <span class="no-gap-pill">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Tanpa Jeda • Bersambung Langsung (${startTimeStr} WIB)</span>
+                </span>
+                <span class="no-gap-line"></span>
+              </div>
+            </div>
+          `;
+        } else {
+          gapBoxHtml = `
+            <div class="room-schedule-gap-box is-overlap">
+              <div class="no-gap-content">
+                <span class="no-gap-line"></span>
+                <span class="gap-overlap-pill">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <span>Jadwal Bersinggungan • Selisih ${Math.abs(gapMins)} Menit</span>
+                </span>
+                <span class="no-gap-line"></span>
+              </div>
+            </div>
+          `;
+        }
+      } else if (idx === 0 && startM > 480 && (startM - 480) >= 15) {
+        // Jeda pagi sebelum sesi 1 (jika sesi 1 baru mulai setelah jam 08:00)
+        const earlyGapMins = startM - 480;
+        const isEarlyGapNow = isToday && (currentMinutes >= 480 && currentMinutes < startM);
+        gapBoxHtml = `
+          <div class="room-schedule-gap-box is-gap early-gap ${isEarlyGapNow ? 'active-gap-now' : ''}">
+            <div class="gap-box-main">
+              <div class="gap-box-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+              <div class="gap-box-info">
+                <div class="gap-box-title-row">
+                  <span class="gap-box-label">Jeda Ruangan Pagi</span>
+                  <span class="gap-box-dur-pill">${formatGapDuration(earlyGapMins)}</span>
+                  ${isEarlyGapNow ? `<span class="gap-box-live"><span class="tv-pulse-dot dot-amber"></span> Sedang Jeda Kosong</span>` : ''}
+                </div>
+                <div class="gap-box-time">08:00 - ${startTimeStr} WIB • Ruangan Kosong Sebelum Sesi 1</div>
+              </div>
+            </div>
+          </div>
+        `;
       }
 
       // 2. Status Waktu (Live ongoing, upcoming, finished, cancelled)
@@ -8198,10 +8298,33 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         liveBadgeHtml = `<span class="badge finished" style="background: rgba(139, 92, 246, 0.15); color: var(--badge-finished, #8b5cf6); font-weight: 700; border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Selesai</span>`;
       } else if (activeDate > currentDayStr) {
         cardStatusClass = 'upcoming';
-        liveBadgeHtml = `<span class="badge scheduled" style="background: rgba(59, 130, 246, 0.15); color: var(--badge-ol, #3b82f6); font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Terjadwal</span>`;
+        liveBadgeHtml = `<span class="badge scheduled" style="background: rgba(59, 130, 246, 0.15); color: var(--badge-ol, #3b82f6); font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;">Akan Datang</span>`;
       }
 
-      // 3. Metode Pembelajaran Badge
+      // 3. Tipe Jadwal (Terjadwal vs Kelas Tambahan vs Perubahan Jadwal)
+      const stRaw = (s.status_jadwal || '').trim();
+      const stLow = stRaw.toLowerCase();
+
+      let jenisKelasLabel = 'Terjadwal';
+      let jenisKelasClass = 'is-terjadwal';
+      let jenisKelasTitle = 'Jadwal perkuliahan reguler terjadwal semester ini';
+      let jenisKelasIcon = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: -1px; flex-shrink: 0;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+
+      if (stLow.includes('tambahan') || stLow.includes('pengganti')) {
+        jenisKelasLabel = 'Kelas Tambahan';
+        jenisKelasClass = 'is-tambahan';
+        jenisKelasTitle = 'Sesi perkuliahan tambahan atau kelas pengganti';
+        jenisKelasIcon = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: -1px; flex-shrink: 0;"><path d="M12 5v14M5 12h14"></path></svg>`;
+      } else if (stLow.includes('perubahan') || stLow.includes('pindah')) {
+        jenisKelasLabel = 'Perubahan Jadwal';
+        jenisKelasClass = 'is-perubahan';
+        jenisKelasTitle = 'Perubahan jadwal atau ruangan resmi BAAK';
+        jenisKelasIcon = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: -1px; flex-shrink: 0;"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>`;
+      }
+
+      const jenisBadgeHtml = `<span class="badge badge-jenis-kelas ${jenisKelasClass}" title="${jenisKelasTitle}">${jenisKelasIcon} <span>${escapeHtml(jenisKelasLabel)}</span></span>`;
+
+      // 4. Metode Pembelajaran Badge
       let methodBadge = '';
       if (s.metode_pembelajaran === 'TM') {
         methodBadge = `<span class="badge tm" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em;" title="Tatap Muka">Tatap Muka</span>`;
@@ -8217,21 +8340,18 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         ? `<span class="badge malam" style="border-radius: var(--radius-full); padding: 3px 10px; font-size: 0.78em; display:inline-flex; align-items:center; gap:4px;" title="Kelas Malam (Mulai jam 17:00 • Thehok)"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="flex-shrink:0;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>Kelas Malam</span>`
         : '';
 
-      // 4. Status Perubahan BAAK (Tambahan, Perubahan, dll.)
+      // 5. Status Catatan Khusus BAAK lainnya (jika bukan redundant & bukan jenis kelas yang sudah tampil)
       let changeBadgeHtml = '';
-      const stLower = (s.status_jadwal || '').trim().toLowerCase();
-      const isRedundantStatus = ['onschedule', 'online', 'ol', 'cancel', 'cc', 'batal', 'ditiadakan', '-', ''].includes(stLower);
+      const isRedundantStatus = ['onschedule', 'online', 'ol', 'cancel', 'cc', 'batal', 'ditiadakan', '-', ''].includes(stLow);
 
-      if (s.status_jadwal && !isRedundantStatus) {
+      if (s.status_jadwal && !isRedundantStatus && !stLow.includes('tambahan') && !stLow.includes('pengganti') && !stLow.includes('perubahan') && !stLow.includes('pindah')) {
         const st = s.status_jadwal.toUpperCase();
         let bg = 'rgba(107, 114, 128, 0.15)', c = '#9ca3af';
-        if (st.includes('TAMBAHAN')) { bg = 'rgba(34, 197, 94, 0.15)'; c = '#10b981'; }
-        else if (st.includes('PERUBAHAN')) { bg = 'rgba(239, 68, 68, 0.15)'; c = '#ef4444'; }
-        else if (st.includes('JEDA')) { bg = 'rgba(245, 158, 11, 0.15)'; c = '#f59e0b'; }
+        if (st.includes('JEDA')) { bg = 'rgba(245, 158, 11, 0.15)'; c = '#f59e0b'; }
         changeBadgeHtml = `<span class="badge" style="padding: 3px 9px; border-radius: var(--radius-full); background: ${bg}; color: ${c}; font-weight: 700; font-size: 0.78em;">${escapeHtml(st)}</span>`;
       }
 
-      // 5. Aslab row (jika ada matched aslab)
+      // 6. Aslab row (jika ada matched aslab)
       let aslabRowHtml = '';
       if (matchedAslab) {
         let waLinkBtn = '';
@@ -8321,6 +8441,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       ` : '';
 
       return `
+        ${gapBoxHtml}
         <div class="room-detail-card ${cardStatusClass}">
           <div class="room-card-header">
             <div class="room-card-session-group">
@@ -8330,6 +8451,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             </div>
             <div class="room-card-badges-right">
               ${liveBadgeHtml}
+              ${jenisBadgeHtml}
               ${nightBadge}
               ${methodBadge}
               ${changeBadgeHtml}
@@ -8353,6 +8475,10 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             <div class="room-card-chip">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
               <span>Semester: <strong>${escapeHtml(s.semester || 'Genap 2025')}</strong></span>
+            </div>
+            <div class="room-card-chip" title="${jenisKelasTitle}">
+              ${jenisKelasIcon}
+              <span>Status: <strong>${escapeHtml(jenisKelasLabel)}</strong></span>
             </div>
           </div>
 
