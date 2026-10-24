@@ -1,17 +1,18 @@
 <!-- MODAL: PENGATURAN TIMER AC (TIMER ON & TIMER OFF) -->
-<div id="modal-timer-ac" class="modal-backdrop" style="display: none;" onclick="if(event.target === this) closeTimerAcModal()">
-  <div class="modal-dialog modal-timer-ac-dialog" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <div class="modal-header-title-wrap">
-        <div class="modal-header-icon timer-icon">
+<div id="modal-timer-ac" class="modal-overlay modal-timer-ac-overlay" role="dialog" aria-modal="true" aria-label="Pengaturan Timer AC" style="display: none;" onclick="if(event.target === this) closeTimerAcModal()">
+  <div class="modal-box modal-timer-ac-dialog" onclick="event.stopPropagation()">
+    <!-- Header Modal Timer AC -->
+    <div class="modal-header-timer-ac">
+      <div class="timer-modal-title-wrap">
+        <div class="timer-modal-icon-badge">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.3">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
         </div>
         <div>
-          <h3 class="modal-title">Pengaturan Timer AC</h3>
-          <div class="modal-subtitle">
+          <h3 class="timer-modal-title">Pengaturan Timer AC</h3>
+          <div class="timer-modal-subtitle">
             <span id="timer-ac-room-title" style="font-weight: 700; color: var(--text-dark);">-</span>
             <span class="sep">•</span>
             <span id="timer-ac-campus-title">-</span>
@@ -20,7 +21,7 @@
           </div>
         </div>
       </div>
-      <button type="button" class="modal-close-btn" onclick="closeTimerAcModal()" title="Tutup">
+      <button type="button" class="timer-modal-close-btn" onclick="closeTimerAcModal()" title="Tutup">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>

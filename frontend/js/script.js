@@ -2727,6 +2727,17 @@ function normalizeScheduleItem(s) {
 }
 
 // ==================== TIMER AC & ASMOT OPERATIONAL MANAGER ====================
+// Global helper format nama ruangan bersih
+function getCleanRoom(str) {
+  if (!str) return '';
+  return (typeof formatRoomName === 'function' ? formatRoomName(str, false) : str)
+    .replace(/\s*\(Kampus\s+(?:Thehok|Kobar)\)/gi, '')
+    .replace(/\s*\((?:Thehok|Kobar)\)/gi, '')
+    .replace(/\s*\(.*?\)/gi, '')
+    .trim();
+}
+window.getCleanRoom = getCleanRoom;
+
 window._roomAcTimers = {};
 
 function getRoomAcTimerKey(roomName = '', campusName = '') {
@@ -3311,7 +3322,10 @@ window.selectQuickTimerMode = function (mode) {
 
 window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   const modal = document.getElementById('modal-timer-ac');
-  if (!modal) return;
+  if (!modal) {
+    console.error("modal-timer-ac element not found in DOM");
+    return;
+  }
 
   const filterTanggal = document.getElementById('filter-tanggal');
   const now = new Date();
@@ -3335,17 +3349,22 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   if (campusTitleEl) campusTitleEl.textContent = campusLabel;
   if (dateTitleEl) dateTitleEl.textContent = formatTanggalIndo(activeDate);
 
-  // Find schedules for this room on activeDate
-  const cleanTargetRoom = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName).toLowerCase();
-  const roomSchedules = (Array.isArray(allJadwal) ? allJadwal : []).filter(item => {
-    if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
-    if (item.tanggal !== activeDate) return false;
-    const itemClean = (typeof getCleanRoom === 'function' ? getCleanRoom(item.nama_ruangan) : item.nama_ruangan).toLowerCase();
-    if (itemClean !== cleanTargetRoom) return false;
-    const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
-    if (campusLabel && itemCamp && itemCamp !== campusLabel) return false;
-    return true;
-  }).map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
+  // Ambil jadwal sesi ruangan
+  let roomSchedules = [];
+  if (window._currentDetailRoom && window._currentDetailRoom.roomName === roomName && Array.isArray(window._currentDetailRoom.schedules) && window._currentDetailRoom.schedules.length > 0) {
+    roomSchedules = window._currentDetailRoom.schedules.map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
+  } else {
+    const cleanTargetRoom = getCleanRoom(roomName).toLowerCase();
+    roomSchedules = (Array.isArray(allJadwal) ? allJadwal : []).filter(item => {
+      if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
+      if (item.tanggal !== activeDate) return false;
+      const itemClean = getCleanRoom(item.nama_ruangan).toLowerCase();
+      if (itemClean !== cleanTargetRoom && !itemClean.includes(cleanTargetRoom) && !cleanTargetRoom.includes(itemClean)) return false;
+      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+      if (campusLabel && itemCamp && itemCamp !== campusLabel) return false;
+      return true;
+    }).map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
+  }
 
   window._activeTimerRoomContext.schedules = roomSchedules;
 
@@ -3429,12 +3448,17 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   onTimerToggleChange();
   validateTimerInputs();
 
+  // Buka Modal Timer AC di atas modal detail ruangan
+  modal.classList.add('open');
   modal.style.display = 'flex';
 };
 
 window.closeTimerAcModal = function () {
   const modal = document.getElementById('modal-timer-ac');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  }
 };
 
 window.onTimerToggleChange = function () {
