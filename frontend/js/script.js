@@ -9282,48 +9282,56 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
       if (!isLabEntity) {
         const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusLabel);
-        headerLabStatusEl.className = `room-lab-status-strip ${acStatus.stripClass}`;
+        headerLabStatusEl.className = `room-lab-status-strip ${acStatus.stripClass} ios-apple-card`;
         headerLabStatusEl.style.display = 'flex';
         headerLabStatusEl.innerHTML = `
-          <div class="lab-status-left" style="cursor: pointer;" onclick="window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')">
-            <span class="lab-status-dot ${acStatus.dotClass}"></span>
-            <div class="lab-status-texts">
-              <div class="lab-status-title-row">
-                <span class="lab-status-title">${acStatus.statusText}</span>
-                ${acStatus.countdownMinutes !== null && acStatus.countdownMinutes > 0 && isToday ? `
-                  <span class="ac-countdown-badge ${acStatus.badgeType}">
-                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    <span>${acStatus.countdownMinutes}m</span>
-                  </span>
-                ` : ''}
-                ${acStatus.timerSummary ? `
-                  <span class="ac-timer-indicator-pill" onclick="event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Timer aktif: ${escapeHtml(acStatus.timerSummary)} (Klik untuk ubah)">
-                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    <span>⏱️ ${escapeHtml(acStatus.timerSummary)}</span>
-                  </span>
-                ` : ''}
+          <!-- 1. Header Row: Status Icon/Title + Countdown Badge -->
+          <div class="ios-status-card-header">
+            <div class="ios-status-title-wrap">
+              <span class="lab-status-dot ${acStatus.dotClass}"></span>
+              <span class="ios-status-title">${acStatus.statusText}</span>
+            </div>
+            ${acStatus.countdownMinutes !== null && acStatus.countdownMinutes > 0 && isToday ? `
+              <span class="ac-countdown-badge ${acStatus.badgeType}">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>${acStatus.countdownMinutes}m</span>
+              </span>
+            ` : ''}
+          </div>
+
+          <!-- 2. Subtitle Note -->
+          <div class="lab-status-sub">${escapeHtml(acStatus.subtext)}</div>
+
+          <!-- 3. Apple Inset Grouped Cell for Timer AC (Tappable Tile) -->
+          <div class="ios-timer-cell ${acStatus.timerBadgeClass}" onclick="event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Status Timer AC Remote: ${escapeHtml(acStatus.timerText)} (Klik untuk mencatat / mengubah)">
+            <div class="ios-timer-cell-left">
+              <div class="ios-timer-icon-badge ${acStatus.timerBadgeClass}">
+                ${acStatus.timerIcon}
               </div>
-              <span class="lab-status-sub">${escapeHtml(acStatus.subtext)}</span>
-              <!-- Strip Status Pencatatan Timer AC Khusus Asmot -->
-              <div class="ac-timer-record-strip ${acStatus.timerBadgeClass}" onclick="event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Status Timer AC: ${escapeHtml(acStatus.timerText)} (Klik untuk mencatat / mengubah)">
-                <span class="timer-record-icon">${acStatus.timerIcon}</span>
-                <span class="timer-record-text"><b>Timer AC:</b> ${acStatus.timerTextHtml}</span>
-                <span class="timer-record-action">${acStatus.timerActionLabel}</span>
+              <div class="ios-timer-cell-texts">
+                <span class="ios-timer-cell-caption">Timer AC Remote</span>
+                <span class="ios-timer-cell-value">${acStatus.timerTextHtml}</span>
               </div>
             </div>
+            <div class="ios-timer-cell-right">
+              <span class="ios-timer-action-pill ${acStatus.timerBadgeClass}">
+                <span>${acStatus.timerActionLabel}</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </span>
+            </div>
           </div>
-          <div class="lab-status-right">
-            <button type="button" class="btn-timer-ac ${acStatus.timerSummary ? 'active' : ''}" onclick="window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Atur Timer Hidup & Timer Mati AC">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>${escapeHtml(acStatus.timerButtonLabel)}</span>
-            </button>
-            ${acStatus.actionLabel ? `
-              <button type="button" class="btn-lab-toggle ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">
+
+          <!-- 4. Primary Action Button -->
+          ${acStatus.actionLabel ? `
+            <div class="ios-status-actions">
+              <button type="button" class="btn-ios-action ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">
                 ${acStatus.btnIcon}
                 <span>${escapeHtml(acStatus.actionLabel)}</span>
               </button>
-            ` : ''}
-          </div>
+            </div>
+          ` : ''}
         `;
 
         const lockBadgeEl = document.getElementById('room-detail-lock-badge');

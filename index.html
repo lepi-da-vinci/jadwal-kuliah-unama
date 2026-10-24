@@ -13,7 +13,7 @@
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20261024_ac_timer_v3">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20261024_ac_timer_apple_v4">
 </head>
 
 <body>
@@ -4848,6 +4848,11 @@
   <!-- MODAL: PENGATURAN TIMER AC (TIMER ON & TIMER OFF) -->
 <div id="modal-timer-ac" class="modal-overlay modal-timer-ac-overlay" role="dialog" aria-modal="true" aria-label="Pengaturan Timer AC" style="display: none;" onclick="if(event.target === this) closeTimerAcModal()">
   <div class="modal-box modal-timer-ac-dialog" onclick="event.stopPropagation()">
+    <!-- Apple Sheet Drag Handle -->
+    <div class="modal-drag-handle-zone" onclick="closeTimerAcModal()" style="padding: 8px 0 2px; cursor: pointer; display: flex; justify-content: center;" title="Tutup">
+      <div class="modal-drag-handle-bar" style="width: 36px; height: 4.5px; border-radius: 9999px; background: rgba(148, 163, 184, 0.45);"></div>
+    </div>
+
     <!-- Header Modal Timer AC -->
     <div class="modal-header-timer-ac">
       <div class="timer-modal-title-wrap">
@@ -5544,7 +5549,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261024_ac_timer_v3"></script>
+  <script src="frontend/js/script.js?v=20261024_ac_timer_apple_v4"></script>
 </body>
 
 </html>

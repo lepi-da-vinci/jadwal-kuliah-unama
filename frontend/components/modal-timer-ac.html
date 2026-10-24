@@ -1,6 +1,11 @@
 <!-- MODAL: PENGATURAN TIMER AC (TIMER ON & TIMER OFF) -->
 <div id="modal-timer-ac" class="modal-overlay modal-timer-ac-overlay" role="dialog" aria-modal="true" aria-label="Pengaturan Timer AC" style="display: none;" onclick="if(event.target === this) closeTimerAcModal()">
   <div class="modal-box modal-timer-ac-dialog" onclick="event.stopPropagation()">
+    <!-- Apple Sheet Drag Handle -->
+    <div class="modal-drag-handle-zone" onclick="closeTimerAcModal()" style="padding: 8px 0 2px; cursor: pointer; display: flex; justify-content: center;" title="Tutup">
+      <div class="modal-drag-handle-bar" style="width: 36px; height: 4.5px; border-radius: 9999px; background: rgba(148, 163, 184, 0.45);"></div>
+    </div>
+
     <!-- Header Modal Timer AC -->
     <div class="modal-header-timer-ac">
       <div class="timer-modal-title-wrap">

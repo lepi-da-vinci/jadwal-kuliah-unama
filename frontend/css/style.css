@@ -13591,3 +13591,302 @@ body.dark .timer-modal-icon-badge {
   background: var(--hover-bg, rgba(0, 0, 0, 0.06));
   color: var(--text-dark);
 }
+
+/* ==============================================================
+   APPLE iOS STANDARD UI/UX FOR MOBILE ROOM & TIMER CARDS
+   ============================================================== */
+
+/* Apple Card Container in Room Modal */
+.room-lab-status-strip.ios-apple-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  padding: 12px 14px !important;
+  border-radius: 16px !important;
+  box-sizing: border-box !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid var(--border) !important;
+  margin-top: 4px !important;
+}
+
+/* Header Row: Title & Countdown */
+.ios-status-card-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+.ios-status-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.ios-status-title {
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.2px !important;
+  color: var(--text-dark) !important;
+  line-height: 1.3 !important;
+}
+
+.room-lab-status-strip.is-ac-on .ios-status-title { color: #0284c7 !important; }
+body.dark .room-lab-status-strip.is-ac-on .ios-status-title { color: #38bdf8 !important; }
+
+.room-lab-status-strip.is-ac-prep .ios-status-title { color: #0284c7 !important; }
+body.dark .room-lab-status-strip.is-ac-prep .ios-status-title { color: #38bdf8 !important; }
+
+.room-lab-status-strip.is-ac-warn-off .ios-status-title { color: #d97706 !important; }
+body.dark .room-lab-status-strip.is-ac-warn-off .ios-status-title { color: #fbbf24 !important; }
+
+.room-lab-status-strip.is-ac-standby .ios-status-title { color: #10b981 !important; }
+body.dark .room-lab-status-strip.is-ac-standby .ios-status-title { color: #34d399 !important; }
+
+/* Subtitle */
+.room-lab-status-strip.ios-apple-card .lab-status-sub {
+  font-size: 0.76rem !important;
+  color: var(--text-muted) !important;
+  line-height: 1.4 !important;
+  margin-top: -3px !important;
+}
+
+/* Apple Inset Grouped Cell for Timer AC */
+.ios-timer-cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 9px 12px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.dark .ios-timer-cell {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ios-timer-cell:hover {
+  filter: brightness(1.02) !important;
+  transform: translateY(-0.5px) !important;
+}
+
+.ios-timer-cell:active {
+  transform: scale(0.985) !important;
+  opacity: 0.9 !important;
+}
+
+.ios-timer-cell-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+/* Apple Squircle Icon Badge */
+.ios-timer-icon-badge {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 9px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 15px !important;
+  flex-shrink: 0 !important;
+}
+
+.ios-timer-icon-badge.timer-none {
+  background: rgba(148, 163, 184, 0.15) !important;
+  color: #64748b !important;
+}
+.ios-timer-icon-badge.timer-off {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #d97706 !important;
+}
+.ios-timer-icon-badge.timer-on {
+  background: rgba(2, 132, 199, 0.15) !important;
+  color: #0284c7 !important;
+}
+.ios-timer-icon-badge.timer-both {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #059669 !important;
+}
+
+.ios-timer-cell-texts {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+.ios-timer-cell-caption {
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: var(--text-muted) !important;
+  opacity: 0.8 !important;
+}
+
+.ios-timer-cell-value {
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  color: var(--text-dark) !important;
+  line-height: 1.3 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Action Pill inside Timer Cell */
+.ios-timer-action-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 5px 10px !important;
+  border-radius: 9999px !important;
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.ios-timer-action-pill.timer-none {
+  background: rgba(2, 132, 199, 0.12) !important;
+  color: #0284c7 !important;
+}
+body.dark .ios-timer-action-pill.timer-none {
+  background: rgba(56, 189, 248, 0.2) !important;
+  color: #38bdf8 !important;
+}
+
+.ios-timer-action-pill.timer-off {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #b45309 !important;
+}
+body.dark .ios-timer-action-pill.timer-off {
+  background: rgba(245, 158, 11, 0.22) !important;
+  color: #fbbf24 !important;
+}
+
+.ios-timer-action-pill.timer-on {
+  background: rgba(2, 132, 199, 0.15) !important;
+  color: #0284c7 !important;
+}
+body.dark .ios-timer-action-pill.timer-on {
+  background: rgba(56, 189, 248, 0.22) !important;
+  color: #38bdf8 !important;
+}
+
+.ios-timer-action-pill.timer-both {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #047857 !important;
+}
+body.dark .ios-timer-action-pill.timer-both {
+  background: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+}
+
+/* Primary Action Button (Apple iOS Large Control) */
+.ios-status-actions {
+  width: 100% !important;
+  margin-top: 2px !important;
+}
+
+.btn-ios-action {
+  width: 100% !important;
+  height: 42px !important;
+  border-radius: 12px !important;
+  font-size: 0.86rem !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  cursor: pointer !important;
+  border: none !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.btn-ios-action:active {
+  transform: scale(0.985) !important;
+  filter: brightness(0.95) !important;
+}
+
+/* Variant Buka (Primary Blue/Teal) */
+.btn-ios-action.buka {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 12px rgba(2, 132, 199, 0.28) !important;
+}
+body.dark .btn-ios-action.buka {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.3) !important;
+}
+
+/* Variant Tutup (Apple Destructive Tinted) */
+.btn-ios-action.tutup {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #dc2626 !important;
+  border: 1.5px solid rgba(239, 68, 68, 0.25) !important;
+}
+body.dark .btn-ios-action.tutup {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+/* ==============================================================
+   RESPONSIVE APPLE BOTTOM SHEET FOR MOBILE / ANDROID (< 640px)
+   ============================================================== */
+@media (max-width: 640px) {
+  #room-detail-modal .modal-box {
+    border-radius: 28px 28px 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 16px) !important;
+  }
+
+  .room-detail-header {
+    padding: 12px 16px 14px !important;
+  }
+
+  #modal-timer-ac {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  #modal-timer-ac .modal-timer-ac-dialog {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 28px 28px 0 0 !important;
+    margin: 0 !important;
+    max-height: 88vh !important;
+    padding-bottom: env(safe-area-inset-bottom, 20px) !important;
+    animation: ios-sheet-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  @keyframes ios-sheet-slide-up {
+    0% { transform: translateY(100%); opacity: 0.8; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  .quick-modes-buttons {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+}
