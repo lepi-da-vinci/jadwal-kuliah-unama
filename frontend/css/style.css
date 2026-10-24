@@ -12513,3 +12513,370 @@ body.dark-mode .session-card-room {
   margin-bottom: 6px;
 }
 
+
+
+/* ══════════════════════════════════════════════════════════════
+   SMART AC TIMER & ASMOT OPERATIONAL STYLES
+   ══════════════════════════════════════════════════════════════ */
+
+/* Status Strip Ruang Kelas (Asmot AC Engine) */
+.room-lab-status-strip.is-ac-on {
+  background: rgba(6, 182, 212, 0.08);
+  border-color: rgba(6, 182, 212, 0.32);
+}
+.room-lab-status-strip.is-ac-on .lab-status-title {
+  color: #0284c7;
+}
+body.dark .room-lab-status-strip.is-ac-on .lab-status-title {
+  color: #38bdf8;
+}
+
+.room-lab-status-strip.is-ac-prep {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.4);
+  animation: ac-pulse-glow 2s infinite ease-in-out;
+}
+.room-lab-status-strip.is-ac-prep .lab-status-title {
+  color: #2563eb;
+}
+body.dark .room-lab-status-strip.is-ac-prep .lab-status-title {
+  color: #60a5fa;
+}
+
+.room-lab-status-strip.is-ac-warn-off {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.38);
+}
+.room-lab-status-strip.is-ac-warn-off .lab-status-title {
+  color: #d97706;
+}
+body.dark .room-lab-status-strip.is-ac-warn-off .lab-status-title {
+  color: #fbbf24;
+}
+
+.room-lab-status-strip.is-ac-standby {
+  background: rgba(20, 184, 166, 0.08);
+  border-color: rgba(20, 184, 166, 0.3);
+}
+.room-lab-status-strip.is-ac-standby .lab-status-title {
+  color: #0d9488;
+}
+body.dark .room-lab-status-strip.is-ac-standby .lab-status-title {
+  color: #2dd4bf;
+}
+
+.room-lab-status-strip.is-ac-off {
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+.lab-status-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Dots */
+.lab-status-dot.dot-prep {
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  animation: ac-pulse-dot 1.5s infinite;
+}
+.lab-status-dot.dot-standby {
+  background: #14b8a6;
+  box-shadow: 0 0 6px rgba(20, 184, 166, 0.5);
+}
+
+/* Countdown Badge */
+.ac-countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.ac-countdown-badge.on,
+.ac-countdown-badge.standby {
+  background: rgba(6, 182, 212, 0.15);
+  color: #0284c7;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.ac-countdown-badge.warning-on {
+  background: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+  animation: ac-pulse-glow 1.5s infinite;
+}
+.ac-countdown-badge.warning-off {
+  background: #f59e0b;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
+}
+
+/* Buttons */
+.btn-lab-toggle.buka-prep {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  animation: ac-pulse-glow 2s infinite;
+}
+.btn-lab-toggle.buka-prep:hover {
+  background: #1d4ed8;
+}
+
+.btn-lab-toggle.tutup-urgent {
+  background: #ea580c;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.35);
+}
+.btn-lab-toggle.tutup-urgent:hover {
+  background: #c2410c;
+}
+
+/* Pill Lock Variants for AC */
+.room-detail-pill.lock.is-ac-active {
+  background: rgba(6, 182, 212, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.room-detail-pill.lock.is-ac-prep-pill {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+.room-detail-pill.lock.is-ac-warn-pill {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.room-detail-pill.lock.is-ac-standby-pill {
+  background: rgba(20, 184, 166, 0.12);
+  color: #0d9488;
+  border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+/* Gap AC Guidance Box in Modal Detail */
+.gap-ac-guidance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.gap-ac-guidance.is-turn-off {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+}
+body.dark .gap-ac-guidance.is-turn-off {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.15);
+}
+.gap-ac-guidance.is-standby {
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f766e;
+  border: 1px dashed rgba(20, 184, 166, 0.35);
+}
+body.dark .gap-ac-guidance.is-standby {
+  color: #99f6e4;
+  background: rgba(20, 184, 166, 0.15);
+}
+.no-gap-ac-sub {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #0d9488;
+  opacity: 0.95;
+}
+
+/* Mini AC Icon in Room Grid Card */
+.lab-card-header-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.lab-card-ac {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  transition: all 0.2s ease;
+}
+.lab-card-ac.is-ac-on {
+  color: #0284c7;
+  background: rgba(6, 182, 212, 0.15);
+}
+.lab-card-ac.is-ac-warning-on {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.2);
+  animation: ac-pulse-glow 1.8s infinite;
+}
+.lab-card-ac.is-ac-warning-off {
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.2);
+  animation: ac-pulse-glow 1.8s infinite;
+}
+.lab-card-ac.is-ac-standby {
+  color: #0d9488;
+  background: rgba(20, 184, 166, 0.15);
+}
+.lab-card-ac.is-ac-off {
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
+/* Asmot AC Summary Bar on Dashboard */
+.asmot-ac-summary-bar {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s ease;
+}
+.asmot-ac-summary-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.asmot-ac-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.asmot-ac-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-dark);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+.asmot-ac-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0284c7;
+}
+.asmot-ac-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.asmot-stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.74rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+.asmot-stat-badge.on {
+  background: rgba(6, 182, 212, 0.1);
+  color: #0284c7;
+  border-color: rgba(6, 182, 212, 0.25);
+}
+.asmot-stat-badge.prep {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.asmot-stat-badge.warn-off {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.asmot-stat-badge.off {
+  background: rgba(156, 163, 175, 0.1);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.asmot-stat-badge.pulse {
+  animation: ac-pulse-glow 2s infinite ease-in-out;
+}
+
+/* Urgent Strip & Chips */
+.asmot-urgent-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.asmot-urgent-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.asmot-chips-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.asmot-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.asmot-quick-chip.prep {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.35);
+}
+.asmot-quick-chip.prep:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+.asmot-quick-chip.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.asmot-quick-chip.warn:hover {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+@keyframes ac-pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+@keyframes ac-pulse-dot {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}

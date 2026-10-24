@@ -2682,6 +2682,493 @@ function getRoomOperationalStatus(schedules, isToday) {
 }
 window.getRoomOperationalStatus = getRoomOperationalStatus;
 
+
+function formatMinToTime(mins) {
+  if (mins < 0) mins = 0;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function normalizeScheduleItem(s) {
+  let startM = s._startM ?? s.start;
+  let endM = s._endM ?? s.end;
+  let jamStr = s.jam || '';
+  if ((startM === undefined || isNaN(startM)) && jamStr.includes(':')) {
+    const parts = jamStr.split(/[-–—]/).map(x => x.trim());
+    if (parts[0]) {
+      const [sh, sm] = parts[0].split(':').map(Number);
+      if (!isNaN(sh) && !isNaN(sm)) startM = sh * 60 + sm;
+    }
+    if (parts[1]) {
+      const [eh, em] = parts[1].split(':').map(Number);
+      if (!isNaN(eh) && !isNaN(em)) endM = eh * 60 + em;
+    } else {
+      endM = (startM || 0) + (s.dur || 135);
+    }
+  }
+  startM = Number(startM) || 0;
+  endM = Number(endM) || (startM + 135);
+  const sh = Math.floor(startM / 60);
+  const sm = startM % 60;
+  const eh = Math.floor(endM / 60);
+  const em = endM % 60;
+  return {
+    ...s,
+    _startM: startM,
+    _endM: endM,
+    _startTimeStr: `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`,
+    _endTimeStr: `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`,
+    _durationMins: endM - startM,
+    nama_mk: s.nama_mk || s.nama || '',
+    kelas: s.kelas || '',
+    metode_pembelajaran: (s.metode_pembelajaran || s.metode || '').toUpperCase()
+  };
+}
+
+/**
+ * Smart AC Engine untuk Ruang Kelas Teori & Asmot
+ * Menghitung status AC operasional, rekomendasi tindakan, dan countdown real-time
+ */
+function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = '') {
+  if (!Array.isArray(rawSchedules) || rawSchedules.length === 0) {
+    return {
+      code: 'NO_SCHEDULE',
+      isAcOn: false,
+      statusText: 'AC Padam',
+      subtext: 'Tidak ada jadwal perkuliahan aktif hari ini',
+      badgeType: 'off',
+      actionLabel: 'Nyalakan AC',
+      targetAction: 'buka',
+      countdownMinutes: null,
+      recommendation: 'Ruangan kosong, AC tetap padam untuk menghemat energi.',
+      stripClass: 'is-ac-off',
+      dotClass: 'dot-belum',
+      btnClass: 'buka',
+      btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+    };
+  }
+
+  const schedules = rawSchedules.map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const effectiveIsToday = (isToday !== undefined) ? isToday : (activeDate === currentDayStr);
+
+  const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
+  const isAcRecordedOn = (opStatus.status === 'buka');
+
+  if (!effectiveIsToday) {
+    return {
+      code: 'NOT_TODAY',
+      isAcOn: false,
+      statusText: 'Jadwal Terdaftar',
+      subtext: `Ada ${schedules.length} sesi perkuliahan pada tanggal ini`,
+      badgeType: 'inactive',
+      actionLabel: null,
+      targetAction: 'buka',
+      countdownMinutes: null,
+      recommendation: 'Kontrol AC langsung aktif saat melihat tanggal hari ini.',
+      stripClass: 'is-ac-off',
+      dotClass: 'dot-belum',
+      btnClass: 'buka',
+      btnIcon: ''
+    };
+  }
+
+  // Filter kelas fisik (abaikan CC jika batal total)
+  const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC');
+  if (physicalSchedules.length === 0) {
+    return {
+      code: 'ONLINE_OR_CANCELLED',
+      isAcOn: isAcRecordedOn,
+      statusText: isAcRecordedOn ? '⚠️ AC Menyala (Kelas Dibatalkan)' : '⏹️ AC Padam (Semua Kelas Batal)',
+      subtext: 'Seluruh perkuliahan hari ini dibatalkan (CC). Tidak perlu hidupkan AC.',
+      badgeType: isAcRecordedOn ? 'warning-off' : 'ol-cc',
+      actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+      targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+      countdownMinutes: null,
+      recommendation: 'Kelas dibatalkan oleh dosen, matikan AC untuk penghematan.',
+      stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
+      dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
+      btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+      btnIcon: isAcRecordedOn
+        ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+        : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+    };
+  }
+
+  const firstS = physicalSchedules[0];
+  const lastS = physicalSchedules[physicalSchedules.length - 1];
+
+  // 1. Apakah sekarang SEBELUM Sesi Pertama?
+  if (currentMinutes < firstS._startM) {
+    const timeUntilFirst = firstS._startM - currentMinutes;
+    if (timeUntilFirst <= 20) {
+      // Masa persiapan H-20! Ruangan harus mulai didinginkan sekarang!
+      return {
+        code: 'PREP_ON',
+        isAcOn: isAcRecordedOn,
+        statusText: isAcRecordedOn ? '❄️ AC Aktif (Masa Persiapan)' : '❄️ Segera Hidupkan AC!',
+        subtext: `Kelas ${firstS.kelas ? `(${firstS.kelas}) ` : ''}mulai ${firstS._startTimeStr} WIB (Sisa ${timeUntilFirst} mnt)`,
+        badgeType: isAcRecordedOn ? 'on' : 'warning-on',
+        actionLabel: isAcRecordedOn ? 'Matikan AC' : '❄️ Hidupkan AC Sekarang',
+        targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+        countdownMinutes: timeUntilFirst,
+        recommendation: 'Hidupkan AC 15–20 menit sebelum kelas dimulai agar ruangan nyaman saat perkuliahan dimulai.',
+        stripClass: isAcRecordedOn ? 'is-ac-on' : 'is-ac-prep',
+        dotClass: isAcRecordedOn ? 'dot-buka' : 'dot-prep',
+        btnClass: isAcRecordedOn ? 'tutup' : 'buka-prep',
+        btnIcon: isAcRecordedOn
+          ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+          : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+      };
+    } else {
+      // Masih lama (> 20 menit sebelum sesi 1)
+      return {
+        code: 'WAITING_PREP',
+        isAcOn: isAcRecordedOn,
+        statusText: isAcRecordedOn ? '⚠️ AC Sudah Menyala (Terlalu Awal)' : '⏹️ AC Padam (Hemat Energi)',
+        subtext: `Sesi 1 mulai jam ${firstS._startTimeStr} WIB • Persiapan AC jam ${formatMinToTime(firstS._startM - 20)} WIB`,
+        badgeType: isAcRecordedOn ? 'warning-off' : 'off',
+        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+        countdownMinutes: timeUntilFirst,
+        recommendation: 'AC belum perlu dinyalakan. Nyalakan pada H-20 menit sebelum jadwal.',
+        stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
+        dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
+        btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+        btnIcon: isAcRecordedOn
+          ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+          : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+      };
+    }
+  }
+
+  // 2. Apakah sekarang SEDANG BERLANGSUNG sebuah sesi?
+  let ongoingIndex = -1;
+  for (let i = 0; i < physicalSchedules.length; i++) {
+    const s = physicalSchedules[i];
+    if (currentMinutes >= s._startM && currentMinutes <= s._endM) {
+      ongoingIndex = i;
+      break;
+    }
+  }
+
+  if (ongoingIndex !== -1) {
+    const ongoingS = physicalSchedules[ongoingIndex];
+    const isOnline = (ongoingS.metode_pembelajaran === 'OL');
+    const remainingMin = ongoingS._endM - currentMinutes;
+
+    if (isOnline) {
+      return {
+        code: 'ONLINE_OR_CANCELLED',
+        isAcOn: isAcRecordedOn,
+        statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Kelas Daring/Online)' : '⏹️ AC Padam (Kuliah Online)',
+        subtext: `Kelas ${ongoingS.nama_mk} dialihkan DARING (OL). Ruangan kosong.`,
+        badgeType: isAcRecordedOn ? 'warning-off' : 'ol-cc',
+        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+        countdownMinutes: remainingMin,
+        recommendation: 'Kuliah dilaksanakan secara online, matikan AC agar hemat listrik.',
+        stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
+        dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
+        btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+        btnIcon: isAcRecordedOn
+          ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+          : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+      };
+    }
+
+    // Cek sesi selanjutnya untuk panduan akhir sesi
+    const nextS = (ongoingIndex < physicalSchedules.length - 1) ? physicalSchedules[ongoingIndex + 1] : null;
+    let nextGuidance = '';
+    if (nextS) {
+      const gap = nextS._startM - ongoingS._endM;
+      if (gap <= 30) {
+        nextGuidance = `Lanjut ${nextS.kelas || 'Sesi ' + (ongoingIndex + 2)} (AC Standby)`;
+      } else {
+        nextGuidance = `Jeda ${gap} mnt (Wajib Matikan AC)`;
+      }
+    } else {
+      nextGuidance = 'Sesi Terakhir (Matikan AC setelah ini)';
+    }
+
+    return {
+      code: 'IN_SESSION',
+      isAcOn: isAcRecordedOn,
+      statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⚠️ Sesi Berlangsung (AC Belum Nyala)',
+      subtext: `Selesai dlm ${remainingMin} mnt (${ongoingS._endTimeStr} WIB) • ${nextGuidance}`,
+      badgeType: isAcRecordedOn ? 'on' : 'warning-off',
+      actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+      targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+      countdownMinutes: remainingMin,
+      recommendation: 'Suhu terjaga dengan baik selama proses perkuliahan berlangsung.',
+      stripClass: isAcRecordedOn ? 'is-ac-on' : 'is-ac-warn-off',
+      dotClass: isAcRecordedOn ? 'dot-buka' : 'dot-tutup',
+      btnClass: isAcRecordedOn ? 'tutup' : 'buka-prep',
+      btnIcon: isAcRecordedOn
+        ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+        : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+    };
+  }
+
+  // 3. Apakah sekarang DI ANTARA DUA SESI (JEDA / GAP)?
+  for (let i = 0; i < physicalSchedules.length - 1; i++) {
+    const prevS = physicalSchedules[i];
+    const nextS = physicalSchedules[i + 1];
+
+    if (currentMinutes > prevS._endM && currentMinutes < nextS._startM) {
+      const gapTotal = nextS._startM - prevS._endM;
+      const timeSincePrevEnd = currentMinutes - prevS._endM;
+      const timeUntilNextStart = nextS._startM - currentMinutes;
+
+      // KASUS C1: GAP KECIL (<= 30 MENIT) -> REKOMENDASI TETAP STANDBY
+      if (gapTotal <= 30) {
+        return {
+          code: 'STANDBY',
+          isAcOn: isAcRecordedOn,
+          statusText: '🔁 AC Tetap Standby',
+          subtext: `Jeda singkat ${gapTotal} mnt • Sesi berikutnya (${nextS._startTimeStr} WIB) segera dimulai`,
+          badgeType: 'standby',
+          actionLabel: isAcRecordedOn ? 'Matikan AC' : '❄️ Hidupkan AC',
+          targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+          countdownMinutes: timeUntilNextStart,
+          recommendation: 'AC jangan dimatikan saat jeda singkat (< 30 mnt) agar kompresor tidak rusak.',
+          stripClass: 'is-ac-standby',
+          dotClass: 'dot-standby',
+          btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+          btnIcon: isAcRecordedOn
+            ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+            : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+        };
+      }
+
+      // KASUS C2: GAP PANJANG (> 30 MENIT)
+      // Cek apakah sudah masuk H-20 persiapan untuk sesi berikutnya?
+      if (timeUntilNextStart <= 20) {
+        return {
+          code: 'PREP_ON',
+          isAcOn: isAcRecordedOn,
+          statusText: isAcRecordedOn ? '❄️ AC Aktif (Persiapan Sesi Lanjutan)' : '❄️ Segera Hidupkan AC!',
+          subtext: `Sesi berikutnya (${nextS.kelas || nextS._startTimeStr}) mulai dlm ${timeUntilNextStart} mnt`,
+          badgeType: isAcRecordedOn ? 'on' : 'warning-on',
+          actionLabel: isAcRecordedOn ? 'Matikan AC' : '❄️ Hidupkan AC Sekarang',
+          targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+          countdownMinutes: timeUntilNextStart,
+          recommendation: 'Waktunya menyalakan AC sebelum sesi perkuliahan selanjutnya dimulai.',
+          stripClass: isAcRecordedOn ? 'is-ac-on' : 'is-ac-prep',
+          dotClass: isAcRecordedOn ? 'dot-buka' : 'dot-prep',
+          btnClass: isAcRecordedOn ? 'tutup' : 'buka-prep',
+          btnIcon: isAcRecordedOn
+            ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+            : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+        };
+      }
+
+      // Jika baru selesai (<= 15 mnt), peringatkan wajib matikan!
+      if (timeSincePrevEnd <= 15 && isAcRecordedOn) {
+        return {
+          code: 'MUST_TURN_OFF',
+          isAcOn: true,
+          statusText: '⚡ Segera Matikan AC!',
+          subtext: `Kelas selesai • Jeda panjang ${gapTotal} menit hingga ${nextS._startTimeStr} WIB`,
+          badgeType: 'warning-off',
+          actionLabel: '⚡ Matikan AC Sekarang',
+          targetAction: 'tutup',
+          countdownMinutes: timeUntilNextStart,
+          recommendation: 'Ruangan kosong lebih dari 30 menit. Matikan AC sekarang untuk menghemat listrik kampus.',
+          stripClass: 'is-ac-warn-off',
+          dotClass: 'dot-tutup',
+          btnClass: 'tutup-urgent',
+          btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+        };
+      }
+
+      // Selama jeda panjang berlangsung
+      return {
+        code: 'LONG_GAP_OFF',
+        isAcOn: isAcRecordedOn,
+        statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Ruang Kosong)' : '⏹️ AC Padam (Hemat Energi)',
+        subtext: `Ruangan kosong hingga ${nextS._startTimeStr} WIB (Sisa jeda ${timeUntilNextStart} mnt)`,
+        badgeType: isAcRecordedOn ? 'warning-off' : 'off',
+        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+        countdownMinutes: timeUntilNextStart,
+        recommendation: isAcRecordedOn ? 'Ruangan sedang kosong, matikan AC.' : 'Sistem hemat listrik aktif selama jeda panjang.',
+        stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
+        dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
+        btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+        btnIcon: isAcRecordedOn
+          ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+          : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+      };
+    }
+  }
+
+  // 4. Apakah sekarang SETELAH Sesi Terakhir Hari Ini?
+  if (currentMinutes > lastS._endM) {
+    const timeSinceLastEnd = currentMinutes - lastS._endM;
+    if (timeSinceLastEnd <= 20 && isAcRecordedOn) {
+      return {
+        code: 'LAST_SESSION_OVER',
+        isAcOn: true,
+        statusText: '⚡ Segera Matikan AC Total!',
+        subtext: `Seluruh sesi hari ini telah selesai pada ${lastS._endTimeStr} WIB`,
+        badgeType: 'warning-off',
+        actionLabel: '⚡ Matikan AC Total',
+        targetAction: 'tutup',
+        countdownMinutes: null,
+        recommendation: 'Perkuliahan hari ini telah selesai. Pastikan AC dimatikan dan pintu ruang dikunci.',
+        stripClass: 'is-ac-warn-off',
+        dotClass: 'dot-tutup',
+        btnClass: 'tutup-urgent',
+        btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+      };
+    } else {
+      return {
+        code: 'ALL_FINISHED',
+        isAcOn: isAcRecordedOn,
+        statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Sesi Selesai)' : '⏹️ AC Padam Total',
+        subtext: `Sesi terakhir selesai jam ${lastS._endTimeStr} WIB • Kegiatan hari ini telah berakhir`,
+        badgeType: isAcRecordedOn ? 'warning-off' : 'off',
+        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+        countdownMinutes: null,
+        recommendation: 'Semua kelas selesai hari ini.',
+        stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
+        dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
+        btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+        btnIcon: isAcRecordedOn
+          ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+          : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+      };
+    }
+  }
+
+  // Fallback
+  return {
+    code: 'IN_SESSION',
+    isAcOn: isAcRecordedOn,
+    statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⏹️ AC Padam',
+    subtext: 'Status operasional ruang kelas',
+    badgeType: isAcRecordedOn ? 'on' : 'off',
+    actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+    targetAction: isAcRecordedOn ? 'tutup' : 'buka',
+    countdownMinutes: null,
+    recommendation: '',
+    stripClass: isAcRecordedOn ? 'is-ac-on' : 'is-ac-off',
+    dotClass: isAcRecordedOn ? 'dot-buka' : 'dot-belum',
+    btnClass: isAcRecordedOn ? 'tutup' : 'buka',
+    btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
+  };
+}
+window.calculateRoomAcStatus = calculateRoomAcStatus;
+
+window.onHeaderAcToggleClick = function (targetAction) {
+  if (!window._currentDetailRoom) return;
+  const btn = document.querySelector('.btn-lab-toggle');
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.pointerEvents = 'none';
+  }
+  const { roomName, kampusStr, activeDate, relevantSession, schedules } = window._currentDetailRoom;
+  const relSess = relevantSession || (Array.isArray(schedules) && schedules.length > 0 ? (schedules[schedules.length - 1] || schedules[0]) : null);
+  const jam = relSess ? (relSess.jam || '08:00') : '08:00';
+  const namaMk = relSess ? (relSess.nama_mk || '') : '';
+  const kelas = relSess ? (relSess.kelas || '') : '';
+  window.toggleLabSessionStatus(activeDate, roomName, jam, namaMk, kelas, targetAction, kampusStr);
+};
+
+function updateAsmotAcSummaryBar(roomsThehok = {}, roomsKobar = {}, kampusFilter = 'semua') {
+  const container = document.getElementById('asmot-ac-summary-bar');
+  if (!container) return;
+
+  const targetRooms = [];
+  if (kampusFilter === 'semua' || kampusFilter === 'Thehok' || kampusFilter === 'Kampus Thehok') {
+    Object.keys(roomsThehok).forEach(r => targetRooms.push({ room: r, campus: 'Thehok', data: roomsThehok[r] }));
+  }
+  if (kampusFilter === 'semua' || kampusFilter === 'Kobar' || kampusFilter === 'Kampus Kobar') {
+    Object.keys(roomsKobar).forEach(r => targetRooms.push({ room: r, campus: 'Kobar', data: roomsKobar[r] }));
+  }
+
+  if (targetRooms.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  let countOn = 0;
+  let countPrep = 0;
+  let countWarnOff = 0;
+  let countStandby = 0;
+  let countOff = 0;
+  const urgentRooms = [];
+
+  targetRooms.forEach(({ room, campus, data }) => {
+    const ac = data.acStatus;
+    if (!ac) return;
+
+    if (ac.badgeType === 'on') {
+      countOn++;
+    } else if (ac.badgeType === 'warning-on') {
+      countPrep++;
+      urgentRooms.push({ room, campus, ac, type: 'prep' });
+    } else if (ac.badgeType === 'warning-off') {
+      countWarnOff++;
+      urgentRooms.push({ room, campus, ac, type: 'warn' });
+    } else if (ac.badgeType === 'standby') {
+      countStandby++;
+    } else {
+      countOff++;
+    }
+  });
+
+  let urgentChipsHtml = '';
+  if (urgentRooms.length > 0) {
+    urgentChipsHtml = urgentRooms.map(u => {
+      const icon = u.type === 'prep' ? '❄️' : '⚡';
+      const label = u.type === 'prep'
+        ? `${u.room}: Nyalakan AC (${u.ac.countdownMinutes ? u.ac.countdownMinutes + 'm' : 'Segera'})`
+        : `${u.room}: Matikan AC`;
+      return `
+        <button type="button" class="asmot-quick-chip ${u.type}" onclick="showRoomDetail('${escapeHtml(u.room)}', '${escapeHtml(u.campus)}')" title="${escapeHtml(u.ac.subtext)}">
+          <span>${icon}</span>
+          <span>${escapeHtml(label)}</span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  container.innerHTML = `
+    <div class="asmot-ac-summary-inner">
+      <div class="asmot-ac-header-line">
+        <div class="asmot-ac-title-wrap">
+          <span class="asmot-ac-icon">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>
+          </span>
+          <span class="asmot-ac-title">Monitoring AC Ruang Kelas (Asmot)</span>
+        </div>
+        <div class="asmot-ac-stats-row">
+          <span class="asmot-stat-badge on" title="Ruang dengan AC aktif menyala">🟢 ${countOn} AC Aktif</span>
+          ${countPrep > 0 ? `<span class="asmot-stat-badge prep pulse" title="Ruang yang perlu segera dinyalakan">❄️ ${countPrep} Perlu Dinyalakan</span>` : ''}
+          ${countWarnOff > 0 ? `<span class="asmot-stat-badge warn-off pulse" title="Ruang yang perlu segera dimatikan">⚡ ${countWarnOff} Perlu Dimatikan</span>` : ''}
+          ${countStandby > 0 ? `<span class="asmot-stat-badge standby" title="Ruang jeda singkat dengan AC standby">🔁 ${countStandby} Standby</span>` : ''}
+          <span class="asmot-stat-badge off" title="Ruang kosong dengan AC padam">⏹️ ${countOff} Hemat Listrik</span>
+        </div>
+      </div>
+      ${urgentChipsHtml ? `
+        <div class="asmot-urgent-strip">
+          <span class="asmot-urgent-label">Aksi Cepat:</span>
+          <div class="asmot-chips-scroll">${urgentChipsHtml}</div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  container.style.display = 'block';
+}
+window.updateAsmotAcSummaryBar = updateAsmotAcSummaryBar;
+
 function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime) {
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
   const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
@@ -2756,8 +3243,9 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Jika Aslab/Asmot mencatat ruangan DIBUKA, maka ikon gembok berstatus 'buka' (gembok terbuka),
   // baik saat sedang jeda antar kelas, kelas sedang berlangsung, maupun jeda istirahat.
   let lockStatus = isToday ? opStatus.status : 'tutup';
+  const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate);
 
-  return { state, text, jamText, lockStatus };
+  return { state, text, jamText, lockStatus, acStatus };
 }
 
 function updateActiveLabPanel() {
@@ -2990,12 +3478,21 @@ function updateActiveLabPanel() {
         ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>`
         : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
 
+      const acBadgeHtml = (!isLabEntity && data.acStatus)
+        ? `<div class="lab-card-ac is-ac-${data.acStatus.badgeType}" title="AC: ${escapeHtml(data.acStatus.statusText)}">
+             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>
+           </div>`
+        : '';
+
       html += `
               <div class="lab-card ${data.state}" onclick="showRoomDetail('${escapeHtml(room)}', '${kampusStr}')">
                 <div class="lab-card-header">
                   <div class="lab-name">${formatRoomNameHtml(room)}</div>
-                  <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
-                    ${lockIconSvg}
+                  <div class="lab-card-header-icons">
+                    ${acBadgeHtml}
+                    <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
+                      ${lockIconSvg}
+                    </div>
                   </div>
                 </div>
                 <div class="lab-status">${statusDisplay}</div>
@@ -3027,6 +3524,8 @@ function updateActiveLabPanel() {
   }
   if (htmlRoom === '') htmlRoom = '<em>Tidak ada ruangan yang sesuai.</em>';
   roomPanel.innerHTML = htmlRoom;
+
+  updateAsmotAcSummaryBar(roomsThehok, roomsKobar, kampusFilter);
 }
 
 setInterval(updateActiveLabPanel, 60000);
@@ -4095,7 +4594,7 @@ function renderInfoMaseNotifications(showPopup = false) {
   // Filter by Kampus First
   let filteredByKampus = validNotifs.filter(n => {
     if (activeInfoMaseKampus === 'semua') return true;
-    const msg = n.pesan.toLowerCase();
+    const msg = (n.pesan || '').toLowerCase();
     if (activeInfoMaseKampus === 'thehok') return msg.includes('thehok');
     if (activeInfoMaseKampus === 'kobar') return msg.includes('kobar');
     return true; // if no campus identifier, show it
@@ -4208,6 +4707,8 @@ function renderInfoMaseNotifications(showPopup = false) {
       targetType = 'jeda';
     }
 
+    const notifDate = n.tanggal || (document.getElementById('filter-tanggal')?.value || '');
+
     const clickAttr = parsedRoom
       ? `data-room="${escapeHtml(parsedRoom)}" data-campus="${escapeHtml(parsedCampus)}" data-date="${escapeHtml(notifDate)}" data-type="${targetType}" onclick="handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, this.dataset.type)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick(this.dataset.room, this.dataset.campus, this.dataset.date, this.dataset.type);}" role="button" tabindex="0"`
       : `data-type="${targetType}" onclick="handleNotifCardClick('', '', '${escapeHtml(notifDate)}', this.dataset.type)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleNotifCardClick('', '', '${escapeHtml(notifDate)}', this.dataset.type);}" role="button" tabindex="0"`;
@@ -4287,12 +4788,19 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
       renderInfoMaseNotifications(false);
     }
   } catch (e) {
-    // Fallback offline / client-side calculation
-    const clientGaps = calculateClientSideGaps(tanggal);
-    if (clientGaps.length > 0) {
-      updateInfoMaseDynamicButtons(clientGaps);
-      renderInfoMaseNotifications(showPopup);
-    } else {
+    console.error('Error fetching notifikasi lab:', e);
+    try {
+      const clientGaps = calculateClientSideGaps(tanggal);
+      if (clientGaps.length > 0) {
+        updateInfoMaseDynamicButtons(clientGaps);
+        renderInfoMaseNotifications(showPopup);
+      } else {
+        updateInfoMaseDynamicButtons([]);
+        renderInfoMaseNotifications(false);
+        if (notifList) notifList.innerHTML = '<em>Tidak ada notifikasi pada tanggal ini.</em>';
+      }
+    } catch (err2) {
+      console.error('Error in fallback calculation:', err2);
       updateInfoMaseDynamicButtons([]);
       renderInfoMaseNotifications(false);
       if (notifList) notifList.innerHTML = '<em style="color:var(--badge-cc);">Gagal memuat notifikasi.</em>';
@@ -8180,7 +8688,76 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         }
       }
 
-      if (currentStatus === 'buka') {
+      if (!isLabEntity) {
+        const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate);
+        headerLabStatusEl.className = `room-lab-status-strip ${acStatus.stripClass}`;
+        headerLabStatusEl.style.display = 'flex';
+        headerLabStatusEl.innerHTML = `
+          <div class="lab-status-left">
+            <span class="lab-status-dot ${acStatus.dotClass}"></span>
+            <div class="lab-status-texts">
+              <div class="lab-status-title-row">
+                <span class="lab-status-title">${acStatus.statusText}</span>
+                ${acStatus.countdownMinutes !== null && acStatus.countdownMinutes > 0 && isToday ? `
+                  <span class="ac-countdown-badge ${acStatus.badgeType}">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span>${acStatus.countdownMinutes}m</span>
+                  </span>
+                ` : ''}
+              </div>
+              <span class="lab-status-sub">${escapeHtml(acStatus.subtext)}</span>
+            </div>
+          </div>
+          <div class="lab-status-right">
+            ${acStatus.actionLabel ? `
+              <button type="button" class="btn-lab-toggle ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">
+                ${acStatus.btnIcon}
+                <span>${escapeHtml(acStatus.actionLabel)}</span>
+              </button>
+            ` : ''}
+          </div>
+        `;
+
+        const lockBadgeEl = document.getElementById('room-detail-lock-badge');
+        if (lockBadgeEl) {
+          if (acStatus.badgeType === 'on') {
+            lockBadgeEl.className = 'room-detail-pill lock is-buka is-ac-active';
+            lockBadgeEl.innerHTML = `
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>
+              <span>AC Aktif</span>
+            `;
+            lockBadgeEl.style.display = 'inline-flex';
+          } else if (acStatus.badgeType === 'warning-on') {
+            lockBadgeEl.className = 'room-detail-pill lock is-prep is-ac-prep-pill';
+            lockBadgeEl.innerHTML = `
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>
+              <span>Perlu Hidupkan</span>
+            `;
+            lockBadgeEl.style.display = 'inline-flex';
+          } else if (acStatus.badgeType === 'warning-off') {
+            lockBadgeEl.className = 'room-detail-pill lock is-tutup is-ac-warn-pill';
+            lockBadgeEl.innerHTML = `
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+              <span>Perlu Matikan</span>
+            `;
+            lockBadgeEl.style.display = 'inline-flex';
+          } else if (acStatus.badgeType === 'standby') {
+            lockBadgeEl.className = 'room-detail-pill lock is-buka is-ac-standby-pill';
+            lockBadgeEl.innerHTML = `
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              <span>AC Standby</span>
+            `;
+            lockBadgeEl.style.display = 'inline-flex';
+          } else {
+            lockBadgeEl.className = 'room-detail-pill lock is-tutup';
+            lockBadgeEl.innerHTML = `
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+              <span>AC Padam</span>
+            `;
+            lockBadgeEl.style.display = 'inline-flex';
+          }
+        }
+      } else if (currentStatus === 'buka') {
         headerLabStatusEl.className = 'room-lab-status-strip is-buka';
         headerLabStatusEl.style.display = 'flex';
         headerLabStatusEl.innerHTML = `
@@ -8322,6 +8899,24 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
         if (gapMins > 0) {
           const isGapActiveNow = isToday && (currentMinutes >= prevEndM && currentMinutes < startM);
+          let acGapAdviceHtml = '';
+          if (!isLabEntity) {
+            if (gapMins >= 30) {
+              acGapAdviceHtml = `
+                <div class="gap-ac-guidance is-turn-off">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                  <span>Panduan AC: <b>Wajib Dimatikan</b> (Hemat energi selama jeda ${formatGapDuration(gapMins)})</span>
+                </div>
+              `;
+            } else {
+              acGapAdviceHtml = `
+                <div class="gap-ac-guidance is-standby">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+                  <span>Panduan AC: <b>Tetap Standby</b> (Jeda singkat ${gapMins} mnt, jangan matikan kompresor)</span>
+                </div>
+              `;
+            }
+          }
           gapBoxHtml = `
             <div class="room-schedule-gap-box is-gap ${isGapActiveNow ? 'active-gap-now' : ''}">
               <div class="gap-box-main">
@@ -8335,6 +8930,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                     ${isGapActiveNow ? `<span class="gap-box-live"><span class="tv-pulse-dot dot-amber"></span> Sedang Jeda Kosong</span>` : ''}
                   </div>
                   <div class="gap-box-time">${prevEndTimeStr} - ${startTimeStr} WIB • Ruangan Kosong</div>
+                  ${acGapAdviceHtml}
                 </div>
               </div>
             </div>
@@ -8347,6 +8943,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                 <span class="no-gap-pill">
                   <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                   <span>Tanpa Jeda • Bersambung Langsung (${startTimeStr} WIB)</span>
+                  ${!isLabEntity ? `<span class="no-gap-ac-sub">❄️ AC Tetap Standby</span>` : ''}
                 </span>
                 <span class="no-gap-line"></span>
               </div>
@@ -8685,7 +9282,7 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       nama_mk: namaMk,
       kelas: kelas,
       status_lab: targetStatus,
-      diubah_oleh: 'Aslab (Web)'
+      diubah_oleh: isLabOrComputer ? 'Aslab (Web)' : 'Asmot (Web)'
     };
 
     const res = await fetch(`${API_BASE_URL}/api/status-lab`, {
