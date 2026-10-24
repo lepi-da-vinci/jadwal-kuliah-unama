@@ -13253,3 +13253,228 @@ body.dark .preview-badge {
   50% { border-color: rgba(239, 68, 68, 0.85); box-shadow: 0 0 10px rgba(239, 68, 68, 0.15); }
   100% { border-color: rgba(239, 68, 68, 0.35); }
 }
+
+/* ==============================================================
+   ASMOT AC TIMER RECORD STRIP & DASHBOARD BADGES
+   ============================================================== */
+
+/* Record Strip inside Room Modal Header */
+.ac-timer-record-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ac-timer-record-strip:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+.ac-timer-record-strip .timer-record-icon {
+  font-size: 0.88rem;
+  flex-shrink: 0;
+}
+
+.ac-timer-record-strip .timer-record-text {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.ac-timer-record-strip .timer-time-highlight {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.ac-timer-record-strip .timer-record-action {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+body.dark .ac-timer-record-strip .timer-record-action {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Strip Variant: Belum Dikasih Timer */
+.ac-timer-record-strip.timer-none {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1.5px dashed rgba(148, 163, 184, 0.45);
+  color: var(--text-muted);
+}
+.ac-timer-record-strip.timer-none .timer-record-action {
+  color: #0284c7;
+  border-color: rgba(2, 132, 199, 0.3);
+  background: rgba(2, 132, 199, 0.08);
+}
+body.dark .ac-timer-record-strip.timer-none .timer-record-action {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+/* Strip Variant: Timer Mati Saja (Amber) */
+.ac-timer-record-strip.timer-off {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #b45309;
+}
+body.dark .ac-timer-record-strip.timer-off {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+}
+
+/* Strip Variant: Timer Hidup Saja (Cyan) */
+.ac-timer-record-strip.timer-on {
+  background: rgba(2, 132, 199, 0.12);
+  border: 1px solid rgba(2, 132, 199, 0.45);
+  color: #0284c7;
+}
+body.dark .ac-timer-record-strip.timer-on {
+  background: rgba(2, 132, 199, 0.18);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+}
+
+/* Strip Variant: Hidup & Mati (Emerald) */
+.ac-timer-record-strip.timer-both {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #047857;
+}
+body.dark .ac-timer-record-strip.timer-both {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #34d399;
+}
+
+/* Quick Mode Selection in Modal Timer */
+.timer-quick-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--hover-bg, rgba(0, 0, 0, 0.02));
+  border: 1px solid var(--border);
+}
+
+.quick-modes-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.quick-modes-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.btn-quick-mode {
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dark);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 5px;
+}
+
+.btn-quick-mode:hover {
+  transform: translateY(-1px);
+}
+
+.btn-quick-mode.mode-off:hover {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+body.dark .btn-quick-mode.mode-off:hover {
+  color: #fbbf24;
+}
+
+.btn-quick-mode.mode-on:hover {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+}
+body.dark .btn-quick-mode.mode-on:hover {
+  color: #38bdf8;
+}
+
+.btn-quick-mode.mode-both:hover {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+body.dark .btn-quick-mode.mode-both:hover {
+  color: #34d399;
+}
+
+/* Mini Timer Badge on Dashboard Grid Room Card */
+.lab-card-timer-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.lab-card-timer-mini.timer-off {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+body.dark .lab-card-timer-mini.timer-off {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+}
+
+.lab-card-timer-mini.timer-on {
+  background: rgba(2, 132, 199, 0.16);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.4);
+}
+body.dark .lab-card-timer-mini.timer-on {
+  background: rgba(2, 132, 199, 0.25);
+  color: #38bdf8;
+}
+
+.lab-card-timer-mini.timer-both {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+body.dark .lab-card-timer-mini.timer-both {
+  background: rgba(16, 185, 129, 0.25);
+  color: #34d399;
+}

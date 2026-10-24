@@ -370,17 +370,26 @@ def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: st
         t_on_sql = f"{timer_on.strip()}:00" if timer_on and len(timer_on.strip()) == 5 else (timer_on.strip() if timer_on else None)
         t_off_sql = f"{timer_off.strip()}:00" if timer_off and len(timer_off.strip()) == 5 else (timer_off.strip() if timer_off else None)
 
+        # 1. Update ke seluruh sesi ruangan ini pada tanggal terkait
         cursor.execute("""
-            INSERT INTO status_operasional_lab (
-                tanggal, id_ruangan, jam, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE
-                timer_on = VALUES(timer_on),
-                timer_off = VALUES(timer_off),
-                timer_aktif = VALUES(timer_aktif),
-                diubah_oleh = VALUES(diubah_oleh),
-                waktu_aksi = NOW()
-        """, (tanggal, id_ruangan, jam_sql, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
+            UPDATE status_operasional_lab
+            SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, waktu_aksi = NOW()
+            WHERE tanggal = %s AND id_ruangan = %s
+        """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
+
+        # 2. Jika belum ada entri sama sekali hari ini, insert baris baru
+        if cursor.rowcount == 0:
+            cursor.execute("""
+                INSERT INTO status_operasional_lab (
+                    tanggal, id_ruangan, jam, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                    timer_on = VALUES(timer_on),
+                    timer_off = VALUES(timer_off),
+                    timer_aktif = VALUES(timer_aktif),
+                    diubah_oleh = VALUES(diubah_oleh),
+                    waktu_aksi = NOW()
+            """, (tanggal, id_ruangan, jam_sql, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
         conn.commit()
         return True
     except Exception as e:

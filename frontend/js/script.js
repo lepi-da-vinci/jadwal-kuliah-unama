@@ -2726,13 +2726,120 @@ function normalizeScheduleItem(s) {
   };
 }
 
+// ==================== TIMER AC & ASMOT OPERATIONAL MANAGER ====================
+window._roomAcTimers = {};
+
+function getRoomAcTimerKey(roomName = '', campusName = '') {
+  const clean = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName || '').trim().toLowerCase();
+  const camp = (formatCampusName(campusName || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : '')) || '').trim().toLowerCase();
+  return `${clean}__${camp}`;
+}
+
+function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
+  if (!roomName) return null;
+  const key = getRoomAcTimerKey(roomName, campusName);
+
+  if (!window._roomAcTimers || Object.keys(window._roomAcTimers).length === 0) {
+    try {
+      const stored = localStorage.getItem(`unama_ac_timers_${activeDate}`);
+      if (stored) window._roomAcTimers = JSON.parse(stored);
+    } catch (e) {}
+  }
+  return (window._roomAcTimers && window._roomAcTimers[key]) || null;
+}
+window.getRoomAcTimer = getRoomAcTimer;
+
+function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
+  if (!Array.isArray(data)) return;
+  if (!window._roomAcTimers) window._roomAcTimers = {};
+
+  data.forEach(stat => {
+    if (stat.timer_aktif && stat.timer_aktif !== 'none') {
+      const key = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
+      window._roomAcTimers[key] = {
+        roomName: stat.nama_ruangan,
+        kampus: stat.kampus,
+        tanggal: stat.tanggal,
+        timer_on: stat.timer_on_str || (stat.timer_on ? String(stat.timer_on).substring(0, 5) : ''),
+        timer_off: stat.timer_off_str || (stat.timer_off ? String(stat.timer_off).substring(0, 5) : ''),
+        timer_aktif: stat.timer_aktif,
+        diubah_oleh: stat.diubah_oleh || 'Asmot (Web)'
+      };
+    }
+  });
+
+  if (targetDate) {
+    try {
+      localStorage.setItem(`unama_ac_timers_${targetDate}`, JSON.stringify(window._roomAcTimers));
+    } catch (e) {}
+  }
+}
+window.syncRoomAcTimersFromBackend = syncRoomAcTimersFromBackend;
+
 /**
  * Smart AC Engine untuk Ruang Kelas Teori & Asmot
  * Menghitung status AC operasional, rekomendasi tindakan, dan countdown real-time
  */
 function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = '', roomName = '', campusName = '') {
+  // Ambil data timer ac ruangan (jika sudah dicatat oleh Asmot)
+  const targetRoom = roomName || (rawSchedules[0] ? (rawSchedules[0].nama_ruangan || rawSchedules[0].cleanName || rawSchedules[0].rawName) : '');
+  const targetCamp = campusName || (rawSchedules[0] ? (rawSchedules[0].kampus || '') : '');
+  const acTimer = getRoomAcTimer(targetRoom, targetCamp, activeDate);
+
+  let timerSummary = null;
+  let timerText = 'Belum Dikasih Timer Remote';
+  let timerTextHtml = 'Belum Dikasih Timer Remote';
+  let timerStatus = 'none';
+  let timerButtonLabel = '⏱️ Catat Timer';
+  let timerBadgeClass = 'timer-none';
+  let timerIcon = '⏱️';
+  let timerActionLabel = '+ Catat Timer';
+
+  if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none') {
+    timerStatus = acTimer.timer_aktif;
+    if (acTimer.timer_aktif === 'both' && acTimer.timer_on && acTimer.timer_off) {
+      timerSummary = `ON ${acTimer.timer_on} • OFF ${acTimer.timer_off}`;
+      timerText = `Sudah Diset Timer (Hidup ${acTimer.timer_on} • Mati ${acTimer.timer_off} WIB)`;
+      timerTextHtml = `Sudah Diset Timer • <span class="timer-time-highlight">Hidup ${acTimer.timer_on} WIB</span> &bull; <span class="timer-time-highlight">Mati ${acTimer.timer_off} WIB</span>`;
+      timerButtonLabel = `⏱️ ${acTimer.timer_on} - ${acTimer.timer_off}`;
+      timerBadgeClass = 'timer-both';
+      timerIcon = '⏱️';
+      timerActionLabel = 'Ubah';
+    } else if (acTimer.timer_aktif === 'on' && acTimer.timer_on) {
+      timerSummary = `ON ${acTimer.timer_on}`;
+      timerText = `Sudah Diset Timer Hidup (Hidup jam ${acTimer.timer_on} WIB)`;
+      timerTextHtml = `Sudah Diset Timer Hidup • <span class="timer-time-highlight">Hidup jam ${acTimer.timer_on} WIB</span>`;
+      timerButtonLabel = `❄️ Hidup ${acTimer.timer_on}`;
+      timerBadgeClass = 'timer-on';
+      timerIcon = '❄️';
+      timerActionLabel = 'Ubah';
+    } else if (acTimer.timer_aktif === 'off' && acTimer.timer_off) {
+      timerSummary = `OFF ${acTimer.timer_off}`;
+      timerText = `Sudah Diset Timer Mati (Mati jam ${acTimer.timer_off} WIB)`;
+      timerTextHtml = `Sudah Diset Timer Mati • <span class="timer-time-highlight">Mati jam ${acTimer.timer_off} WIB</span>`;
+      timerButtonLabel = `⚡ Mati ${acTimer.timer_off}`;
+      timerBadgeClass = 'timer-off';
+      timerIcon = '⚡';
+      timerActionLabel = 'Ubah';
+    }
+  }
+
+  function withTimer(res) {
+    if (!res) return res;
+    res.timerData = acTimer;
+    res.timerSummary = timerSummary;
+    res.timerStatus = timerStatus;
+    res.timerText = timerText;
+    res.timerTextHtml = timerTextHtml;
+    res.timerButtonLabel = timerButtonLabel;
+    res.timerBadgeClass = timerBadgeClass;
+    res.timerIcon = timerIcon;
+    res.timerActionLabel = timerActionLabel;
+    return res;
+  }
+
   if (!Array.isArray(rawSchedules) || rawSchedules.length === 0) {
-    return {
+    return withTimer({
       code: 'NO_SCHEDULE',
       isAcOn: false,
       statusText: 'AC Padam',
@@ -2746,7 +2853,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       dotClass: 'dot-belum',
       btnClass: 'buka',
       btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-    };
+    });
   }
 
   const schedules = rawSchedules.map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
@@ -2759,7 +2866,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const isAcRecordedOn = (opStatus.status === 'buka');
 
   if (!effectiveIsToday) {
-    return {
+    return withTimer({
       code: 'NOT_TODAY',
       isAcOn: false,
       statusText: 'Jadwal Terdaftar',
@@ -2773,13 +2880,13 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       dotClass: 'dot-belum',
       btnClass: 'buka',
       btnIcon: ''
-    };
+    });
   }
 
   // Filter kelas fisik (abaikan CC jika batal total)
   const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC');
   if (physicalSchedules.length === 0) {
-    return {
+    return withTimer({
       code: 'ONLINE_OR_CANCELLED',
       isAcOn: isAcRecordedOn,
       statusText: isAcRecordedOn ? '⚠️ AC Menyala (Kelas Dibatalkan)' : '⏹️ AC Padam (Semua Kelas Batal)',
@@ -2795,7 +2902,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       btnIcon: isAcRecordedOn
         ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
         : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-    };
+    });
   }
 
   const firstS = physicalSchedules[0];
@@ -2806,7 +2913,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     const timeUntilFirst = firstS._startM - currentMinutes;
     if (timeUntilFirst <= 20) {
       // Masa persiapan H-20! Ruangan harus mulai didinginkan sekarang!
-      return {
+      return withTimer({
         code: 'PREP_ON',
         isAcOn: isAcRecordedOn,
         statusText: isAcRecordedOn ? '❄️ AC Aktif (Masa Persiapan)' : '❄️ Segera Hidupkan AC!',
@@ -2822,10 +2929,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         btnIcon: isAcRecordedOn
           ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
           : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-      };
+      });
     } else {
       // Masih lama (> 20 menit sebelum sesi 1)
-      return {
+      return withTimer({
         code: 'WAITING_PREP',
         isAcOn: isAcRecordedOn,
         statusText: isAcRecordedOn ? '⚠️ AC Sudah Menyala (Terlalu Awal)' : '⏹️ AC Padam (Hemat Energi)',
@@ -2841,7 +2948,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         btnIcon: isAcRecordedOn
           ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
           : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-      };
+      });
     }
   }
 
@@ -2861,7 +2968,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     const remainingMin = ongoingS._endM - currentMinutes;
 
     if (isOnline) {
-      return {
+      return withTimer({
         code: 'ONLINE_OR_CANCELLED',
         isAcOn: isAcRecordedOn,
         statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Kelas Daring/Online)' : '⏹️ AC Padam (Kuliah Online)',
@@ -2877,7 +2984,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         btnIcon: isAcRecordedOn
           ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
           : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-      };
+      });
     }
 
     // Cek sesi selanjutnya untuk panduan akhir sesi
@@ -2894,7 +3001,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       nextGuidance = 'Sesi Terakhir (Matikan AC setelah ini)';
     }
 
-    return {
+    return withTimer({
       code: 'IN_SESSION',
       isAcOn: isAcRecordedOn,
       statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⚠️ Sesi Berlangsung (AC Belum Nyala)',
@@ -2910,7 +3017,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       btnIcon: isAcRecordedOn
         ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
         : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-    };
+    });
   }
 
   // 3. Apakah sekarang DI ANTARA DUA SESI (JEDA / GAP)?
@@ -2925,7 +3032,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
 
       // KASUS C1: GAP KECIL (<= 30 MENIT) -> REKOMENDASI TETAP STANDBY
       if (gapTotal <= 30) {
-        return {
+        return withTimer({
           code: 'STANDBY',
           isAcOn: isAcRecordedOn,
           statusText: '🔁 AC Tetap Standby',
@@ -2941,13 +3048,13 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
           btnIcon: isAcRecordedOn
             ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
             : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-        };
+        });
       }
 
       // KASUS C2: GAP PANJANG (> 30 MENIT)
       // Cek apakah sudah masuk H-20 persiapan untuk sesi berikutnya?
       if (timeUntilNextStart <= 20) {
-        return {
+        return withTimer({
           code: 'PREP_ON',
           isAcOn: isAcRecordedOn,
           statusText: isAcRecordedOn ? '❄️ AC Aktif (Persiapan Sesi Lanjutan)' : '❄️ Segera Hidupkan AC!',
@@ -2963,12 +3070,12 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
           btnIcon: isAcRecordedOn
             ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
             : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-        };
+        });
       }
 
       // Jika baru selesai (<= 15 mnt), peringatkan wajib matikan!
       if (timeSincePrevEnd <= 15 && isAcRecordedOn) {
-        return {
+        return withTimer({
           code: 'MUST_TURN_OFF',
           isAcOn: true,
           statusText: '⚡ Segera Matikan AC!',
@@ -2982,11 +3089,11 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
           dotClass: 'dot-tutup',
           btnClass: 'tutup-urgent',
           btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
-        };
+        });
       }
 
       // Selama jeda panjang berlangsung
-      return {
+      return withTimer({
         code: 'LONG_GAP_OFF',
         isAcOn: isAcRecordedOn,
         statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Ruang Kosong)' : '⏹️ AC Padam (Hemat Energi)',
@@ -3002,7 +3109,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         btnIcon: isAcRecordedOn
           ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
           : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-      };
+      });
     }
   }
 
@@ -3010,7 +3117,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   if (currentMinutes > lastS._endM) {
     const timeSinceLastEnd = currentMinutes - lastS._endM;
     if (timeSinceLastEnd <= 20 && isAcRecordedOn) {
-      return {
+      return withTimer({
         code: 'LAST_SESSION_OVER',
         isAcOn: true,
         statusText: '⚡ Segera Matikan AC Total!',
@@ -3024,9 +3131,9 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         dotClass: 'dot-tutup',
         btnClass: 'tutup-urgent',
         btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
-      };
+      });
     } else {
-      return {
+      return withTimer({
         code: 'ALL_FINISHED',
         isAcOn: isAcRecordedOn,
         statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Sesi Selesai)' : '⏹️ AC Padam Total',
@@ -3042,27 +3149,12 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         btnIcon: isAcRecordedOn
           ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
           : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-      };
-    }
-  }
-
-  // Attach Timer AC details
-  const targetRoom = roomName || (schedules[0] ? (schedules[0].nama_ruangan || schedules[0].cleanName || schedules[0].rawName) : '');
-  const targetCamp = campusName || (schedules[0] ? (schedules[0].kampus || '') : '');
-  const acTimer = getRoomAcTimer(targetRoom, targetCamp, activeDate);
-  let timerSummary = null;
-  if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none') {
-    if (acTimer.timer_aktif === 'both' && acTimer.timer_on && acTimer.timer_off) {
-      timerSummary = `ON ${acTimer.timer_on} • OFF ${acTimer.timer_off}`;
-    } else if (acTimer.timer_aktif === 'on' && acTimer.timer_on) {
-      timerSummary = `ON ${acTimer.timer_on}`;
-    } else if (acTimer.timer_aktif === 'off' && acTimer.timer_off) {
-      timerSummary = `OFF ${acTimer.timer_off}`;
+      });
     }
   }
 
   // Fallback
-  const finalResult = {
+  return withTimer({
     code: 'IN_SESSION',
     isAcOn: isAcRecordedOn,
     statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⏹️ AC Padam',
@@ -3076,10 +3168,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     dotClass: isAcRecordedOn ? 'dot-buka' : 'dot-belum',
     btnClass: isAcRecordedOn ? 'tutup' : 'buka',
     btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
-  };
-  finalResult.timerData = acTimer;
-  finalResult.timerSummary = timerSummary;
-  return finalResult;
+  });
 }
 window.calculateRoomAcStatus = calculateRoomAcStatus;
 
@@ -3188,55 +3277,37 @@ function updateAsmotAcSummaryBar(roomsThehok = {}, roomsKobar = {}, kampusFilter
 window.updateAsmotAcSummaryBar = updateAsmotAcSummaryBar;
 
 
-// ==================== TIMER AC & ASMOT OPERATIONAL MANAGER ====================
-window._roomAcTimers = {};
 
-function getRoomAcTimerKey(roomName = '', campusName = '') {
-  const clean = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName || '').trim().toLowerCase();
-  const camp = (formatCampusName(campusName || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : '')) || '').trim().toLowerCase();
-  return `${clean}__${camp}`;
-}
 
-function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
-  if (!roomName) return null;
-  const key = getRoomAcTimerKey(roomName, campusName);
+window.selectQuickTimerMode = function (mode) {
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  const onInput = document.getElementById('timer-on-time');
+  const offInput = document.getElementById('timer-off-time');
+  const ctx = window._activeTimerRoomContext || {};
 
-  if (!window._roomAcTimers || Object.keys(window._roomAcTimers).length === 0) {
-    try {
-      const stored = localStorage.getItem(`unama_ac_timers_${activeDate}`);
-      if (stored) window._roomAcTimers = JSON.parse(stored);
-    } catch (e) {}
+  const defaultOn = formatMinToTime((ctx.firstStartM ?? 480) - 20);
+  const defaultOff = ctx.lastEndTimeStr || "16:15";
+
+  if (mode === 'off') {
+    if (onToggle) onToggle.checked = false;
+    if (offToggle) offToggle.checked = true;
+    if (offInput) offInput.value = defaultOff;
+  } else if (mode === 'on') {
+    if (onToggle) onToggle.checked = true;
+    if (offToggle) offToggle.checked = false;
+    if (onInput) onInput.value = defaultOn;
+  } else if (mode === 'both') {
+    if (onToggle) onToggle.checked = true;
+    if (offToggle) offToggle.checked = true;
+    if (onInput) onInput.value = defaultOn;
+    if (offInput) offInput.value = defaultOff;
   }
-  return (window._roomAcTimers && window._roomAcTimers[key]) || null;
-}
-window.getRoomAcTimer = getRoomAcTimer;
 
-function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
-  if (!Array.isArray(data)) return;
-  if (!window._roomAcTimers) window._roomAcTimers = {};
-
-  data.forEach(stat => {
-    if (stat.timer_aktif && stat.timer_aktif !== 'none') {
-      const key = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
-      window._roomAcTimers[key] = {
-        roomName: stat.nama_ruangan,
-        kampus: stat.kampus,
-        tanggal: stat.tanggal,
-        timer_on: stat.timer_on_str || (stat.timer_on ? String(stat.timer_on).substring(0, 5) : ''),
-        timer_off: stat.timer_off_str || (stat.timer_off ? String(stat.timer_off).substring(0, 5) : ''),
-        timer_aktif: stat.timer_aktif,
-        diubah_oleh: stat.diubah_oleh || 'Asmot (Web)'
-      };
-    }
-  });
-
-  if (targetDate) {
-    try {
-      localStorage.setItem(`unama_ac_timers_${targetDate}`, JSON.stringify(window._roomAcTimers));
-    } catch (e) {}
+  if (typeof onTimerToggleChange === 'function') {
+    onTimerToggleChange();
   }
-}
-window.syncRoomAcTimersFromBackend = syncRoomAcTimersFromBackend;
+};
 
 window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   const modal = document.getElementById('modal-timer-ac');
@@ -3661,7 +3732,7 @@ function checkAndTriggerAcTimers() {
 }
 window.checkAndTriggerAcTimers = checkAndTriggerAcTimers;
 
-function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime) {
+function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, roomName = '', campusName = '') {
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
   const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
 
@@ -3735,7 +3806,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Jika Aslab/Asmot mencatat ruangan DIBUKA, maka ikon gembok berstatus 'buka' (gembok terbuka),
   // baik saat sedang jeda antar kelas, kelas sedang berlangsung, maupun jeda istirahat.
   let lockStatus = isToday ? opStatus.status : 'tutup';
-  const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate);
+  const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusName);
 
   return { state, text, jamText, lockStatus, acStatus };
 }
@@ -3857,7 +3928,7 @@ function updateActiveLabPanel() {
     let schedules = (roomSchedules[roomKey] || []).slice();
     schedules.sort((a, b) => a.start - b.start);
 
-    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime);
+    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, cleanName, kampus);
     targetDict[cleanName] = statusObj;
   });
 
@@ -3882,7 +3953,7 @@ function updateActiveLabPanel() {
 
     schedules.sort((a, b) => a.start - b.start);
 
-    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime);
+    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, cleanName, kampus);
     targetDict[cleanName] = statusObj;
   });
 
@@ -3981,6 +4052,7 @@ function updateActiveLabPanel() {
                 <div class="lab-card-header">
                   <div class="lab-name">${formatRoomNameHtml(room)}</div>
                   <div class="lab-card-header-icons">
+                    ${(!isLabEntity && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') ? `<div class="lab-card-timer-mini ${data.acStatus.timerBadgeClass}" title="Timer AC: ${escapeHtml(data.acStatus.timerText)}"><span>${data.acStatus.timerIcon} ${escapeHtml(data.acStatus.timerSummary || '')}</span></div>` : ''}
                     ${acBadgeHtml}
                     <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
                       ${lockIconSvg}
@@ -5258,7 +5330,7 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
     return;
   }
   try {
-    if (notifList) notifList.innerHTML = '<em>Memuat notifikasi...</em>';
+    if (notifList && (!latestNotifikasiLabData || latestNotifikasiLabData.length === 0)) notifList.innerHTML = '<em>Memuat notifikasi...</em>';
     const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}&_t=${Date.now()}`);
     const data = await response.json();
 
@@ -9208,12 +9280,18 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                 ` : ''}
               </div>
               <span class="lab-status-sub">${escapeHtml(acStatus.subtext)}</span>
+              <!-- Strip Status Pencatatan Timer AC Khusus Asmot -->
+              <div class="ac-timer-record-strip ${acStatus.timerBadgeClass}" onclick="event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Status Timer AC: ${escapeHtml(acStatus.timerText)} (Klik untuk mencatat / mengubah)">
+                <span class="timer-record-icon">${acStatus.timerIcon}</span>
+                <span class="timer-record-text"><b>Timer AC:</b> ${acStatus.timerTextHtml}</span>
+                <span class="timer-record-action">${acStatus.timerActionLabel}</span>
+              </div>
             </div>
           </div>
           <div class="lab-status-right">
             <button type="button" class="btn-timer-ac ${acStatus.timerSummary ? 'active' : ''}" onclick="window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Atur Timer Hidup & Timer Mati AC">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>${acStatus.timerSummary ? 'Timer' : 'Timer AC'}</span>
+              <span>${escapeHtml(acStatus.timerButtonLabel)}</span>
             </button>
             ${acStatus.actionLabel ? `
               <button type="button" class="btn-lab-toggle ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">

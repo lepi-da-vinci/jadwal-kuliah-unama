@@ -45,6 +45,22 @@
         </div>
       </div>
 
+      <!-- MODE CEPAT ASMOT -->
+      <div class="timer-quick-modes">
+        <span class="quick-modes-label">Pilihan Cepat Mode Timer Asmot:</span>
+        <div class="quick-modes-buttons">
+          <button type="button" class="btn-quick-mode mode-off" onclick="selectQuickTimerMode('off')" title="Hanya aktifkan Timer Mati (AC mati otomatis saat sesi selesai)">
+            <span>⚡ Catat Timer Mati Saja</span>
+          </button>
+          <button type="button" class="btn-quick-mode mode-on" onclick="selectQuickTimerMode('on')" title="Hanya aktifkan Timer Hidup (AC hidup sebelum kelas dimulai)">
+            <span>❄️ Catat Timer Hidup Saja</span>
+          </button>
+          <button type="button" class="btn-quick-mode mode-both" onclick="selectQuickTimerMode('both')" title="Aktifkan Timer Hidup dan Timer Mati">
+            <span>⏱️ Catat Hidup & Mati</span>
+          </button>
+        </div>
+      </div>
+
       <!-- SECTION 1: TIMER HIDUP (ON) -->
       <div class="timer-card card-timer-on">
         <div class="timer-card-header">
@@ -163,4 +179,3 @@
     </div>
   </div>
 </div>
-

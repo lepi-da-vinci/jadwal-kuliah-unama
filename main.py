@@ -4058,11 +4058,11 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
         for r in rows:
             if r.get('waktu_aksi'):
                 r['waktu_aksi_str'] = r['waktu_aksi'].strftime('%H:%M:%S')
+                r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
             if r.get('timer_on'):
                 r['timer_on_str'] = str(r['timer_on'])[:5]
             if r.get('timer_off'):
                 r['timer_off_str'] = str(r['timer_off'])[:5]
-                r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
             if r.get('jam'):
                 total_sec = int(r['jam'].total_seconds()) if hasattr(r['jam'], 'total_seconds') else 0
                 r['jam'] = f"{total_sec//3600:02d}:{(total_sec%3600)//60:02d}"
