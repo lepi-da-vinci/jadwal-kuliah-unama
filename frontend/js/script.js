@@ -3327,6 +3327,10 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
     return;
   }
 
+  // Guard flag dan timestamp agar tidak tertutup oleh ghost clicks / gestures di mobile
+  window._isTimerAcModalOpen = true;
+  window._timerModalOpenedAt = Date.now();
+
   const filterTanggal = document.getElementById('filter-tanggal');
   const now = new Date();
   const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -3394,35 +3398,6 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
     refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) • Sesi Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar)`;
   }
 
-  // Preset Chips Dynamic Generation
-  const onPresetsContainer = document.getElementById('timer-on-presets');
-  if (onPresetsContainer) {
-    const h20 = formatMinToTime(firstStartM - 20);
-    const h15 = formatMinToTime(firstStartM - 15);
-    const h10 = formatMinToTime(firstStartM - 10);
-    onPresetsContainer.innerHTML = `
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">❄️ H-20 (${h20})</button>
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h15}')">H-15 (${h15})</button>
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h10}')">H-10 (${h10})</button>
-    `;
-  }
-
-  const offPresetsContainer = document.getElementById('timer-off-presets');
-  if (offPresetsContainer) {
-    let offChips = '';
-    if (roomSchedules.length > 0) {
-      roomSchedules.forEach((s, idx) => {
-        offChips += `<button type="button" class="preset-chip" onclick="selectPresetTime('off', '${s._endTimeStr}')">Selesai Sesi ${idx + 1} (${s._endTimeStr})</button>`;
-      });
-    } else {
-      offChips = `
-        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '11:00')">11:00 WIB</button>
-        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '17:00')">17:00 WIB</button>
-      `;
-    }
-    offPresetsContainer.innerHTML = offChips;
-  }
-
   // Load existing timer config or defaults
   const existingTimer = getRoomAcTimer(roomName, campusLabel, activeDate);
   const onToggle = document.getElementById('timer-on-toggle');
@@ -3445,6 +3420,14 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
     if (offTimeInput) offTimeInput.value = defaultOff;
   }
 
+  // Load preferensi tipe remote AC untuk ruangan ini (atau default '24h')
+  let savedRemoteType = '24h';
+  try {
+    savedRemoteType = localStorage.getItem('unama_remote_type_' + roomName) || '24h';
+  } catch (e) {}
+
+  window.selectRemoteType(savedRemoteType, true);
+
   onTimerToggleChange();
   validateTimerInputs();
 
@@ -3453,13 +3436,354 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   modal.style.display = 'flex';
 };
 
-window.closeTimerAcModal = function () {
+window.closeTimerAcModal = function (e) {
+  // Cegah instant close jika baru saja terbuka < 350ms (akibat ghost click touch di Android)
+  if (e && e.type === 'click' && window._timerModalOpenedAt && (Date.now() - window._timerModalOpenedAt < 350)) {
+    return;
+  }
   const modal = document.getElementById('modal-timer-ac');
   if (modal) {
     modal.classList.remove('open');
     modal.style.display = 'none';
   }
+  window._isTimerAcModalOpen = false;
 };
+
+// ==============================================================
+// LOGIKA SELEKTOR TIPE FORMAT REMOTE AC (24H, 12H AM/PM, PER JAM 1-12)
+// ==============================================================
+window.selectRemoteType = function (type, isInitial = false) {
+  window._activeRemoteType = type;
+
+  // 1. Update Tab Buttons Active State
+  const tabs = ['24h', '12h', 'duration'];
+  tabs.forEach(t => {
+    const tabEl = document.getElementById('tab-remote-' + t);
+    if (tabEl) tabEl.classList.toggle('active', t === type);
+  });
+
+  // 2. Update Header Hint Description
+  const hintEl = document.getElementById('timer-remote-type-desc');
+  if (hintEl) {
+    if (type === '24h') hintEl.textContent = 'Model 24 Jam (00:00 - 23:59)';
+    else if (type === '12h') hintEl.textContent = 'Model 12 Jam (AM / PM)';
+    else if (type === 'duration') hintEl.textContent = 'Model Tombol Per Jam (1 - 12 Jam)';
+  }
+
+  // 3. Switch Views for Timer ON and Timer OFF
+  const on24 = document.getElementById('timer-on-view-24h');
+  const on12 = document.getElementById('timer-on-view-12h');
+  const onDur = document.getElementById('timer-on-view-duration');
+
+  const off24 = document.getElementById('timer-off-view-24h');
+  const off12 = document.getElementById('timer-off-view-12h');
+  const offDur = document.getElementById('timer-off-view-duration');
+
+  if (on24) on24.style.display = (type === '24h') ? 'block' : 'none';
+  if (on12) on12.style.display = (type === '12h') ? 'block' : 'none';
+  if (onDur) onDur.style.display = (type === 'duration') ? 'block' : 'none';
+
+  if (off24) off24.style.display = (type === '24h') ? 'block' : 'none';
+  if (off12) off12.style.display = (type === '12h') ? 'block' : 'none';
+  if (offDur) offDur.style.display = (type === 'duration') ? 'block' : 'none';
+
+  // 4. Sinkronkan nilai antar view
+  const onInput = document.getElementById('timer-on-time');
+  const offInput = document.getElementById('timer-off-time');
+  const currentOnVal = onInput ? onInput.value : '07:40';
+  const currentOffVal = offInput ? offInput.value : '11:00';
+
+  if (type === '12h') {
+    sync24hTo12h('on', currentOnVal);
+    sync24hTo12h('off', currentOffVal);
+  } else if (type === 'duration') {
+    renderDurationGrid('off');
+    renderDurationGrid('on');
+  }
+
+  // 5. Update Preset Chips Format
+  renderTimerPresets(type);
+
+  // 6. Simpan preferensi per ruangan ke localStorage
+  if (window._activeTimerRoomContext?.roomName) {
+    try {
+      localStorage.setItem('unama_remote_type_' + window._activeTimerRoomContext.roomName, type);
+    } catch (e) {}
+  }
+
+  if (!isInitial) {
+    validateTimerInputs();
+  }
+};
+
+// Helper: Konversi Waktu 24h ke Format 12h (AM / PM)
+window.formatTimeTo12h = function (time24Str) {
+  if (!time24Str || !time24Str.includes(':')) return time24Str;
+  const parts = time24Str.split(':').map(Number);
+  const h = parts[0];
+  const m = String(parts[1]).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  let h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
+};
+
+// Helper: Sinkronisasi nilai 24h ke Input 12 Jam (AM/PM)
+window.sync24hTo12h = function (which, time24Str) {
+  if (!time24Str || !time24Str.includes(':')) return;
+  const parts = time24Str.split(':').map(Number);
+  const h24 = parts[0];
+  const m = parts[1];
+
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  let h12 = h24 % 12;
+  if (h12 === 0) h12 = 12;
+
+  const hourSelect = document.getElementById(`timer-${which}-12h-hour`);
+  const minSelect = document.getElementById(`timer-${which}-12h-minute`);
+  const amBtn = document.getElementById(`btn-${which}-am`);
+  const pmBtn = document.getElementById(`btn-${which}-pm`);
+  const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
+
+  if (hourSelect) hourSelect.value = String(h12);
+
+  // Pilih menit yang paling mendekati jika tidak pas kelipatan 5
+  if (minSelect) {
+    const minOptions = Array.from(minSelect.options).map(o => Number(o.value));
+    let closestMin = minOptions.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev);
+    minSelect.value = String(closestMin).padStart(2, '0');
+  }
+
+  if (amBtn && pmBtn) {
+    amBtn.classList.toggle('active', ampm === 'AM');
+    pmBtn.classList.toggle('active', ampm === 'PM');
+  }
+
+  if (equivBadge) {
+    equivBadge.innerHTML = `Setara: <b>${time24Str} WIB</b>`;
+  }
+};
+
+// Handler: Tombol Toggle AM / PM
+window.setAmPm = function (which, ampm) {
+  const amBtn = document.getElementById(`btn-${which}-am`);
+  const pmBtn = document.getElementById(`btn-${which}-pm`);
+  if (amBtn && pmBtn) {
+    amBtn.classList.toggle('active', ampm === 'AM');
+    pmBtn.classList.toggle('active', ampm === 'PM');
+  }
+  on12hInputChange(which);
+};
+
+// Handler: Perubahan pada select digit 12 Jam
+window.on12hInputChange = function (which) {
+  const hourSelect = document.getElementById(`timer-${which}-12h-hour`);
+  const minSelect = document.getElementById(`timer-${which}-12h-minute`);
+  const pmBtn = document.getElementById(`btn-${which}-pm`);
+  const mainInput = document.getElementById(`timer-${which}-time`);
+  const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
+
+  const h12 = parseInt(hourSelect?.value || '12', 10);
+  const m = minSelect?.value || '00';
+  const isPm = pmBtn?.classList.contains('active');
+
+  let h24 = h12 % 12;
+  if (isPm) h24 += 12;
+
+  const time24Str = `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  if (mainInput) mainInput.value = time24Str;
+
+  if (equivBadge) {
+    equivBadge.innerHTML = `Setara: <b>${time24Str} WIB</b>`;
+  }
+
+  validateTimerInputs();
+};
+
+// Handler: Perubahan pada input 24 Jam standar
+window.on24hInputChange = function (which) {
+  const mainInput = document.getElementById(`timer-${which}-time`);
+  if (mainInput) {
+    sync24hTo12h(which, mainInput.value);
+  }
+  validateTimerInputs();
+};
+
+// ==============================================================
+// LOGIKA HITUNGAN DURASI PER JAM (1 - 12 JAM)
+// ==============================================================
+window.renderDurationGrid = function (which) {
+  const container = document.getElementById(`timer-${which}-duration-grid`);
+  const nowTimeEl = document.getElementById(`timer-${which}-now-time`);
+  if (!container) return;
+
+  const now = new Date();
+  const nowH = String(now.getHours()).padStart(2, '0');
+  const nowM = String(now.getMinutes()).padStart(2, '0');
+  const nowTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
+  if (nowTimeEl) {
+    nowTimeEl.textContent = `Waktu sekarang: ${nowH}:${nowM} WIB`;
+  }
+
+  // Hitung durasi rekomendasi berdasarkan sesi aktif ruangan
+  let recommendedHour = null;
+  const ctx = window._activeTimerRoomContext || {};
+  const schedules = ctx.schedules || [];
+
+  if (which === 'off') {
+    // Cari sesi aktif saat ini
+    const activeSession = schedules.find(s => nowTotalMinutes >= s._startM && nowTotalMinutes < s._endM);
+    if (activeSession) {
+      const remainingMinutes = activeSession._endM - nowTotalMinutes;
+      if (remainingMinutes > 0) {
+        recommendedHour = Math.max(1, Math.min(12, Math.round(remainingMinutes / 60)));
+      }
+    } else if (schedules.length > 0) {
+      // Jika belum mulai, ambil durasi dari sekarang sampai sesi pertama selesai
+      const firstSession = schedules[0];
+      if (nowTotalMinutes < firstSession._endM) {
+        const diff = firstSession._endM - nowTotalMinutes;
+        recommendedHour = Math.max(1, Math.min(12, Math.round(diff / 60)));
+      }
+    }
+  }
+
+  // Cek apakah input waktu saat ini cocok dengan salah satu jam durasi
+  const currentVal = document.getElementById(`timer-${which}-time`)?.value;
+  let activeHourSelected = null;
+  if (currentVal && currentVal.includes(':')) {
+    const [cH, cM] = currentVal.split(':').map(Number);
+    const cTotal = cH * 60 + cM;
+    let diff = cTotal - nowTotalMinutes;
+    if (diff < 0) diff += 1440;
+    const roundedH = Math.round(diff / 60);
+    if (roundedH >= 1 && roundedH <= 12 && Math.abs(diff - roundedH * 60) <= 5) {
+      activeHourSelected = roundedH;
+    }
+  }
+
+  let html = '';
+  for (let h = 1; h <= 12; h++) {
+    const targetMin = (nowTotalMinutes + h * 60) % 1440;
+    const targetH = String(Math.floor(targetMin / 60)).padStart(2, '0');
+    const targetM = String(targetMin % 60).padStart(2, '0');
+    const targetTimeStr = `${targetH}:${targetM}`;
+
+    const isRec = (recommendedHour === h);
+    const isActive = (activeHourSelected === h);
+
+    html += `
+      <button type="button" 
+              class="btn-duration-hour ${isRec ? 'recommended' : ''} ${isActive ? 'active' : ''}" 
+              data-hour="${h}" 
+              onclick="selectDurationHour('${which}', ${h})" 
+              title="Disetel ${h} jam di remote: AC ${which === 'off' ? 'mati' : 'hidup'} pada ${targetTimeStr} WIB">
+        <span class="duration-hour-title">${h} Jam</span>
+        <span class="duration-hour-time">${targetTimeStr}</span>
+      </button>
+    `;
+  }
+
+  container.innerHTML = html;
+
+  // Update box kalkulasi jika ada tombol yang aktif
+  if (activeHourSelected) {
+    const calcBox = document.getElementById(`timer-${which}-duration-calc`);
+    const calcText = document.getElementById(`timer-${which}-duration-calc-text`);
+    if (calcBox) calcBox.style.display = 'flex';
+    if (calcText) {
+      const targetMin = (nowTotalMinutes + activeHourSelected * 60) % 1440;
+      const targetTimeStr = `${String(Math.floor(targetMin / 60)).padStart(2, '0')}:${String(targetMin % 60).padStart(2, '0')}`;
+      calcText.innerHTML = `Disetel di remote: <b>${activeHourSelected} Jam</b> → AC ${which === 'off' ? 'Mati' : 'Hidup'} Pukul <b>${targetTimeStr} WIB</b>`;
+    }
+  }
+};
+
+window.selectDurationHour = function (which, hours) {
+  const now = new Date();
+  const nowTotalMinutes = now.getHours() * 60 + now.getMinutes();
+  const targetMin = (nowTotalMinutes + hours * 60) % 1440;
+  const targetH = String(Math.floor(targetMin / 60)).padStart(2, '0');
+  const targetM = String(targetMin % 60).padStart(2, '0');
+  const targetTimeStr = `${targetH}:${targetM}`;
+
+  // 1. Set input utama (24h)
+  const mainInput = document.getElementById(`timer-${which}-time`);
+  if (mainInput) mainInput.value = targetTimeStr;
+
+  // 2. Aktifkan toggle switch jika belum on
+  const toggle = document.getElementById(`timer-${which}-toggle`);
+  if (toggle && !toggle.checked) {
+    toggle.checked = true;
+    onTimerToggleChange();
+  }
+
+  // 3. Update highlight active di grid durasi
+  const container = document.getElementById(`timer-${which}-duration-grid`);
+  if (container) {
+    container.querySelectorAll('.btn-duration-hour').forEach(btn => {
+      const btnH = parseInt(btn.getAttribute('data-hour'), 10);
+      btn.classList.toggle('active', btnH === hours);
+    });
+  }
+
+  // 4. Update banner kalkulasi interaktif
+  const calcBox = document.getElementById(`timer-${which}-duration-calc`);
+  const calcText = document.getElementById(`timer-${which}-duration-calc-text`);
+  if (calcBox) calcBox.style.display = 'flex';
+  if (calcText) {
+    calcText.innerHTML = `Disetel di remote: <b>${hours} Jam</b> → AC ${which === 'off' ? 'Mati' : 'Hidup'} Pukul <b>${targetTimeStr} WIB</b>`;
+  }
+
+  // 5. Sinkronkan juga ke input 12h
+  sync24hTo12h(which, targetTimeStr);
+
+  validateTimerInputs();
+};
+
+// Render Preset Rekomendasi Sesuai Format Aktif
+function renderTimerPresets(formatType) {
+  const ctx = window._activeTimerRoomContext || {};
+  const firstStartM = ctx.firstStartM ?? 480;
+  const roomSchedules = ctx.schedules || [];
+
+  const onPresetsContainer = document.getElementById('timer-on-presets');
+  if (onPresetsContainer) {
+    const h20 = formatMinToTime(firstStartM - 20);
+    const h15 = formatMinToTime(firstStartM - 15);
+    const h10 = formatMinToTime(firstStartM - 10);
+
+    const l20 = formatType === '12h' ? formatTimeTo12h(h20) : `${h20} WIB`;
+    const l15 = formatType === '12h' ? formatTimeTo12h(h15) : `${h15} WIB`;
+    const l10 = formatType === '12h' ? formatTimeTo12h(h10) : `${h10} WIB`;
+
+    onPresetsContainer.innerHTML = `
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">❄️ H-20 (${l20})</button>
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h15}')">H-15 (${l15})</button>
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h10}')">H-10 (${l10})</button>
+    `;
+  }
+
+  const offPresetsContainer = document.getElementById('timer-off-presets');
+  if (offPresetsContainer) {
+    let offChips = '';
+    if (roomSchedules.length > 0) {
+      roomSchedules.forEach((s, idx) => {
+        const lbl = formatType === '12h' ? formatTimeTo12h(s._endTimeStr) : `${s._endTimeStr} WIB`;
+        offChips += `<button type="button" class="preset-chip" onclick="selectPresetTime('off', '${s._endTimeStr}')">Selesai Sesi ${idx + 1} (${lbl})</button>`;
+      });
+    } else {
+      const lbl11 = formatType === '12h' ? formatTimeTo12h('11:00') : '11:00 WIB';
+      const lbl17 = formatType === '12h' ? formatTimeTo12h('17:00') : '17:00 WIB';
+      offChips = `
+        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '11:00')">${lbl11}</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '17:00')">${lbl17}</button>
+      `;
+    }
+    offPresetsContainer.innerHTML = offChips;
+  }
+}
 
 window.onTimerToggleChange = function () {
   const onToggle = document.getElementById('timer-on-toggle');
@@ -3488,6 +3812,7 @@ window.selectPresetTime = function (type, timeStr) {
       onToggle.checked = true;
       onTimerToggleChange();
     }
+    sync24hTo12h('on', timeStr);
   } else if (type === 'off') {
     const offInput = document.getElementById('timer-off-time');
     const offToggle = document.getElementById('timer-off-toggle');
@@ -3496,6 +3821,7 @@ window.selectPresetTime = function (type, timeStr) {
       offToggle.checked = true;
       onTimerToggleChange();
     }
+    sync24hTo12h('off', timeStr);
   }
   validateTimerInputs();
 };
@@ -3506,6 +3832,7 @@ window.applySmartOnCorrection = function () {
   const recommendedOn = formatMinToTime(firstStartM - 20);
   const onInput = document.getElementById('timer-on-time');
   if (onInput) onInput.value = recommendedOn;
+  sync24hTo12h('on', recommendedOn);
   validateTimerInputs();
 };
 
@@ -3587,16 +3914,25 @@ window.validateTimerInputs = function () {
     if (offCorrectionBox) offCorrectionBox.style.display = 'none';
   }
 
-  // Update Preview Badge
+  // Update Live Preview Badge
   if (previewBadge) {
+    const formatType = window._activeRemoteType || '24h';
+    let onDisplay = onVal;
+    let offDisplay = offVal;
+
+    if (formatType === '12h') {
+      onDisplay = formatTimeTo12h(onVal);
+      offDisplay = formatTimeTo12h(offVal);
+    }
+
     if (onActive && offActive) {
-      previewBadge.textContent = `⏱️ Timer Aktif: ON ${onVal} • OFF ${offVal} WIB`;
+      previewBadge.textContent = `⏱️ Timer Aktif: ON ${onDisplay} • OFF ${offDisplay}`;
       previewBadge.style.color = '#0284c7';
     } else if (onActive) {
-      previewBadge.textContent = `⏱️ Timer ON: ${onVal} WIB`;
+      previewBadge.textContent = `⏱️ Timer ON: ${onDisplay}`;
       previewBadge.style.color = '#0284c7';
     } else if (offActive) {
-      previewBadge.textContent = `⏱️ Timer OFF: ${offVal} WIB`;
+      previewBadge.textContent = `⏱️ Timer OFF: ${offDisplay}`;
       previewBadge.style.color = '#d97706';
     } else {
       previewBadge.textContent = `Tidak Ada Timer Aktif (Manual Control)`;
@@ -9302,8 +9638,15 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           <!-- 2. Subtitle Note -->
           <div class="lab-status-sub">${escapeHtml(acStatus.subtext)}</div>
 
-          <!-- 3. Apple Inset Grouped Cell for Timer AC (Tappable Tile) -->
-          <div class="ios-timer-cell ${acStatus.timerBadgeClass}" onclick="event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Status Timer AC Remote: ${escapeHtml(acStatus.timerText)} (Klik untuk mencatat / mengubah)">
+          <!-- 3. Apple Inset Grouped Cell for Timer AC (Tappable Tile, Touch-Friendly) -->
+          <div class="ios-timer-cell ${acStatus.timerBadgeClass}" 
+               role="button" 
+               tabindex="0"
+               style="touch-action: manipulation; -webkit-tap-highlight-color: transparent; cursor: pointer;"
+               onclick="event.preventDefault(); event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}');"
+               onpointerdown="event.stopPropagation();"
+               ontouchstart="event.stopPropagation();"
+               title="Status Timer AC Remote: ${escapeHtml(acStatus.timerText)} (Klik untuk mencatat / mengubah)">
             <div class="ios-timer-cell-left">
               <div class="ios-timer-icon-badge ${acStatus.timerBadgeClass}">
                 ${acStatus.timerIcon}
@@ -9314,12 +9657,15 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
               </div>
             </div>
             <div class="ios-timer-cell-right">
-              <span class="ios-timer-action-pill ${acStatus.timerBadgeClass}">
+              <button type="button" 
+                      class="ios-timer-action-pill ${acStatus.timerBadgeClass}" 
+                      style="touch-action: manipulation; -webkit-tap-highlight-color: transparent; border: none; cursor: pointer;"
+                      onclick="event.preventDefault(); event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}');">
                 <span>${acStatus.timerActionLabel}</span>
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
-              </span>
+              </button>
             </div>
           </div>
 
@@ -10120,7 +10466,7 @@ window.initRoomDetailDragToDismiss = function () {
   }
 
   function handleStart(clientY, pointerId, target) {
-    if (target && target.closest('button, input, select, a, [role="button"]:not(#room-detail-drag-handle)')) {
+    if (target && target.closest('button, input, select, a, .ios-timer-cell, .room-lab-status-strip, .room-lab-action-group, .btn-ios-action, [role="button"]:not(#room-detail-drag-handle)')) {
       return false;
     }
 
@@ -10215,9 +10561,8 @@ window.initRoomDetailDragToDismiss = function () {
     }
   }
 
+  // Apple iOS Standard: Drag-to-dismiss hanya dipicu oleh drag handle bar di atas, bukan seluruh header atau konten kartu!
   const targets = [dragHandle];
-  const headerContainer = document.getElementById('room-detail-header-container');
-  if (headerContainer) targets.push(headerContainer);
 
   targets.forEach(el => {
     el.style.touchAction = 'none';
@@ -10279,7 +10624,10 @@ window.initRoomDetailDragToDismiss = function () {
 
 const roomModal = document.getElementById('room-detail-modal');
 document.getElementById('room-detail-close-btn')?.addEventListener('click', () => window.closeRoomDetailModal(false));
-roomModal?.addEventListener('click', (e) => { if (e.target === roomModal) window.closeRoomDetailModal(false); });
+roomModal?.addEventListener('click', (e) => {
+  if (window._isTimerAcModalOpen || document.getElementById('modal-timer-ac')?.classList.contains('open')) return;
+  if (e.target === roomModal) window.closeRoomDetailModal(false);
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && roomModal?.classList.contains('open')) window.closeRoomDetailModal(false); });
 
 document.getElementById('btn-test-notif-lab')?.addEventListener('click', () => {

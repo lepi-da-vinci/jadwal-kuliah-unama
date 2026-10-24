@@ -1,8 +1,8 @@
 <!-- MODAL: PENGATURAN TIMER AC (TIMER ON & TIMER OFF) -->
-<div id="modal-timer-ac" class="modal-overlay modal-timer-ac-overlay" role="dialog" aria-modal="true" aria-label="Pengaturan Timer AC" style="display: none;" onclick="if(event.target === this) closeTimerAcModal()">
+<div id="modal-timer-ac" class="modal-overlay modal-timer-ac-overlay" role="dialog" aria-modal="true" aria-label="Pengaturan Timer AC" style="display: none;" onclick="if(event.target === this) closeTimerAcModal(event)">
   <div class="modal-box modal-timer-ac-dialog" onclick="event.stopPropagation()">
     <!-- Apple Sheet Drag Handle -->
-    <div class="modal-drag-handle-zone" onclick="closeTimerAcModal()" style="padding: 8px 0 2px; cursor: pointer; display: flex; justify-content: center;" title="Tutup">
+    <div class="modal-drag-handle-zone" onclick="closeTimerAcModal(event)" style="padding: 8px 0 2px; cursor: pointer; display: flex; justify-content: center;" title="Tutup">
       <div class="modal-drag-handle-bar" style="width: 36px; height: 4.5px; border-radius: 9999px; background: rgba(148, 163, 184, 0.45);"></div>
     </div>
 
@@ -26,7 +26,7 @@
           </div>
         </div>
       </div>
-      <button type="button" class="timer-modal-close-btn" onclick="closeTimerAcModal()" title="Tutup">
+      <button type="button" class="timer-modal-close-btn" onclick="closeTimerAcModal(event)" title="Tutup">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -48,6 +48,31 @@
         <div class="ref-banner-info">
           <div class="ref-banner-title">Acuan Jadwal Ruangan Hari Ini:</div>
           <div class="ref-banner-desc" id="timer-ac-schedule-summary">Memuat info sesi...</div>
+        </div>
+      </div>
+
+      <!-- SELEKTOR TIPE FORMAT REMOTE AC (24H, 12H AM/PM, HITUNGAN JAM 1-12) -->
+      <div class="timer-remote-type-section">
+        <div class="remote-type-header">
+          <div class="remote-type-header-left">
+            <span class="remote-type-icon-main">🎛️</span>
+            <span class="remote-type-label">Format Sesuai Tipe Remote:</span>
+          </div>
+          <span class="remote-type-badge-info" id="timer-remote-type-desc">Model 24 Jam (00:00 - 23:59)</span>
+        </div>
+        <div class="remote-type-tabs" role="tablist">
+          <button type="button" class="btn-remote-tab active" id="tab-remote-24h" onclick="selectRemoteType('24h')">
+            <span class="tab-icon">🕒</span>
+            <span class="tab-label">Format 24 Jam</span>
+          </button>
+          <button type="button" class="btn-remote-tab" id="tab-remote-12h" onclick="selectRemoteType('12h')">
+            <span class="tab-icon">🕐</span>
+            <span class="tab-label">12 Jam (AM/PM)</span>
+          </button>
+          <button type="button" class="btn-remote-tab" id="tab-remote-duration" onclick="selectRemoteType('duration')">
+            <span class="tab-icon">⏳</span>
+            <span class="tab-label">Per Jam (1 - 12 Jam)</span>
+          </button>
         </div>
       </div>
 
@@ -81,11 +106,60 @@
         </div>
 
         <div class="timer-card-content" id="timer-on-content">
-          <div class="timer-input-row">
-            <label for="timer-on-time" class="timer-input-label">Jam Hidup:</label>
-            <div class="timer-input-wrap">
-              <input type="time" id="timer-on-time" class="timer-time-input" value="07:40" oninput="validateTimerInputs()" onchange="validateTimerInputs()">
-              <span class="timer-tz">WIB</span>
+          <!-- View Format 24 Jam (Standard) -->
+          <div class="timer-format-view view-format-24h" id="timer-on-view-24h">
+            <div class="timer-input-row">
+              <label for="timer-on-time" class="timer-input-label">Jam Hidup (24 Jam):</label>
+              <div class="timer-input-wrap">
+                <input type="time" id="timer-on-time" class="timer-time-input" value="07:40" oninput="on24hInputChange('on')" onchange="on24hInputChange('on')">
+                <span class="timer-tz">WIB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- View Format 12 Jam (AM / PM) -->
+          <div class="timer-format-view view-format-12h" id="timer-on-view-12h" style="display: none;">
+            <div class="timer-input-row timer-12h-row">
+              <label class="timer-input-label">Jam Hidup (12 Jam):</label>
+              <div class="timer-12h-wrap">
+                <div class="timer-12h-inputs">
+                  <select id="timer-on-12h-hour" class="timer-select-digit" onchange="on12hInputChange('on')">
+                    <option value="1">01</option><option value="2">02</option><option value="3">03</option>
+                    <option value="4">04</option><option value="5">05</option><option value="6">06</option>
+                    <option value="7" selected>07</option><option value="8">08</option><option value="9">09</option>
+                    <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                  </select>
+                  <span class="timer-digit-sep">:</span>
+                  <select id="timer-on-12h-minute" class="timer-select-digit" onchange="on12hInputChange('on')">
+                    <option value="00">00</option><option value="05">05</option><option value="10">10</option>
+                    <option value="15">15</option><option value="20">20</option><option value="25">25</option>
+                    <option value="30">30</option><option value="35">35</option><option value="40" selected>40</option>
+                    <option value="45">45</option><option value="50">50</option><option value="55">55</option>
+                  </select>
+                </div>
+                <div class="timer-ampm-group">
+                  <button type="button" class="btn-ampm active" id="btn-on-am" onclick="setAmPm('on', 'AM')">AM</button>
+                  <button type="button" class="btn-ampm" id="btn-on-pm" onclick="setAmPm('on', 'PM')">PM</button>
+                </div>
+              </div>
+            </div>
+            <div class="timer-equivalent-badge" id="timer-on-12h-equiv">
+              Setara: <b>07:40 WIB</b>
+            </div>
+          </div>
+
+          <!-- View Format Hitungan Jam (Durasi 1 - 12 Jam) -->
+          <div class="timer-format-view view-format-duration" id="timer-on-view-duration" style="display: none;">
+            <div class="duration-section-header">
+              <span class="duration-guide-label">Pilih Durasi Timer Hidup di Remote:</span>
+              <span class="duration-ref-time" id="timer-on-now-time">Waktu sekarang: --:-- WIB</span>
+            </div>
+            <div class="timer-duration-grid" id="timer-on-duration-grid">
+              <!-- Rendered dynamically 1h to 12h -->
+            </div>
+            <div class="duration-calc-box on-calc" id="timer-on-duration-calc" style="display: none;">
+              <span class="calc-icon">❄️</span>
+              <span class="calc-text" id="timer-on-duration-calc-text">Pilih durasi jam di atas</span>
             </div>
           </div>
 
@@ -104,7 +178,7 @@
           </div>
 
           <!-- Quick Presets ON -->
-          <div class="timer-presets-row">
+          <div class="timer-presets-row" id="timer-on-presets-row">
             <span class="presets-label">Preset Rekomendasi:</span>
             <div class="presets-chips" id="timer-on-presets">
               <!-- Rendered dynamically -->
@@ -127,11 +201,60 @@
         </div>
 
         <div class="timer-card-content" id="timer-off-content">
-          <div class="timer-input-row">
-            <label for="timer-off-time" class="timer-input-label">Jam Mati:</label>
-            <div class="timer-input-wrap">
-              <input type="time" id="timer-off-time" class="timer-time-input" value="11:00" oninput="validateTimerInputs()" onchange="validateTimerInputs()">
-              <span class="timer-tz">WIB</span>
+          <!-- View Format 24 Jam (Standard) -->
+          <div class="timer-format-view view-format-24h" id="timer-off-view-24h">
+            <div class="timer-input-row">
+              <label for="timer-off-time" class="timer-input-label">Jam Mati (24 Jam):</label>
+              <div class="timer-input-wrap">
+                <input type="time" id="timer-off-time" class="timer-time-input" value="11:00" oninput="on24hInputChange('off')" onchange="on24hInputChange('off')">
+                <span class="timer-tz">WIB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- View Format 12 Jam (AM / PM) -->
+          <div class="timer-format-view view-format-12h" id="timer-off-view-12h" style="display: none;">
+            <div class="timer-input-row timer-12h-row">
+              <label class="timer-input-label">Jam Mati (12 Jam):</label>
+              <div class="timer-12h-wrap">
+                <div class="timer-12h-inputs">
+                  <select id="timer-off-12h-hour" class="timer-select-digit" onchange="on12hInputChange('off')">
+                    <option value="1">01</option><option value="2">02</option><option value="3">03</option>
+                    <option value="4" selected>04</option><option value="5">05</option><option value="6">06</option>
+                    <option value="7">07</option><option value="8">08</option><option value="9">09</option>
+                    <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                  </select>
+                  <span class="timer-digit-sep">:</span>
+                  <select id="timer-off-12h-minute" class="timer-select-digit" onchange="on12hInputChange('off')">
+                    <option value="00">00</option><option value="05">05</option><option value="10">10</option>
+                    <option value="15" selected>15</option><option value="20">20</option><option value="25">25</option>
+                    <option value="30">30</option><option value="35">35</option><option value="40">40</option>
+                    <option value="45">45</option><option value="50">50</option><option value="55">55</option>
+                  </select>
+                </div>
+                <div class="timer-ampm-group">
+                  <button type="button" class="btn-ampm" id="btn-off-am" onclick="setAmPm('off', 'AM')">AM</button>
+                  <button type="button" class="btn-ampm active" id="btn-off-pm" onclick="setAmPm('off', 'PM')">PM</button>
+                </div>
+              </div>
+            </div>
+            <div class="timer-equivalent-badge" id="timer-off-12h-equiv">
+              Setara: <b>16:15 WIB</b>
+            </div>
+          </div>
+
+          <!-- View Format Hitungan Jam (Durasi 1 - 12 Jam) -->
+          <div class="timer-format-view view-format-duration" id="timer-off-view-duration" style="display: none;">
+            <div class="duration-section-header">
+              <span class="duration-guide-label">Pilih Durasi Mati di Remote (1 s/d 12 Jam):</span>
+              <span class="duration-ref-time" id="timer-off-now-time">Waktu sekarang: --:-- WIB</span>
+            </div>
+            <div class="timer-duration-grid" id="timer-off-duration-grid">
+              <!-- Rendered dynamically 1h to 12h -->
+            </div>
+            <div class="duration-calc-box off-calc" id="timer-off-duration-calc" style="display: none;">
+              <span class="calc-icon">⚡</span>
+              <span class="calc-text" id="timer-off-duration-calc-text">Pilih durasi jam di atas</span>
             </div>
           </div>
 
@@ -147,7 +270,7 @@
           </div>
 
           <!-- Quick Presets OFF -->
-          <div class="timer-presets-row">
+          <div class="timer-presets-row" id="timer-off-presets-row">
             <span class="presets-label">Preset Rekomendasi:</span>
             <div class="presets-chips" id="timer-off-presets">
               <!-- Rendered dynamically -->
@@ -164,7 +287,7 @@
     </div>
 
     <div class="modal-footer timer-modal-footer">
-      <button type="button" class="btn btn-secondary btn-sm" onclick="closeTimerAcModal()">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeTimerAcModal(event)">
         Batal
       </button>
       <button type="button" class="btn btn-danger btn-sm" id="btn-reset-timer-ac" onclick="resetTimerAc()" title="Nonaktifkan dan hapus pengaturan timer untuk ruangan ini">

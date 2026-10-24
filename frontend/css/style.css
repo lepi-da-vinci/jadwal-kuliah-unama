@@ -13255,6 +13255,301 @@ body.dark .preview-badge {
 }
 
 /* ==============================================================
+   REMOTE AC TYPE SELECTOR (24H, 12H AM/PM, PER JAM 1-12 JAM)
+   ============================================================== */
+.timer-remote-type-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-hover, rgba(241, 245, 249, 0.6));
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+body.dark .timer-remote-type-section {
+  background: rgba(30, 41, 59, 0.45);
+}
+
+.remote-type-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.remote-type-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.remote-type-icon-main {
+  font-size: 0.92rem;
+}
+.remote-type-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+.remote-type-badge-info {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(2, 132, 199, 0.22);
+}
+body.dark .remote-type-badge-info {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+/* Apple iOS Segmented Control for Remote Tabs */
+.remote-type-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: rgba(148, 163, 184, 0.16);
+  padding: 3px;
+  border-radius: 10px;
+}
+body.dark .remote-type-tabs {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.btn-remote-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+.btn-remote-tab .tab-icon {
+  font-size: 0.85rem;
+}
+.btn-remote-tab:hover {
+  color: var(--text-dark);
+}
+.btn-remote-tab.active {
+  background: var(--bg-card, #ffffff);
+  color: var(--primary, #0284c7);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+body.dark .btn-remote-tab.active {
+  background: #1e293b;
+  color: #38bdf8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* 12-Hour (AM/PM) Inputs */
+.timer-12h-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.timer-12h-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+.timer-select-digit {
+  border: none;
+  background: transparent;
+  color: var(--text-dark);
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.timer-select-digit option {
+  background: var(--bg-card);
+  color: var(--text-dark);
+}
+.timer-digit-sep {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text-dark);
+}
+.timer-ampm-group {
+  display: flex;
+  background: rgba(148, 163, 184, 0.16);
+  padding: 2px;
+  border-radius: 8px;
+  gap: 2px;
+}
+.btn-ampm {
+  padding: 5px 9px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-ampm.active {
+  background: var(--bg-card);
+  color: #0284c7;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+body.dark .btn-ampm.active {
+  background: #1e293b;
+  color: #38bdf8;
+}
+
+.timer-equivalent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.1);
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+/* Durasi Per Jam (1 - 12 Jam) Grid */
+.duration-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.duration-guide-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+.duration-ref-time {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.timer-duration-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.btn-duration-hour {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dark);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 48px;
+}
+.btn-duration-hour:hover {
+  border-color: #0284c7;
+  transform: translateY(-1px);
+}
+.btn-duration-hour:active {
+  transform: scale(0.96);
+}
+.duration-hour-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.duration-hour-time {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.btn-duration-hour.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.32);
+}
+.btn-duration-hour.active .duration-hour-time {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.card-timer-off .btn-duration-hour.active {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-color: #f59e0b;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.32);
+}
+
+.btn-duration-hour.recommended {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+.btn-duration-hour.recommended:before {
+  content: '⭐';
+  position: absolute;
+  top: -6px;
+  right: -3px;
+  font-size: 0.65rem;
+}
+
+.duration-calc-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  margin-bottom: 8px;
+}
+.duration-calc-box.off-calc {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #b45309;
+}
+body.dark .duration-calc-box.off-calc {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+.duration-calc-box.on-calc {
+  background: rgba(2, 132, 199, 0.1);
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  color: #0369a1;
+}
+body.dark .duration-calc-box.on-calc {
+  background: rgba(2, 132, 199, 0.16);
+  border-color: rgba(2, 132, 199, 0.35);
+  color: #38bdf8;
+}
+
+/* ==============================================================
    ASMOT AC TIMER RECORD STRIP & DASHBOARD BADGES
    ============================================================== */
 
@@ -13888,5 +14183,24 @@ body.dark .btn-ios-action.tutup {
   .quick-modes-buttons {
     grid-template-columns: 1fr !important;
     gap: 6px !important;
+  }
+
+  .remote-type-tabs {
+    gap: 3px !important;
+  }
+  .btn-remote-tab {
+    font-size: 0.7rem !important;
+    padding: 6px 4px !important;
+  }
+
+  .timer-duration-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .timer-ac-modal-body {
+    max-height: calc(88vh - 120px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 }
