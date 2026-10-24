@@ -13865,36 +13865,43 @@ body.dark .btn-quick-mode.mode-both:hover {
 .lab-card-timer-mini {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 4px !important;
-  padding: 2px 7px !important;
+  gap: 3px !important;
+  padding: 2px 6px !important;
+  height: 20px !important;
   border-radius: 6px !important;
   font-size: 0.68rem !important;
   font-weight: 700 !important;
-  line-height: 1.2 !important;
+  line-height: 1 !important;
   white-space: nowrap !important;
   background: rgba(255, 255, 255, 0.95) !important;
   color: #0f172a !important;
-  border: 1px solid rgba(255, 255, 255, 0.8) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22) !important;
+  border: none !important;
+  border-left: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: blur(4px) !important;
 }
 body.dark .lab-card-timer-mini {
-  background: rgba(15, 23, 42, 0.92) !important;
+  background: rgba(30, 41, 59, 0.92) !important;
   color: #f8fafc !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45) !important;
+  border: none !important;
+  border-left: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45) !important;
 }
 
 .lab-card-timer-mini svg {
   flex-shrink: 0 !important;
+  color: #475569 !important;
 }
-.lab-card-timer-mini.timer-on svg { color: #0284c7 !important; }
-.lab-card-timer-mini.timer-off svg { color: #d97706 !important; }
-.lab-card-timer-mini.timer-both svg { color: #059669 !important; }
+body.dark .lab-card-timer-mini svg {
+  color: #94a3b8 !important;
+}
 
-.lab-card-timer-mini.timer-off { border-left: 2.5px solid #d97706 !important; }
-.lab-card-timer-mini.timer-on { border-left: 2.5px solid #0284c7 !important; }
-.lab-card-timer-mini.timer-both { border-left: 2.5px solid #059669 !important; }
+.lab-card-timer-mini.timer-off,
+.lab-card-timer-mini.timer-on,
+.lab-card-timer-mini.timer-both {
+  border: none !important;
+  border-left: none !important;
+}
 
 /* ==============================================================
    MODAL TIMER AC (DEDICATED FULLSCREEN FIXED OVERLAY)

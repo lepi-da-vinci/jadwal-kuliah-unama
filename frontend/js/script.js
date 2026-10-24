@@ -4616,17 +4616,38 @@ function updateActiveLabPanel() {
                           (room || '').toLowerCase().includes('cisco');
       const entityLabel = isLabEntity ? 'Labor' : 'Ruangan';
 
-      // Status AC: Aktif (Menyala) atau Padam (Standby / Mati)
-      const isAcActive = (!isLabEntity && data.acStatus) ? Boolean(data.acStatus.isAcOn) : isBuka;
-      const acClass = isAcActive ? 'is-ac-on' : 'is-ac-off';
-      const acTitle = isAcActive 
-        ? `${entityLabel}: AC Menyala (Aktif)` 
-        : `${entityLabel}: AC Padam (Mati / Standby)`;
-      const acIconSvg = isAcActive
-        ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="9" rx="2"></rect><line x1="6" y1="8" x2="18" y2="8"></line><line x1="18" y1="5.5" x2="18.01" y2="5.5" stroke-width="2.5"></line><path d="M6 15c1 1.2 2 1.2 3 0s2-1.2 3 0 2 1.2 3 0"></path><path d="M8 18.5c1 1 2 1 3 0s2-1 3 0"></path></svg>`
-        : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="10" rx="2"></rect><line x1="6" y1="9.5" x2="18" y2="9.5"></line><line x1="18" y1="6.5" x2="18.01" y2="6.5" stroke-width="2.2"></line></svg>`;
+      // Icon status di pojok kanan kartu:
+      // - Untuk Laboratorium: Tetap lambang gembok fisik (apakah lab sudah DIBUKA atau DITUTUP)
+      // - Untuk Ruangan Kelas: Lambang AC (apakah AC Menyala/Aktif atau Padam/Standby)
+      let rightStatusIconHtml = '';
+      if (isLabEntity) {
+        const lockClass = isBuka ? 'is-buka' : 'is-tutup';
+        const lockTitle = isBuka ? 'Labor sudah DIBUKA' : 'Labor DITUTUP / belum dibuka';
+        const lockIconSvg = isBuka
+          ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>`
+          : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+        rightStatusIconHtml = `
+          <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
+            ${lockIconSvg}
+          </div>
+        `;
+      } else {
+        const isAcActive = data.acStatus ? Boolean(data.acStatus.isAcOn) : isBuka;
+        const acClass = isAcActive ? 'is-ac-on' : 'is-ac-off';
+        const acTitle = isAcActive 
+          ? 'Ruangan: AC Menyala (Aktif)' 
+          : 'Ruangan: AC Padam (Mati / Standby)';
+        const acIconSvg = isAcActive
+          ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="9" rx="2"></rect><line x1="6" y1="8" x2="18" y2="8"></line><line x1="18" y1="5.5" x2="18.01" y2="5.5" stroke-width="2.5"></line><path d="M6 15c1 1.2 2 1.2 3 0s2-1.2 3 0 2 1.2 3 0"></path><path d="M8 18.5c1 1 2 1 3 0s2-1 3 0"></path></svg>`
+          : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="10" rx="2"></rect><line x1="6" y1="9.5" x2="18" y2="9.5"></line><line x1="18" y1="6.5" x2="18.01" y2="6.5" stroke-width="2.2"></line></svg>`;
+        rightStatusIconHtml = `
+          <div class="lab-card-ac-status ${acClass}" title="${acTitle}" aria-label="${acTitle}">
+            ${acIconSvg}
+          </div>
+        `;
+      }
 
-      // Badge Timer Mini: Sisi kiri ada indikator I (ON), O (OFF), atau I/O (Both), tanpa teks jam panjang agar nama ruangan tidak terpotong
+      // Badge Timer Mini: Sisi kiri ada indikator I (ON), O (OFF), atau I/O (Both), tanpa garis pinggir warna
       let timerBadgeHtml = '';
       if (!isLabEntity && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
         const tStatus = data.acStatus.timerStatus;
@@ -4661,9 +4682,7 @@ function updateActiveLabPanel() {
                   <div class="lab-name">${formatRoomNameHtml(room)}</div>
                   <div class="lab-card-header-icons">
                     ${timerBadgeHtml}
-                    <div class="lab-card-ac-status ${acClass}" title="${acTitle}" aria-label="${acTitle}">
-                      ${acIconSvg}
-                    </div>
+                    ${rightStatusIconHtml}
                   </div>
                 </div>
                 <div class="lab-status">${statusDisplay}</div>
