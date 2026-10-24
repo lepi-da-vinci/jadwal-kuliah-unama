@@ -1,0 +1,166 @@
+<!-- MODAL: PENGATURAN TIMER AC (TIMER ON & TIMER OFF) -->
+<div id="modal-timer-ac" class="modal-backdrop" style="display: none;" onclick="if(event.target === this) closeTimerAcModal()">
+  <div class="modal-dialog modal-timer-ac-dialog" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-header-title-wrap">
+        <div class="modal-header-icon timer-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.3">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <div>
+          <h3 class="modal-title">Pengaturan Timer AC</h3>
+          <div class="modal-subtitle">
+            <span id="timer-ac-room-title" style="font-weight: 700; color: var(--text-dark);">-</span>
+            <span class="sep">•</span>
+            <span id="timer-ac-campus-title">-</span>
+            <span class="sep">•</span>
+            <span id="timer-ac-date-title">-</span>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="closeTimerAcModal()" title="Tutup">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body timer-ac-modal-body">
+      <!-- Jadwal Reference Banner -->
+      <div class="timer-ac-ref-banner">
+        <div class="ref-banner-icon">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+        </div>
+        <div class="ref-banner-info">
+          <div class="ref-banner-title">Acuan Jadwal Ruangan Hari Ini:</div>
+          <div class="ref-banner-desc" id="timer-ac-schedule-summary">Memuat info sesi...</div>
+        </div>
+      </div>
+
+      <!-- SECTION 1: TIMER HIDUP (ON) -->
+      <div class="timer-card card-timer-on">
+        <div class="timer-card-header">
+          <div class="timer-card-title">
+            <span class="timer-card-dot dot-on"></span>
+            <span>❄️ Timer Hidup (Auto ON)</span>
+          </div>
+          <label class="timer-switch">
+            <input type="checkbox" id="timer-on-toggle" onchange="onTimerToggleChange()">
+            <span class="timer-slider"></span>
+          </label>
+        </div>
+
+        <div class="timer-card-content" id="timer-on-content">
+          <div class="timer-input-row">
+            <label for="timer-on-time" class="timer-input-label">Jam Hidup:</label>
+            <div class="timer-input-wrap">
+              <input type="time" id="timer-on-time" class="timer-time-input" value="07:40" oninput="validateTimerInputs()" onchange="validateTimerInputs()">
+              <span class="timer-tz">WIB</span>
+            </div>
+          </div>
+
+          <!-- Peringatan Koreksi Pintar Timer ON -->
+          <div id="timer-on-correction-box" class="timer-correction-box" style="display: none;">
+            <div class="correction-icon">⚠️</div>
+            <div class="correction-content">
+              <div class="correction-title" id="timer-on-correction-title">Perlu Koreksi Waktu</div>
+              <div class="correction-desc" id="timer-on-correction-desc">
+                Timer ON harus disetel sebelum jam mulai kelas, bukan saat atau sesudah kelas dimulai.
+              </div>
+              <button type="button" class="btn-apply-correction" id="btn-apply-on-correction" onclick="applySmartOnCorrection()">
+                Gunakan Rekomendasi (H-20)
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Presets ON -->
+          <div class="timer-presets-row">
+            <span class="presets-label">Preset Rekomendasi:</span>
+            <div class="presets-chips" id="timer-on-presets">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 2: TIMER MATI (OFF) -->
+      <div class="timer-card card-timer-off">
+        <div class="timer-card-header">
+          <div class="timer-card-title">
+            <span class="timer-card-dot dot-off"></span>
+            <span>⚡ Timer Mati (Auto OFF)</span>
+          </div>
+          <label class="timer-switch">
+            <input type="checkbox" id="timer-off-toggle" onchange="onTimerToggleChange()">
+            <span class="timer-slider"></span>
+          </label>
+        </div>
+
+        <div class="timer-card-content" id="timer-off-content">
+          <div class="timer-input-row">
+            <label for="timer-off-time" class="timer-input-label">Jam Mati:</label>
+            <div class="timer-input-wrap">
+              <input type="time" id="timer-off-time" class="timer-time-input" value="11:00" oninput="validateTimerInputs()" onchange="validateTimerInputs()">
+              <span class="timer-tz">WIB</span>
+            </div>
+          </div>
+
+          <!-- Peringatan Koreksi Timer OFF -->
+          <div id="timer-off-correction-box" class="timer-correction-box" style="display: none;">
+            <div class="correction-icon">⚠️</div>
+            <div class="correction-content">
+              <div class="correction-title" id="timer-off-correction-title">Peringatan Waktu Mati</div>
+              <div class="correction-desc" id="timer-off-correction-desc">
+                Timer OFF disarankan disetel setelah sesi selesai atau saat jeda panjang.
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Presets OFF -->
+          <div class="timer-presets-row">
+            <span class="presets-label">Preset Rekomendasi:</span>
+            <div class="presets-chips" id="timer-off-presets">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE PREVIEW BADGE -->
+      <div class="timer-summary-preview">
+        <span class="preview-label">Ringkasan Timer:</span>
+        <span class="preview-badge" id="timer-preview-badge">Tidak Ada Timer Aktif</span>
+      </div>
+    </div>
+
+    <div class="modal-footer timer-modal-footer">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeTimerAcModal()">
+        Batal
+      </button>
+      <button type="button" class="btn btn-danger btn-sm" id="btn-reset-timer-ac" onclick="resetTimerAc()" title="Nonaktifkan dan hapus pengaturan timer untuk ruangan ini">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span>Reset Timer</span>
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-save-timer-ac" onclick="saveTimerAc()">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+        <span>Simpan Timer</span>
+      </button>
+    </div>
+  </div>
+</div>
+

@@ -2730,7 +2730,7 @@ function normalizeScheduleItem(s) {
  * Smart AC Engine untuk Ruang Kelas Teori & Asmot
  * Menghitung status AC operasional, rekomendasi tindakan, dan countdown real-time
  */
-function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = '') {
+function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = '', roomName = '', campusName = '') {
   if (!Array.isArray(rawSchedules) || rawSchedules.length === 0) {
     return {
       code: 'NO_SCHEDULE',
@@ -2899,7 +2899,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       isAcOn: isAcRecordedOn,
       statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⚠️ Sesi Berlangsung (AC Belum Nyala)',
       subtext: `Selesai dlm ${remainingMin} mnt (${ongoingS._endTimeStr} WIB) • ${nextGuidance}`,
-      badgeType: isAcRecordedOn ? 'on' : 'warning-off',
+      badgeType: isAcRecordedOn ? 'on' : 'warning-on',
       actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
       targetAction: isAcRecordedOn ? 'tutup' : 'buka',
       countdownMinutes: remainingMin,
@@ -3046,8 +3046,23 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     }
   }
 
+  // Attach Timer AC details
+  const targetRoom = roomName || (schedules[0] ? (schedules[0].nama_ruangan || schedules[0].cleanName || schedules[0].rawName) : '');
+  const targetCamp = campusName || (schedules[0] ? (schedules[0].kampus || '') : '');
+  const acTimer = getRoomAcTimer(targetRoom, targetCamp, activeDate);
+  let timerSummary = null;
+  if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none') {
+    if (acTimer.timer_aktif === 'both' && acTimer.timer_on && acTimer.timer_off) {
+      timerSummary = `ON ${acTimer.timer_on} • OFF ${acTimer.timer_off}`;
+    } else if (acTimer.timer_aktif === 'on' && acTimer.timer_on) {
+      timerSummary = `ON ${acTimer.timer_on}`;
+    } else if (acTimer.timer_aktif === 'off' && acTimer.timer_off) {
+      timerSummary = `OFF ${acTimer.timer_off}`;
+    }
+  }
+
   // Fallback
-  return {
+  const finalResult = {
     code: 'IN_SESSION',
     isAcOn: isAcRecordedOn,
     statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⏹️ AC Padam',
@@ -3062,6 +3077,9 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     btnClass: isAcRecordedOn ? 'tutup' : 'buka',
     btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>`
   };
+  finalResult.timerData = acTimer;
+  finalResult.timerSummary = timerSummary;
+  return finalResult;
 }
 window.calculateRoomAcStatus = calculateRoomAcStatus;
 
@@ -3168,6 +3186,480 @@ function updateAsmotAcSummaryBar(roomsThehok = {}, roomsKobar = {}, kampusFilter
   container.style.display = 'block';
 }
 window.updateAsmotAcSummaryBar = updateAsmotAcSummaryBar;
+
+
+// ==================== TIMER AC & ASMOT OPERATIONAL MANAGER ====================
+window._roomAcTimers = {};
+
+function getRoomAcTimerKey(roomName = '', campusName = '') {
+  const clean = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName || '').trim().toLowerCase();
+  const camp = (formatCampusName(campusName || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : '')) || '').trim().toLowerCase();
+  return `${clean}__${camp}`;
+}
+
+function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
+  if (!roomName) return null;
+  const key = getRoomAcTimerKey(roomName, campusName);
+
+  if (!window._roomAcTimers || Object.keys(window._roomAcTimers).length === 0) {
+    try {
+      const stored = localStorage.getItem(`unama_ac_timers_${activeDate}`);
+      if (stored) window._roomAcTimers = JSON.parse(stored);
+    } catch (e) {}
+  }
+  return (window._roomAcTimers && window._roomAcTimers[key]) || null;
+}
+window.getRoomAcTimer = getRoomAcTimer;
+
+function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
+  if (!Array.isArray(data)) return;
+  if (!window._roomAcTimers) window._roomAcTimers = {};
+
+  data.forEach(stat => {
+    if (stat.timer_aktif && stat.timer_aktif !== 'none') {
+      const key = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
+      window._roomAcTimers[key] = {
+        roomName: stat.nama_ruangan,
+        kampus: stat.kampus,
+        tanggal: stat.tanggal,
+        timer_on: stat.timer_on_str || (stat.timer_on ? String(stat.timer_on).substring(0, 5) : ''),
+        timer_off: stat.timer_off_str || (stat.timer_off ? String(stat.timer_off).substring(0, 5) : ''),
+        timer_aktif: stat.timer_aktif,
+        diubah_oleh: stat.diubah_oleh || 'Asmot (Web)'
+      };
+    }
+  });
+
+  if (targetDate) {
+    try {
+      localStorage.setItem(`unama_ac_timers_${targetDate}`, JSON.stringify(window._roomAcTimers));
+    } catch (e) {}
+  }
+}
+window.syncRoomAcTimersFromBackend = syncRoomAcTimersFromBackend;
+
+window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
+  const modal = document.getElementById('modal-timer-ac');
+  if (!modal) return;
+
+  const filterTanggal = document.getElementById('filter-tanggal');
+  const now = new Date();
+  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const activeDate = customDate || (filterTanggal ? filterTanggal.value : currentDayStr);
+
+  const cleanCamp = formatCampusName(kampusStr || (typeof getRoomCampus === 'function' ? getRoomCampus(roomName) : ''));
+  const campusLabel = cleanCamp || 'Thehok';
+
+  window._activeTimerRoomContext = {
+    roomName: roomName,
+    campus: campusLabel,
+    activeDate: activeDate
+  };
+
+  // Set modal header texts
+  const roomTitleEl = document.getElementById('timer-ac-room-title');
+  const campusTitleEl = document.getElementById('timer-ac-campus-title');
+  const dateTitleEl = document.getElementById('timer-ac-date-title');
+  if (roomTitleEl) roomTitleEl.textContent = formatRoomName(roomName, false);
+  if (campusTitleEl) campusTitleEl.textContent = campusLabel;
+  if (dateTitleEl) dateTitleEl.textContent = formatTanggalIndo(activeDate);
+
+  // Find schedules for this room on activeDate
+  const cleanTargetRoom = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName).toLowerCase();
+  const roomSchedules = (Array.isArray(allJadwal) ? allJadwal : []).filter(item => {
+    if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
+    if (item.tanggal !== activeDate) return false;
+    const itemClean = (typeof getCleanRoom === 'function' ? getCleanRoom(item.nama_ruangan) : item.nama_ruangan).toLowerCase();
+    if (itemClean !== cleanTargetRoom) return false;
+    const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+    if (campusLabel && itemCamp && itemCamp !== campusLabel) return false;
+    return true;
+  }).map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
+
+  window._activeTimerRoomContext.schedules = roomSchedules;
+
+  let firstStartM = 480; // 08:00
+  let firstStartTimeStr = "08:00";
+  let lastEndM = 1020; // 17:00
+  let lastEndTimeStr = "17:00";
+  let firstSessionName = "Sesi 1";
+
+  if (roomSchedules.length > 0) {
+    const first = roomSchedules[0];
+    const last = roomSchedules[roomSchedules.length - 1];
+    firstStartM = first._startM;
+    firstStartTimeStr = first._startTimeStr;
+    firstSessionName = first.nama_mk ? `${first.nama_mk} (${first.kelas || ''})` : 'Sesi 1';
+    lastEndM = last._endM;
+    lastEndTimeStr = last._endTimeStr;
+  }
+
+  window._activeTimerRoomContext.firstStartM = firstStartM;
+  window._activeTimerRoomContext.firstStartTimeStr = firstStartTimeStr;
+  window._activeTimerRoomContext.lastEndM = lastEndM;
+  window._activeTimerRoomContext.lastEndTimeStr = lastEndTimeStr;
+
+  const refSummaryEl = document.getElementById('timer-ac-schedule-summary');
+  if (refSummaryEl) {
+    refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) • Sesi Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar)`;
+  }
+
+  // Preset Chips Dynamic Generation
+  const onPresetsContainer = document.getElementById('timer-on-presets');
+  if (onPresetsContainer) {
+    const h20 = formatMinToTime(firstStartM - 20);
+    const h15 = formatMinToTime(firstStartM - 15);
+    const h10 = formatMinToTime(firstStartM - 10);
+    onPresetsContainer.innerHTML = `
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">❄️ H-20 (${h20})</button>
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h15}')">H-15 (${h15})</button>
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h10}')">H-10 (${h10})</button>
+    `;
+  }
+
+  const offPresetsContainer = document.getElementById('timer-off-presets');
+  if (offPresetsContainer) {
+    let offChips = '';
+    if (roomSchedules.length > 0) {
+      roomSchedules.forEach((s, idx) => {
+        offChips += `<button type="button" class="preset-chip" onclick="selectPresetTime('off', '${s._endTimeStr}')">Selesai Sesi ${idx + 1} (${s._endTimeStr})</button>`;
+      });
+    } else {
+      offChips = `
+        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '11:00')">11:00 WIB</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '17:00')">17:00 WIB</button>
+      `;
+    }
+    offPresetsContainer.innerHTML = offChips;
+  }
+
+  // Load existing timer config or defaults
+  const existingTimer = getRoomAcTimer(roomName, campusLabel, activeDate);
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  const onTimeInput = document.getElementById('timer-on-time');
+  const offTimeInput = document.getElementById('timer-off-time');
+
+  const defaultOn = formatMinToTime(firstStartM - 20);
+  const defaultOff = lastEndTimeStr || "17:00";
+
+  if (existingTimer && existingTimer.timer_aktif && existingTimer.timer_aktif !== 'none') {
+    if (onToggle) onToggle.checked = (existingTimer.timer_aktif === 'on' || existingTimer.timer_aktif === 'both');
+    if (offToggle) offToggle.checked = (existingTimer.timer_aktif === 'off' || existingTimer.timer_aktif === 'both');
+    if (onTimeInput) onTimeInput.value = existingTimer.timer_on || defaultOn;
+    if (offTimeInput) offTimeInput.value = existingTimer.timer_off || defaultOff;
+  } else {
+    if (onToggle) onToggle.checked = false;
+    if (offToggle) offToggle.checked = false;
+    if (onTimeInput) onTimeInput.value = defaultOn;
+    if (offTimeInput) offTimeInput.value = defaultOff;
+  }
+
+  onTimerToggleChange();
+  validateTimerInputs();
+
+  modal.style.display = 'flex';
+};
+
+window.closeTimerAcModal = function () {
+  const modal = document.getElementById('modal-timer-ac');
+  if (modal) modal.style.display = 'none';
+};
+
+window.onTimerToggleChange = function () {
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  const onContent = document.getElementById('timer-on-content');
+  const offContent = document.getElementById('timer-off-content');
+
+  if (onContent) {
+    onContent.style.opacity = (onToggle && onToggle.checked) ? '1' : '0.45';
+    onContent.style.pointerEvents = (onToggle && onToggle.checked) ? 'auto' : 'none';
+  }
+  if (offContent) {
+    offContent.style.opacity = (offToggle && offToggle.checked) ? '1' : '0.45';
+    offContent.style.pointerEvents = (offToggle && offToggle.checked) ? 'auto' : 'none';
+  }
+
+  validateTimerInputs();
+};
+
+window.selectPresetTime = function (type, timeStr) {
+  if (type === 'on') {
+    const onInput = document.getElementById('timer-on-time');
+    const onToggle = document.getElementById('timer-on-toggle');
+    if (onInput) onInput.value = timeStr;
+    if (onToggle && !onToggle.checked) {
+      onToggle.checked = true;
+      onTimerToggleChange();
+    }
+  } else if (type === 'off') {
+    const offInput = document.getElementById('timer-off-time');
+    const offToggle = document.getElementById('timer-off-toggle');
+    if (offInput) offInput.value = timeStr;
+    if (offToggle && !offToggle.checked) {
+      offToggle.checked = true;
+      onTimerToggleChange();
+    }
+  }
+  validateTimerInputs();
+};
+
+window.applySmartOnCorrection = function () {
+  const ctx = window._activeTimerRoomContext || {};
+  const firstStartM = ctx.firstStartM ?? 480;
+  const recommendedOn = formatMinToTime(firstStartM - 20);
+  const onInput = document.getElementById('timer-on-time');
+  if (onInput) onInput.value = recommendedOn;
+  validateTimerInputs();
+};
+
+window.validateTimerInputs = function () {
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  const onInput = document.getElementById('timer-on-time');
+  const offInput = document.getElementById('timer-off-time');
+  const onCorrectionBox = document.getElementById('timer-on-correction-box');
+  const offCorrectionBox = document.getElementById('timer-off-correction-box');
+  const previewBadge = document.getElementById('timer-preview-badge');
+  const saveBtn = document.getElementById('btn-save-timer-ac');
+
+  const onActive = onToggle ? onToggle.checked : false;
+  const offActive = offToggle ? offToggle.checked : false;
+  const onVal = onInput ? onInput.value : '';
+  const offVal = offInput ? offInput.value : '';
+
+  const ctx = window._activeTimerRoomContext || {};
+  const firstStartM = ctx.firstStartM ?? 480;
+  const firstStartTimeStr = ctx.firstStartTimeStr || '08:00';
+
+  let hasError = false;
+
+  // 1. VALIDASI TIMER ON: Wajib SEBELUM jam mulai perkuliahan
+  if (onActive && onVal) {
+    const onParts = onVal.split(':').map(Number);
+    const onM = onParts[0] * 60 + onParts[1];
+
+    if (onM >= firstStartM) {
+      // User mencoba menyetel Timer ON pada atau setelah jam mulai perkuliahan!
+      hasError = true;
+      if (onCorrectionBox) {
+        onCorrectionBox.style.display = 'flex';
+        const titleEl = document.getElementById('timer-on-correction-title');
+        const descEl = document.getElementById('timer-on-correction-desc');
+        const btnApply = document.getElementById('btn-apply-on-correction');
+
+        if (titleEl) titleEl.textContent = '⚠️ Koreksi: Timer ON Harus Sebelum Jam Mulai!';
+        if (descEl) {
+          descEl.innerHTML = `Timer ON disetel <b>${onVal} WIB</b> (saat/sesudah kelas dimulai). Timer ON minimal harus disetel <b>sebelum jam ${firstStartTimeStr} WIB</b> agar ruangan sudah sejuk saat kelas dimulai. Rekomendasi pendinginan: <b>H-20 (${formatMinToTime(firstStartM - 20)} WIB)</b>.`;
+        }
+        if (btnApply) {
+          btnApply.textContent = `Gunakan Rekomendasi (${formatMinToTime(firstStartM - 20)})`;
+        }
+      }
+    } else {
+      if (onCorrectionBox) onCorrectionBox.style.display = 'none';
+    }
+  } else {
+    if (onCorrectionBox) onCorrectionBox.style.display = 'none';
+  }
+
+  // 2. VALIDASI TIMER OFF: Harus setelah Timer ON (jika keduanya aktif)
+  if (offActive && offVal) {
+    const offParts = offVal.split(':').map(Number);
+    const offM = offParts[0] * 60 + offParts[1];
+
+    if (onActive && onVal) {
+      const onParts = onVal.split(':').map(Number);
+      const onM = onParts[0] * 60 + onParts[1];
+
+      if (offM <= onM) {
+        hasError = true;
+        if (offCorrectionBox) {
+          offCorrectionBox.style.display = 'flex';
+          const titleEl = document.getElementById('timer-off-correction-title');
+          const descEl = document.getElementById('timer-off-correction-desc');
+          if (titleEl) titleEl.textContent = '⚠️ Waktu Timer Tidak Sesuai';
+          if (descEl) descEl.textContent = `Timer Mati (${offVal} WIB) harus lebih lambat dari Timer Hidup (${onVal} WIB).`;
+        }
+      } else {
+        if (offCorrectionBox) offCorrectionBox.style.display = 'none';
+      }
+    } else {
+      if (offCorrectionBox) offCorrectionBox.style.display = 'none';
+    }
+  } else {
+    if (offCorrectionBox) offCorrectionBox.style.display = 'none';
+  }
+
+  // Update Preview Badge
+  if (previewBadge) {
+    if (onActive && offActive) {
+      previewBadge.textContent = `⏱️ Timer Aktif: ON ${onVal} • OFF ${offVal} WIB`;
+      previewBadge.style.color = '#0284c7';
+    } else if (onActive) {
+      previewBadge.textContent = `⏱️ Timer ON: ${onVal} WIB`;
+      previewBadge.style.color = '#0284c7';
+    } else if (offActive) {
+      previewBadge.textContent = `⏱️ Timer OFF: ${offVal} WIB`;
+      previewBadge.style.color = '#d97706';
+    } else {
+      previewBadge.textContent = `Tidak Ada Timer Aktif (Manual Control)`;
+      previewBadge.style.color = 'var(--text-muted)';
+    }
+  }
+
+  if (saveBtn) {
+    saveBtn.disabled = hasError;
+    saveBtn.style.opacity = hasError ? '0.5' : '1';
+    saveBtn.title = hasError ? 'Harap perbaiki jam timer yang tidak sesuai terlebih dahulu' : 'Simpan konfigurasi timer AC';
+  }
+};
+
+window.saveTimerAc = async function () {
+  const ctx = window._activeTimerRoomContext;
+  if (!ctx) return;
+
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  const onInput = document.getElementById('timer-on-time');
+  const offInput = document.getElementById('timer-off-time');
+
+  const onActive = onToggle ? onToggle.checked : false;
+  const offActive = offToggle ? offToggle.checked : false;
+  const onVal = (onActive && onInput) ? onInput.value : null;
+  const offVal = (offActive && offInput) ? offInput.value : null;
+
+  let timerAktif = 'none';
+  if (onActive && offActive) timerAktif = 'both';
+  else if (onActive) timerAktif = 'on';
+  else if (offActive) timerAktif = 'off';
+
+  const saveBtn = document.getElementById('btn-save-timer-ac');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Menyimpan...'; }
+
+  const payload = {
+    tanggal: ctx.activeDate,
+    nama_ruangan: ctx.roomName,
+    kampus: ctx.campus,
+    timer_on: onVal,
+    timer_off: offVal,
+    timer_aktif: timerAktif,
+    diubah_oleh: 'Asmot (Web)'
+  };
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/timer-ac`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+
+    // Cache locally
+    const key = getRoomAcTimerKey(ctx.roomName, ctx.campus);
+    if (!window._roomAcTimers) window._roomAcTimers = {};
+    if (timerAktif !== 'none') {
+      window._roomAcTimers[key] = {
+        roomName: ctx.roomName,
+        kampus: ctx.campus,
+        tanggal: ctx.activeDate,
+        timer_on: onVal,
+        timer_off: offVal,
+        timer_aktif: timerAktif,
+        diubah_oleh: 'Asmot (Web)'
+      };
+    } else {
+      delete window._roomAcTimers[key];
+    }
+    try {
+      localStorage.setItem(`unama_ac_timers_${ctx.activeDate}`, JSON.stringify(window._roomAcTimers));
+    } catch (e) {}
+
+    closeTimerAcModal();
+
+    let msg = `Timer AC untuk ${ctx.roomName} dinonaktifkan`;
+    if (timerAktif === 'both') msg = `Timer AC ${ctx.roomName} aktif: ON ${onVal} • OFF ${offVal}`;
+    else if (timerAktif === 'on') msg = `Timer Hidup AC ${ctx.roomName} aktif: ON ${onVal}`;
+    else if (timerAktif === 'off') msg = `Timer Mati AC ${ctx.roomName} aktif: OFF ${offVal}`;
+
+    if (typeof showToast === 'function') {
+      showToast(msg, 'success');
+    }
+
+    // Refresh Room Detail & Active Lab Panel
+    if (typeof window.showRoomDetail === 'function' && window._currentDetailRoom && window._currentDetailRoom.roomName === ctx.roomName) {
+      window.showRoomDetail(ctx.roomName, ctx.campus, ctx.activeDate);
+    }
+    if (typeof updateActiveLabPanel === 'function') {
+      updateActiveLabPanel();
+    }
+  } catch (err) {
+    alert('Gagal menyimpan timer AC: ' + err.message);
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Simpan Timer'; }
+  }
+};
+
+window.resetTimerAc = async function () {
+  const ctx = window._activeTimerRoomContext;
+  if (!ctx) return;
+  if (!confirm(`Hapus dan nonaktifkan timer AC untuk ${ctx.roomName}?`)) return;
+
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  if (onToggle) onToggle.checked = false;
+  if (offToggle) offToggle.checked = false;
+  onTimerToggleChange();
+
+  await window.saveTimerAc();
+};
+
+function checkAndTriggerAcTimers() {
+  const now = new Date();
+  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  if (!window._roomAcTimers) return;
+
+  Object.keys(window._roomAcTimers).forEach(key => {
+    const t = window._roomAcTimers[key];
+    if (!t || t.tanggal !== currentDayStr || !t.timer_aktif || t.timer_aktif === 'none') return;
+
+    // Trigger Timer ON
+    if ((t.timer_aktif === 'on' || t.timer_aktif === 'both') && t.timer_on === currentTimeStr) {
+      const triggerKey = `triggered_on_${t.tanggal}_${key}_${t.timer_on}`;
+      if (!window._triggeredAcTimers) window._triggeredAcTimers = new Set();
+      if (!window._triggeredAcTimers.has(triggerKey)) {
+        window._triggeredAcTimers.add(triggerKey);
+        // Execute Turn ON
+        if (typeof toggleLabSessionStatus === 'function') {
+          toggleLabSessionStatus(t.tanggal, t.roomName, '08:00', '', '', 'buka', t.kampus);
+          if (typeof showToast === 'function') {
+            showToast(`❄️ Timer Otomatis: AC ${t.roomName} dinyalakan (${t.timer_on} WIB)`, 'info');
+          }
+        }
+      }
+    }
+
+    // Trigger Timer OFF
+    if ((t.timer_aktif === 'off' || t.timer_aktif === 'both') && t.timer_off === currentTimeStr) {
+      const triggerKey = `triggered_off_${t.tanggal}_${key}_${t.timer_off}`;
+      if (!window._triggeredAcTimers) window._triggeredAcTimers = new Set();
+      if (!window._triggeredAcTimers.has(triggerKey)) {
+        window._triggeredAcTimers.add(triggerKey);
+        // Execute Turn OFF
+        if (typeof toggleLabSessionStatus === 'function') {
+          toggleLabSessionStatus(t.tanggal, t.roomName, '08:00', '', '', 'tutup', t.kampus);
+          if (typeof showToast === 'function') {
+            showToast(`⚡ Timer Otomatis: AC ${t.roomName} dimatikan (${t.timer_off} WIB)`, 'info');
+          }
+        }
+      }
+    }
+  });
+}
+window.checkAndTriggerAcTimers = checkAndTriggerAcTimers;
 
 function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime) {
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
@@ -3526,6 +4018,7 @@ function updateActiveLabPanel() {
   roomPanel.innerHTML = htmlRoom;
 
   updateAsmotAcSummaryBar(roomsThehok, roomsKobar, kampusFilter);
+  checkAndTriggerAcTimers();
 }
 
 setInterval(updateActiveLabPanel, 60000);
@@ -3556,6 +4049,9 @@ async function syncRealtimeLabStatus(force = false) {
     }
     _lastLabStatusHash = currentHash;
 
+    if (Array.isArray(json.data)) {
+      syncRoomAcTimersFromBackend(json.data, targetDate);
+    }
     if (Array.isArray(allJadwal)) {
       json.data.forEach(stat => {
         const statJam = (stat.jam || '').substring(0, 5);
@@ -8689,11 +9185,11 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       }
 
       if (!isLabEntity) {
-        const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate);
+        const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusLabel);
         headerLabStatusEl.className = `room-lab-status-strip ${acStatus.stripClass}`;
         headerLabStatusEl.style.display = 'flex';
         headerLabStatusEl.innerHTML = `
-          <div class="lab-status-left">
+          <div class="lab-status-left" style="cursor: pointer;" onclick="window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')">
             <span class="lab-status-dot ${acStatus.dotClass}"></span>
             <div class="lab-status-texts">
               <div class="lab-status-title-row">
@@ -8704,11 +9200,21 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                     <span>${acStatus.countdownMinutes}m</span>
                   </span>
                 ` : ''}
+                ${acStatus.timerSummary ? `
+                  <span class="ac-timer-indicator-pill" onclick="event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Timer aktif: ${escapeHtml(acStatus.timerSummary)} (Klik untuk ubah)">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span>⏱️ ${escapeHtml(acStatus.timerSummary)}</span>
+                  </span>
+                ` : ''}
               </div>
               <span class="lab-status-sub">${escapeHtml(acStatus.subtext)}</span>
             </div>
           </div>
           <div class="lab-status-right">
+            <button type="button" class="btn-timer-ac ${acStatus.timerSummary ? 'active' : ''}" onclick="window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}')" title="Atur Timer Hidup & Timer Mati AC">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>${acStatus.timerSummary ? 'Timer' : 'Timer AC'}</span>
+            </button>
             ${acStatus.actionLabel ? `
               <button type="button" class="btn-lab-toggle ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">
                 ${acStatus.btnIcon}
@@ -8729,9 +9235,10 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
             lockBadgeEl.style.display = 'inline-flex';
           } else if (acStatus.badgeType === 'warning-on') {
             lockBadgeEl.className = 'room-detail-pill lock is-prep is-ac-prep-pill';
+            const lockLabel = (acStatus.code === 'IN_SESSION') ? 'Belum Nyala' : 'Perlu Hidupkan';
             lockBadgeEl.innerHTML = `
               <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" style="vertical-align: -1px;"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>
-              <span>Perlu Hidupkan</span>
+              <span>${lockLabel}</span>
             `;
             lockBadgeEl.style.display = 'inline-flex';
           } else if (acStatus.badgeType === 'warning-off') {

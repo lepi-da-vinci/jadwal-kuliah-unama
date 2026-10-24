@@ -3960,6 +3960,76 @@ def update_status_lab(data: StatusLabUpdateInput):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+class TimerAcUpdateInput(BaseModel):
+    tanggal: str
+    id_ruangan: Optional[int] = None
+    nama_ruangan: Optional[str] = None
+    kampus: Optional[str] = None
+    jam: Optional[str] = "08:00"
+    timer_on: Optional[str] = None
+    timer_off: Optional[str] = None
+    timer_aktif: str = "none" # "none", "on", "off", "both"
+    diubah_oleh: str = "Asmot (Web)"
+
+@app.post("/api/timer-ac")
+def update_timer_ac(data: TimerAcUpdateInput):
+    """Menyimpan atau memperbarui konfigurasi timer AC untuk ruangan dan tanggal tertentu"""
+    try:
+        id_ruangan = data.id_ruangan
+        if not id_ruangan and data.nama_ruangan:
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
+            query_exact = "SELECT id_ruangan FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
+            params_exact = [data.nama_ruangan.strip()]
+            if detected_camp:
+                query_exact += " AND kampus = %s"
+                params_exact.append(detected_camp)
+            query_exact += " LIMIT 1"
+            cursor.execute(query_exact, tuple(params_exact))
+            row = cursor.fetchone()
+            if not row:
+                query = "SELECT id_ruangan FROM ruangan WHERE nama_ruangan LIKE %s"
+                params = [f"%{clean_kw}%"]
+                if detected_camp:
+                    query += " AND kampus = %s"
+                    params.append(detected_camp)
+                query += " LIMIT 1"
+                cursor.execute(query, tuple(params))
+                row = cursor.fetchone()
+            if row:
+                id_ruangan = row['id_ruangan']
+            cursor.close()
+            conn.close()
+
+        if not id_ruangan:
+            return {"status": "error", "message": "Ruangan tidak ditemukan"}
+
+        sukses = wa_notifier.set_timer_ac(
+            tanggal=data.tanggal.strip(),
+            id_ruangan=id_ruangan,
+            jam=data.jam or "08:00",
+            timer_on=data.timer_on,
+            timer_off=data.timer_off,
+            timer_aktif=data.timer_aktif,
+            diubah_oleh=data.diubah_oleh or "Asmot (Web)"
+        )
+
+        if sukses:
+            return {
+                "status": "success",
+                "message": "Pengaturan timer AC berhasil disimpan",
+                "timer_on": data.timer_on,
+                "timer_off": data.timer_off,
+                "timer_aktif": data.timer_aktif,
+                "id_ruangan": id_ruangan
+            }
+        else:
+            return {"status": "error", "message": "Gagal menyimpan timer AC ke database"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/api/status-lab")
 def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
     """Mengambil riwayat/status lab real-time untuk tanggal tertentu"""
@@ -3988,6 +4058,10 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
         for r in rows:
             if r.get('waktu_aksi'):
                 r['waktu_aksi_str'] = r['waktu_aksi'].strftime('%H:%M:%S')
+            if r.get('timer_on'):
+                r['timer_on_str'] = str(r['timer_on'])[:5]
+            if r.get('timer_off'):
+                r['timer_off_str'] = str(r['timer_off'])[:5]
                 r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
             if r.get('jam'):
                 total_sec = int(r['jam'].total_seconds()) if hasattr(r['jam'], 'total_seconds') else 0

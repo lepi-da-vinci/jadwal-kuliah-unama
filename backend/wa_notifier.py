@@ -275,6 +275,9 @@ def ensure_db_schema():
                     status_lab VARCHAR(20) NOT NULL DEFAULT 'buka',
                     diubah_oleh VARCHAR(100) NULL,
                     waktu_aksi DATETIME NULL,
+                    timer_on TIME NULL,
+                    timer_off TIME NULL,
+                    timer_aktif VARCHAR(20) DEFAULT 'none',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     UNIQUE KEY uq_tanggal_ruang_jam (tanggal, id_ruangan, jam)
@@ -342,6 +345,46 @@ def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_l
         return True
     except Exception as e:
         print(f"Error set_status_operasional_lab: {e}")
+        return False
+    finally:
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
+
+
+def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: str = None, timer_off: str = None, timer_aktif: str = 'none', diubah_oleh: str = "Asmot (Web)"):
+    """
+    Menyimpan atau memperbarui konfigurasi timer AC (Timer On & Timer Off) untuk ruangan.
+    """
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        ensure_db_schema()
+
+        jam_clean = jam.strip() if jam else "08:00"
+        jam_sql = f"{jam_clean}:00" if len(jam_clean) == 5 else jam_clean
+        
+        t_on_sql = f"{timer_on.strip()}:00" if timer_on and len(timer_on.strip()) == 5 else (timer_on.strip() if timer_on else None)
+        t_off_sql = f"{timer_off.strip()}:00" if timer_off and len(timer_off.strip()) == 5 else (timer_off.strip() if timer_off else None)
+
+        cursor.execute("""
+            INSERT INTO status_operasional_lab (
+                tanggal, id_ruangan, jam, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                timer_on = VALUES(timer_on),
+                timer_off = VALUES(timer_off),
+                timer_aktif = VALUES(timer_aktif),
+                diubah_oleh = VALUES(diubah_oleh),
+                waktu_aksi = NOW()
+        """, (tanggal, id_ruangan, jam_sql, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error set_timer_ac: {e}")
         return False
     finally:
         if 'cursor' in locals() and cursor:
