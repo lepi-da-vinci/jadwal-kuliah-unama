@@ -13,7 +13,7 @@
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20261024_ac_remote_type_v5">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20261024_ac_card_redesign_v7">
 </head>
 
 <body>
@@ -249,9 +249,6 @@
             <div class="status-legend-item"><span class="legend-dot finished"></span> Selesai</div>
           </div>
         </div>
-
-        <!-- MONITOR OPERASIONAL AC RUANG KELAS (ASMOT) -->
-        <div id="asmot-ac-summary-bar" class="asmot-ac-summary-bar" style="display: none;"></div>
 
         <div class="panels-row">
           <div class="panel panel-lab" id="active-lab-panel">
@@ -4898,43 +4895,76 @@
         </div>
       </div>
 
+      <!-- SARAN PINTAR TIMER ASMOT -->
+      <div class="timer-smart-suggestion-card" id="timer-smart-suggestion-card">
+        <div class="suggestion-card-header">
+          <div class="suggestion-header-left">
+            <svg class="suggestion-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span class="suggestion-title" id="timer-suggestion-title">Saran Pengaturan Timer Asmot</span>
+          </div>
+          <button type="button" class="btn-apply-suggestion" id="btn-apply-smart-suggestion" onclick="applyAsmotSmartSuggestion()">
+            Terapkan Saran
+          </button>
+        </div>
+        <div class="suggestion-body" id="timer-suggestion-desc">
+          Menganalisis jadwal dan waktu...
+        </div>
+      </div>
+
       <!-- SELEKTOR TIPE FORMAT REMOTE AC (24H, 12H AM/PM, HITUNGAN JAM 1-12) -->
       <div class="timer-remote-type-section">
         <div class="remote-type-header">
           <div class="remote-type-header-left">
-            <span class="remote-type-icon-main">🎛️</span>
-            <span class="remote-type-label">Format Sesuai Tipe Remote:</span>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3">
+              <line x1="4" y1="21" x2="4" y2="14"></line>
+              <line x1="4" y1="10" x2="4" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12" y2="3"></line>
+              <line x1="20" y1="21" x2="20" y2="16"></line>
+              <line x1="20" y1="12" x2="20" y2="3"></line>
+              <line x1="1" y1="14" x2="7" y2="14"></line>
+              <line x1="9" y1="8" x2="15" y2="8"></line>
+              <line x1="17" y1="16" x2="23" y2="16"></line>
+            </svg>
+            <span class="remote-type-label">Format Remote AC:</span>
           </div>
-          <span class="remote-type-badge-info" id="timer-remote-type-desc">Model 24 Jam (00:00 - 23:59)</span>
+          <span class="remote-type-badge-info" id="timer-remote-type-desc">Model 24 Jam</span>
         </div>
         <div class="remote-type-tabs" role="tablist">
           <button type="button" class="btn-remote-tab active" id="tab-remote-24h" onclick="selectRemoteType('24h')">
-            <span class="tab-icon">🕒</span>
-            <span class="tab-label">Format 24 Jam</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span class="tab-label">24 Jam</span>
           </button>
           <button type="button" class="btn-remote-tab" id="tab-remote-12h" onclick="selectRemoteType('12h')">
-            <span class="tab-icon">🕐</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="7"></circle><polyline points="12 9 12 12 13.5 13.5"></polyline><path d="M16.51 17.35l-.35 3.83A2 2 0 0 1 14.17 23H9.83a2 2 0 0 1-1.99-1.82l-.35-3.83m.01-10.7l.35-3.83A2 2 0 0 1 9.83 1h4.34a2 2 0 0 1 1.99 1.82l.35 3.83"></path></svg>
             <span class="tab-label">12 Jam (AM/PM)</span>
           </button>
           <button type="button" class="btn-remote-tab" id="tab-remote-duration" onclick="selectRemoteType('duration')">
-            <span class="tab-icon">⏳</span>
-            <span class="tab-label">Per Jam (1 - 12 Jam)</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M5 22h14"></path><path d="M5 2h14"></path><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path></svg>
+            <span class="tab-label">Per Jam (1-12 Jam)</span>
           </button>
         </div>
       </div>
 
       <!-- MODE CEPAT ASMOT -->
       <div class="timer-quick-modes">
-        <span class="quick-modes-label">Pilihan Cepat Mode Timer Asmot:</span>
+        <span class="quick-modes-label">Pilihan Cepat Mode Timer:</span>
         <div class="quick-modes-buttons">
           <button type="button" class="btn-quick-mode mode-off" onclick="selectQuickTimerMode('off')" title="Hanya aktifkan Timer Mati (AC mati otomatis saat sesi selesai)">
-            <span>⚡ Catat Timer Mati Saja</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            <span>Timer Mati Saja</span>
           </button>
           <button type="button" class="btn-quick-mode mode-on" onclick="selectQuickTimerMode('on')" title="Hanya aktifkan Timer Hidup (AC hidup sebelum kelas dimulai)">
-            <span>❄️ Catat Timer Hidup Saja</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <span>Timer Hidup Saja</span>
           </button>
           <button type="button" class="btn-quick-mode mode-both" onclick="selectQuickTimerMode('both')" title="Aktifkan Timer Hidup dan Timer Mati">
-            <span>⏱️ Catat Hidup & Mati</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Hidup & Mati</span>
           </button>
         </div>
       </div>
@@ -4944,7 +4974,7 @@
         <div class="timer-card-header">
           <div class="timer-card-title">
             <span class="timer-card-dot dot-on"></span>
-            <span>❄️ Timer Hidup (Auto ON)</span>
+            <span>Timer Hidup (Auto ON)</span>
           </div>
           <label class="timer-switch">
             <input type="checkbox" id="timer-on-toggle" onchange="onTimerToggleChange()">
@@ -5005,14 +5035,18 @@
               <!-- Rendered dynamically 1h to 12h -->
             </div>
             <div class="duration-calc-box on-calc" id="timer-on-duration-calc" style="display: none;">
-              <span class="calc-icon">❄️</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span class="calc-text" id="timer-on-duration-calc-text">Pilih durasi jam di atas</span>
             </div>
           </div>
 
           <!-- Peringatan Koreksi Pintar Timer ON -->
           <div id="timer-on-correction-box" class="timer-correction-box" style="display: none;">
-            <div class="correction-icon">⚠️</div>
+            <svg class="correction-icon-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
             <div class="correction-content">
               <div class="correction-title" id="timer-on-correction-title">Perlu Koreksi Waktu</div>
               <div class="correction-desc" id="timer-on-correction-desc">
@@ -5026,7 +5060,7 @@
 
           <!-- Quick Presets ON -->
           <div class="timer-presets-row" id="timer-on-presets-row">
-            <span class="presets-label">Preset Rekomendasi:</span>
+            <span class="presets-label">Preset Cepat:</span>
             <div class="presets-chips" id="timer-on-presets">
               <!-- Rendered dynamically -->
             </div>
@@ -5039,7 +5073,7 @@
         <div class="timer-card-header">
           <div class="timer-card-title">
             <span class="timer-card-dot dot-off"></span>
-            <span>⚡ Timer Mati (Auto OFF)</span>
+            <span>Timer Mati (Auto OFF)</span>
           </div>
           <label class="timer-switch">
             <input type="checkbox" id="timer-off-toggle" onchange="onTimerToggleChange()">
@@ -5100,14 +5134,18 @@
               <!-- Rendered dynamically 1h to 12h -->
             </div>
             <div class="duration-calc-box off-calc" id="timer-off-duration-calc" style="display: none;">
-              <span class="calc-icon">⚡</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span class="calc-text" id="timer-off-duration-calc-text">Pilih durasi jam di atas</span>
             </div>
           </div>
 
           <!-- Peringatan Koreksi Timer OFF -->
           <div id="timer-off-correction-box" class="timer-correction-box" style="display: none;">
-            <div class="correction-icon">⚠️</div>
+            <svg class="correction-icon-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
             <div class="correction-content">
               <div class="correction-title" id="timer-off-correction-title">Peringatan Waktu Mati</div>
               <div class="correction-desc" id="timer-off-correction-desc">
@@ -5118,7 +5156,7 @@
 
           <!-- Quick Presets OFF -->
           <div class="timer-presets-row" id="timer-off-presets-row">
-            <span class="presets-label">Preset Rekomendasi:</span>
+            <span class="presets-label">Preset Cepat:</span>
             <div class="presets-chips" id="timer-off-presets">
               <!-- Rendered dynamically -->
             </div>
@@ -5672,7 +5710,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261024_ac_remote_type_v5"></script>
+  <script src="frontend/js/script.js?v=20261024_ac_card_redesign_v7"></script>
 </body>
 
 </html>

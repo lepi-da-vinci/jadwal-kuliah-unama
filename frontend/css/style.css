@@ -13254,6 +13254,132 @@ body.dark .preview-badge {
   100% { border-color: rgba(239, 68, 68, 0.35); }
 }
 
+
+/* ==============================================================
+   SMART ASMOT RECOMMENDATION CARD
+   ============================================================== */
+.timer-smart-suggestion-card {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(56, 189, 248, 0.03) 100%);
+  border: 1px solid rgba(2, 132, 199, 0.28);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+body.dark .timer-smart-suggestion-card {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.16) 0%, rgba(56, 189, 248, 0.06) 100%);
+  border-color: rgba(56, 189, 248, 0.32);
+}
+.suggestion-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.suggestion-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0284c7;
+}
+body.dark .suggestion-header-left {
+  color: #38bdf8;
+}
+.suggestion-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0369a1;
+}
+body.dark .suggestion-title {
+  color: #7dd3fc;
+}
+.btn-apply-suggestion {
+  padding: 4px 11px;
+  border-radius: 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: none;
+  background: #0284c7;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.25);
+  white-space: nowrap;
+}
+.btn-apply-suggestion:hover {
+  background: #0369a1;
+}
+.suggestion-body {
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+.suggestion-body b {
+  color: var(--text-dark);
+  font-weight: 700;
+}
+.suggestion-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+}
+body.dark .suggestion-tag {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+/* Compact Apple Inset Card for Room Detail Modal */
+.ios-apple-card.compact {
+  padding: 8px 12px !important;
+  gap: 6px !important;
+  margin-top: 2px !important;
+  margin-bottom: 2px !important;
+}
+.ios-apple-card.compact .ios-status-card-header {
+  gap: 8px !important;
+}
+.ios-apple-card.compact .ios-status-title {
+  font-size: 0.82rem !important;
+}
+.ios-apple-card.compact .lab-status-sub {
+  font-size: 0.72rem !important;
+  margin: 0 !important;
+  line-height: 1.25 !important;
+}
+.ios-apple-card.compact .ios-timer-cell {
+  padding: 5px 9px !important;
+  gap: 6px !important;
+}
+.ios-apple-card.compact .ios-timer-icon-badge {
+  width: 24px !important;
+  height: 24px !important;
+  font-size: 11px !important;
+  border-radius: 6px !important;
+}
+.ios-apple-card.compact .ios-timer-cell-caption {
+  font-size: 0.66rem !important;
+}
+.ios-apple-card.compact .ios-timer-cell-value {
+  font-size: 0.72rem !important;
+}
+.ios-apple-card.compact .ios-timer-action-pill {
+  padding: 3px 8px !important;
+  font-size: 0.7rem !important;
+  height: 24px !important;
+}
+.ios-apple-card.compact .btn-ios-action {
+  height: 30px !important;
+  font-size: 0.74rem !important;
+  padding: 0 10px !important;
+  min-width: 88px !important;
+  border-radius: 8px !important;
+}
+
 /* ==============================================================
    REMOTE AC TYPE SELECTOR (24H, 12H AM/PM, PER JAM 1-12 JAM)
    ============================================================== */
@@ -13322,17 +13448,20 @@ body.dark .remote-type-tabs {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 7px 6px;
+  gap: 4px;
+  padding: 6px 3px;
   border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .btn-remote-tab .tab-icon {
   font-size: 0.85rem;
@@ -13732,47 +13861,40 @@ body.dark .btn-quick-mode.mode-both:hover {
 }
 
 /* Mini Timer Badge on Dashboard Grid Room Card */
+/* High-Contrast Solid Timer Badge on Dashboard Grid Room Card (Tampil Jelas di Kartu Merah/Hijau/Ungu) */
 .lab-card-timer-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22) !important;
+  backdrop-filter: blur(4px) !important;
+}
+body.dark .lab-card-timer-mini {
+  background: rgba(15, 23, 42, 0.92) !important;
+  color: #f8fafc !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45) !important;
 }
 
-.lab-card-timer-mini.timer-off {
-  background: rgba(245, 158, 11, 0.16);
-  color: #b45309;
-  border: 1px solid rgba(245, 158, 11, 0.4);
+.lab-card-timer-mini svg {
+  flex-shrink: 0 !important;
 }
-body.dark .lab-card-timer-mini.timer-off {
-  background: rgba(245, 158, 11, 0.25);
-  color: #fbbf24;
-}
+.lab-card-timer-mini.timer-on svg { color: #0284c7 !important; }
+.lab-card-timer-mini.timer-off svg { color: #d97706 !important; }
+.lab-card-timer-mini.timer-both svg { color: #059669 !important; }
 
-.lab-card-timer-mini.timer-on {
-  background: rgba(2, 132, 199, 0.16);
-  color: #0284c7;
-  border: 1px solid rgba(2, 132, 199, 0.4);
-}
-body.dark .lab-card-timer-mini.timer-on {
-  background: rgba(2, 132, 199, 0.25);
-  color: #38bdf8;
-}
-
-.lab-card-timer-mini.timer-both {
-  background: rgba(16, 185, 129, 0.16);
-  color: #047857;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-}
-body.dark .lab-card-timer-mini.timer-both {
-  background: rgba(16, 185, 129, 0.25);
-  color: #34d399;
-}
+.lab-card-timer-mini.timer-off { border-left: 2.5px solid #d97706 !important; }
+.lab-card-timer-mini.timer-on { border-left: 2.5px solid #0284c7 !important; }
+.lab-card-timer-mini.timer-both { border-left: 2.5px solid #059669 !important; }
 
 /* ==============================================================
    MODAL TIMER AC (DEDICATED FULLSCREEN FIXED OVERLAY)
@@ -14203,4 +14325,58 @@ body.dark .btn-ios-action.tutup {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
   }
+}
+
+/* Logo AC menggantikan Logo Gembok pada Grid Ruang Kelas */
+.lab-card-ac-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  z-index: 1;
+}
+
+.lab-card:hover .lab-card-ac-status {
+  transform: scale(1.08);
+}
+
+.lab-card-ac-status svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.lab-card-ac-status.is-ac-on {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+.lab-card-ac-status.is-ac-off {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+#asmot-ac-summary-bar,
+.asmot-ac-summary-bar {
+  display: none !important;
+}
+
+.lab-card-timer-mini .timer-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px !important;
+  line-height: 1 !important;
+}
+
+.lab-card-timer-mini {
+  padding: 1px 5px !important;
+  gap: 3px !important;
+  height: 20px !important;
 }

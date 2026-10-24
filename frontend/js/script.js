@@ -2801,9 +2801,9 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   let timerText = 'Belum Dikasih Timer Remote';
   let timerTextHtml = 'Belum Dikasih Timer Remote';
   let timerStatus = 'none';
-  let timerButtonLabel = '⏱️ Catat Timer';
+  let timerButtonLabel = 'Catat Timer';
   let timerBadgeClass = 'timer-none';
-  let timerIcon = '⏱️';
+  let timerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
   let timerActionLabel = '+ Catat Timer';
 
   if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none') {
@@ -2812,25 +2812,25 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       timerSummary = `ON ${acTimer.timer_on} • OFF ${acTimer.timer_off}`;
       timerText = `Sudah Diset Timer (Hidup ${acTimer.timer_on} • Mati ${acTimer.timer_off} WIB)`;
       timerTextHtml = `Sudah Diset Timer • <span class="timer-time-highlight">Hidup ${acTimer.timer_on} WIB</span> &bull; <span class="timer-time-highlight">Mati ${acTimer.timer_off} WIB</span>`;
-      timerButtonLabel = `⏱️ ${acTimer.timer_on} - ${acTimer.timer_off}`;
+      timerButtonLabel = `${acTimer.timer_on} - ${acTimer.timer_off}`;
       timerBadgeClass = 'timer-both';
-      timerIcon = '⏱️';
+      timerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
       timerActionLabel = 'Ubah';
     } else if (acTimer.timer_aktif === 'on' && acTimer.timer_on) {
       timerSummary = `ON ${acTimer.timer_on}`;
       timerText = `Sudah Diset Timer Hidup (Hidup jam ${acTimer.timer_on} WIB)`;
       timerTextHtml = `Sudah Diset Timer Hidup • <span class="timer-time-highlight">Hidup jam ${acTimer.timer_on} WIB</span>`;
-      timerButtonLabel = `❄️ Hidup ${acTimer.timer_on}`;
+      timerButtonLabel = `Hidup ${acTimer.timer_on}`;
       timerBadgeClass = 'timer-on';
-      timerIcon = '❄️';
+      timerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
       timerActionLabel = 'Ubah';
     } else if (acTimer.timer_aktif === 'off' && acTimer.timer_off) {
       timerSummary = `OFF ${acTimer.timer_off}`;
       timerText = `Sudah Diset Timer Mati (Mati jam ${acTimer.timer_off} WIB)`;
       timerTextHtml = `Sudah Diset Timer Mati • <span class="timer-time-highlight">Mati jam ${acTimer.timer_off} WIB</span>`;
-      timerButtonLabel = `⚡ Mati ${acTimer.timer_off}`;
+      timerButtonLabel = `Mati ${acTimer.timer_off}`;
       timerBadgeClass = 'timer-off';
-      timerIcon = '⚡';
+      timerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
       timerActionLabel = 'Ubah';
     }
   }
@@ -2900,10 +2900,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     return withTimer({
       code: 'ONLINE_OR_CANCELLED',
       isAcOn: isAcRecordedOn,
-      statusText: isAcRecordedOn ? '⚠️ AC Menyala (Kelas Dibatalkan)' : '⏹️ AC Padam (Semua Kelas Batal)',
+      statusText: isAcRecordedOn ? 'AC Menyala (Kelas Dibatalkan)' : '⏹️ AC Padam (Semua Kelas Batal)',
       subtext: 'Seluruh perkuliahan hari ini dibatalkan (CC). Tidak perlu hidupkan AC.',
       badgeType: isAcRecordedOn ? 'warning-off' : 'ol-cc',
-      actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+      actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
       targetAction: isAcRecordedOn ? 'tutup' : 'buka',
       countdownMinutes: null,
       recommendation: 'Kelas dibatalkan oleh dosen, matikan AC untuk penghematan.',
@@ -2927,10 +2927,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       return withTimer({
         code: 'PREP_ON',
         isAcOn: isAcRecordedOn,
-        statusText: isAcRecordedOn ? '❄️ AC Aktif (Masa Persiapan)' : '❄️ Segera Hidupkan AC!',
+        statusText: isAcRecordedOn ? 'AC Aktif (Masa Persiapan)' : 'Segera Hidupkan AC!',
         subtext: `Kelas ${firstS.kelas ? `(${firstS.kelas}) ` : ''}mulai ${firstS._startTimeStr} WIB (Sisa ${timeUntilFirst} mnt)`,
         badgeType: isAcRecordedOn ? 'on' : 'warning-on',
-        actionLabel: isAcRecordedOn ? 'Matikan AC' : '❄️ Hidupkan AC Sekarang',
+        actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC Sekarang',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: timeUntilFirst,
         recommendation: 'Hidupkan AC 15–20 menit sebelum kelas dimulai agar ruangan nyaman saat perkuliahan dimulai.',
@@ -2949,7 +2949,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         statusText: isAcRecordedOn ? '⚠️ AC Sudah Menyala (Terlalu Awal)' : '⏹️ AC Padam (Hemat Energi)',
         subtext: `Sesi 1 mulai jam ${firstS._startTimeStr} WIB • Persiapan AC jam ${formatMinToTime(firstS._startM - 20)} WIB`,
         badgeType: isAcRecordedOn ? 'warning-off' : 'off',
-        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: timeUntilFirst,
         recommendation: 'AC belum perlu dinyalakan. Nyalakan pada H-20 menit sebelum jadwal.',
@@ -2985,7 +2985,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Kelas Daring/Online)' : '⏹️ AC Padam (Kuliah Online)',
         subtext: `Kelas ${ongoingS.nama_mk} dialihkan DARING (OL). Ruangan kosong.`,
         badgeType: isAcRecordedOn ? 'warning-off' : 'ol-cc',
-        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: remainingMin,
         recommendation: 'Kuliah dilaksanakan secara online, matikan AC agar hemat listrik.',
@@ -3015,10 +3015,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     return withTimer({
       code: 'IN_SESSION',
       isAcOn: isAcRecordedOn,
-      statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⚠️ Sesi Berlangsung (AC Belum Nyala)',
+      statusText: isAcRecordedOn ? 'AC Sedang Aktif' : 'Sesi Berlangsung (AC Belum Nyala)',
       subtext: `Selesai dlm ${remainingMin} mnt (${ongoingS._endTimeStr} WIB) • ${nextGuidance}`,
       badgeType: isAcRecordedOn ? 'on' : 'warning-on',
-      actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+      actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
       targetAction: isAcRecordedOn ? 'tutup' : 'buka',
       countdownMinutes: remainingMin,
       recommendation: 'Suhu terjaga dengan baik selama proses perkuliahan berlangsung.',
@@ -3049,7 +3049,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
           statusText: '🔁 AC Tetap Standby',
           subtext: `Jeda singkat ${gapTotal} mnt • Sesi berikutnya (${nextS._startTimeStr} WIB) segera dimulai`,
           badgeType: 'standby',
-          actionLabel: isAcRecordedOn ? 'Matikan AC' : '❄️ Hidupkan AC',
+          actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
           targetAction: isAcRecordedOn ? 'tutup' : 'buka',
           countdownMinutes: timeUntilNextStart,
           recommendation: 'AC jangan dimatikan saat jeda singkat (< 30 mnt) agar kompresor tidak rusak.',
@@ -3068,10 +3068,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         return withTimer({
           code: 'PREP_ON',
           isAcOn: isAcRecordedOn,
-          statusText: isAcRecordedOn ? '❄️ AC Aktif (Persiapan Sesi Lanjutan)' : '❄️ Segera Hidupkan AC!',
+          statusText: isAcRecordedOn ? 'AC Aktif (Persiapan Sesi Lanjutan)' : 'Segera Hidupkan AC!',
           subtext: `Sesi berikutnya (${nextS.kelas || nextS._startTimeStr}) mulai dlm ${timeUntilNextStart} mnt`,
           badgeType: isAcRecordedOn ? 'on' : 'warning-on',
-          actionLabel: isAcRecordedOn ? 'Matikan AC' : '❄️ Hidupkan AC Sekarang',
+          actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC Sekarang',
           targetAction: isAcRecordedOn ? 'tutup' : 'buka',
           countdownMinutes: timeUntilNextStart,
           recommendation: 'Waktunya menyalakan AC sebelum sesi perkuliahan selanjutnya dimulai.',
@@ -3089,10 +3089,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         return withTimer({
           code: 'MUST_TURN_OFF',
           isAcOn: true,
-          statusText: '⚡ Segera Matikan AC!',
+          statusText: 'Segera Matikan AC!',
           subtext: `Kelas selesai • Jeda panjang ${gapTotal} menit hingga ${nextS._startTimeStr} WIB`,
           badgeType: 'warning-off',
-          actionLabel: '⚡ Matikan AC Sekarang',
+          actionLabel: 'Matikan AC Sekarang',
           targetAction: 'tutup',
           countdownMinutes: timeUntilNextStart,
           recommendation: 'Ruangan kosong lebih dari 30 menit. Matikan AC sekarang untuk menghemat listrik kampus.',
@@ -3110,7 +3110,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Ruang Kosong)' : '⏹️ AC Padam (Hemat Energi)',
         subtext: `Ruangan kosong hingga ${nextS._startTimeStr} WIB (Sisa jeda ${timeUntilNextStart} mnt)`,
         badgeType: isAcRecordedOn ? 'warning-off' : 'off',
-        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: timeUntilNextStart,
         recommendation: isAcRecordedOn ? 'Ruangan sedang kosong, matikan AC.' : 'Sistem hemat listrik aktif selama jeda panjang.',
@@ -3131,10 +3131,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       return withTimer({
         code: 'LAST_SESSION_OVER',
         isAcOn: true,
-        statusText: '⚡ Segera Matikan AC Total!',
+        statusText: 'Segera Matikan AC Total!',
         subtext: `Seluruh sesi hari ini telah selesai pada ${lastS._endTimeStr} WIB`,
         badgeType: 'warning-off',
-        actionLabel: '⚡ Matikan AC Total',
+        actionLabel: 'Matikan AC Total',
         targetAction: 'tutup',
         countdownMinutes: null,
         recommendation: 'Perkuliahan hari ini telah selesai. Pastikan AC dimatikan dan pintu ruang dikunci.',
@@ -3150,7 +3150,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         statusText: isAcRecordedOn ? '⚠️ AC Masih Nyala (Sesi Selesai)' : '⏹️ AC Padam Total',
         subtext: `Sesi terakhir selesai jam ${lastS._endTimeStr} WIB • Kegiatan hari ini telah berakhir`,
         badgeType: isAcRecordedOn ? 'warning-off' : 'off',
-        actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+        actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: null,
         recommendation: 'Semua kelas selesai hari ini.',
@@ -3168,10 +3168,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   return withTimer({
     code: 'IN_SESSION',
     isAcOn: isAcRecordedOn,
-    statusText: isAcRecordedOn ? '🟢 AC Sedang Aktif' : '⏹️ AC Padam',
+    statusText: isAcRecordedOn ? 'AC Sedang Aktif' : '⏹️ AC Padam',
     subtext: 'Status operasional ruang kelas',
     badgeType: isAcRecordedOn ? 'on' : 'off',
-    actionLabel: isAcRecordedOn ? '⚡ Matikan AC' : '❄️ Hidupkan AC',
+    actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
     targetAction: isAcRecordedOn ? 'tutup' : 'buka',
     countdownMinutes: null,
     recommendation: '',
@@ -3200,6 +3200,14 @@ window.onHeaderAcToggleClick = function (targetAction) {
 };
 
 function updateAsmotAcSummaryBar(roomsThehok = {}, roomsKobar = {}, kampusFilter = 'semua') {
+  const container = document.getElementById('asmot-ac-summary-bar');
+  if (container) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+  }
+  return;
+}
+function _unused_updateAsmotAcSummaryBar_disabled(roomsThehok = {}, roomsKobar = {}, kampusFilter = 'semua') {
   const container = document.getElementById('asmot-ac-summary-bar');
   if (!container) return;
 
@@ -3395,7 +3403,7 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
 
   const refSummaryEl = document.getElementById('timer-ac-schedule-summary');
   if (refSummaryEl) {
-    refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) • Sesi Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar)`;
+    refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) &bull; Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar)`;
   }
 
   // Load existing timer config or defaults
@@ -3420,7 +3428,10 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
     if (offTimeInput) offTimeInput.value = defaultOff;
   }
 
-  // Load preferensi tipe remote AC untuk ruangan ini (atau default '24h')
+  // Hitung dan render Saran Pintar Asmot
+  updateAsmotSmartSuggestion();
+
+  // Load preferensi tipe remote AC untuk ruangan ini (default '24h')
   let savedRemoteType = '24h';
   try {
     savedRemoteType = localStorage.getItem('unama_remote_type_' + roomName) || '24h';
@@ -3450,6 +3461,236 @@ window.closeTimerAcModal = function (e) {
 };
 
 // ==============================================================
+// SISTEM SARAN PINTAR TIMER ASMOT (SMART ASMOT ENGINE)
+// ==============================================================
+window.calculateAsmotSmartSuggestion = function () {
+  const ctx = window._activeTimerRoomContext || {};
+  const schedules = ctx.schedules || [];
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  if (!schedules || schedules.length === 0) {
+    return {
+      hasSuggestion: false,
+      title: 'Tidak Ada Jadwal Hari Ini',
+      desc: 'Ruangan tidak memiliki jadwal perkuliahan hari ini. AC tidak perlu disetel timer.',
+      mode: 'none',
+      on: null,
+      off: null,
+      durationOn: null,
+      durationOff: null
+    };
+  }
+
+  const firstSession = schedules[0];
+  const lastSession = schedules[schedules.length - 1];
+
+  // 1. KASUS 1: SESI PERTAMA MULAI PAGI (08:00 WIB) & SEKARANG MASIH AWAL PAGI (<= 08:30)
+  // Aturan user: "kalau matakuliah pertama jam 8 sistem nggak perlu kasih tau untuk timer on jadi saran timer off nya aja jam berapa sesuai dengan jam mknya minimal setelah jam mk nya selesai."
+  const isMorningFirst = (firstSession._startM >= 450 && firstSession._startM <= 510);
+  if (isMorningFirst && nowMin <= firstSession._startM + 30) {
+    // Cari jam selesai sesi 1 atau rangkaian sesi yang bersambung langsung tanpa jeda
+    let targetEndM = firstSession._endM;
+    let targetEndStr = firstSession._endTimeStr;
+    let sessionCount = 1;
+
+    for (let i = 1; i < schedules.length; i++) {
+      if (schedules[i]._startM <= targetEndM + 15) {
+        targetEndM = schedules[i]._endM;
+        targetEndStr = schedules[i]._endTimeStr;
+        sessionCount++;
+      } else {
+        break;
+      }
+    }
+
+    const diffMin = targetEndM - nowMin;
+    const suggestedDurationH = Math.max(1, Math.min(12, Math.ceil(diffMin / 60)));
+
+    return {
+      hasSuggestion: true,
+      title: 'Saran Timer Asmot (Sesi Awal Pagi)',
+      desc: `Sesi pertama dimulai pukul <b>${firstSession._startTimeStr} WIB</b>. Timer ON tidak diperlukan karena AC langsung dinyalakan saat buka lab. Setel <b>Timer OFF pukul ${targetEndStr} WIB</b> (selesai ${sessionCount > 1 ? sessionCount + ' sesi bersambung' : 'perkuliahan'}) atau setel <b>${suggestedDurationH} Jam</b> di remote.`,
+      mode: 'off',
+      on: null,
+      off: targetEndStr,
+      durationOn: null,
+      durationOff: suggestedDurationH,
+      labelOn: 'Tidak Perlu',
+      labelOff: `${targetEndStr} WIB (${suggestedDurationH} Jam)`
+    };
+  }
+
+  // 2. KASUS 2: ADA JEDA ATAU SESI BERIKUTNYA BARU AKAN MULAI NANTI (misal sesi jam 10:15 atau siang)
+  // Aturan user: "nah tapi kalau ada jeda ni misal jam 10.15 asmot mulai hidupin labnya jam berpa itu harus di liat dari jam realtime misal ni jam 7 jadi sarannya itu 2 jam baru hidup, minimal 1 jam sebelum mk mulai."
+  const futureSession = schedules.find(s => s._startM > nowMin);
+  if (futureSession) {
+    // Target hidup: minimal 1 jam (60 menit) sebelum MK mulai
+    const targetOnMin = futureSession._startM - 60;
+    const diffToOn = targetOnMin - nowMin;
+    let targetEndStr = futureSession._endTimeStr;
+
+    if (diffToOn > 20) {
+      // Ada jeda waktu yang cukup sebelum 1 jam pra-kelas (misal jam sekarang 07:00, kelas 10:15 -> target hidup 09:15 -> selisih ~2 jam)
+      const suggestedOnH = Math.max(1, Math.min(12, Math.round(diffToOn / 60)));
+      const onTimeStr = formatMinToTime(targetOnMin);
+
+      const diffToOff = futureSession._endM - nowMin;
+      const suggestedOffH = Math.max(1, Math.min(12, Math.ceil(diffToOff / 60)));
+
+      return {
+        hasSuggestion: true,
+        title: `Saran Timer Asmot (Persiapan Sesi ${futureSession._startTimeStr} WIB)`,
+        desc: `Perkuliahan berikutnya mulai pukul <b>${futureSession._startTimeStr} WIB</b>. Setel <b>Timer ON ${suggestedOnH} Jam lagi</b> (AC hidup pukul <b>${onTimeStr} WIB</b> - 1 jam sebelum kelas) dan <b>Timer OFF pukul ${targetEndStr} WIB</b> (atau <b>${suggestedOffH} Jam</b> di remote).`,
+        mode: 'both',
+        on: onTimeStr,
+        off: targetEndStr,
+        durationOn: suggestedOnH,
+        durationOff: suggestedOffH,
+        labelOn: `${onTimeStr} WIB (${suggestedOnH} Jam lagi)`,
+        labelOff: `${targetEndStr} WIB (${suggestedOffH} Jam)`
+      };
+    } else {
+      // Sudah masuk dalam 1 jam sebelum kelas mulai
+      const diffToOff = futureSession._endM - nowMin;
+      const suggestedOffH = Math.max(1, Math.min(12, Math.ceil(diffToOff / 60)));
+
+      return {
+        hasSuggestion: true,
+        title: `Saran Timer Asmot (Mendekati Sesi ${futureSession._startTimeStr} WIB)`,
+        desc: `Kelas akan dimulai dalam kurang dari 1 jam (<b>${futureSession._startTimeStr} WIB</b>). AC sebaiknya langsung dinyalakan sekarang. Setel <b>Timer OFF pukul ${targetEndStr} WIB</b> (selesai kelas) atau <b>${suggestedOffH} Jam</b> di remote.`,
+        mode: 'off',
+        on: null,
+        off: targetEndStr,
+        durationOn: null,
+        durationOff: suggestedOffH,
+        labelOn: 'Hidupkan Manual Sekarang',
+        labelOff: `${targetEndStr} WIB (${suggestedOffH} Jam)`
+      };
+    }
+  }
+
+  // 3. KASUS 3: SEDANG BERLANGSUNG KULIAH
+  const currentSession = schedules.find(s => nowMin >= s._startM && nowMin < s._endM);
+  if (currentSession) {
+    let targetEndM = currentSession._endM;
+    let targetEndStr = currentSession._endTimeStr;
+
+    const currentIdx = schedules.indexOf(currentSession);
+    for (let i = currentIdx + 1; i < schedules.length; i++) {
+      if (schedules[i]._startM <= targetEndM + 15) {
+        targetEndM = schedules[i]._endM;
+        targetEndStr = schedules[i]._endTimeStr;
+      } else {
+        break;
+      }
+    }
+
+    const diffToOff = targetEndM - nowMin;
+    const suggestedOffH = Math.max(1, Math.min(12, Math.ceil(diffToOff / 60)));
+
+    return {
+      hasSuggestion: true,
+      title: 'Saran Timer Asmot (Sesi Sedang Berlangsung)',
+      desc: `Perkuliahan sedang berlangsung hingga pukul <b>${targetEndStr} WIB</b>. AC sudah aktif. Setel <b>Timer OFF pukul ${targetEndStr} WIB</b> atau <b>${suggestedOffH} Jam</b> di remote.`,
+      mode: 'off',
+      on: null,
+      off: targetEndStr,
+      durationOn: null,
+      durationOff: suggestedOffH,
+      labelOn: 'Tidak Perlu',
+      labelOff: `${targetEndStr} WIB (${suggestedOffH} Jam)`
+    };
+  }
+
+  // 4. KASUS 4: SEMUA KULIAH HARI INI TELAH SELESAI
+  return {
+    hasSuggestion: false,
+    title: 'Perkuliahan Hari Ini Selesai',
+    desc: `Semua sesi perkuliahan hari ini telah selesai (terakhir pukul <b>${lastSession._endTimeStr} WIB</b>). Matikan AC dan tidak perlu menyetel timer.`,
+    mode: 'none',
+    on: null,
+    off: null,
+    durationOn: null,
+    durationOff: null
+  };
+};
+
+window.updateAsmotSmartSuggestion = function () {
+  const suggestion = window.calculateAsmotSmartSuggestion();
+  window._currentSmartSuggestion = suggestion;
+
+  const card = document.getElementById('timer-smart-suggestion-card');
+  const titleEl = document.getElementById('timer-suggestion-title');
+  const descEl = document.getElementById('timer-suggestion-desc');
+  const btnApply = document.getElementById('btn-apply-smart-suggestion');
+
+  if (!card) return;
+
+  if (suggestion && suggestion.hasSuggestion) {
+    card.style.display = 'flex';
+    if (titleEl) titleEl.textContent = suggestion.title;
+    if (descEl) descEl.innerHTML = suggestion.desc;
+    if (btnApply) btnApply.style.display = 'inline-block';
+  } else {
+    card.style.display = 'flex';
+    if (titleEl) titleEl.textContent = suggestion?.title || 'Informasi Timer Asmot';
+    if (descEl) descEl.innerHTML = suggestion?.desc || 'Tidak ada rekomendasi khusus saat ini.';
+    if (btnApply) btnApply.style.display = 'none';
+  }
+};
+
+window.applyAsmotSmartSuggestion = function () {
+  const suggestion = window._currentSmartSuggestion;
+  if (!suggestion || !suggestion.hasSuggestion) return;
+
+  const onToggle = document.getElementById('timer-on-toggle');
+  const offToggle = document.getElementById('timer-off-toggle');
+  const onInput = document.getElementById('timer-on-time');
+  const offInput = document.getElementById('timer-off-time');
+
+  if (suggestion.mode === 'off') {
+    if (onToggle) onToggle.checked = false;
+    if (offToggle) offToggle.checked = true;
+    if (suggestion.off && offInput) offInput.value = suggestion.off;
+  } else if (suggestion.mode === 'both') {
+    if (onToggle) onToggle.checked = true;
+    if (offToggle) offToggle.checked = true;
+    if (suggestion.on && onInput) onInput.value = suggestion.on;
+    if (suggestion.off && offInput) offInput.value = suggestion.off;
+  }
+
+  // Sinkronkan ke input 12 jam jika view 12 jam sedang aktif
+  if (suggestion.on) sync24hTo12h('on', suggestion.on);
+  if (suggestion.off) sync24hTo12h('off', suggestion.off);
+
+  // Jika remote type duration aktif: sorot tombol durasi yang sesuai
+  if (suggestion.durationOn) {
+    const onContainer = document.getElementById('timer-on-duration-grid');
+    if (onContainer) {
+      onContainer.querySelectorAll('.btn-duration-hour').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.getAttribute('data-hour'), 10) === suggestion.durationOn);
+      });
+    }
+  }
+  if (suggestion.durationOff) {
+    const offContainer = document.getElementById('timer-off-duration-grid');
+    if (offContainer) {
+      offContainer.querySelectorAll('.btn-duration-hour').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.getAttribute('data-hour'), 10) === suggestion.durationOff);
+      });
+    }
+  }
+
+  onTimerToggleChange();
+  validateTimerInputs();
+
+  if (typeof showToast === 'function') {
+    showToast('Saran Asmot berhasil diterapkan ke pengaturan timer!', 'info');
+  }
+};
+
+// ==============================================================
 // LOGIKA SELEKTOR TIPE FORMAT REMOTE AC (24H, 12H AM/PM, PER JAM 1-12)
 // ==============================================================
 window.selectRemoteType = function (type, isInitial = false) {
@@ -3462,10 +3703,10 @@ window.selectRemoteType = function (type, isInitial = false) {
     if (tabEl) tabEl.classList.toggle('active', t === type);
   });
 
-  // 2. Update Header Hint Description
+  // 2. Update Header Hint Description (Tanpa Emotikon)
   const hintEl = document.getElementById('timer-remote-type-desc');
   if (hintEl) {
-    if (type === '24h') hintEl.textContent = 'Model 24 Jam (00:00 - 23:59)';
+    if (type === '24h') hintEl.textContent = 'Model 24 Jam';
     else if (type === '12h') hintEl.textContent = 'Model 12 Jam (AM / PM)';
     else if (type === 'duration') hintEl.textContent = 'Model Tombol Per Jam (1 - 12 Jam)';
   }
@@ -3547,7 +3788,6 @@ window.sync24hTo12h = function (which, time24Str) {
 
   if (hourSelect) hourSelect.value = String(h12);
 
-  // Pilih menit yang paling mendekati jika tidak pas kelipatan 5
   if (minSelect) {
     const minOptions = Array.from(minSelect.options).map(o => Number(o.value));
     let closestMin = minOptions.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev);
@@ -3564,7 +3804,6 @@ window.sync24hTo12h = function (which, time24Str) {
   }
 };
 
-// Handler: Tombol Toggle AM / PM
 window.setAmPm = function (which, ampm) {
   const amBtn = document.getElementById(`btn-${which}-am`);
   const pmBtn = document.getElementById(`btn-${which}-pm`);
@@ -3575,7 +3814,6 @@ window.setAmPm = function (which, ampm) {
   on12hInputChange(which);
 };
 
-// Handler: Perubahan pada select digit 12 Jam
 window.on12hInputChange = function (which) {
   const hourSelect = document.getElementById(`timer-${which}-12h-hour`);
   const minSelect = document.getElementById(`timer-${which}-12h-minute`);
@@ -3600,7 +3838,6 @@ window.on12hInputChange = function (which) {
   validateTimerInputs();
 };
 
-// Handler: Perubahan pada input 24 Jam standar
 window.on24hInputChange = function (which) {
   const mainInput = document.getElementById(`timer-${which}-time`);
   if (mainInput) {
@@ -3610,7 +3847,7 @@ window.on24hInputChange = function (which) {
 };
 
 // ==============================================================
-// LOGIKA HITUNGAN DURASI PER JAM (1 - 12 JAM)
+// LOGIKA HITUNGAN DURASI PER JAM (1 - 12 JAM) DENGAN SARAN ASMOT
 // ==============================================================
 window.renderDurationGrid = function (which) {
   const container = document.getElementById(`timer-${which}-duration-grid`);
@@ -3626,27 +3863,13 @@ window.renderDurationGrid = function (which) {
     nowTimeEl.textContent = `Waktu sekarang: ${nowH}:${nowM} WIB`;
   }
 
-  // Hitung durasi rekomendasi berdasarkan sesi aktif ruangan
+  // Dapatkan durasi rekomendasi dari Saran Asmot
+  const suggestion = window._currentSmartSuggestion || window.calculateAsmotSmartSuggestion();
   let recommendedHour = null;
-  const ctx = window._activeTimerRoomContext || {};
-  const schedules = ctx.schedules || [];
-
-  if (which === 'off') {
-    // Cari sesi aktif saat ini
-    const activeSession = schedules.find(s => nowTotalMinutes >= s._startM && nowTotalMinutes < s._endM);
-    if (activeSession) {
-      const remainingMinutes = activeSession._endM - nowTotalMinutes;
-      if (remainingMinutes > 0) {
-        recommendedHour = Math.max(1, Math.min(12, Math.round(remainingMinutes / 60)));
-      }
-    } else if (schedules.length > 0) {
-      // Jika belum mulai, ambil durasi dari sekarang sampai sesi pertama selesai
-      const firstSession = schedules[0];
-      if (nowTotalMinutes < firstSession._endM) {
-        const diff = firstSession._endM - nowTotalMinutes;
-        recommendedHour = Math.max(1, Math.min(12, Math.round(diff / 60)));
-      }
-    }
+  if (which === 'off' && suggestion && suggestion.durationOff) {
+    recommendedHour = suggestion.durationOff;
+  } else if (which === 'on' && suggestion && suggestion.durationOn) {
+    recommendedHour = suggestion.durationOn;
   }
 
   // Cek apakah input waktu saat ini cocok dengan salah satu jam durasi
@@ -3679,8 +3902,8 @@ window.renderDurationGrid = function (which) {
               data-hour="${h}" 
               onclick="selectDurationHour('${which}', ${h})" 
               title="Disetel ${h} jam di remote: AC ${which === 'off' ? 'mati' : 'hidup'} pada ${targetTimeStr} WIB">
-        <span class="duration-hour-title">${h} Jam</span>
-        <span class="duration-hour-time">${targetTimeStr}</span>
+        <span class="duration-hour-title">${h} Jam ${isRec ? '<span class="duration-rec-tag">Saran Asmot</span>' : ''}</span>
+        <span class="duration-hour-time">${targetTimeStr} WIB</span>
       </button>
     `;
   }
@@ -3695,7 +3918,7 @@ window.renderDurationGrid = function (which) {
     if (calcText) {
       const targetMin = (nowTotalMinutes + activeHourSelected * 60) % 1440;
       const targetTimeStr = `${String(Math.floor(targetMin / 60)).padStart(2, '0')}:${String(targetMin % 60).padStart(2, '0')}`;
-      calcText.innerHTML = `Disetel di remote: <b>${activeHourSelected} Jam</b> → AC ${which === 'off' ? 'Mati' : 'Hidup'} Pukul <b>${targetTimeStr} WIB</b>`;
+      calcText.innerHTML = `Disetel di remote: <b>${activeHourSelected} Jam</b> &rarr; AC ${which === 'off' ? 'Mati' : 'Hidup'} Pukul <b>${targetTimeStr} WIB</b>`;
     }
   }
 };
@@ -3733,7 +3956,7 @@ window.selectDurationHour = function (which, hours) {
   const calcText = document.getElementById(`timer-${which}-duration-calc-text`);
   if (calcBox) calcBox.style.display = 'flex';
   if (calcText) {
-    calcText.innerHTML = `Disetel di remote: <b>${hours} Jam</b> → AC ${which === 'off' ? 'Mati' : 'Hidup'} Pukul <b>${targetTimeStr} WIB</b>`;
+    calcText.innerHTML = `Disetel di remote: <b>${hours} Jam</b> &rarr; AC ${which === 'off' ? 'Mati' : 'Hidup'} Pukul <b>${targetTimeStr} WIB</b>`;
   }
 
   // 5. Sinkronkan juga ke input 12h
@@ -3742,7 +3965,7 @@ window.selectDurationHour = function (which, hours) {
   validateTimerInputs();
 };
 
-// Render Preset Rekomendasi Sesuai Format Aktif
+// Render Preset Rekomendasi Sesuai Format Aktif (Tanpa Emotikon)
 function renderTimerPresets(formatType) {
   const ctx = window._activeTimerRoomContext || {};
   const firstStartM = ctx.firstStartM ?? 480;
@@ -3759,7 +3982,7 @@ function renderTimerPresets(formatType) {
     const l10 = formatType === '12h' ? formatTimeTo12h(h10) : `${h10} WIB`;
 
     onPresetsContainer.innerHTML = `
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">❄️ H-20 (${l20})</button>
+      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">H-20 (${l20})</button>
       <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h15}')">H-15 (${l15})</button>
       <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h10}')">H-10 (${l10})</button>
     `;
@@ -3863,7 +4086,6 @@ window.validateTimerInputs = function () {
     const onM = onParts[0] * 60 + onParts[1];
 
     if (onM >= firstStartM) {
-      // User mencoba menyetel Timer ON pada atau setelah jam mulai perkuliahan!
       hasError = true;
       if (onCorrectionBox) {
         onCorrectionBox.style.display = 'flex';
@@ -3871,9 +4093,9 @@ window.validateTimerInputs = function () {
         const descEl = document.getElementById('timer-on-correction-desc');
         const btnApply = document.getElementById('btn-apply-on-correction');
 
-        if (titleEl) titleEl.textContent = '⚠️ Koreksi: Timer ON Harus Sebelum Jam Mulai!';
+        if (titleEl) titleEl.textContent = 'Koreksi: Timer ON Harus Sebelum Jam Mulai';
         if (descEl) {
-          descEl.innerHTML = `Timer ON disetel <b>${onVal} WIB</b> (saat/sesudah kelas dimulai). Timer ON minimal harus disetel <b>sebelum jam ${firstStartTimeStr} WIB</b> agar ruangan sudah sejuk saat kelas dimulai. Rekomendasi pendinginan: <b>H-20 (${formatMinToTime(firstStartM - 20)} WIB)</b>.`;
+          descEl.innerHTML = `Timer ON disetel <b>${onVal} WIB</b> (saat/sesudah kelas dimulai). Timer ON minimal harus disetel <b>sebelum jam ${firstStartTimeStr} WIB</b> agar ruangan sudah sejuk saat kelas dimulai. Rekomendasi: <b>H-20 (${formatMinToTime(firstStartM - 20)} WIB)</b>.`;
         }
         if (btnApply) {
           btnApply.textContent = `Gunakan Rekomendasi (${formatMinToTime(firstStartM - 20)})`;
@@ -3901,7 +4123,7 @@ window.validateTimerInputs = function () {
           offCorrectionBox.style.display = 'flex';
           const titleEl = document.getElementById('timer-off-correction-title');
           const descEl = document.getElementById('timer-off-correction-desc');
-          if (titleEl) titleEl.textContent = '⚠️ Waktu Timer Tidak Sesuai';
+          if (titleEl) titleEl.textContent = 'Waktu Timer Tidak Sesuai';
           if (descEl) descEl.textContent = `Timer Mati (${offVal} WIB) harus lebih lambat dari Timer Hidup (${onVal} WIB).`;
         }
       } else {
@@ -3914,7 +4136,7 @@ window.validateTimerInputs = function () {
     if (offCorrectionBox) offCorrectionBox.style.display = 'none';
   }
 
-  // Update Live Preview Badge
+  // Update Live Preview Badge (Bebas Emotikon)
   if (previewBadge) {
     const formatType = window._activeRemoteType || '24h';
     let onDisplay = onVal;
@@ -3926,16 +4148,16 @@ window.validateTimerInputs = function () {
     }
 
     if (onActive && offActive) {
-      previewBadge.textContent = `⏱️ Timer Aktif: ON ${onDisplay} • OFF ${offDisplay}`;
+      previewBadge.textContent = `Timer Aktif: ON ${onDisplay} • OFF ${offDisplay}`;
       previewBadge.style.color = '#0284c7';
     } else if (onActive) {
-      previewBadge.textContent = `⏱️ Timer ON: ${onDisplay}`;
+      previewBadge.textContent = `Timer Aktif: ON ${onDisplay}`;
       previewBadge.style.color = '#0284c7';
     } else if (offActive) {
-      previewBadge.textContent = `⏱️ Timer OFF: ${offDisplay}`;
+      previewBadge.textContent = `Timer Aktif: OFF ${offDisplay}`;
       previewBadge.style.color = '#d97706';
     } else {
-      previewBadge.textContent = `Tidak Ada Timer Aktif (Manual Control)`;
+      previewBadge.textContent = `Tidak Ada Timer Aktif (Kontrol Manual)`;
       previewBadge.style.color = 'var(--text-muted)';
     }
   }
@@ -4067,7 +4289,7 @@ function checkAndTriggerAcTimers() {
         if (typeof toggleLabSessionStatus === 'function') {
           toggleLabSessionStatus(t.tanggal, t.roomName, '08:00', '', '', 'buka', t.kampus);
           if (typeof showToast === 'function') {
-            showToast(`❄️ Timer Otomatis: AC ${t.roomName} dinyalakan (${t.timer_on} WIB)`, 'info');
+            showToast(`Timer Otomatis: AC ${t.roomName} dinyalakan (${t.timer_on} WIB)`, 'info');
           }
         }
       }
@@ -4083,7 +4305,7 @@ function checkAndTriggerAcTimers() {
         if (typeof toggleLabSessionStatus === 'function') {
           toggleLabSessionStatus(t.tanggal, t.roomName, '08:00', '', '', 'tutup', t.kampus);
           if (typeof showToast === 'function') {
-            showToast(`⚡ Timer Otomatis: AC ${t.roomName} dimatikan (${t.timer_off} WIB)`, 'info');
+            showToast(`Timer Otomatis: AC ${t.roomName} dimatikan (${t.timer_off} WIB)`, 'info');
           }
         }
       }
@@ -4389,33 +4611,58 @@ function updateActiveLabPanel() {
       }
 
       const isBuka = (data.lockStatus === 'buka');
-      const lockClass = isBuka ? 'is-buka' : 'is-tutup';
       const isLabEntity = (typeof isLab === 'function' && isLab(room)) ||
                           (room || '').toLowerCase().includes('lab') ||
                           (room || '').toLowerCase().includes('cisco');
       const entityLabel = isLabEntity ? 'Labor' : 'Ruangan';
-      const lockTitle = isBuka 
-        ? `${entityLabel} sudah DIBUKA` 
-        : `${entityLabel} DITUTUP / belum dibuka`;
-      const lockIconSvg = isBuka
-        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 9.9-1"></path><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>`
-        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
 
-      const acBadgeHtml = (!isLabEntity && data.acStatus)
-        ? `<div class="lab-card-ac is-ac-${data.acStatus.badgeType}" title="AC: ${escapeHtml(data.acStatus.statusText)}">
-             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"></path></svg>
-           </div>`
-        : '';
+      // Status AC: Aktif (Menyala) atau Padam (Standby / Mati)
+      const isAcActive = (!isLabEntity && data.acStatus) ? Boolean(data.acStatus.isAcOn) : isBuka;
+      const acClass = isAcActive ? 'is-ac-on' : 'is-ac-off';
+      const acTitle = isAcActive 
+        ? `${entityLabel}: AC Menyala (Aktif)` 
+        : `${entityLabel}: AC Padam (Mati / Standby)`;
+      const acIconSvg = isAcActive
+        ? `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="9" rx="2"></rect><line x1="6" y1="8" x2="18" y2="8"></line><line x1="18" y1="5.5" x2="18.01" y2="5.5" stroke-width="2.5"></line><path d="M6 15c1 1.2 2 1.2 3 0s2-1.2 3 0 2 1.2 3 0"></path><path d="M8 18.5c1 1 2 1 3 0s2-1 3 0"></path></svg>`
+        : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="10" rx="2"></rect><line x1="6" y1="9.5" x2="18" y2="9.5"></line><line x1="18" y1="6.5" x2="18.01" y2="6.5" stroke-width="2.2"></line></svg>`;
+
+      // Badge Timer Mini: Sisi kiri ada indikator I (ON), O (OFF), atau I/O (Both), tanpa teks jam panjang agar nama ruangan tidak terpotong
+      let timerBadgeHtml = '';
+      if (!isLabEntity && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
+        const tStatus = data.acStatus.timerStatus;
+        const tData = data.acStatus.timerData || {};
+        if (tStatus === 'on') {
+          timerBadgeHtml = `
+            <div class="lab-card-timer-mini timer-on" title="Timer AC Remote: Hidup (Jam ${escapeHtml(tData.timer_on || '')} WIB)">
+              <span class="timer-tag">I</span>
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+          `;
+        } else if (tStatus === 'off') {
+          timerBadgeHtml = `
+            <div class="lab-card-timer-mini timer-off" title="Timer AC Remote: Mati (Jam ${escapeHtml(tData.timer_off || '')} WIB)">
+              <span class="timer-tag">O</span>
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+          `;
+        } else if (tStatus === 'both') {
+          timerBadgeHtml = `
+            <div class="lab-card-timer-mini timer-both" title="Timer AC Remote: Hidup ${escapeHtml(tData.timer_on || '')} • Mati ${escapeHtml(tData.timer_off || '')} WIB">
+              <span class="timer-tag">I/O</span>
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+          `;
+        }
+      }
 
       html += `
               <div class="lab-card ${data.state}" onclick="showRoomDetail('${escapeHtml(room)}', '${kampusStr}')">
                 <div class="lab-card-header">
                   <div class="lab-name">${formatRoomNameHtml(room)}</div>
                   <div class="lab-card-header-icons">
-                    ${(!isLabEntity && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') ? `<div class="lab-card-timer-mini ${data.acStatus.timerBadgeClass}" title="Timer AC: ${escapeHtml(data.acStatus.timerText)}"><span>${data.acStatus.timerIcon} ${escapeHtml(data.acStatus.timerSummary || '')}</span></div>` : ''}
-                    ${acBadgeHtml}
-                    <div class="lab-card-lock ${lockClass}" title="${lockTitle}" aria-label="${lockTitle}">
-                      ${lockIconSvg}
+                    ${timerBadgeHtml}
+                    <div class="lab-card-ac-status ${acClass}" title="${acTitle}" aria-label="${acTitle}">
+                      ${acIconSvg}
                     </div>
                   </div>
                 </div>
@@ -9618,27 +9865,34 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
       if (!isLabEntity) {
         const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusLabel);
-        headerLabStatusEl.className = `room-lab-status-strip ${acStatus.stripClass} ios-apple-card`;
+        // Compact Apple Header Card: Ramping & Hemat Ruang agar Jadwal Perkuliahan di Bawahnya Sangat Lega
+        headerLabStatusEl.className = `room-lab-status-strip ${acStatus.stripClass} ios-apple-card compact`;
         headerLabStatusEl.style.display = 'flex';
         headerLabStatusEl.innerHTML = `
-          <!-- 1. Header Row: Status Icon/Title + Countdown Badge -->
+          <!-- Baris 1: Status & Tombol Aksi Berdampingan (Compact Inline) -->
           <div class="ios-status-card-header">
             <div class="ios-status-title-wrap">
               <span class="lab-status-dot ${acStatus.dotClass}"></span>
               <span class="ios-status-title">${acStatus.statusText}</span>
+              ${acStatus.countdownMinutes !== null && acStatus.countdownMinutes > 0 && isToday ? `
+                <span class="ac-countdown-badge ${acStatus.badgeType}">
+                  <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span>${acStatus.countdownMinutes}m</span>
+                </span>
+              ` : ''}
             </div>
-            ${acStatus.countdownMinutes !== null && acStatus.countdownMinutes > 0 && isToday ? `
-              <span class="ac-countdown-badge ${acStatus.badgeType}">
-                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                <span>${acStatus.countdownMinutes}m</span>
-              </span>
+            ${acStatus.actionLabel ? `
+              <button type="button" class="btn-ios-action ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">
+                ${acStatus.btnIcon}
+                <span>${escapeHtml(acStatus.actionLabel)}</span>
+              </button>
             ` : ''}
           </div>
 
-          <!-- 2. Subtitle Note -->
+          <!-- Baris 2: Subtitle Note Ringkas -->
           <div class="lab-status-sub">${escapeHtml(acStatus.subtext)}</div>
 
-          <!-- 3. Apple Inset Grouped Cell for Timer AC (Tappable Tile, Touch-Friendly) -->
+          <!-- Baris 3: Compact Inset Tile Timer AC (1 Baris Ramping) -->
           <div class="ios-timer-cell ${acStatus.timerBadgeClass}" 
                role="button" 
                tabindex="0"
@@ -9646,13 +9900,13 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                onclick="event.preventDefault(); event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}');"
                onpointerdown="event.stopPropagation();"
                ontouchstart="event.stopPropagation();"
-               title="Status Timer AC Remote: ${escapeHtml(acStatus.timerText)} (Klik untuk mencatat / mengubah)">
+               title="Status Timer AC Remote: ${escapeHtml(acStatus.timerText)} (Klik untuk mengatur)">
             <div class="ios-timer-cell-left">
               <div class="ios-timer-icon-badge ${acStatus.timerBadgeClass}">
                 ${acStatus.timerIcon}
               </div>
               <div class="ios-timer-cell-texts">
-                <span class="ios-timer-cell-caption">Timer AC Remote</span>
+                <span class="ios-timer-cell-caption">Timer Remote AC</span>
                 <span class="ios-timer-cell-value">${acStatus.timerTextHtml}</span>
               </div>
             </div>
@@ -9662,22 +9916,12 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                       style="touch-action: manipulation; -webkit-tap-highlight-color: transparent; border: none; cursor: pointer;"
                       onclick="event.preventDefault(); event.stopPropagation(); window.openTimerAcModal('${escapeHtml(roomName)}', '${escapeHtml(campusLabel)}', '${escapeHtml(activeDate)}');">
                 <span>${acStatus.timerActionLabel}</span>
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
               </button>
             </div>
           </div>
-
-          <!-- 4. Primary Action Button -->
-          ${acStatus.actionLabel ? `
-            <div class="ios-status-actions">
-              <button type="button" class="btn-ios-action ${acStatus.btnClass}" onclick="window.onHeaderAcToggleClick('${acStatus.targetAction}')" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" title="${escapeHtml(acStatus.actionLabel)}">
-                ${acStatus.btnIcon}
-                <span>${escapeHtml(acStatus.actionLabel)}</span>
-              </button>
-            </div>
-          ` : ''}
         `;
 
         const lockBadgeEl = document.getElementById('room-detail-lock-badge');
@@ -9906,7 +10150,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
                 <span class="no-gap-pill">
                   <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                   <span>Tanpa Jeda • Bersambung Langsung (${startTimeStr} WIB)</span>
-                  ${!isLabEntity ? `<span class="no-gap-ac-sub">❄️ AC Tetap Standby</span>` : ''}
+                  ${!isLabEntity ? `<span class="no-gap-ac-sub">AC Tetap Standby</span>` : ''}
                 </span>
                 <span class="no-gap-line"></span>
               </div>
