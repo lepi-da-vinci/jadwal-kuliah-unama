@@ -2874,7 +2874,34 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const effectiveIsToday = (isToday !== undefined) ? isToday : (activeDate === currentDayStr);
 
   const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
-  const isAcRecordedOn = (opStatus.status === 'buka');
+  let isAcRecordedOn = (opStatus.status === 'buka');
+
+  // Sinkronisasi otomatis status AC berdasarkan jam realtime dan pengaturan Timer Remote Asmot
+  if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none' && effectiveIsToday) {
+    const parseClockToMins = (str) => {
+      if (!str || !str.includes(':')) return null;
+      const [h, m] = str.split(':').map(Number);
+      return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+    };
+    const tOnM = parseClockToMins(acTimer.timer_on);
+    const tOffM = parseClockToMins(acTimer.timer_off);
+
+    if (acTimer.timer_aktif === 'both' && tOnM !== null && tOffM !== null) {
+      if (currentMinutes >= tOnM && currentMinutes < tOffM) {
+        isAcRecordedOn = true;
+      } else if (currentMinutes >= tOffM) {
+        isAcRecordedOn = false;
+      }
+    } else if (acTimer.timer_aktif === 'on' && tOnM !== null) {
+      if (currentMinutes >= tOnM) {
+        isAcRecordedOn = true;
+      }
+    } else if (acTimer.timer_aktif === 'off' && tOffM !== null) {
+      if (currentMinutes >= tOffM) {
+        isAcRecordedOn = false;
+      }
+    }
+  }
 
   if (!effectiveIsToday) {
     return withTimer({
@@ -2900,7 +2927,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     return withTimer({
       code: 'ONLINE_OR_CANCELLED',
       isAcOn: isAcRecordedOn,
-      statusText: isAcRecordedOn ? 'AC Menyala (Kelas Dibatalkan)' : '⏹️ AC Padam (Semua Kelas Batal)',
+      statusText: isAcRecordedOn ? 'AC Menyala (Kelas Dibatalkan)' : 'AC Padam (Semua Kelas Batal)',
       subtext: 'Seluruh perkuliahan hari ini dibatalkan (CC). Tidak perlu hidupkan AC.',
       badgeType: isAcRecordedOn ? 'warning-off' : 'ol-cc',
       actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
@@ -3769,6 +3796,50 @@ window.formatTimeTo12h = function (time24Str) {
   return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
 };
 
+// Helper: Atur Opsi Menit untuk 12 Jam (AM vs PM)
+// Sesuai permintaan operasional asmot: Untuk PM hanya ada opsi '00' dan '30' menit saja
+window.updateMinuteOptionsForAmPm = function (which, ampm) {
+  const minSelect = document.getElementById(`timer-${which}-12h-minute`);
+  if (!minSelect) return;
+  const currentVal = minSelect.value || '00';
+  const curNum = parseInt(currentVal, 10) || 0;
+
+  minSelect.innerHTML = '';
+  if (ampm === 'PM') {
+    // PM: Khusus 00 dan 30 menit saja!
+    const opt00 = document.createElement('option');
+    opt00.value = '00';
+    opt00.textContent = '00';
+    const opt30 = document.createElement('option');
+    opt30.value = '30';
+    opt30.textContent = '30';
+    minSelect.appendChild(opt00);
+    minSelect.appendChild(opt30);
+
+    // Snap ke 30 jika >= 15 dan <= 45, selain itu 00
+    minSelect.value = (curNum >= 15 && curNum <= 45) ? '30' : '00';
+  } else {
+    // AM: Interval perkuliahan pagi
+    const amOptions = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
+    amOptions.forEach(val => {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val;
+      minSelect.appendChild(opt);
+    });
+    let closest = '00';
+    let minDiff = 999;
+    amOptions.forEach(val => {
+      const diff = Math.abs(parseInt(val, 10) - curNum);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = val;
+      }
+    });
+    minSelect.value = closest;
+  }
+};
+
 // Helper: Sinkronisasi nilai 24h ke Input 12 Jam (AM/PM)
 window.sync24hTo12h = function (which, time24Str) {
   if (!time24Str || !time24Str.includes(':')) return;
@@ -3786,21 +3857,34 @@ window.sync24hTo12h = function (which, time24Str) {
   const pmBtn = document.getElementById(`btn-${which}-pm`);
   const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
 
-  if (hourSelect) hourSelect.value = String(h12);
-
-  if (minSelect) {
-    const minOptions = Array.from(minSelect.options).map(o => Number(o.value));
-    let closestMin = minOptions.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev);
-    minSelect.value = String(closestMin).padStart(2, '0');
-  }
-
   if (amBtn && pmBtn) {
     amBtn.classList.toggle('active', ampm === 'AM');
     pmBtn.classList.toggle('active', ampm === 'PM');
   }
 
+  // Perbarui opsi menit terlebih dahulu berdasarkan AM/PM
+  if (typeof updateMinuteOptionsForAmPm === 'function') {
+    updateMinuteOptionsForAmPm(which, ampm);
+  }
+
+  if (hourSelect) hourSelect.value = String(h12);
+
+  if (minSelect) {
+    const minOptions = Array.from(minSelect.options).map(o => Number(o.value));
+    if (minOptions.length > 0) {
+      let closestMin = minOptions.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev);
+      minSelect.value = String(closestMin).padStart(2, '0');
+    }
+  }
+
+  // Sinkronkan kembali waktu 24h dengan menit yang sudah tersnap (00/30)
+  const chosenM = minSelect ? minSelect.value : String(m).padStart(2, '0');
+  const snappedTime24Str = `${String(h24).padStart(2, '0')}:${chosenM}`;
+  const mainInput = document.getElementById(`timer-${which}-time`);
+  if (mainInput) mainInput.value = snappedTime24Str;
+
   if (equivBadge) {
-    equivBadge.innerHTML = `Setara: <b>${time24Str} WIB</b>`;
+    equivBadge.innerHTML = `Setara: <b>${snappedTime24Str} WIB</b>`;
   }
 };
 
@@ -3810,6 +3894,10 @@ window.setAmPm = function (which, ampm) {
   if (amBtn && pmBtn) {
     amBtn.classList.toggle('active', ampm === 'AM');
     pmBtn.classList.toggle('active', ampm === 'PM');
+  }
+  // Saat beralih antara AM dan PM, sesuaikan opsi menit (PM: hanya 00 dan 30)
+  if (typeof updateMinuteOptionsForAmPm === 'function') {
+    updateMinuteOptionsForAmPm(which, ampm);
   }
   on12hInputChange(which);
 };
