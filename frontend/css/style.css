@@ -14310,8 +14310,54 @@ body.dark .btn-ios-action.tutup {
   }
 
   .quick-modes-buttons {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 5px !important;
+  }
+
+  .btn-quick-mode {
+    padding: 6px 3px !important;
+    font-size: 0.7rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    min-height: 44px !important;
+  }
+
+  .btn-quick-mode span {
+    font-size: 0.67rem !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+  }
+
+  .timer-modal-footer {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
     gap: 6px !important;
+    padding: 10px 12px calc(env(safe-area-inset-bottom, 12px) + 6px) !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .timer-modal-footer .btn {
+    padding: 7px 10px !important;
+    font-size: 0.75rem !important;
+    min-width: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    flex: 1 1 auto !important;
+    gap: 4px !important;
+  }
+
+  .timer-modal-footer .btn-secondary {
+    flex: 0 0 auto !important;
+    min-width: 56px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
   }
 
   .remote-type-tabs {
@@ -14558,4 +14604,108 @@ body.dark .btn-ampm.active {
   background: #1e293b !important;
   color: #38bdf8 !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+}
+
+
+/* ==============================================================
+   CUSTOM APPLE DROPDOWN FOR TIMER 12H DIGITS (HOUR & MINUTE)
+   ============================================================== */
+.timer-digit-wrapper {
+  position: relative !important;
+  display: inline-flex !important;
+}
+
+.timer-digit-trigger {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  padding: 4px 6px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--text-dark) !important;
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Display", sans-serif !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: all 0.15s ease !important;
+}
+
+.timer-digit-trigger svg {
+  color: var(--text-muted) !important;
+  transition: transform 0.2s ease !important;
+}
+
+.timer-digit-wrapper:has(.timer-digit-dropdown.open) .timer-digit-trigger svg {
+  transform: rotate(180deg) !important;
+}
+
+.timer-digit-trigger:hover,
+.timer-digit-trigger:focus-visible {
+  background: rgba(148, 163, 184, 0.18) !important;
+  outline: none !important;
+}
+
+.timer-digit-dropdown {
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  min-width: 74px !important;
+  max-height: 210px !important;
+  overflow-y: auto !important;
+  padding: 5px !important;
+  background: var(--bg-card) !important;
+  border: 1.5px solid var(--border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.18), 0 8px 12px -6px rgba(0, 0, 0, 0.1) !important;
+  z-index: 10080 !important;
+  display: none;
+}
+
+body.dark .timer-digit-dropdown {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+.timer-digit-dropdown.open {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  animation: fadeInDown 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.timer-digit-dropdown .aslab-list-item {
+  padding: 8px 10px !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  transition: all 0.15s ease !important;
+  color: var(--text-dark) !important;
+}
+
+.timer-digit-dropdown .aslab-list-item:hover:not(.active) {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: var(--primary) !important;
+  transform: translateX(2px) !important;
+}
+
+.timer-digit-dropdown .aslab-list-item.active {
+  background: var(--primary, #6366f1) !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4) !important;
+}
+
+.timer-digit-dropdown .aslab-list-item.active::after {
+  content: "✓" !important;
+  font-weight: 900 !important;
+  font-size: 0.95em !important;
+  margin-left: 6px !important;
 }

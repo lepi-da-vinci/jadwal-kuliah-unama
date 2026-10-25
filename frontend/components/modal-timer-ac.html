@@ -111,15 +111,15 @@
         <span class="quick-modes-label">Pilihan Cepat Mode Timer:</span>
         <div class="quick-modes-buttons">
           <button type="button" class="btn-quick-mode mode-off" onclick="selectQuickTimerMode('off')" title="Hanya aktifkan Timer Mati (AC mati otomatis saat sesi selesai)">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="8"></circle></svg>
             <span>Timer Mati Saja</span>
           </button>
           <button type="button" class="btn-quick-mode mode-on" onclick="selectQuickTimerMode('on')" title="Hanya aktifkan Timer Hidup (AC hidup sebelum kelas dimulai)">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="12" y1="4" x2="12" y2="20"></line></svg>
             <span>Timer Hidup Saja</span>
           </button>
-          <button type="button" class="btn-quick-mode mode-both" onclick="selectQuickTimerMode('both')" title="Aktifkan Timer Hidup dan Timer Mati">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <button type="button" class="btn-quick-mode mode-both" onclick="selectQuickTimerMode('both')" title="Aktifkan Timer Hidup dan Timer Mati (Gabungan I dan O)">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
             <span>Hidup & Mati</span>
           </button>
         </div>
@@ -156,19 +156,43 @@
               <label class="timer-input-label">Jam Hidup (12 Jam):</label>
               <div class="timer-12h-wrap">
                 <div class="timer-12h-inputs">
-                  <select id="timer-on-12h-hour" class="timer-select-digit" onchange="on12hInputChange('on')">
-                    <option value="1">01</option><option value="2">02</option><option value="3">03</option>
-                    <option value="4">04</option><option value="5">05</option><option value="6">06</option>
-                    <option value="7" selected>07</option><option value="8">08</option><option value="9">09</option>
-                    <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                  </select>
+                  <!-- Custom Dropdown Jam ON -->
+                  <div class="custom-select-wrapper timer-digit-wrapper" id="wrapper-timer-on-hour">
+                    <div class="timer-digit-trigger" tabindex="0" role="button" aria-haspopup="listbox" onclick="toggleTimerDigitSelect('timer-on-hour', event)">
+                      <span class="timer-digit-label" id="label-timer-on-hour">07</span>
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="aslab-list-container custom-select-dropdown timer-digit-dropdown" id="dropdown-timer-on-hour">
+                      <div class="aslab-list-item" data-value="1" onclick="selectTimerDigitOption('on', 'hour', '1')">01</div>
+                      <div class="aslab-list-item" data-value="2" onclick="selectTimerDigitOption('on', 'hour', '2')">02</div>
+                      <div class="aslab-list-item" data-value="3" onclick="selectTimerDigitOption('on', 'hour', '3')">03</div>
+                      <div class="aslab-list-item" data-value="4" onclick="selectTimerDigitOption('on', 'hour', '4')">04</div>
+                      <div class="aslab-list-item" data-value="5" onclick="selectTimerDigitOption('on', 'hour', '5')">05</div>
+                      <div class="aslab-list-item" data-value="6" onclick="selectTimerDigitOption('on', 'hour', '6')">06</div>
+                      <div class="aslab-list-item active" data-value="7" onclick="selectTimerDigitOption('on', 'hour', '7')">07</div>
+                      <div class="aslab-list-item" data-value="8" onclick="selectTimerDigitOption('on', 'hour', '8')">08</div>
+                      <div class="aslab-list-item" data-value="9" onclick="selectTimerDigitOption('on', 'hour', '9')">09</div>
+                      <div class="aslab-list-item" data-value="10" onclick="selectTimerDigitOption('on', 'hour', '10')">10</div>
+                      <div class="aslab-list-item" data-value="11" onclick="selectTimerDigitOption('on', 'hour', '11')">11</div>
+                      <div class="aslab-list-item" data-value="12" onclick="selectTimerDigitOption('on', 'hour', '12')">12</div>
+                    </div>
+                    <input type="hidden" id="timer-on-12h-hour" value="7">
+                  </div>
+
                   <span class="timer-digit-sep">:</span>
-                  <select id="timer-on-12h-minute" class="timer-select-digit" onchange="on12hInputChange('on')">
-                    <option value="00">00</option><option value="05">05</option><option value="10">10</option>
-                    <option value="15">15</option><option value="20">20</option><option value="25">25</option>
-                    <option value="30">30</option><option value="35">35</option><option value="40" selected>40</option>
-                    <option value="45">45</option><option value="50">50</option><option value="55">55</option>
-                  </select>
+
+                  <!-- Custom Dropdown Menit ON -->
+                  <div class="custom-select-wrapper timer-digit-wrapper" id="wrapper-timer-on-minute">
+                    <div class="timer-digit-trigger" tabindex="0" role="button" aria-haspopup="listbox" onclick="toggleTimerDigitSelect('timer-on-minute', event)">
+                      <span class="timer-digit-label" id="label-timer-on-minute">30</span>
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="aslab-list-container custom-select-dropdown timer-digit-dropdown" id="dropdown-timer-on-minute">
+                      <div class="aslab-list-item" data-value="00" onclick="selectTimerDigitOption('on', 'minute', '00')">00</div>
+                      <div class="aslab-list-item active" data-value="30" onclick="selectTimerDigitOption('on', 'minute', '30')">30</div>
+                    </div>
+                    <input type="hidden" id="timer-on-12h-minute" value="30">
+                  </div>
                 </div>
                 <div class="timer-ampm-group">
                   <button type="button" class="btn-ampm active" id="btn-on-am" onclick="setAmPm('on', 'AM')">AM</button>
@@ -255,17 +279,43 @@
               <label class="timer-input-label">Jam Mati (12 Jam):</label>
               <div class="timer-12h-wrap">
                 <div class="timer-12h-inputs">
-                  <select id="timer-off-12h-hour" class="timer-select-digit" onchange="on12hInputChange('off')">
-                    <option value="1">01</option><option value="2">02</option><option value="3">03</option>
-                    <option value="4" selected>04</option><option value="5">05</option><option value="6">06</option>
-                    <option value="7">07</option><option value="8">08</option><option value="9">09</option>
-                    <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                  </select>
+                  <!-- Custom Dropdown Jam OFF -->
+                  <div class="custom-select-wrapper timer-digit-wrapper" id="wrapper-timer-off-hour">
+                    <div class="timer-digit-trigger" tabindex="0" role="button" aria-haspopup="listbox" onclick="toggleTimerDigitSelect('timer-off-hour', event)">
+                      <span class="timer-digit-label" id="label-timer-off-hour">04</span>
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="aslab-list-container custom-select-dropdown timer-digit-dropdown" id="dropdown-timer-off-hour">
+                      <div class="aslab-list-item" data-value="1" onclick="selectTimerDigitOption('off', 'hour', '1')">01</div>
+                      <div class="aslab-list-item" data-value="2" onclick="selectTimerDigitOption('off', 'hour', '2')">02</div>
+                      <div class="aslab-list-item" data-value="3" onclick="selectTimerDigitOption('off', 'hour', '3')">03</div>
+                      <div class="aslab-list-item active" data-value="4" onclick="selectTimerDigitOption('off', 'hour', '4')">04</div>
+                      <div class="aslab-list-item" data-value="5" onclick="selectTimerDigitOption('off', 'hour', '5')">05</div>
+                      <div class="aslab-list-item" data-value="6" onclick="selectTimerDigitOption('off', 'hour', '6')">06</div>
+                      <div class="aslab-list-item" data-value="7" onclick="selectTimerDigitOption('off', 'hour', '7')">07</div>
+                      <div class="aslab-list-item" data-value="8" onclick="selectTimerDigitOption('off', 'hour', '8')">08</div>
+                      <div class="aslab-list-item" data-value="9" onclick="selectTimerDigitOption('off', 'hour', '9')">09</div>
+                      <div class="aslab-list-item" data-value="10" onclick="selectTimerDigitOption('off', 'hour', '10')">10</div>
+                      <div class="aslab-list-item" data-value="11" onclick="selectTimerDigitOption('off', 'hour', '11')">11</div>
+                      <div class="aslab-list-item" data-value="12" onclick="selectTimerDigitOption('off', 'hour', '12')">12</div>
+                    </div>
+                    <input type="hidden" id="timer-off-12h-hour" value="4">
+                  </div>
+
                   <span class="timer-digit-sep">:</span>
-                  <select id="timer-off-12h-minute" class="timer-select-digit" onchange="on12hInputChange('off')">
-                    <option value="00" selected>00</option>
-                    <option value="30">30</option>
-                  </select>
+
+                  <!-- Custom Dropdown Menit OFF -->
+                  <div class="custom-select-wrapper timer-digit-wrapper" id="wrapper-timer-off-minute">
+                    <div class="timer-digit-trigger" tabindex="0" role="button" aria-haspopup="listbox" onclick="toggleTimerDigitSelect('timer-off-minute', event)">
+                      <span class="timer-digit-label" id="label-timer-off-minute">00</span>
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="aslab-list-container custom-select-dropdown timer-digit-dropdown" id="dropdown-timer-off-minute">
+                      <div class="aslab-list-item active" data-value="00" onclick="selectTimerDigitOption('off', 'minute', '00')">00</div>
+                      <div class="aslab-list-item" data-value="30" onclick="selectTimerDigitOption('off', 'minute', '30')">30</div>
+                    </div>
+                    <input type="hidden" id="timer-off-12h-minute" value="00">
+                  </div>
                 </div>
                 <div class="timer-ampm-group">
                   <button type="button" class="btn-ampm" id="btn-off-am" onclick="setAmPm('off', 'AM')">AM</button>

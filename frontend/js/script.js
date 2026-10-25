@@ -3428,9 +3428,27 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   window._activeTimerRoomContext.lastEndM = lastEndM;
   window._activeTimerRoomContext.lastEndTimeStr = lastEndTimeStr;
 
+  // Hitung total jam perkuliahan hari ini untuk acuan jadwal Asmot
+  let totalClassMinutes = 0;
+  roomSchedules.forEach(s => {
+    if (typeof s._startM === 'number' && typeof s._endM === 'number') {
+      totalClassMinutes += Math.max(0, s._endM - s._startM);
+    }
+  });
+  const totalClassH = Math.floor(totalClassMinutes / 60);
+  const totalClassM = totalClassMinutes % 60;
+  let totalClassStr = '';
+  if (totalClassH > 0 && totalClassM > 0) {
+    totalClassStr = `${totalClassH} Jam ${totalClassM} Menit`;
+  } else if (totalClassH > 0) {
+    totalClassStr = `${totalClassH} Jam`;
+  } else {
+    totalClassStr = `${totalClassMinutes} Menit`;
+  }
+
   const refSummaryEl = document.getElementById('timer-ac-schedule-summary');
   if (refSummaryEl) {
-    refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) &bull; Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar)`;
+    refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) &bull; Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar &bull; <b>Total ${totalClassStr} Kuliah</b>)`;
   }
 
   // Load existing timer config or defaults
@@ -3493,6 +3511,7 @@ window.closeTimerAcModal = function (e) {
 window.calculateAsmotSmartSuggestion = function () {
   const ctx = window._activeTimerRoomContext || {};
   const schedules = ctx.schedules || [];
+  const activeRemoteType = window._activeRemoteType || '24h';
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
@@ -3509,137 +3528,171 @@ window.calculateAsmotSmartSuggestion = function () {
     };
   }
 
-  const firstSession = schedules[0];
-  const lastSession = schedules[schedules.length - 1];
+  // 1. KELOMPOKKAN SESI KE DALAM BLOK KONTINU (JEDA <= 90 MENIT DIANGGAP SATU BLOK)
+  // Aturan operasional asmot:
+  // - Jika jeda antar sesi <= 90 menit (misal jeda 60 mnt atau 90 mnt): JANGAN jeda timer, arahkan langsung ke sesi terakhir!
+  // - Jika jeda > 90 menit (misal jeda 2-3 jam, selesai jam 12:30 lalu mulai lagi jam 15:30):
+  //   Gunakan Timer OFF untuk mematikan AC saat jeda (jam 12:30), DAN gunakan Timer ON untuk otomatis menghidupkan AC kembali untuk sesi setelah jeda (jam 14:30)!
+  const blocks = [];
+  let currentBlock = {
+    startM: schedules[0]._startM,
+    endM: schedules[0]._endM,
+    startTimeStr: schedules[0]._startTimeStr,
+    endTimeStr: schedules[0]._endTimeStr,
+    sessions: [schedules[0]]
+  };
 
-  // 1. KASUS 1: SESI PERTAMA MULAI PAGI (08:00 WIB) & SEKARANG MASIH AWAL PAGI (<= 08:30)
-  // Aturan user: "kalau matakuliah pertama jam 8 sistem nggak perlu kasih tau untuk timer on jadi saran timer off nya aja jam berapa sesuai dengan jam mknya minimal setelah jam mk nya selesai."
-  const isMorningFirst = (firstSession._startM >= 450 && firstSession._startM <= 510);
-  if (isMorningFirst && nowMin <= firstSession._startM + 30) {
-    // Cari jam selesai sesi 1 atau rangkaian sesi yang bersambung langsung tanpa jeda
-    let targetEndM = firstSession._endM;
-    let targetEndStr = firstSession._endTimeStr;
-    let sessionCount = 1;
-
-    for (let i = 1; i < schedules.length; i++) {
-      if (schedules[i]._startM <= targetEndM + 15) {
-        targetEndM = schedules[i]._endM;
-        targetEndStr = schedules[i]._endTimeStr;
-        sessionCount++;
-      } else {
-        break;
-      }
-    }
-
-    const diffMin = targetEndM - nowMin;
-    const suggestedDurationH = Math.max(1, Math.min(12, Math.ceil(diffMin / 60)));
-
-    return {
-      hasSuggestion: true,
-      title: 'Saran Timer Asmot (Sesi Awal Pagi)',
-      desc: `Sesi pertama dimulai pukul <b>${firstSession._startTimeStr} WIB</b>. Timer ON tidak diperlukan karena AC langsung dinyalakan saat buka lab. Setel <b>Timer OFF pukul ${targetEndStr} WIB</b> (selesai ${sessionCount > 1 ? sessionCount + ' sesi bersambung' : 'perkuliahan'}) atau setel <b>${suggestedDurationH} Jam</b> di remote.`,
-      mode: 'off',
-      on: null,
-      off: targetEndStr,
-      durationOn: null,
-      durationOff: suggestedDurationH,
-      labelOn: 'Tidak Perlu',
-      labelOff: `${targetEndStr} WIB (${suggestedDurationH} Jam)`
-    };
-  }
-
-  // 2. KASUS 2: ADA JEDA ATAU SESI BERIKUTNYA BARU AKAN MULAI NANTI (misal sesi jam 10:15 atau siang)
-  // Aturan user: "nah tapi kalau ada jeda ni misal jam 10.15 asmot mulai hidupin labnya jam berpa itu harus di liat dari jam realtime misal ni jam 7 jadi sarannya itu 2 jam baru hidup, minimal 1 jam sebelum mk mulai."
-  const futureSession = schedules.find(s => s._startM > nowMin);
-  if (futureSession) {
-    // Target hidup: minimal 1 jam (60 menit) sebelum MK mulai
-    const targetOnMin = futureSession._startM - 60;
-    const diffToOn = targetOnMin - nowMin;
-    let targetEndStr = futureSession._endTimeStr;
-
-    if (diffToOn > 20) {
-      // Ada jeda waktu yang cukup sebelum 1 jam pra-kelas (misal jam sekarang 07:00, kelas 10:15 -> target hidup 09:15 -> selisih ~2 jam)
-      const suggestedOnH = Math.max(1, Math.min(12, Math.round(diffToOn / 60)));
-      const onTimeStr = formatMinToTime(targetOnMin);
-
-      const diffToOff = futureSession._endM - nowMin;
-      const suggestedOffH = Math.max(1, Math.min(12, Math.ceil(diffToOff / 60)));
-
-      return {
-        hasSuggestion: true,
-        title: `Saran Timer Asmot (Persiapan Sesi ${futureSession._startTimeStr} WIB)`,
-        desc: `Perkuliahan berikutnya mulai pukul <b>${futureSession._startTimeStr} WIB</b>. Setel <b>Timer ON ${suggestedOnH} Jam lagi</b> (AC hidup pukul <b>${onTimeStr} WIB</b> - 1 jam sebelum kelas) dan <b>Timer OFF pukul ${targetEndStr} WIB</b> (atau <b>${suggestedOffH} Jam</b> di remote).`,
-        mode: 'both',
-        on: onTimeStr,
-        off: targetEndStr,
-        durationOn: suggestedOnH,
-        durationOff: suggestedOffH,
-        labelOn: `${onTimeStr} WIB (${suggestedOnH} Jam lagi)`,
-        labelOff: `${targetEndStr} WIB (${suggestedOffH} Jam)`
-      };
+  for (let i = 1; i < schedules.length; i++) {
+    const s = schedules[i];
+    const gap = s._startM - currentBlock.endM;
+    if (gap <= 90) {
+      currentBlock.endM = Math.max(currentBlock.endM, s._endM);
+      currentBlock.endTimeStr = s._endTimeStr;
+      currentBlock.sessions.push(s);
     } else {
-      // Sudah masuk dalam 1 jam sebelum kelas mulai
-      const diffToOff = futureSession._endM - nowMin;
-      const suggestedOffH = Math.max(1, Math.min(12, Math.ceil(diffToOff / 60)));
-
-      return {
-        hasSuggestion: true,
-        title: `Saran Timer Asmot (Mendekati Sesi ${futureSession._startTimeStr} WIB)`,
-        desc: `Kelas akan dimulai dalam kurang dari 1 jam (<b>${futureSession._startTimeStr} WIB</b>). AC sebaiknya langsung dinyalakan sekarang. Setel <b>Timer OFF pukul ${targetEndStr} WIB</b> (selesai kelas) atau <b>${suggestedOffH} Jam</b> di remote.`,
-        mode: 'off',
-        on: null,
-        off: targetEndStr,
-        durationOn: null,
-        durationOff: suggestedOffH,
-        labelOn: 'Hidupkan Manual Sekarang',
-        labelOff: `${targetEndStr} WIB (${suggestedOffH} Jam)`
+      blocks.push(currentBlock);
+      currentBlock = {
+        startM: s._startM,
+        endM: s._endM,
+        startTimeStr: s._startTimeStr,
+        endTimeStr: s._endTimeStr,
+        sessions: [s]
       };
     }
   }
+  blocks.push(currentBlock);
 
-  // 3. KASUS 3: SEDANG BERLANGSUNG KULIAH
-  const currentSession = schedules.find(s => nowMin >= s._startM && nowMin < s._endM);
-  if (currentSession) {
-    let targetEndM = currentSession._endM;
-    let targetEndStr = currentSession._endTimeStr;
+  // 2. CARI BLOK SASARAN AKTIF BERDASARKAN WAKTU SEKARANG (nowMin)
+  const activeBlockIdx = blocks.findIndex(b => nowMin < b.endM);
+  const activeBlock = activeBlockIdx !== -1 ? blocks[activeBlockIdx] : null;
 
-    const currentIdx = schedules.indexOf(currentSession);
-    for (let i = currentIdx + 1; i < schedules.length; i++) {
-      if (schedules[i]._startM <= targetEndM + 15) {
-        targetEndM = schedules[i]._endM;
-        targetEndStr = schedules[i]._endTimeStr;
-      } else {
-        break;
-      }
-    }
-
-    const diffToOff = targetEndM - nowMin;
-    const suggestedOffH = Math.max(1, Math.min(12, Math.ceil(diffToOff / 60)));
-
+  if (!activeBlock) {
+    const lastBlock = blocks[blocks.length - 1];
     return {
-      hasSuggestion: true,
-      title: 'Saran Timer Asmot (Sesi Sedang Berlangsung)',
-      desc: `Perkuliahan sedang berlangsung hingga pukul <b>${targetEndStr} WIB</b>. AC sudah aktif. Setel <b>Timer OFF pukul ${targetEndStr} WIB</b> atau <b>${suggestedOffH} Jam</b> di remote.`,
-      mode: 'off',
+      hasSuggestion: false,
+      title: 'Perkuliahan Hari Ini Selesai',
+      desc: `Semua sesi perkuliahan hari ini telah selesai (terakhir pukul <b>${lastBlock.endTimeStr} WIB</b>). Matikan AC dan tidak perlu menyetel timer.`,
+      mode: 'none',
       on: null,
-      off: targetEndStr,
+      off: null,
       durationOn: null,
-      durationOff: suggestedOffH,
-      labelOn: 'Tidak Perlu',
-      labelOff: `${targetEndStr} WIB (${suggestedOffH} Jam)`
+      durationOff: null
     };
   }
 
-  // 4. KASUS 4: SEMUA KULIAH HARI INI TELAH SELESAI
+  // Cek apakah ada blok sesi lanjutan setelah jeda panjang:
+  const nextBlock = (activeBlockIdx >= 0 && activeBlockIdx < blocks.length - 1) ? blocks[activeBlockIdx + 1] : null;
+
+  // 3. TENTUKAN TARGET WAKTU OFF
+  const targetOffMin = activeBlock.endM;
+  const offTime24 = activeBlock.endTimeStr;
+  const diffOffMin = targetOffMin - nowMin;
+  const durationOff = Math.max(1, Math.ceil(diffOffMin / 60));
+
+  let isOffExceeds12h = false;
+  let earliestSetTimeStr = '';
+  if (diffOffMin > 720) {
+    isOffExceeds12h = true;
+    const earliestSetMin = Math.max(0, targetOffMin - 720);
+    earliestSetTimeStr = formatMinToTime(earliestSetMin);
+  }
+
+  let mode = 'off';
+  let onTime24 = null;
+  let durationOn = null;
+  let isBreakAutoOn = false;
+
+  if (nowMin < activeBlock.startM - 60) {
+    // Skenario A: Masih awal sebelum blok ini mulai (persiapan awal hari)
+    mode = 'both';
+    const targetOnMin = activeBlock.startM - 60;
+    onTime24 = formatMinToTime(targetOnMin);
+    const diffOnMin = targetOnMin - nowMin;
+    durationOn = Math.max(1, Math.round(diffOnMin / 60));
+  } else if (nextBlock) {
+    // Skenario B: Sesi blok ini sedang berlangsung / baru mulai, DAN ADA JEDA PANJANG ke sesi berikutnya!
+    // Permintaan user: "karna ada jeda aku mau timer on itu di pakai untuk otomatis hidup untuk jam setelah jeda sebagai saran untuk asmotnya."
+    mode = 'both';
+    isBreakAutoOn = true;
+    const targetOnMin = nextBlock.startM - 60; // AC hidup 1 jam sebelum sesi setelah jeda mulai
+    onTime24 = formatMinToTime(targetOnMin);
+    const diffOnMin = targetOnMin - nowMin;
+    durationOn = Math.max(1, Math.round(diffOnMin / 60));
+  }
+
+  // 4. SUSUN STRUKTUR FORMAT 12H (PEMBULATAN KHUSUS REMOTE 00 & 30 MENIT)
+  const off12Str = window.formatTimeTo12h(offTime24, 'ceil');
+  const on12Str = onTime24 ? window.formatTimeTo12h(onTime24, 'floor') : null;
+
+  // 5. TEKS DESKRIPSI OTOMATIS SESUAI TAB FORMAT REMOTE AKTIF
+  let title = '';
+  let desc = '';
+
+  if (mode === 'both') {
+    if (isBreakAutoOn) {
+      // Saran cerdas jeda: Mati saat jeda & hidup otomatis sebelum sesi lanjutan
+      title = 'Saran Timer Asmot (Mati Jeda & Hidup Otomatis)';
+      if (activeRemoteType === 'duration') {
+        if (isOffExceeds12h) {
+          desc = `AC dinyalakan sekarang. Waktu jeda (${offTime24} WIB) melebihi batas remote; tunggu pukul <b>${earliestSetTimeStr} WIB</b> untuk menyetel Timer OFF. Setel <b>Timer ON ${durationOn} Jam</b> (AC otomatis hidup pukul ${onTime24} WIB untuk persiapan sesi ${nextBlock.startTimeStr} WIB).`;
+        } else {
+          desc = `AC dinyalakan sekarang. Setel <b>Timer OFF ${durationOff} Jam</b> di remote (mati saat jeda pukul ${offTime24} WIB) dan <b>Timer ON ${durationOn} Jam</b> (otomatis hidup kembali pukul ${onTime24} WIB untuk sesi ${nextBlock.startTimeStr} WIB).`;
+        }
+      } else if (activeRemoteType === '12h') {
+        desc = `AC dinyalakan sekarang. Setel <b>Timer OFF pukul ${off12Str}</b> di remote (mati saat jeda) dan <b>Timer ON pukul ${on12Str}</b> (otomatis hidup kembali untuk sesi ${nextBlock.startTimeStr} WIB).`;
+      } else {
+        desc = `AC dinyalakan sekarang. Setel <b>Timer OFF pukul ${offTime24} WIB</b> (mati saat jeda) dan <b>Timer ON pukul ${onTime24} WIB</b> (otomatis hidup kembali untuk sesi ${nextBlock.startTimeStr} WIB).`;
+      }
+    } else {
+      // Persiapan awal hari (belum mulai)
+      title = `Saran Timer Asmot (Mulai Sesi ${activeBlock.startTimeStr} WIB)`;
+      if (activeRemoteType === 'duration') {
+        if (isOffExceeds12h) {
+          desc = `Perkuliahan berikutnya mulai pukul <b>${activeBlock.startTimeStr} WIB</b>. Setel <b>Timer ON ${durationOn} Jam</b> di remote (AC hidup pukul ${onTime24} WIB). Waktu selesai (${offTime24} WIB) melebihi batas 12 Jam remote; tunggu sampai pukul <b>${earliestSetTimeStr} WIB</b> untuk menyetel Timer OFF 12 Jam di remote.`;
+        } else {
+          desc = `Perkuliahan berikutnya mulai pukul <b>${activeBlock.startTimeStr} WIB</b>. Setel <b>Timer ON ${durationOn} Jam</b> dan <b>Timer OFF ${durationOff} Jam</b> di remote.`;
+        }
+      } else if (activeRemoteType === '12h') {
+        desc = `Perkuliahan berikutnya mulai pukul <b>${activeBlock.startTimeStr} WIB</b>. Setel <b>Timer ON pukul ${on12Str}</b> (1 jam sebelum mulai) dan <b>Timer OFF pukul ${off12Str}</b> di remote.`;
+      } else {
+        desc = `Perkuliahan berikutnya mulai pukul <b>${activeBlock.startTimeStr} WIB</b>. Setel <b>Timer ON pukul ${onTime24} WIB</b> dan <b>Timer OFF pukul ${offTime24} WIB</b> (selesai kelas).`;
+      }
+    }
+  } else {
+    // Mode OFF saja (blok terakhir hari ini, tanpa jeda lanjutan)
+    const isOngoing = nowMin >= activeBlock.startM;
+    title = isOngoing
+      ? 'Saran Timer Asmot (Sesi Berlangsung)'
+      : `Saran Timer Asmot (Mendekati Sesi ${activeBlock.startTimeStr} WIB)`;
+
+    if (activeRemoteType === 'duration') {
+      if (isOffExceeds12h) {
+        desc = `AC langsung dinyalakan sekarang. Waktu selesai perkuliahan (${offTime24} WIB) melebihi batas 12 Jam remote (${Math.round(diffOffMin/60 * 10)/10} Jam). Harap tunggu hingga pukul <b>${earliestSetTimeStr} WIB</b> untuk menyetel Timer OFF 12 Jam di remote.`;
+      } else {
+        desc = `AC langsung dinyalakan sekarang. Setel <b>Timer OFF ${durationOff} Jam</b> di remote (selesai perkuliahan pukul ${offTime24} WIB).`;
+      }
+    } else if (activeRemoteType === '12h') {
+      desc = `AC langsung dinyalakan sekarang. Setel <b>Timer OFF pukul ${off12Str}</b> di remote (selesai kelas pukul ${offTime24} WIB).`;
+    } else {
+      desc = `AC langsung dinyalakan sekarang. Setel <b>Timer OFF pukul ${offTime24} WIB</b> (selesai perkuliahan).`;
+    }
+  }
+
   return {
-    hasSuggestion: false,
-    title: 'Perkuliahan Hari Ini Selesai',
-    desc: `Semua sesi perkuliahan hari ini telah selesai (terakhir pukul <b>${lastSession._endTimeStr} WIB</b>). Matikan AC dan tidak perlu menyetel timer.`,
-    mode: 'none',
-    on: null,
-    off: null,
-    durationOn: null,
-    durationOff: null
+    hasSuggestion: true,
+    title,
+    desc,
+    mode,
+    on: onTime24,
+    off: offTime24,
+    durationOn,
+    durationOff: isOffExceeds12h ? null : durationOff,
+    isOffExceeds12h,
+    earliestSetTimeStr,
+    labelOn: onTime24 ? `${onTime24} WIB (${durationOn} Jam lagi)` : 'Tidak Perlu',
+    labelOff: isOffExceeds12h
+      ? `${offTime24} WIB (Tunggu ${earliestSetTimeStr})`
+      : `${offTime24} WIB (${durationOff} Jam)`
   };
 };
 
@@ -3782,12 +3835,52 @@ window.selectRemoteType = function (type, isInitial = false) {
   if (!isInitial) {
     validateTimerInputs();
   }
+  // Selalu perbarui deskripsi saran Asmot agar format teksnya sesuai tab yang dipilih
+  if (typeof updateAsmotSmartSuggestion === 'function') {
+    updateAsmotSmartSuggestion();
+  }
 };
 
-// Helper: Konversi Waktu 24h ke Format 12h (AM / PM)
-window.formatTimeTo12h = function (time24Str) {
+// Helper: Pembulatan Waktu ke Interval 30 Menit Remote AC (:00 dan :30)
+// Aturan user: Timer OFF dibulatkan ke atas (ceil) agar AC tidak mati sebelum kelas selesai.
+// Contoh: 14:45 -> 15:00 (03:00 PM), 14:15 -> 14:30 (02:30 PM).
+// Timer ON dibulatkan ke bawah (floor) agar AC nyala sebelum kelas dimulai.
+window.roundTimeToRemote30Min = function (time24Str, roundDirection = 'ceil') {
   if (!time24Str || !time24Str.includes(':')) return time24Str;
   const parts = time24Str.split(':').map(Number);
+  let h = parts[0];
+  let m = parts[1];
+
+  if (m === 0 || m === 30) {
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  if (roundDirection === 'ceil') {
+    if (m > 0 && m < 30) {
+      m = 30;
+    } else if (m > 30) {
+      m = 0;
+      h = (h + 1) % 24;
+    }
+  } else {
+    if (m > 0 && m < 30) {
+      m = 0;
+    } else if (m > 30) {
+      m = 30;
+    }
+  }
+
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+// Helper: Konversi Waktu 24h ke Format 12h (AM / PM) dengan Opsi Pembulatan Remote
+window.formatTimeTo12h = function (time24Str, roundDirection = null) {
+  if (!time24Str || !time24Str.includes(':')) return time24Str;
+  let workStr = time24Str;
+  if (roundDirection) {
+    workStr = window.roundTimeToRemote30Min(time24Str, roundDirection);
+  }
+  const parts = workStr.split(':').map(Number);
   const h = parts[0];
   const m = String(parts[1]).padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
@@ -3796,54 +3889,81 @@ window.formatTimeTo12h = function (time24Str) {
   return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
 };
 
-// Helper: Atur Opsi Menit untuk 12 Jam (AM vs PM)
-// Sesuai permintaan operasional asmot: Untuk PM hanya ada opsi '00' dan '30' menit saja
-window.updateMinuteOptionsForAmPm = function (which, ampm) {
-  const minSelect = document.getElementById(`timer-${which}-12h-minute`);
-  if (!minSelect) return;
-  const currentVal = minSelect.value || '00';
-  const curNum = parseInt(currentVal, 10) || 0;
+// ==============================================================
+// CUSTOM APPLE-STYLE DROPDOWN UNTUK JAM & MENIT 12H TIMER AC
+// ==============================================================
+window.toggleTimerDigitSelect = function (id, event) {
+  if (event) event.stopPropagation();
+  const dropdown = document.getElementById(`dropdown-${id}`);
+  if (!dropdown) return;
+  const isOpen = dropdown.classList.contains('open');
 
-  minSelect.innerHTML = '';
-  if (ampm === 'PM') {
-    // PM: Khusus 00 dan 30 menit saja!
-    const opt00 = document.createElement('option');
-    opt00.value = '00';
-    opt00.textContent = '00';
-    const opt30 = document.createElement('option');
-    opt30.value = '30';
-    opt30.textContent = '30';
-    minSelect.appendChild(opt00);
-    minSelect.appendChild(opt30);
+  // Tutup semua dropdown custom lain
+  document.querySelectorAll('.custom-select-dropdown.open, .timer-digit-dropdown.open').forEach(el => {
+    el.classList.remove('open');
+  });
 
-    // Snap ke 30 jika >= 15 dan <= 45, selain itu 00
-    minSelect.value = (curNum >= 15 && curNum <= 45) ? '30' : '00';
-  } else {
-    // AM: Interval perkuliahan pagi
-    const amOptions = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
-    amOptions.forEach(val => {
-      const opt = document.createElement('option');
-      opt.value = val;
-      opt.textContent = val;
-      minSelect.appendChild(opt);
-    });
-    let closest = '00';
-    let minDiff = 999;
-    amOptions.forEach(val => {
-      const diff = Math.abs(parseInt(val, 10) - curNum);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = val;
-      }
-    });
-    minSelect.value = closest;
+  if (!isOpen) {
+    dropdown.classList.add('open');
   }
+};
+
+window.selectTimerDigitOption = function (which, part, value) {
+  const id = `timer-${which}-${part}`;
+  const input = document.getElementById(`timer-${which}-12h-${part}`);
+  const label = document.getElementById(`label-${id}`);
+  const dropdown = document.getElementById(`dropdown-${id}`);
+
+  const displayVal = String(value).padStart(2, '0');
+  if (input) input.value = String(value);
+  if (label) label.textContent = displayVal;
+
+  if (dropdown) {
+    dropdown.querySelectorAll('.aslab-list-item').forEach(item => {
+      const itemVal = item.getAttribute('data-value');
+      item.classList.toggle('active', itemVal === String(value) || itemVal === displayVal);
+    });
+    dropdown.classList.remove('open');
+  }
+
+  // Panggil kalkulasi waktu 12 Jam
+  if (typeof on12hInputChange === 'function') {
+    on12hInputChange(which);
+  }
+};
+
+// Helper: Atur Opsi Menit untuk 12 Jam (AM / PM)
+// Aturan user: format menit di 12H hanya ada 00 dan 30 menit
+window.updateMinuteOptionsForAmPm = function (which, ampm) {
+  const minDropdown = document.getElementById(`dropdown-timer-${which}-minute`);
+  const minInput = document.getElementById(`timer-${which}-12h-minute`);
+  const minLabel = document.getElementById(`label-timer-${which}-minute`);
+  if (!minDropdown || !minInput) return;
+
+  const currentVal = minInput.value || '00';
+  const curNum = parseInt(currentVal, 10) || 0;
+  let targetVal = '00';
+  if (which === 'off') {
+    targetVal = (curNum > 0 && curNum <= 30) ? '30' : '00';
+  } else {
+    targetVal = (curNum >= 15 && curNum <= 45) ? '30' : '00';
+  }
+
+  minInput.value = targetVal;
+  if (minLabel) minLabel.textContent = targetVal;
+
+  minDropdown.querySelectorAll('.aslab-list-item').forEach(item => {
+    item.classList.toggle('active', item.getAttribute('data-value') === targetVal);
+  });
 };
 
 // Helper: Sinkronisasi nilai 24h ke Input 12 Jam (AM/PM)
 window.sync24hTo12h = function (which, time24Str) {
   if (!time24Str || !time24Str.includes(':')) return;
-  const parts = time24Str.split(':').map(Number);
+
+  // Bulatkan waktu ke interval 30 menit remote (OFF ceil, ON floor)
+  const roundedTime24 = window.roundTimeToRemote30Min(time24Str, which === 'off' ? 'ceil' : 'floor');
+  const parts = roundedTime24.split(':').map(Number);
   const h24 = parts[0];
   const m = parts[1];
 
@@ -3851,38 +3971,53 @@ window.sync24hTo12h = function (which, time24Str) {
   let h12 = h24 % 12;
   if (h12 === 0) h12 = 12;
 
-  const hourSelect = document.getElementById(`timer-${which}-12h-hour`);
-  const minSelect = document.getElementById(`timer-${which}-12h-minute`);
+  const hourDisplay = String(h12).padStart(2, '0');
+  const minDisplay = String(m).padStart(2, '0');
+
+  // 1. Update Hidden Inputs
+  const hourInput = document.getElementById(`timer-${which}-12h-hour`);
+  const minInput = document.getElementById(`timer-${which}-12h-minute`);
+  if (hourInput) hourInput.value = String(h12);
+  if (minInput) minInput.value = minDisplay;
+
+  // 2. Update Custom Dropdown Trigger Labels
+  const hourLabel = document.getElementById(`label-timer-${which}-hour`);
+  const minLabel = document.getElementById(`label-timer-${which}-minute`);
+  if (hourLabel) hourLabel.textContent = hourDisplay;
+  if (minLabel) minLabel.textContent = minDisplay;
+
+  // 3. Update Active State di Custom Dropdown Menu
+  const hourDropdown = document.getElementById(`dropdown-timer-${which}-hour`);
+  if (hourDropdown) {
+    hourDropdown.querySelectorAll('.aslab-list-item').forEach(item => {
+      const v = item.getAttribute('data-value');
+      item.classList.toggle('active', v === String(h12) || v === hourDisplay);
+    });
+  }
+
+  const minDropdown = document.getElementById(`dropdown-timer-${which}-minute`);
+  if (minDropdown) {
+    minDropdown.querySelectorAll('.aslab-list-item').forEach(item => {
+      item.classList.toggle('active', item.getAttribute('data-value') === minDisplay);
+    });
+  }
+
+  // 4. Update Tombol AM / PM
   const amBtn = document.getElementById(`btn-${which}-am`);
   const pmBtn = document.getElementById(`btn-${which}-pm`);
-  const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
-
   if (amBtn && pmBtn) {
     amBtn.classList.toggle('active', ampm === 'AM');
     pmBtn.classList.toggle('active', ampm === 'PM');
   }
 
-  // Perbarui opsi menit terlebih dahulu berdasarkan AM/PM
-  if (typeof updateMinuteOptionsForAmPm === 'function') {
-    updateMinuteOptionsForAmPm(which, ampm);
-  }
-
-  if (hourSelect) hourSelect.value = String(h12);
-
-  if (minSelect) {
-    const minOptions = Array.from(minSelect.options).map(o => Number(o.value));
-    if (minOptions.length > 0) {
-      let closestMin = minOptions.reduce((prev, curr) => Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev);
-      minSelect.value = String(closestMin).padStart(2, '0');
-    }
-  }
-
-  // Sinkronkan kembali waktu 24h dengan menit yang sudah tersnap (00/30)
-  const chosenM = minSelect ? minSelect.value : String(m).padStart(2, '0');
-  const snappedTime24Str = `${String(h24).padStart(2, '0')}:${chosenM}`;
+  // 5. Sinkronkan kembali input utama 24h dengan waktu yang sudah dibulatkan
+  const snappedTime24Str = `${String(h24).padStart(2, '0')}:${minDisplay}`;
   const mainInput = document.getElementById(`timer-${which}-time`);
-  if (mainInput) mainInput.value = snappedTime24Str;
+  if (mainInput && mainInput.value !== snappedTime24Str) {
+    mainInput.value = snappedTime24Str;
+  }
 
+  const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
   if (equivBadge) {
     equivBadge.innerHTML = `Setara: <b>${snappedTime24Str} WIB</b>`;
   }
@@ -3895,7 +4030,6 @@ window.setAmPm = function (which, ampm) {
     amBtn.classList.toggle('active', ampm === 'AM');
     pmBtn.classList.toggle('active', ampm === 'PM');
   }
-  // Saat beralih antara AM dan PM, sesuaikan opsi menit (PM: hanya 00 dan 30)
   if (typeof updateMinuteOptionsForAmPm === 'function') {
     updateMinuteOptionsForAmPm(which, ampm);
   }
@@ -3903,14 +4037,14 @@ window.setAmPm = function (which, ampm) {
 };
 
 window.on12hInputChange = function (which) {
-  const hourSelect = document.getElementById(`timer-${which}-12h-hour`);
-  const minSelect = document.getElementById(`timer-${which}-12h-minute`);
+  const hourInput = document.getElementById(`timer-${which}-12h-hour`);
+  const minInput = document.getElementById(`timer-${which}-12h-minute`);
   const pmBtn = document.getElementById(`btn-${which}-pm`);
   const mainInput = document.getElementById(`timer-${which}-time`);
   const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
 
-  const h12 = parseInt(hourSelect?.value || '12', 10);
-  const m = minSelect?.value || '00';
+  const h12 = parseInt(hourInput?.value || '12', 10);
+  const m = minInput?.value || '00';
   const isPm = pmBtn?.classList.contains('active');
 
   let h24 = h12 % 12;
@@ -3933,7 +4067,6 @@ window.on24hInputChange = function (which) {
   }
   validateTimerInputs();
 };
-
 // ==============================================================
 // LOGIKA HITUNGAN DURASI PER JAM (1 - 12 JAM) DENGAN SARAN ASMOT
 // ==============================================================
@@ -4065,9 +4198,9 @@ function renderTimerPresets(formatType) {
     const h15 = formatMinToTime(firstStartM - 15);
     const h10 = formatMinToTime(firstStartM - 10);
 
-    const l20 = formatType === '12h' ? formatTimeTo12h(h20) : `${h20} WIB`;
-    const l15 = formatType === '12h' ? formatTimeTo12h(h15) : `${h15} WIB`;
-    const l10 = formatType === '12h' ? formatTimeTo12h(h10) : `${h10} WIB`;
+    const l20 = formatType === '12h' ? formatTimeTo12h(h20, 'floor') : `${h20} WIB`;
+    const l15 = formatType === '12h' ? formatTimeTo12h(h15, 'floor') : `${h15} WIB`;
+    const l10 = formatType === '12h' ? formatTimeTo12h(h10, 'floor') : `${h10} WIB`;
 
     onPresetsContainer.innerHTML = `
       <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">H-20 (${l20})</button>
@@ -4081,12 +4214,12 @@ function renderTimerPresets(formatType) {
     let offChips = '';
     if (roomSchedules.length > 0) {
       roomSchedules.forEach((s, idx) => {
-        const lbl = formatType === '12h' ? formatTimeTo12h(s._endTimeStr) : `${s._endTimeStr} WIB`;
+        const lbl = formatType === '12h' ? formatTimeTo12h(s._endTimeStr, 'ceil') : `${s._endTimeStr} WIB`;
         offChips += `<button type="button" class="preset-chip" onclick="selectPresetTime('off', '${s._endTimeStr}')">Selesai Sesi ${idx + 1} (${lbl})</button>`;
       });
     } else {
-      const lbl11 = formatType === '12h' ? formatTimeTo12h('11:00') : '11:00 WIB';
-      const lbl17 = formatType === '12h' ? formatTimeTo12h('17:00') : '17:00 WIB';
+      const lbl11 = formatType === '12h' ? formatTimeTo12h('11:00', 'ceil') : '11:00 WIB';
+      const lbl17 = formatType === '12h' ? formatTimeTo12h('17:00', 'ceil') : '17:00 WIB';
       offChips = `
         <button type="button" class="preset-chip" onclick="selectPresetTime('off', '11:00')">${lbl11}</button>
         <button type="button" class="preset-chip" onclick="selectPresetTime('off', '17:00')">${lbl17}</button>
@@ -4345,7 +4478,22 @@ window.saveTimerAc = async function () {
 window.resetTimerAc = async function () {
   const ctx = window._activeTimerRoomContext;
   if (!ctx) return;
-  if (!confirm(`Hapus dan nonaktifkan timer AC untuk ${ctx.roomName}?`)) return;
+
+  let confirmed = false;
+  if (typeof window.showModernConfirm === 'function') {
+    confirmed = await window.showModernConfirm({
+      title: "Reset Timer AC?",
+      subtitle: `Hapus dan nonaktifkan seluruh pengaturan timer AC untuk ${ctx.roomName}?`,
+      warningText: "AC ruangan akan kembali ke mode operasional normal tanpa timer otomatis.",
+      okText: "Ya, Reset Timer",
+      cancelText: "Batal",
+      isWipeAll: false
+    });
+  } else {
+    confirmed = confirm(`Hapus dan nonaktifkan timer AC untuk ${ctx.roomName}?`);
+  }
+
+  if (!confirmed) return;
 
   const onToggle = document.getElementById('timer-on-toggle');
   const offToggle = document.getElementById('timer-off-toggle');
@@ -4354,6 +4502,10 @@ window.resetTimerAc = async function () {
   onTimerToggleChange();
 
   await window.saveTimerAc();
+
+  if (typeof showToast === 'function') {
+    showToast(`Pengaturan timer AC untuk ${ctx.roomName} berhasil dinonaktifkan`, 'info');
+  }
 };
 
 function checkAndTriggerAcTimers() {
