@@ -16603,8 +16603,8 @@ if (spotlightInput) {
 function parseKodeKelasUnama(rawCode) {
   if (!rawCode) return null;
   const clean = String(rawCode).trim().toUpperCase();
-  // Format UNAMA: 2 digit urutan (01, 02, ...) + 1 huruf Mode (P=Pagi, M=Malam) + 1 huruf Jurusan (T=TI, S=SI, W=Kewirausahaan, dll) + 1 karakter Semester / Jenis (P=MK Pilihan, T=Tugas Akhir, atau Angka Semester)
-  const match = clean.match(/^(\d{2})([PM])([A-Z])([0-9A-Z])?$/);
+  // Format UNAMA: Urutan + Huruf 1 Mode (P=Pagi, M=Malam) + Huruf 2 Jurusan (T=TI, S=SI, K=SK, M=Manajemen, B=Bisnis Digital, W=Kewirausahaan) + Suffix
+  const match = clean.match(/^(\d+)?([PM])([A-Z])([0-9A-Z]*)?$/);
 
   const prodiMap = {
     'T': 'Teknik Informatika',
@@ -16613,7 +16613,9 @@ function parseKodeKelasUnama(rawCode) {
     'M': 'Manajemen',
     'W': 'Kewirausahaan',
     'B': 'Bisnis Digital',
-    'Q': 'Sistem Komputer'
+    'Q': 'Sistem Komputer',
+    'I': 'Manajemen Informatika',
+    'A': 'Komputerisasi Akuntansi'
   };
 
   if (!match) {
@@ -16664,7 +16666,7 @@ function parseKodeKelasUnama(rawCode) {
 
   return {
     raw: clean,
-    urutanStr: `Kelas ${match[1]}`,
+    urutanStr: match[1] ? `Kelas ${match[1]}` : clean,
     urutanNum: urutan,
     shiftChar,
     modeWaktu,
@@ -16674,9 +16676,10 @@ function parseKodeKelasUnama(rawCode) {
     namaProdiSingkat,
     semesterLabel,
     semesterRaw: semChar,
-    isMkPilihan: semChar === 'P'
+    isMkPilihan: semChar === 'P' || semChar.includes('P')
   };
 }
+if (typeof window !== 'undefined') window.parseKodeKelasUnama = parseKodeKelasUnama;
 
 function renderSpotlightResults(query) {
   const container = document.getElementById('spotlight-results');
@@ -18437,17 +18440,8 @@ function filterStatsTableData(query) {
   }
 
   tbody.innerHTML = filtered.map((k, i) => {
-    const prodiMatch = k.kelas.match(/[A-Za-z]+/);
-    const prodiCode = prodiMatch ? prodiMatch[0].toUpperCase() : '';
-    const prodiName = {
-      'PT': 'Teknik Informatika (S1)',
-      'PS': 'Sistem Informasi (S1)',
-      'PK': 'Sistem Komputer (S1)',
-      'SK': 'Sistem Komputer (S1)',
-      'MS': 'Magister SI (S2)',
-      'MM': 'Magister Manajemen (S2)',
-      'PM': 'Peminatan Manajemen'
-    }[prodiCode] || 'Program Studi Reguler';
+    const parsed = (typeof parseKodeKelasUnama === 'function') ? parseKodeKelasUnama(k.kelas) : null;
+    const prodiName = parsed ? parsed.namaProdi : 'Program Studi Reguler';
 
     return `
       <tr>
@@ -20959,19 +20953,8 @@ function renderMatrixCardsKelas(container) {
 
   container.innerHTML = topAktif.map((k, idx) => {
     const isTop = idx === 0;
-    const prodiMatch = (k.kelas || '').match(/[A-Za-z]+/);
-    const rawProdi = prodiMatch ? prodiMatch[0].toUpperCase() : '';
-    let prodiName = 'Kelas Perkuliahan';
-    if (rawProdi.startsWith('PS')) prodiName = 'Sistem Informasi (S1)';
-    else if (rawProdi.startsWith('PT')) prodiName = 'Teknik Informatika (S1)';
-    else if (rawProdi.startsWith('PK') || rawProdi.startsWith('SK')) prodiName = 'Sistem Komputer (S1)';
-    else if (rawProdi.startsWith('PM')) prodiName = 'Peminatan Manajemen';
-    else if (rawProdi.startsWith('MT')) prodiName = 'Magister Teknik (S2)';
-    else if (rawProdi.startsWith('MM')) prodiName = 'Magister Manajemen (S2)';
-    else if (rawProdi.startsWith('MS')) prodiName = 'Magister SI (S2)';
-    else if (rawProdi.startsWith('MK')) prodiName = 'Magister Komputer (S2)';
-    else if (rawProdi.startsWith('PW')) prodiName = 'Kelas Weekend';
-    else if (rawProdi.startsWith('MW')) prodiName = 'Kelas Malam';
+    const parsed = (typeof parseKodeKelasUnama === 'function') ? parseKodeKelasUnama(k.kelas) : null;
+    const prodiName = parsed ? parsed.namaProdi : 'Kelas Perkuliahan';
 
     const safeKode = safeEscapeStats(k.kelas).replace(/'/g, "\\'");
     const pct = Math.round((k.total_jam / maxJam) * 100);

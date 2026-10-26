@@ -1041,19 +1041,19 @@ def get_statistics(semester: str = None):
             })
         })
         prodi_names = {
-            "PS": "Sistem Informasi (S1)",
-            "PT": "Teknik Informatika (S1)",
-            "SK": "Sistem Komputer (S1)",
-            "PK": "Sistem Komputer (S1)",
-            "PM": "Peminatan / Manajemen",
-            "MT": "Magister Teknik Informatika (S2)",
-            "MM": "Magister Manajemen (S2)",
-            "MS": "Magister Sistem Informasi (S2)",
-            "MK": "Magister Ilmu Komputer (S2)",
-            "PW": "Kelas Eksekutif / Weekend",
-            "MW": "Kelas Eksekutif / Malam",
-            "PB": "Peminatan Bisnis",
-            "MB": "Magister Bisnis",
+            "PT": "Teknik Informatika (Pagi)",
+            "MT": "Teknik Informatika (Malam)",
+            "PS": "Sistem Informasi (Pagi)",
+            "MS": "Sistem Informasi (Malam)",
+            "PK": "Sistem Komputer (Pagi)",
+            "MK": "Sistem Komputer (Malam)",
+            "SK": "Sistem Komputer",
+            "PB": "Bisnis Digital (Pagi)",
+            "MB": "Bisnis Digital (Malam)",
+            "PM": "Manajemen (Pagi)",
+            "MM": "Manajemen (Malam)",
+            "PW": "Kewirausahaan (Pagi)",
+            "MW": "Kewirausahaan (Malam)",
             "MI": "Manajemen Informatika (D3)",
             "KA": "Komputerisasi Akuntansi (D3)"
         }
@@ -2918,16 +2918,19 @@ def get_detail_kelas(kelas: str, semester: str = None):
         m_prodi = re.search(r'([A-Za-z]+)', clean_kelas)
         prodi_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
         prodi_map_names = {
-            "PT": "Teknik Informatika (S1)",
-            "PS": "Sistem Informasi (S1)",
-            "PK": "Sistem Komputer (S1)",
-            "SK": "Sistem Komputer (S1)",
-            "MS": "Magister Sistem Informasi (S2)",
-            "MM": "Magister Manajemen (S2)",
-            "PM": "Peminatan / Manajemen",
-            "PW": "Kelas Eksekutif / Weekend",
-            "MW": "Kelas Eksekutif / Malam",
-            "PB": "Peminatan Bisnis",
+            "PT": "Teknik Informatika (Pagi)",
+            "MT": "Teknik Informatika (Malam)",
+            "PS": "Sistem Informasi (Pagi)",
+            "MS": "Sistem Informasi (Malam)",
+            "PK": "Sistem Komputer (Pagi)",
+            "MK": "Sistem Komputer (Malam)",
+            "SK": "Sistem Komputer",
+            "PB": "Bisnis Digital (Pagi)",
+            "MB": "Bisnis Digital (Malam)",
+            "PM": "Manajemen (Pagi)",
+            "MM": "Manajemen (Malam)",
+            "PW": "Kewirausahaan (Pagi)",
+            "MW": "Kewirausahaan (Malam)",
             "MI": "Manajemen Informatika (D3)",
             "KA": "Komputerisasi Akuntansi (D3)"
         }
