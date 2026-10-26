@@ -2762,12 +2762,12 @@ window.getRoomAcTimer = getRoomAcTimer;
 
 function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
   if (!Array.isArray(data)) return;
-  if (!window._roomAcTimers) window._roomAcTimers = {};
+  const newTimers = {};
 
   data.forEach(stat => {
     if (stat.timer_aktif && stat.timer_aktif !== 'none') {
       const key = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
-      window._roomAcTimers[key] = {
+      newTimers[key] = {
         roomName: stat.nama_ruangan,
         kampus: stat.kampus,
         tanggal: stat.tanggal,
@@ -2778,6 +2778,8 @@ function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
       };
     }
   });
+
+  window._roomAcTimers = newTimers;
 
   if (targetDate) {
     try {
@@ -3393,7 +3395,12 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
     }).map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
   }
 
-  window._activeTimerRoomContext.schedules = roomSchedules;
+  window._activeTimerRoomContext.allSchedules = roomSchedules;
+
+  // Filter khusus perkuliahan tatap muka fisik (bukan Daring/OL dan bukan Batal/CC)
+  const physicalSchedules = roomSchedules.filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
+  const targetSchedules = physicalSchedules.length > 0 ? physicalSchedules : roomSchedules;
+  window._activeTimerRoomContext.schedules = targetSchedules;
 
   let firstStartM = 480; // 08:00
   let firstStartTimeStr = "08:00";
@@ -3401,9 +3408,9 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   let lastEndTimeStr = "17:00";
   let firstSessionName = "Sesi 1";
 
-  if (roomSchedules.length > 0) {
-    const first = roomSchedules[0];
-    const last = roomSchedules[roomSchedules.length - 1];
+  if (targetSchedules.length > 0) {
+    const first = targetSchedules[0];
+    const last = targetSchedules[targetSchedules.length - 1];
     firstStartM = first._startM;
     firstStartTimeStr = first._startTimeStr;
     firstSessionName = first.nama_mk ? `${first.nama_mk} (${first.kelas || ''})` : 'Sesi 1';
@@ -3416,9 +3423,9 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   window._activeTimerRoomContext.lastEndM = lastEndM;
   window._activeTimerRoomContext.lastEndTimeStr = lastEndTimeStr;
 
-  // Hitung total jam perkuliahan hari ini untuk acuan jadwal Asmot
+  // Hitung total jam perkuliahan fisik hari ini untuk acuan jadwal Asmot
   let totalClassMinutes = 0;
-  roomSchedules.forEach(s => {
+  targetSchedules.forEach(s => {
     if (typeof s._startM === 'number' && typeof s._endM === 'number') {
       totalClassMinutes += Math.max(0, s._endM - s._startM);
     }
@@ -3436,7 +3443,14 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
 
   const refSummaryEl = document.getElementById('timer-ac-schedule-summary');
   if (refSummaryEl) {
-    refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) &bull; Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar &bull; <b>Total ${totalClassStr} Kuliah</b>)`;
+    if (physicalSchedules.length === 0 && roomSchedules.length > 0) {
+      refSummaryEl.innerHTML = `<span style="color: #f59e0b; font-weight: 600;">Seluruh sesi hari ini Daring (Online) / Dibatalkan (${roomSchedules.length} Sesi). Tidak memerlukan AC fisik.</span>`;
+    } else if (physicalSchedules.length > 0 && roomSchedules.length > physicalSchedules.length) {
+      const onlineCount = roomSchedules.length - physicalSchedules.length;
+      refSummaryEl.innerHTML = `Kelas Fisik Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) &bull; Selesai: <b>${lastEndTimeStr} WIB</b> (${physicalSchedules.length} Sesi Fisik &bull; <b>Total ${totalClassStr}</b>)<br><span style="color: #0284c7; font-size: 0.73rem; font-weight: 600;">(Ada ${onlineCount} sesi Daring/Online tidak memakai ruangan fisik)</span>`;
+    } else {
+      refSummaryEl.innerHTML = `Sesi Mulai: <b>${firstStartTimeStr} WIB</b> (${escapeHtml(firstSessionName)}) &bull; Selesai: <b>${lastEndTimeStr} WIB</b> (${roomSchedules.length} Sesi Terdaftar &bull; <b>Total ${totalClassStr} Kuliah</b>)`;
+    }
   }
 
   // Load existing timer config or defaults
@@ -4417,6 +4431,9 @@ window.saveTimerAc = async function () {
       body: JSON.stringify(payload)
     });
     const json = await res.json();
+    if (json.status !== 'success') {
+      throw new Error(json.message || 'Gagal menyimpan timer di server');
+    }
 
     // Cache locally
     const key = getRoomAcTimerKey(ctx.roomName, ctx.campus);
@@ -4438,6 +4455,13 @@ window.saveTimerAc = async function () {
       localStorage.setItem(`unama_ac_timers_${ctx.activeDate}`, JSON.stringify(window._roomAcTimers));
     } catch (e) {}
 
+    // Broadcast across tabs/windows
+    try {
+      const ch = new BroadcastChannel('unama_lab_status_sync');
+      ch.postMessage({ type: 'LAB_STATUS_CHANGED', date: ctx.activeDate });
+      ch.close();
+    } catch (e) {}
+
     closeTimerAcModal();
 
     let msg = `Timer AC untuk ${ctx.roomName} dinonaktifkan`;
@@ -4449,15 +4473,23 @@ window.saveTimerAc = async function () {
       showToast(msg, 'success');
     }
 
-    // Refresh Room Detail & Active Lab Panel
-    if (typeof window.showRoomDetail === 'function' && window._currentDetailRoom && window._currentDetailRoom.roomName === ctx.roomName) {
-      window.showRoomDetail(ctx.roomName, ctx.campus, ctx.activeDate);
+    // Refresh Room Detail & Active Lab Panel & trigger immediate background sync
+    if (typeof syncRealtimeLabStatus === 'function') {
+      _lastLabStatusHash = '';
+      syncRealtimeLabStatus(true);
     }
     if (typeof updateActiveLabPanel === 'function') {
       updateActiveLabPanel();
     }
+    if (typeof window.showRoomDetail === 'function' && window._currentDetailRoom && window._currentDetailRoom.roomName === ctx.roomName) {
+      window.showRoomDetail(ctx.roomName, ctx.campus, ctx.activeDate);
+    }
   } catch (err) {
-    alert('Gagal menyimpan timer AC: ' + err.message);
+    if (typeof showToast === 'function') {
+      showToast('Gagal menyimpan timer AC: ' + err.message, 'error');
+    } else {
+      alert('Gagal menyimpan timer AC: ' + err.message);
+    }
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Simpan Timer'; }
   }
@@ -4950,7 +4982,7 @@ async function syncRealtimeLabStatus(force = false) {
     const json = await res.json();
     if (json.status !== 'success' || !Array.isArray(json.data)) return;
 
-    const currentHash = json.data.map(d => `${d.id_ruangan}_${d.jam}_${d.status_lab}_${d.waktu_aksi_str}`).join('|');
+    const currentHash = json.data.map(d => `${d.id_ruangan}_${d.jam}_${d.status_lab}_${d.timer_aktif || 'none'}_${d.timer_on_str || d.timer_on || ''}_${d.timer_off_str || d.timer_off || ''}_${d.waktu_aksi_str || ''}`).join('|');
     if (currentHash === _lastLabStatusHash && !force) {
       return;
     }
