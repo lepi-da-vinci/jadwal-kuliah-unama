@@ -4520,6 +4520,17 @@ function checkAndTriggerAcTimers() {
     const t = window._roomAcTimers[key];
     if (!t || t.tanggal !== currentDayStr || !t.timer_aktif || t.timer_aktif === 'none') return;
 
+    // Temukan jam sesi yang ada di ruangan ini hari ini
+    let targetJamOn = '08:00';
+    let targetJamOff = '08:00';
+    if (Array.isArray(allJadwal)) {
+      const roomSchedules = allJadwal.filter(j => j.tanggal === t.tanggal && isSameRoomName(j.nama_ruangan, t.roomName));
+      if (roomSchedules.length > 0) {
+        targetJamOn = roomSchedules[0].jam || '08:00';
+        targetJamOff = roomSchedules[roomSchedules.length - 1].jam || '08:00';
+      }
+    }
+
     // Trigger Timer ON
     if ((t.timer_aktif === 'on' || t.timer_aktif === 'both') && t.timer_on === currentTimeStr) {
       const triggerKey = `triggered_on_${t.tanggal}_${key}_${t.timer_on}`;
@@ -4528,7 +4539,7 @@ function checkAndTriggerAcTimers() {
         window._triggeredAcTimers.add(triggerKey);
         // Execute Turn ON
         if (typeof toggleLabSessionStatus === 'function') {
-          toggleLabSessionStatus(t.tanggal, t.roomName, '08:00', '', '', 'buka', t.kampus);
+          toggleLabSessionStatus(t.tanggal, t.roomName, targetJamOn, '', '', 'buka', t.kampus);
           if (typeof showToast === 'function') {
             showToast(`Timer Otomatis: AC ${t.roomName} dinyalakan (${t.timer_on} WIB)`, 'info');
           }
@@ -4544,7 +4555,7 @@ function checkAndTriggerAcTimers() {
         window._triggeredAcTimers.add(triggerKey);
         // Execute Turn OFF
         if (typeof toggleLabSessionStatus === 'function') {
-          toggleLabSessionStatus(t.tanggal, t.roomName, '08:00', '', '', 'tutup', t.kampus);
+          toggleLabSessionStatus(t.tanggal, t.roomName, targetJamOff, '', '', 'tutup', t.kampus);
           if (typeof showToast === 'function') {
             showToast(`Timer Otomatis: AC ${t.roomName} dimatikan (${t.timer_off} WIB)`, 'info');
           }
@@ -4559,6 +4570,10 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
   const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
 
+  // 1. Hitung status AC terlebih dahulu (ground truth untuk timer & pendingin ruangan)
+  const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusName);
+  const isAcActive = Boolean(acStatus && acStatus.isAcOn);
+
   let isOccupied = false;
   let hasFutureClass = false;
   let activeClass = null;
@@ -4567,9 +4582,10 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   if (isToday) {
     for (const s of validPhysicalClasses) {
       if (currentTime >= s.start && currentTime <= s.end) {
-        isOccupied = true;
-        activeClass = s;
-        break;
+        if (!activeClass) {
+          isOccupied = true;
+          activeClass = s;
+        }
       } else if (currentTime < s.start) {
         hasFutureClass = true;
         if (!nextClass) nextClass = s;
@@ -4587,8 +4603,9 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   const opStatus = getRoomOperationalStatus(schedules, isToday);
 
   // Jika kelas saat ini aktif menurut jam tetapi telah ditutup secara eksplisit oleh aslab
+  // ATURAN PENTING: Jika AC sedang aktif (karena Timer ON tercapai atau dinyalakan), ruangan TIDAK PERNAH dianggap ditutup!
   let isExplicitlyClosed = false;
-  if (opStatus.status === 'tutup' && (activeClass || validPhysicalClasses.length > 0) && opStatus.label === 'tutup') {
+  if (!isAcActive && opStatus.status === 'tutup' && (activeClass || validPhysicalClasses.length > 0) && opStatus.label === 'tutup') {
     isExplicitlyClosed = true;
   }
 
@@ -4596,20 +4613,40 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   let text = 'Kosong';
   let jamText = '';
 
-  if (isOccupied && !isExplicitlyClosed) {
+  if (isOccupied && (!isExplicitlyClosed || isAcActive)) {
+    // Sesi perkuliahan sedang aktif saat ini (atau AC sedang aktif pada rentang sesi ini)
     state = 'occupied';
     text = activeClass.nama;
     jamText = activeClass.jam;
   } else if (hasFutureClass && nextClass && (!isOccupied || isExplicitlyClosed)) {
+    // Jeda antar sesi kelas
     state = 'waiting';
     text = 'Jeda';
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
   } else if (isToday && validPhysicalClasses.length > 0) {
-    // Seluruh kelas fisik hari ini di ruangan ini telah selesai / ditutup
-    state = 'finished';
-    text = 'Selesai';
-    jamText = isExplicitlyClosed ? '(Ditutup)' : '';
+    // Cek apakah seluruh sesi hari ini sudah melewati jam selesai
+    const maxEndMinutes = Math.max(...validPhysicalClasses.map(s => s.end || 0));
+    const allEnded = currentTime > maxEndMinutes;
+
+    if (allEnded || (isExplicitlyClosed && !isAcActive)) {
+      state = 'finished';
+      text = 'Selesai';
+      jamText = isExplicitlyClosed ? '(Ditutup)' : '';
+    } else if (activeClass) {
+      state = 'occupied';
+      text = activeClass.nama;
+      jamText = activeClass.jam;
+    } else if (hasFutureClass && nextClass) {
+      state = 'waiting';
+      text = 'Jeda';
+      const isNight = nextClass.start >= 17 * 60;
+      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+    } else {
+      state = 'empty';
+      text = 'Kosong';
+      jamText = '';
+    }
   } else if (!isToday && activeDate < currentDayStr && validPhysicalClasses.length > 0) {
     state = 'finished';
     text = 'Selesai';
@@ -4625,11 +4662,10 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   }
 
   // Status gembok buka/tutup (lockStatus):
-  // Wajib selalu tergantung dari aksi buka/tutup aktual Aslab atau Asmot hari ini!
-  // Jika Aslab/Asmot mencatat ruangan DIBUKA, maka ikon gembok berstatus 'buka' (gembok terbuka),
-  // baik saat sedang jeda antar kelas, kelas sedang berlangsung, maupun jeda istirahat.
   let lockStatus = isToday ? opStatus.status : 'tutup';
-  const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusName);
+  if (isToday && isAcActive) {
+    lockStatus = 'buka';
+  }
 
   return { state, text, jamText, lockStatus, acStatus };
 }
