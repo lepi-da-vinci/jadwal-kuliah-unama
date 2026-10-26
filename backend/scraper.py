@@ -2048,10 +2048,16 @@ def _execute_http_engine(engine_key, url, timeout=12):
 
         elif engine_key == 'httpx':
             import httpx
-            with httpx.Client(http2=True, timeout=timeout, follow_redirects=True) as client:
-                r = client.get(url, headers=headers)
-                durasi = int((time.time() - t0) * 1000)
-                return True, r.status_code, r.text, None, durasi
+            try:
+                with httpx.Client(http2=True, timeout=timeout, follow_redirects=True) as client:
+                    r = client.get(url, headers=headers)
+                    durasi = int((time.time() - t0) * 1000)
+                    return True, r.status_code, r.text, None, durasi
+            except Exception:
+                with httpx.Client(http2=False, timeout=timeout, follow_redirects=True) as client:
+                    r = client.get(url, headers=headers)
+                    durasi = int((time.time() - t0) * 1000)
+                    return True, r.status_code, r.text, None, durasi
 
         elif engine_key == 'requests':
             import requests
@@ -2068,9 +2074,11 @@ def _execute_http_engine(engine_key, url, timeout=12):
 
 def test_all_scraping_engines(target_date=None):
     """
-    Menjalankan pengujian (probe test) serentak ke semua engine backend
-    untuk mendeteksi mana yang lolos dan mana yang terkena 403 Forbidden atau Cloudflare.
+    Menjalankan pengujian (probe test) serentak PARALEL ke semua engine backend
+    menggunakan ThreadPoolExecutor (selesai dalam hitungan detik).
     """
+    import concurrent.futures
+
     base_url = "https://baak.unama.ac.id/jadwal-kuliah?search=1"
     if target_date:
         base_url += f"&tanggal={target_date}"
@@ -2082,10 +2090,9 @@ def test_all_scraping_engines(target_date=None):
         ('requests', 'requests (Direct HTTP)')
     ]
 
-    results = []
-
-    for eng_key, eng_name in engines_to_test:
-        ok, code, html, err, durasi = _execute_http_engine(eng_key, base_url, timeout=9)
+    def _test_one(eng_tuple):
+        eng_key, eng_name = eng_tuple
+        ok, code, html, err, durasi = _execute_http_engine(eng_key, base_url, timeout=5)
 
         if not ok:
             status = 'ERROR'
@@ -2111,15 +2118,27 @@ def test_all_scraping_engines(target_date=None):
             pesan = f'Server BAAK merespons dengan kode HTTP {code}.'
 
         record_scraping_log(eng_name, base_url, target_date, code, status, pesan, durasi, 0)
-        results.append({
+        return {
             "engine": eng_name,
             "engine_key": eng_key,
             "http_status": code,
             "status": status,
             "pesan": pesan,
             "durasi_ms": durasi
-        })
+        }
 
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(_test_one, item) for item in engines_to_test]
+        for f in concurrent.futures.as_completed(futures):
+            try:
+                results.append(f.result())
+            except Exception as e:
+                print(f"[Scraper Test Parallel Error] {e}")
+
+    # Urutkan sesuai urutan engines_to_test
+    order = {name: i for i, (_, name) in enumerate(engines_to_test)}
+    results.sort(key=lambda x: order.get(x["engine"], 99))
     return results
 
 def scrape_baak_direct(target_date=None, target_semester=None):

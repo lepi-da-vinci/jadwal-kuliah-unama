@@ -2316,12 +2316,12 @@ def get_scraper_logs(limit: int = 50):
         return {"status": "error", "message": str(e), "logs": [], "summary": {}}
 
 @app.post("/api/scraper/test")
-def test_scraper_engines(req: SyncRequest = None):
-    """Menjalankan probe test ke seluruh engine (curl_cffi, cloudscraper, httpx, requests) dan mengembalikan diagnosa."""
+async def test_scraper_engines(req: SyncRequest = None):
+    """Menjalankan probe test ke seluruh engine secara non-blocking via asyncio.to_thread."""
     try:
         target_tgl = req.tanggal if req else None
-        results = scraper.test_all_scraping_engines(target_tgl)
-        summary = scraper.get_scraping_engine_summary()
+        results = await asyncio.to_thread(scraper.test_all_scraping_engines, target_tgl)
+        summary = await asyncio.to_thread(scraper.get_scraping_engine_summary)
         return {
             "status": "success",
             "results": results,
