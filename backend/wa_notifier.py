@@ -253,7 +253,10 @@ def ensure_db_schema():
         for col_sql in [
             "ALTER TABLE asisten_lab ADD COLUMN wa_lid VARCHAR(100) NULL",
             "ALTER TABLE asisten_lab ADD COLUMN role VARCHAR(20) DEFAULT 'aslab'",
-            "ALTER TABLE asisten_lab ADD COLUMN kampus_tugas VARCHAR(50) NULL"
+            "ALTER TABLE asisten_lab ADD COLUMN kampus_tugas VARCHAR(50) NULL",
+            "ALTER TABLE status_operasional_lab ADD COLUMN timer_on TIME NULL",
+            "ALTER TABLE status_operasional_lab ADD COLUMN timer_off TIME NULL",
+            "ALTER TABLE status_operasional_lab ADD COLUMN timer_aktif VARCHAR(20) DEFAULT 'none'"
         ]:
             try:
                 cursor.execute(col_sql)
@@ -358,6 +361,7 @@ def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_l
 def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: str = None, timer_off: str = None, timer_aktif: str = 'none', diubah_oleh: str = "Asmot (Web)"):
     """
     Menyimpan atau memperbarui konfigurasi timer AC (Timer On & Timer Off) untuk ruangan.
+    Otomatis melakukan self-healing migration jika kolom timer belum ada di database server.
     """
     try:
         conn = scraper.get_db()
@@ -370,31 +374,54 @@ def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: st
         t_on_sql = f"{timer_on.strip()}:00" if timer_on and len(timer_on.strip()) == 5 else (timer_on.strip() if timer_on else None)
         t_off_sql = f"{timer_off.strip()}:00" if timer_off and len(timer_off.strip()) == 5 else (timer_off.strip() if timer_off else None)
 
-        # 1. Update ke seluruh sesi ruangan ini pada tanggal terkait
-        cursor.execute("""
-            UPDATE status_operasional_lab
-            SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, waktu_aksi = NOW()
-            WHERE tanggal = %s AND id_ruangan = %s
-        """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
-
-        # 2. Jika belum ada entri sama sekali hari ini, insert baris baru
-        if cursor.rowcount == 0:
+        def _execute_timer_queries():
+            # 1. Update ke seluruh sesi ruangan ini pada tanggal terkait
             cursor.execute("""
-                INSERT INTO status_operasional_lab (
-                    tanggal, id_ruangan, jam, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                ON DUPLICATE KEY UPDATE
-                    timer_on = VALUES(timer_on),
-                    timer_off = VALUES(timer_off),
-                    timer_aktif = VALUES(timer_aktif),
-                    diubah_oleh = VALUES(diubah_oleh),
-                    waktu_aksi = NOW()
-            """, (tanggal, id_ruangan, jam_sql, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
+                UPDATE status_operasional_lab
+                SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, waktu_aksi = NOW()
+                WHERE tanggal = %s AND id_ruangan = %s
+            """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
+
+            # 2. Jika belum ada entri sama sekali hari ini, insert baris baru
+            if cursor.rowcount == 0:
+                cursor.execute("""
+                    INSERT INTO status_operasional_lab (
+                        tanggal, id_ruangan, jam, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        timer_on = VALUES(timer_on),
+                        timer_off = VALUES(timer_off),
+                        timer_aktif = VALUES(timer_aktif),
+                        diubah_oleh = VALUES(diubah_oleh),
+                        waktu_aksi = NOW()
+                """, (tanggal, id_ruangan, jam_sql, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
+
+        try:
+            _execute_timer_queries()
+        except Exception as query_err:
+            # Self-healing migration jika tabel di server belum memiliki kolom timer
+            err_msg = str(query_err).lower()
+            if "unknown column" in err_msg or "1054" in err_msg:
+                for col_sql in [
+                    "ALTER TABLE status_operasional_lab ADD COLUMN timer_on TIME NULL",
+                    "ALTER TABLE status_operasional_lab ADD COLUMN timer_off TIME NULL",
+                    "ALTER TABLE status_operasional_lab ADD COLUMN timer_aktif VARCHAR(20) DEFAULT 'none'"
+                ]:
+                    try:
+                        cursor.execute(col_sql)
+                        conn.commit()
+                    except Exception:
+                        pass
+                # Coba eksekusi ulang setelah migrasi kolom berhasil
+                _execute_timer_queries()
+            else:
+                raise query_err
+
         conn.commit()
-        return True
+        return True, None
     except Exception as e:
         print(f"Error set_timer_ac: {e}")
-        return False
+        return False, str(e)
     finally:
         if 'cursor' in locals() and cursor:
             try: cursor.close()

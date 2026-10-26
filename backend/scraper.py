@@ -157,6 +157,17 @@ def init_db_schema():
             cursor.execute("ALTER TABLE jadwal MODIFY COLUMN metode_pembelajaran ENUM('TM', 'OL', 'CC') DEFAULT 'TM'")
         except Exception:
             pass
+
+        # Migrasi kolom tabel status_operasional_lab untuk Timer AC
+        for col_sql in [
+            "ALTER TABLE status_operasional_lab ADD COLUMN timer_on TIME NULL",
+            "ALTER TABLE status_operasional_lab ADD COLUMN timer_off TIME NULL",
+            "ALTER TABLE status_operasional_lab ADD COLUMN timer_aktif VARCHAR(20) DEFAULT 'none'"
+        ]:
+            try:
+                cursor.execute(col_sql)
+            except Exception:
+                pass
         
         # ─── MASTER SEMESTER & MIGRATION ────────────────────────────
         cursor.execute("""

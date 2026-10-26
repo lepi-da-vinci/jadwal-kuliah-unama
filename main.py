@@ -4006,7 +4006,7 @@ def update_timer_ac(data: TimerAcUpdateInput):
         if not id_ruangan:
             return {"status": "error", "message": "Ruangan tidak ditemukan"}
 
-        sukses = wa_notifier.set_timer_ac(
+        res_tuple = wa_notifier.set_timer_ac(
             tanggal=data.tanggal.strip(),
             id_ruangan=id_ruangan,
             jam=data.jam or "08:00",
@@ -4015,6 +4015,9 @@ def update_timer_ac(data: TimerAcUpdateInput):
             timer_aktif=data.timer_aktif,
             diubah_oleh=data.diubah_oleh or "Asmot (Web)"
         )
+
+        sukses = res_tuple[0] if isinstance(res_tuple, (tuple, list)) else bool(res_tuple)
+        err_msg = res_tuple[1] if (isinstance(res_tuple, (tuple, list)) and len(res_tuple) > 1) else None
 
         if sukses:
             return {
@@ -4026,7 +4029,7 @@ def update_timer_ac(data: TimerAcUpdateInput):
                 "id_ruangan": id_ruangan
             }
         else:
-            return {"status": "error", "message": "Gagal menyimpan timer AC ke database"}
+            return {"status": "error", "message": f"Gagal menyimpan timer AC ke database: {err_msg or 'Kesalahan database'}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
