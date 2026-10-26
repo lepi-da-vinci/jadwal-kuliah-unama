@@ -5125,6 +5125,12 @@ async function syncData(tanggal) {
     });
     const result = await response.json();
 
+    if (result && result.blocked_403) {
+      if (typeof showScraper403Notification === 'function') {
+        showScraper403Notification(result.message);
+      }
+    }
+
     if (syncBtn) {
       syncBtn.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
@@ -21339,3 +21345,227 @@ window.filterDetailKelasDay = filterDetailKelasDay;
 
 
 
+
+
+// ══════════════════════════════════════════════════════════════════
+// MODUL LOG & DIAGNOSTIK ENGINE SCRAPING BAAK UNAMA
+// ══════════════════════════════════════════════════════════════════
+
+function closeSettingAndOpenScraperLogs() {
+  if (typeof closeSettingModal === 'function') {
+    try {
+      closeSettingModal(false, true);
+    } catch (e) {}
+  }
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) {
+    testModal.classList.remove('open');
+    testModal.style.display = 'none';
+  }
+  setTimeout(() => {
+    openScraperLogsModal();
+  }, 120);
+}
+
+function openScraperLogsModal() {
+  // Pastikan modal setting tertutup rapat
+  const testModal = document.getElementById('test-wa-modal');
+  if (testModal) {
+    testModal.classList.remove('open');
+    testModal.style.display = 'none';
+  }
+
+  const modal = document.getElementById('scraper-logs-modal');
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.style.display = 'flex';
+  modal.style.zIndex = '100005';
+  document.body.style.overflow = 'hidden';
+  fetchScraperLogs();
+}
+
+function closeScraperLogsModal() {
+  const modal = document.getElementById('scraper-logs-modal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function fetchScraperLogs() {
+  const tbody = document.getElementById('scraper-logs-table-body');
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding: 24px; text-align: center; color: var(--text-muted);">Memuat riwayat log scraping...</td></tr>`;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/scraper/logs?limit=100`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.status === 'success') {
+      renderScraperLogsTable(data.logs || []);
+    } else {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px;">Gagal memuat log: ${data.message || 'Error server'}</td></tr>`;
+    }
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px;">Gagal terhubung ke API log: ${err.message}. Harap pastikan server backend aktif.</td></tr>`;
+  }
+}
+
+function renderScraperLogsTable(logs) {
+  const tbody = document.getElementById('scraper-logs-table-body');
+  if (!tbody) return;
+
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding: 30px; text-align: center; color: var(--text-muted);">Belum ada riwayat log scraping tersimpan di database.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = logs.map(l => {
+    const code = l.http_status;
+    let badgeBg = 'rgba(148, 163, 184, 0.15)';
+    let badgeColor = 'var(--text-muted)';
+    const stUpper = String(l.status || '').toUpperCase();
+
+    if (code === 200 || stUpper === 'SUCCESS') {
+      badgeBg = 'rgba(16, 185, 129, 0.15)';
+      badgeColor = '#10b981';
+    } else if (code === 403 || stUpper.includes('403') || stUpper.includes('BLOCKED')) {
+      badgeBg = 'rgba(239, 68, 68, 0.15)';
+      badgeColor = '#ef4444';
+    } else if (stUpper.includes('CHALLENGE') || stUpper.includes('ERROR') || stUpper.includes('TIMEOUT')) {
+      badgeBg = 'rgba(245, 158, 11, 0.15)';
+      badgeColor = '#f59e0b';
+    }
+
+    const codeBadge = code ? `<span style="font-weight:700; color:${code === 200 ? '#10b981' : (code === 403 ? '#ef4444' : '#f59e0b')};">${code}</span>` : '<span style="color:var(--text-muted);">-</span>';
+
+    return `
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 10px 12px; font-family: monospace; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${l.timestamp || '-'}</td>
+        <td style="padding: 10px 12px; font-weight: 600; color: var(--text); white-space: nowrap;">${l.engine || '-'}</td>
+        <td style="padding: 10px 12px; white-space: nowrap;">${codeBadge}</td>
+        <td style="padding: 10px 12px; white-space: nowrap;">
+          <span style="font-size: 0.76rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: ${badgeBg}; color: ${badgeColor};">
+            ${l.status || '-'}
+          </span>
+        </td>
+        <td style="padding: 10px 12px; color: var(--text); line-height: 1.4;">
+          ${l.pesan || '-'}
+          ${l.jumlah_data ? `<span style="margin-left: 6px; font-size: 0.76rem; background: rgba(16,185,129,0.12); color: #10b981; padding: 1px 6px; border-radius: 4px; font-weight: 600;">+${l.jumlah_data} data</span>` : ''}
+        </td>
+        <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${l.durasi_ms ? l.durasi_ms + 'ms' : '-'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function runScraperEngineTest() {
+  const btn = document.getElementById('btn-run-scraper-test');
+  const spinner = document.getElementById('scraper-test-spinner');
+
+  if (btn) btn.disabled = true;
+  if (spinner) spinner.style.animation = 'spin 1s linear infinite';
+
+  try {
+    const tgl = document.getElementById('filter-tanggal')?.value || '';
+    const res = await fetch(`${API_BASE_URL}/api/scraper/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tanggal: tgl || null })
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.status === 'success') {
+      await fetchScraperLogs();
+    } else {
+      alert(`Hasil pengujian: ${data.message || 'Tidak ada detail'}`);
+    }
+  } catch (err) {
+    alert(`Pengujian scraper gagal terhubung: ${err.message}. Harap pastikan server backend berjalan.`);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (spinner) spinner.style.animation = '';
+  }
+}
+
+async function clearScraperLogsAction() {
+  if (!confirm("Bersihkan seluruh riwayat log engine scraping?")) return;
+  try {
+    const token = typeof getAdminToken === 'function' ? getAdminToken() : (localStorage.getItem('admin_token') || '');
+    const res = await fetch(`${API_BASE_URL}/api/scraper/clear-logs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      await fetchScraperLogs();
+    } else {
+      alert(data.message || "Gagal membersihkan log");
+    }
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+function showScraper403Notification(msg) {
+  const existing = document.querySelector('.custom-403-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'custom-403-toast';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    max-width: 420px;
+    background: var(--bg-card, #fff);
+    border: 1.5px solid #ef4444;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+    z-index: 100010;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  `;
+  toast.innerHTML = `
+    <div style="display: flex; align-items: flex-start; gap: 10px;">
+      <div style="color: #ef4444; flex-shrink: 0; margin-top: 2px;">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      <div style="flex: 1;">
+        <div style="font-weight: 700; font-size: 0.95rem; color: #ef4444; margin-bottom: 4px;">BAAK UNAMA 403 Forbidden</div>
+        <div style="font-size: 0.82rem; color: var(--text); line-height: 1.4;">${msg || 'Server BAAK UNAMA saat ini menolak akses scraping (HTTP 403 Forbidden). Data jadwal lokal tetap aktif.'}</div>
+      </div>
+      <button type="button" onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px;">
+      <button type="button" class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()" style="padding: 5px 10px; font-size: 0.78rem; border-radius: 6px;">Tutup</button>
+      <button type="button" class="btn btn-primary" onclick="this.parentElement.parentElement.remove(); openScraperLogsModal();" style="padding: 5px 12px; font-size: 0.78rem; border-radius: 6px; background: #ef4444; border-color: #ef4444; color: #fff;">Buka Log Scraping</button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    if (toast.parentElement) toast.remove();
+  }, 10000);
+}
+
+window.closeSettingAndOpenScraperLogs = closeSettingAndOpenScraperLogs;
+window.openScraperLogsModal = openScraperLogsModal;
+window.closeScraperLogsModal = closeScraperLogsModal;
+window.fetchScraperLogs = fetchScraperLogs;
+window.runScraperEngineTest = runScraperEngineTest;
+window.clearScraperLogsAction = clearScraperLogsAction;
+window.showScraper403Notification = showScraper403Notification;

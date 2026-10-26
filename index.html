@@ -13,7 +13,7 @@
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20261026_prodi_unama_fix_v15">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20261026_scraper_logs_v16">
 </head>
 
 <body>
@@ -4050,6 +4050,20 @@
         <span id="setting-active-semester-pill" class="badge-mini-sem" style="margin-left: 6px;">Ganjil 2026</span>
       </button>
 
+            <!-- Tombol Akses Log & Diagnostik Engine Scraping BAAK -->
+      <button class="btn btn-secondary" id="btn-show-scraper-logs" onclick="closeSettingAndOpenScraperLogs()"
+        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px; background: rgba(99, 102, 241, 0.05); border: 1.2px solid rgba(99, 102, 241, 0.3); border-radius: 10px; cursor: pointer;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+          <line x1="6" y1="6" x2="6.01" y2="6"></line>
+          <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        <span>Log & Diagnostik Engine Scraping</span>
+        <span class="badge-mini-sem" style="margin-left: auto; background: rgba(99, 102, 241, 0.15); color: var(--primary);">MULTI-ENGINE</span>
+      </button>
+
       <!-- Kategori 3: Master Data Admin -->
       <div class="admin-only"
         style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
@@ -5243,6 +5257,96 @@
 </div>
 
 
+    <!-- MODAL: LOG & DIAGNOSTIK ENGINE SCRAPING BAAK -->
+  <!-- ==================== MODAL LOG AKTIVITAS SCRAPING ==================== -->
+<div id="scraper-logs-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Log Scraping" style="display: none; z-index: 100002;">
+  <div class="modal-box setting-modal-box" style="max-width: 860px; width: 95%;">
+    <!-- Drag Handle / Dismiss bar -->
+    <div class="modal-drag-handle-zone" id="scraper-logs-drag-handle" role="button" tabindex="0" onclick="closeScraperLogsModal()">
+      <div class="modal-drag-handle-bar"></div>
+    </div>
+
+    <!-- Header Modal -->
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); display: flex; align-items: center; justify-content: center; color: var(--primary);">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+        </div>
+        <div>
+          <h2 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text);">Log Aktivitas Scraping BAAK</h2>
+          <span style="font-size: 0.82rem; color: var(--text-muted);">Riwayat kejadian saat sistem mengambil data jadwal</span>
+        </div>
+      </div>
+      <button type="button" class="modal-close-header-btn" aria-label="Tutup" onclick="closeScraperLogsModal()"
+        style="background: var(--bg-elevated, rgba(148, 163, 184, 0.15)); border: 1px solid var(--border); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 120px); overflow-y: auto; padding-right: 2px;">
+      
+      <!-- Toolbar Tombol Aksi -->
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="btn btn-primary" id="btn-run-scraper-test" onclick="runScraperEngineTest()"
+            style="padding: 8px 14px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;">
+            <svg id="scraper-test-spinner" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Uji Coba Scraping Sekarang</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="fetchScraperLogs()"
+            style="padding: 8px 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            <span>Refresh Log</span>
+          </button>
+        </div>
+        <div>
+          <button type="button" class="btn btn-secondary" onclick="clearScraperLogsAction()"
+            style="padding: 6px 12px; font-size: 0.8rem; color: #ef4444; border-color: rgba(239,68,68,0.3); border-radius: 8px;">
+            Bersihkan Log
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabel Riwayat Log Kejadian Scraping -->
+      <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card, #fff);">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.84rem; text-align: left;">
+          <thead>
+            <tr style="background: var(--bg-elevated, rgba(148, 163, 184, 0.08)); border-bottom: 1px solid var(--border); color: var(--text-muted);">
+              <th style="padding: 10px 12px; font-weight: 600; width: 140px;">Waktu</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 170px;">Engine</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 95px;">HTTP</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 125px;">Status</th>
+              <th style="padding: 10px 12px; font-weight: 600;">Kejadian / Diagnosa Log</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 75px; text-align: right;">Durasi</th>
+            </tr>
+          </thead>
+          <tbody id="scraper-logs-table-body">
+            <tr>
+              <td colspan="6" style="padding: 30px; text-align: center; color: var(--text-muted);">
+                Memuat data riwayat log scraping...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
   <!-- MODAL: SECURITY & OTORISASI ADMIN & DIALOG KONFIRMASI -->
     <!-- ==================== MODAL SECURITY & OTORISASI ADMIN ==================== -->
 
@@ -5758,7 +5862,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261026_prodi_unama_fix_v15"></script>
+  <script src="frontend/js/script.js?v=20261026_scraper_logs_v16"></script>
 </body>
 
 </html>

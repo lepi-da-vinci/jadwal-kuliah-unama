@@ -18,7 +18,20 @@ function safeCloseTab() {
 if (isAutoClose) {
     console.log("Jadwal Kuliah Sync: Menunggu halaman selesai dimuat sepenuhnya...");
 
+    function checkIs403Forbidden() {
+        const title = (document.title || '').toLowerCase();
+        const bodyText = (document.body ? document.body.innerText : '').toLowerCase();
+        const html = (document.documentElement ? document.documentElement.outerHTML : '').toLowerCase();
+
+        return title.includes('403 forbidden') ||
+               bodyText.includes('403 forbidden') ||
+               bodyText.includes('penolakan akses') ||
+               (html.includes('tengine') && html.includes('403'));
+    }
+
     function isBaakPageReady() {
+        if (checkIs403Forbidden()) return true;
+
         const isCloudflare = document.title.includes('Just a moment') || 
                              document.querySelector('#challenge-running') || 
                              document.querySelector('#cf-challenge-running');
@@ -42,6 +55,44 @@ if (isAutoClose) {
         
         if (isBaakPageReady() || retryCount >= 15) {
             clearInterval(checkInterval);
+
+            // Cek apakah halaman adalah 403 Forbidden
+            if (checkIs403Forbidden()) {
+                console.warn("[UNAMA Extension] Server BAAK merespons 403 Forbidden (Penolakan Akses). Melaporkan ke sistem...");
+                try {
+                    fetch('http://127.0.0.1:8000/api/scraper/log-engine', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            engine: 'Chrome Extension (Browser)',
+                            target_url: window.location.href,
+                            target_tanggal: tanggal,
+                            http_status: 403,
+                            status: 'BLOCKED (403)',
+                            pesan: 'Browser mendeteksi penolakan akses (Tengine siakadv3 403 Forbidden) saat membuka BAAK UNAMA.',
+                            durasi_ms: 0,
+                            jumlah_data: 0
+                        })
+                    }).catch(() => {});
+                } catch (e) {}
+
+                document.body.innerHTML = `
+                    <div style='text-align:center; margin-top:15%; font-family:sans-serif; padding:20px; color:#1e293b;'>
+                        <div style='background:#fee2e2; color:#ef4444; display:inline-block; padding:10px 20px; border-radius:30px; font-weight:bold; margin-bottom:15px;'>
+                            HTTP 403 Forbidden - Penolakan Akses BAAK
+                        </div>
+                        <h2 style='margin-bottom:10px;'>Server BAAK UNAMA Menolak Akses</h2>
+                        <p style='color:#64748b; max-width:520px; margin:0 auto 20px auto; line-height:1.5;'>
+                            Server BAAK UNAMA (Tengine siakadv3) saat ini menolak koneksi browser (403 Forbidden). 
+                            Seluruh data jadwal lokal yang sudah ada di Dashboard tetap aman dan aktif.
+                        </p>
+                        <p style='font-size:14px; color:#94a3b8;'>Menutup tab dalam 3 detik...</p>
+                    </div>
+                `;
+                setTimeout(safeCloseTab, 3200);
+                return;
+            }
+
             console.log("Halaman siap! Mengirim data ke lokal API...");
             
             const htmlContent = document.documentElement.outerHTML;

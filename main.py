@@ -2240,9 +2240,30 @@ async def sync_data(req: SyncRequest):
                 await asyncio.sleep(0.8)
                 current = sync_status.get(tgl_key, {})
                 if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
-                    return {"status": "success", "message": "Berhasil sinkronisasi via Ekstensi Chrome!", "count": current.get("count", 0)}
-            
-            return {"status": "success", "message": "Proses sinkronisasi selesai atau berjalan di background."}
+                    count_got = current.get("count", 0)
+                    return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({count_got} jadwal)!", "count": count_got}
+
+            current = sync_status.get(tgl_key, {})
+            if current.get("status") == "done" and current.get("count", 0) > 0:
+                return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({current.get('count', 0)} data)!", "count": current.get("count", 0)}
+
+            # Jika ekstensi tidak menghasilkan data (terhalang 403 atau tidak terbuka)
+            scraper.record_scraping_log(
+                "Chrome Extension (Browser)",
+                target_url,
+                tgl_key,
+                403,
+                "BLOCKED (403)",
+                "Ekstensi di browser tidak berhasil menarik data baru (terindikasi penolakan akses 403 Forbidden atau tab tertutup).",
+                int((time.time() - start_time) * 1000),
+                0
+            )
+            return {
+                "status": "warning",
+                "message": "Sinkronisasi tidak dapat menarik data baru dari BAAK UNAMA karena server menolak akses (HTTP 403 Forbidden) pada backend dan browser. Data jadwal lokal yang sudah ada tetap aman dan aktif.",
+                "count": 0,
+                "blocked_403": True
+            }
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
@@ -2260,6 +2281,16 @@ def get_pending_sync():
 class ClearPendingRequest(BaseModel):
     tanggal: str | None = None
 
+class ScraperLogReportRequest(BaseModel):
+    engine: str
+    target_url: str | None = None
+    target_tanggal: str | None = None
+    http_status: int | None = None
+    status: str
+    pesan: str | None = None
+    durasi_ms: int | None = 0
+    jumlah_data: int | None = 0
+
 @app.post("/api/sync/pending/clear")
 def clear_pending_sync(req: ClearPendingRequest = None):
     """Menghapus tugas sinkronisasi setelah diambil oleh ekstensi"""
@@ -2269,6 +2300,62 @@ def clear_pending_sync(req: ClearPendingRequest = None):
     else:
         pending_sync_queue.clear()
     return {"status": "success"}
+
+@app.get("/api/scraper/logs")
+def get_scraper_logs(limit: int = 50):
+    """Mengambil riwayat log percobaan setiap scraping engine dan ringkasan status terkini."""
+    try:
+        logs = scraper.get_scraping_engine_logs(limit)
+        summary = scraper.get_scraping_engine_summary()
+        return {
+            "status": "success",
+            "logs": logs,
+            "summary": summary
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e), "logs": [], "summary": {}}
+
+@app.post("/api/scraper/test")
+def test_scraper_engines(req: SyncRequest = None):
+    """Menjalankan probe test ke seluruh engine (curl_cffi, cloudscraper, httpx, requests) dan mengembalikan diagnosa."""
+    try:
+        target_tgl = req.tanggal if req else None
+        results = scraper.test_all_scraping_engines(target_tgl)
+        summary = scraper.get_scraping_engine_summary()
+        return {
+            "status": "success",
+            "results": results,
+            "summary": summary
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e), "results": [], "summary": {}}
+
+@app.post("/api/scraper/log-engine")
+def report_scraper_log(req: ScraperLogReportRequest):
+    """Menerima laporan status/log dari client atau Chrome Extension (misal saat browser terkena 403 Forbidden)."""
+    try:
+        scraper.record_scraping_log(
+            engine=req.engine,
+            target_url=req.target_url,
+            target_tanggal=req.target_tanggal,
+            http_status=req.http_status,
+            status=req.status,
+            pesan=req.pesan,
+            durasi_ms=req.durasi_ms or 0,
+            jumlah_data=req.jumlah_data or 0
+        )
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/scraper/clear-logs")
+def clear_scraper_logs(admin: str = Depends(verify_admin_token)):
+    """Mengosongkan riwayat log engine scraping (memerlukan hak akses Admin)."""
+    try:
+        scraper.clear_scraping_engine_logs()
+        return {"status": "success", "message": "Seluruh riwayat log engine scraping berhasil dibersihkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/sync-html")
 def sync_html_data(req: SyncHtmlRequest):
