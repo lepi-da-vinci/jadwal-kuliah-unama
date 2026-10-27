@@ -15,6 +15,38 @@ function safeCloseTab() {
     }
 }
 
+// Mengambil origin API server aktif (tersimpan saat pengguna membuka dashboard)
+async function getApiServerOrigins() {
+    const origins = [];
+    try {
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+            const data = await chrome.storage.local.get("serverUrl");
+            if (data && data.serverUrl && !origins.includes(data.serverUrl)) {
+                origins.push(data.serverUrl);
+            }
+        }
+    } catch (e) {}
+    if (!origins.includes("http://127.0.0.1:8000")) {
+        origins.push("http://127.0.0.1:8000");
+    }
+    return origins;
+}
+
+// Helper untuk mengirim fetch ke server yang tersedia (server remote Cloudflare atau lokal PC)
+async function sendToServer(endpoint, options) {
+    const origins = await getApiServerOrigins();
+    let lastError = null;
+    for (const origin of origins) {
+        try {
+            const res = await fetch(`${origin}${endpoint}`, options);
+            if (res.ok) return res;
+        } catch (err) {
+            lastError = err;
+        }
+    }
+    throw lastError || new Error("Gagal terhubung ke API backend");
+}
+
 if (isAutoClose) {
     console.log("Jadwal Kuliah Sync: Menunggu halaman selesai dimuat sepenuhnya...");
 
@@ -50,7 +82,7 @@ if (isAutoClose) {
     }
 
     let retryCount = 0;
-    const checkInterval = setInterval(() => {
+    const checkInterval = setInterval(async () => {
         retryCount++;
         
         if (isBaakPageReady() || retryCount >= 15) {
@@ -60,7 +92,7 @@ if (isAutoClose) {
             if (checkIs403Forbidden()) {
                 console.warn("[UNAMA Extension] Server BAAK merespons 403 Forbidden (Penolakan Akses). Melaporkan ke sistem...");
                 try {
-                    fetch('http://127.0.0.1:8000/api/scraper/log-engine', {
+                    await sendToServer('/api/scraper/log-engine', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -93,7 +125,7 @@ if (isAutoClose) {
                 return;
             }
 
-            console.log("Halaman siap! Mengirim data ke lokal API...");
+            console.log("Halaman siap! Mengirim data ke API backend...");
             
             const htmlContent = document.documentElement.outerHTML;
             document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>⏳ Sedang Menarik Data...</h1><p style='font-size:18px;'>Jangan tutup tab ini. Tab akan tertutup otomatis setelah semua halaman selesai ditarik.</p></div>";
@@ -107,18 +139,18 @@ if (isAutoClose) {
     }, 1000);
 }
 
-function processPage(htmlContent, pageNum, docContext) {
-    fetch('http://127.0.0.1:8000/api/sync-html', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            html: htmlContent,
-            tanggal: tanggal,
-            page: pageNum.toString()
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
+async function processPage(htmlContent, pageNum, docContext) {
+    try {
+        const response = await sendToServer('/api/sync-html', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                html: htmlContent,
+                tanggal: tanggal,
+                page: pageNum.toString()
+            })
+        });
+        const data = await response.json();
         console.log(`Sinkronisasi halaman ${pageNum} berhasil:`, data);
         
         let nextButton = docContext.querySelector('a[rel="next"]') || 
@@ -147,33 +179,27 @@ function processPage(htmlContent, pageNum, docContext) {
             window.location.href = nextUrl.href;
         } else {
             console.log("Semua halaman selesai! Mengirim sinyal complete...");
-            fetch('http://127.0.0.1:8000/api/sync-complete', {
+            await sendToServer('/api/sync-complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tanggal: tanggal })
-            })
-            .then(() => {
-                if (isAutoClose) {
-                    document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Sinkronisasi Selesai!</h1><p style='font-size:18px;'>Menutup tab dalam 1 detik...</p></div>";
-                    setTimeout(safeCloseTab, 1000);
-                }
-            })
-            .catch(err => {
-                console.error("Gagal mengirim sinyal sync complete", err);
-                safeCloseTab();
-            });
+            }).catch(() => {});
+
+            if (isAutoClose) {
+                document.body.innerHTML = "<div style='text-align:center; margin-top:20%; font-family:sans-serif;'><h1>✅ Sinkronisasi Selesai!</h1><p style='font-size:18px;'>Menutup tab dalam 1 detik...</p></div>";
+                setTimeout(safeCloseTab, 1000);
+            }
         }
-    })
-    .catch(error => {
-        console.error("Gagal sinkronisasi ke lokal API:", error);
-        fetch('http://127.0.0.1:8000/api/sync-complete', {
+    } catch (error) {
+        console.error("Gagal sinkronisasi ke API:", error);
+        await sendToServer('/api/sync-complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tanggal: tanggal })
-        }).finally(() => {
-            if (isAutoClose) {
-                safeCloseTab();
-            }
-        });
-    });
+        }).catch(() => {});
+
+        if (isAutoClose) {
+            safeCloseTab();
+        }
+    }
 }

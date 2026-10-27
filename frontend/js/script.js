@@ -21548,7 +21548,13 @@ async function fetchScraperLogs() {
       if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px;">Gagal memuat log: ${data.message || 'Error server'}</td></tr>`;
     }
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px;">Gagal terhubung ke API log: ${err.message}. Harap pastikan server backend aktif.</td></tr>`;
+    if (tbody) {
+      const is404 = String(err.message).includes('404');
+      const hint = is404
+        ? "Endpoint rute log belum aktif di server. Jika server baru git pull, jalankan 'docker restart jadwal_backend' di server agar rute baru termuat."
+        : "Harap pastikan koneksi internet atau server backend aktif.";
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px; line-height:1.5;">Gagal terhubung ke API log: ${err.message}.<br><span style="font-size:0.8rem; color:var(--text-muted);">${hint}</span></td></tr>`;
+    }
   }
 }
 
@@ -21557,7 +21563,20 @@ function renderScraperLogsTable(logs) {
   if (!tbody) return;
 
   if (!logs || logs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="padding: 30px; text-align: center; color: var(--text-muted);">Belum ada riwayat log scraping tersimpan di database.</td></tr>`;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="padding: 36px 20px; text-align: center; color: var(--text-muted);">
+          <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; color: var(--text);">Belum ada riwayat log scraping tersimpan</div>
+          <p style="margin: 0 0 14px 0; font-size: 0.82rem; color: var(--text-muted);">Belum ada percobaan scraping yang tercatat di database. Klik tombol di bawah untuk menguji respon server BAAK ke seluruh engine.</p>
+          <button type="button" class="btn btn-primary" onclick="runScraperEngineTest()" style="padding: 8px 16px; font-size: 0.85rem; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Uji Coba Scraping Sekarang</span>
+          </button>
+        </td>
+      </tr>
+    `;
     return;
   }
 

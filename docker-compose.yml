@@ -38,6 +38,7 @@ services:
       dockerfile: Dockerfile
     container_name: jadwal_backend
     restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:

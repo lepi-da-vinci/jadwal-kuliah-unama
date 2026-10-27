@@ -31,13 +31,26 @@ try:
 except ImportError:
     build_html = None
 
+import logging
 import scraper
 import wa_notifier
+
+# Filter logging agar access log tidak dipenuhi spam polling /api/sync/pending
+class NoisyEndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return "/api/sync/pending" not in msg
+
+logging.getLogger("uvicorn.access").addFilter(NoisyEndpointFilter())
 
 app = FastAPI(title="API Analitik Jadwal Kuliah")
 
 @app.on_event("startup")
 async def startup_event():
+    try:
+        logging.getLogger("uvicorn.access").addFilter(NoisyEndpointFilter())
+    except Exception:
+        pass
     if build_html:
         try:
             build_html()

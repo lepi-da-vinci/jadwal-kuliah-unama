@@ -213,3 +213,20 @@ INSERT IGNORE INTO asisten_lab (nama_aslab, no_wa, kampus_tugas, role, id_ruanga
 ('M.Raffi Pra Diestyawan', '', 'Kobar', 'aslab', 31);
 
 
+
+-- Tabel Log Aktivitas Engine Scraping BAAK
+CREATE TABLE IF NOT EXISTS `log_scraping_engine` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `timestamp` DATETIME NOT NULL,
+  `engine` VARCHAR(60) NOT NULL,
+  `target_url` VARCHAR(255) DEFAULT NULL,
+  `target_tanggal` VARCHAR(20) DEFAULT NULL,
+  `http_status` INT DEFAULT NULL,
+  `status` VARCHAR(50) NOT NULL,
+  `pesan` TEXT DEFAULT NULL,
+  `durasi_ms` INT DEFAULT 0,
+  `jumlah_data` INT DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_engine_time` (`timestamp`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
