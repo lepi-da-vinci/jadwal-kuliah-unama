@@ -3617,8 +3617,9 @@ window.calculateAsmotSmartSuggestion = function () {
   // 3. TENTUKAN TARGET WAKTU OFF
   const targetOffMin = activeBlock.endM;
   const offTime24 = activeBlock.endTimeStr;
-  const diffOffMin = targetOffMin - nowMin;
-  const durationOff = Math.max(1, Math.ceil(diffOffMin / 60));
+  const diffOffMin = Math.max(0, targetOffMin - nowMin);
+  // Gunakan Math.round agar jam remote presisi ke jam tombol terdekat (contoh: 09:53 ke 17:00 adalah 7 jam 7 mnt -> 7 Jam)
+  let durationOff = Math.max(1, Math.round(diffOffMin / 60));
 
   let isOffExceeds12h = false;
   let earliestSetTimeStr = '';
@@ -3636,19 +3637,28 @@ window.calculateAsmotSmartSuggestion = function () {
   if (nowMin < activeBlock.startM - 60) {
     // Skenario A: Masih awal sebelum blok ini mulai (persiapan awal hari)
     mode = 'both';
-    const targetOnMin = activeBlock.startM - 60;
+    const targetOnMin = Math.max(0, activeBlock.startM - 60);
     onTime24 = formatMinToTime(targetOnMin);
-    const diffOnMin = targetOnMin - nowMin;
+    const diffOnMin = Math.max(0, targetOnMin - nowMin);
     durationOn = Math.max(1, Math.round(diffOnMin / 60));
   } else if (nextBlock) {
     // Skenario B: Sesi blok ini sedang berlangsung / baru mulai, DAN ADA JEDA PANJANG ke sesi berikutnya!
-    // Permintaan user: "karna ada jeda aku mau timer on itu di pakai untuk otomatis hidup untuk jam setelah jeda sebagai saran untuk asmotnya."
+    // Contoh: blok pagi-siang selesai 17:00, sesi malam mulai 19:15 (jeda 2 jam 15 mnt).
     mode = 'both';
     isBreakAutoOn = true;
-    const targetOnMin = nextBlock.startM - 60; // AC hidup 1 jam sebelum sesi setelah jeda mulai
+
+    // AC otomatis hidup 20 menit sebelum sesi lanjutan mulai (misal 19:15 -> hidup 18:55 WIB)
+    const targetOnMin = Math.max(targetOffMin + 30, nextBlock.startM - 20);
     onTime24 = formatMinToTime(targetOnMin);
-    const diffOnMin = targetOnMin - nowMin;
-    durationOn = Math.max(1, Math.round(diffOnMin / 60));
+    const diffOnMin = Math.max(0, targetOnMin - nowMin);
+    let durOn = Math.max(1, Math.round(diffOnMin / 60));
+
+    // Durasi ON HARUS lebih besar dari durasi OFF agar ada jeda mati di antaranya!
+    // Tidak boleh terjadi Timer OFF dan Timer ON bernilai sama (misal sama-sama 8 Jam)
+    if (durOn <= durationOff) {
+      durOn = durationOff + Math.max(1, Math.round((nextBlock.startM - targetOffMin - 20) / 60));
+    }
+    durationOn = durOn;
   }
 
   // 4. SUSUN STRUKTUR FORMAT 12H (PEMBULATAN KHUSUS REMOTE 00 & 30 MENIT)
@@ -4327,30 +4337,41 @@ window.validateTimerInputs = function () {
   const offVal = offInput ? offInput.value : '';
 
   const ctx = window._activeTimerRoomContext || {};
-  const firstStartM = ctx.firstStartM ?? 480;
-  const firstStartTimeStr = ctx.firstStartTimeStr || '08:00';
+  const roomSchedules = (ctx.schedules || []).filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  let hasError = false;
+  let hasFatalError = false;
 
-  // 1. VALIDASI TIMER ON: Wajib SEBELUM jam mulai perkuliahan
-  if (onActive && onVal) {
+  // 1. VALIDASI TIMER ON: Disesuaikan dengan sesi target yang relevan (bukan selalu sesi pertama pagi)
+  if (onActive && onVal && onVal.includes(':')) {
     const onParts = onVal.split(':').map(Number);
     const onM = onParts[0] * 60 + onParts[1];
 
-    if (onM >= firstStartM) {
-      hasError = true;
+    // Cari sesi target untuk Timer ON ini:
+    // Jika waktu sekarang sudah melewati sesi awal, cari sesi yang jam mulainya setelah waktu sekarang
+    const upcomingSessions = roomSchedules.filter(s => s._startM > nowMin);
+    const targetSession = upcomingSessions.length > 0 ? upcomingSessions[0] : (roomSchedules[0] || null);
+
+    // Hanya tampilkan peringatan JIKA Timer ON disetel MELEWATI jam mulai sesi target
+    if (targetSession && onM > targetSession._startM) {
       if (onCorrectionBox) {
         onCorrectionBox.style.display = 'flex';
         const titleEl = document.getElementById('timer-on-correction-title');
         const descEl = document.getElementById('timer-on-correction-desc');
         const btnApply = document.getElementById('btn-apply-on-correction');
 
-        if (titleEl) titleEl.textContent = 'Koreksi: Timer ON Harus Sebelum Jam Mulai';
+        if (titleEl) titleEl.textContent = 'Peringatan: Timer ON Melewati Jam Mulai Kelas';
         if (descEl) {
-          descEl.innerHTML = `Timer ON disetel <b>${onVal} WIB</b> (saat/sesudah kelas dimulai). Timer ON minimal harus disetel <b>sebelum jam ${firstStartTimeStr} WIB</b> agar ruangan sudah sejuk saat kelas dimulai. Rekomendasi: <b>H-20 (${formatMinToTime(firstStartM - 20)} WIB)</b>.`;
+          descEl.innerHTML = `Timer ON (${onVal} WIB) disetel melewati jam mulai kelas <b>${targetSession._startTimeStr} WIB</b> (${escapeHtml(targetSession.nama_mk || '')}). Sebaiknya disetel sebelum kelas dimulai agar ruangan sejuk.`;
         }
         if (btnApply) {
-          btnApply.textContent = `Gunakan Rekomendasi (${formatMinToTime(firstStartM - 20)})`;
+          const recM = Math.max(0, targetSession._startM - 20);
+          btnApply.textContent = `Gunakan Rekomendasi (${formatMinToTime(recM)})`;
+          btnApply.onclick = () => {
+            if (onInput) onInput.value = formatMinToTime(recM);
+            validateTimerInputs();
+          };
         }
       }
     } else {
@@ -4360,28 +4381,27 @@ window.validateTimerInputs = function () {
     if (onCorrectionBox) onCorrectionBox.style.display = 'none';
   }
 
-  // 2. VALIDASI TIMER OFF: Harus setelah Timer ON (jika keduanya aktif)
-  if (offActive && offVal) {
+  // 2. VALIDASI TIMER OFF & TIMER ON BERSAMAAN
+  if (onActive && offActive && onVal && offVal && onVal.includes(':') && offVal.includes(':')) {
+    const onParts = onVal.split(':').map(Number);
     const offParts = offVal.split(':').map(Number);
+    const onM = onParts[0] * 60 + onParts[1];
     const offM = offParts[0] * 60 + offParts[1];
 
-    if (onActive && onVal) {
-      const onParts = onVal.split(':').map(Number);
-      const onM = onParts[0] * 60 + onParts[1];
-
-      if (offM <= onM) {
-        hasError = true;
-        if (offCorrectionBox) {
-          offCorrectionBox.style.display = 'flex';
-          const titleEl = document.getElementById('timer-off-correction-title');
-          const descEl = document.getElementById('timer-off-correction-desc');
-          if (titleEl) titleEl.textContent = 'Waktu Timer Tidak Sesuai';
-          if (descEl) descEl.textContent = `Timer Mati (${offVal} WIB) harus lebih lambat dari Timer Hidup (${onVal} WIB).`;
-        }
-      } else {
-        if (offCorrectionBox) offCorrectionBox.style.display = 'none';
+    if (onM === offM) {
+      // Tidak boleh sama persis jamnya
+      hasFatalError = true;
+      if (offCorrectionBox) {
+        offCorrectionBox.style.display = 'flex';
+        const titleEl = document.getElementById('timer-off-correction-title');
+        const descEl = document.getElementById('timer-off-correction-desc');
+        if (titleEl) titleEl.textContent = 'Waktu Timer Tidak Boleh Sama';
+        if (descEl) descEl.textContent = `Timer Hidup dan Timer Mati tidak boleh disetel pada jam yang sama persis (${onVal} WIB).`;
       }
     } else {
+      // onM != offM adalah VALID:
+      // Baik onM < offM (hidup pagi, mati sore) maupun offM < onM (mati saat jeda, hidup lagi setelah jeda)
+      // keduanya adalah konfigurasi yang sah!
       if (offCorrectionBox) offCorrectionBox.style.display = 'none';
     }
   } else {
@@ -4415,9 +4435,9 @@ window.validateTimerInputs = function () {
   }
 
   if (saveBtn) {
-    saveBtn.disabled = hasError;
-    saveBtn.style.opacity = hasError ? '0.5' : '1';
-    saveBtn.title = hasError ? 'Harap perbaiki jam timer yang tidak sesuai terlebih dahulu' : 'Simpan konfigurasi timer AC';
+    saveBtn.disabled = hasFatalError;
+    saveBtn.style.opacity = hasFatalError ? '0.5' : '1';
+    saveBtn.title = hasFatalError ? 'Harap perbaiki jam timer yang bentrok terlebih dahulu' : 'Simpan konfigurasi timer AC';
   }
 };
 
