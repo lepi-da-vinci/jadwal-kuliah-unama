@@ -4530,7 +4530,9 @@ window.saveTimerAc = async function () {
     if (typeof updateActiveLabPanel === 'function') {
       updateActiveLabPanel();
     }
-    if (typeof window.showRoomDetail === 'function' && window._currentDetailRoom && window._currentDetailRoom.roomName === ctx.roomName) {
+    const roomDetailModal = document.getElementById('room-detail-modal');
+    const isRoomDetailOpen = roomDetailModal && (roomDetailModal.classList.contains('open') || roomDetailModal.style.display === 'flex');
+    if (isRoomDetailOpen && typeof window.showRoomDetail === 'function' && window._currentDetailRoom && window._currentDetailRoom.roomName === ctx.roomName) {
       window.showRoomDetail(ctx.roomName, ctx.campus, ctx.activeDate);
     }
   } catch (err) {
@@ -10936,7 +10938,7 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
 
       // Jika modal notifikasi (#lab-modal) sedang aktif terbuka, bersihkan kartu ruangan ini
       const activeLabModal = document.getElementById('lab-modal');
-      if (activeLabModal && activeLabModal.classList.contains('open')) {
+      if (activeLabModal && (activeLabModal.classList.contains('open') || activeLabModal.style.display === 'flex')) {
         const cards = activeLabModal.querySelectorAll('.im-card');
         let remainingCards = 0;
         cards.forEach(card => {
@@ -10948,13 +10950,22 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
           }
         });
         if (remainingCards === 0) {
-          activeLabModal.classList.remove('open');
-          if (typeof popModalHistoryIfNeeded === 'function') popModalHistoryIfNeeded('lab-modal');
+          if (typeof closeModal === 'function') {
+            closeModal(true);
+          } else {
+            activeLabModal.classList.remove('open');
+            activeLabModal.style.display = 'none';
+          }
         }
       }
 
-      if (typeof window.showRoomDetail === 'function') {
-        window.showRoomDetail(roomName, targetKampus, tanggal);
+      // HANYA perbarui / re-render modal detail ruangan JIKA modal detail ruangan memang sedang aktif terbuka untuk ruangan ini
+      const roomDetailModal = document.getElementById('room-detail-modal');
+      const isRoomDetailOpen = roomDetailModal && (roomDetailModal.classList.contains('open') || roomDetailModal.style.display === 'flex');
+      if (isRoomDetailOpen && window._currentDetailRoom && typeof isSameRoomName === 'function' && isSameRoomName(window._currentDetailRoom.roomName, roomName)) {
+        if (typeof window.showRoomDetail === 'function') {
+          window.showRoomDetail(roomName, targetKampus, tanggal);
+        }
       }
 
       if (typeof window.renderStatusLab === 'function') {
@@ -11011,6 +11022,7 @@ window.closeRoomDetailModal = function (quick = false, fromDrag = false) {
     }
     modal.style.removeProperty('background-color');
     modal.style.removeProperty('transition');
+    window._currentDetailRoom = null;
 
     // Kembalikan posisi scroll agar tetap stay di Status Penggunaan Ruangan (tidak kembali ke puncak)
     const restoreRoomScrollPosition = () => {
@@ -13559,8 +13571,20 @@ function initLabModalDragToDismiss() {
 }
 window.initLabModalDragToDismiss = initLabModalDragToDismiss;
 
-modalCloseBtn.addEventListener('click', () => closeModal(false));
-modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(false); });
+modalCloseBtn.addEventListener('click', (e) => {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  closeModal(false);
+});
+modal.addEventListener('click', (e) => {
+  if (e.target === modal) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeModal(false);
+  }
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(false); });
 
 // ─── Notification Sound ───
