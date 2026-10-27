@@ -374,27 +374,51 @@ def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: st
         t_on_sql = f"{timer_on.strip()}:00" if timer_on and len(timer_on.strip()) == 5 else (timer_on.strip() if timer_on else None)
         t_off_sql = f"{timer_off.strip()}:00" if timer_off and len(timer_off.strip()) == 5 else (timer_off.strip() if timer_off else None)
 
+        now_dt = datetime.datetime.now()
+        now_m = now_dt.hour * 60 + now_dt.minute
+        init_status = 'buka'
+        if timer_aktif in ('on', 'both'):
+            if timer_on and ':' in str(timer_on):
+                parts = str(timer_on).strip().split(':')
+                on_m = int(parts[0]) * 60 + int(parts[1])
+                init_status = 'buka' if now_m >= on_m else 'tutup'
+            else:
+                init_status = 'tutup'
+        elif timer_aktif == 'off':
+            if timer_off and ':' in str(timer_off):
+                parts = str(timer_off).strip().split(':')
+                off_m = int(parts[0]) * 60 + int(parts[1])
+                init_status = 'tutup' if now_m >= off_m else 'buka'
+
         def _execute_timer_queries():
             # 1. Update ke seluruh sesi ruangan ini pada tanggal terkait
-            cursor.execute("""
-                UPDATE status_operasional_lab
-                SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, waktu_aksi = NOW()
-                WHERE tanggal = %s AND id_ruangan = %s
-            """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
+            if init_status == 'tutup':
+                cursor.execute("""
+                    UPDATE status_operasional_lab
+                    SET timer_on = %s, timer_off = %s, timer_aktif = %s, status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW()
+                    WHERE tanggal = %s AND id_ruangan = %s
+                """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
+            else:
+                cursor.execute("""
+                    UPDATE status_operasional_lab
+                    SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, waktu_aksi = NOW()
+                    WHERE tanggal = %s AND id_ruangan = %s
+                """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
 
             # 2. Jika belum ada entri sama sekali hari ini, insert baris baru
             if cursor.rowcount == 0:
                 cursor.execute("""
                     INSERT INTO status_operasional_lab (
-                        tanggal, id_ruangan, jam, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                        tanggal, id_ruangan, jam, status_lab, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON DUPLICATE KEY UPDATE
                         timer_on = VALUES(timer_on),
                         timer_off = VALUES(timer_off),
                         timer_aktif = VALUES(timer_aktif),
+                        status_lab = VALUES(status_lab),
                         diubah_oleh = VALUES(diubah_oleh),
                         waktu_aksi = NOW()
-                """, (tanggal, id_ruangan, jam_sql, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
+                """, (tanggal, id_ruangan, jam_sql, init_status, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
 
         try:
             _execute_timer_queries()

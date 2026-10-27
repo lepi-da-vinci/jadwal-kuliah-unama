@@ -2749,14 +2749,24 @@ function getRoomAcTimerKey(roomName = '', campusName = '') {
 function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
   if (!roomName) return null;
   const key = getRoomAcTimerKey(roomName, campusName);
+  const now = new Date();
+  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const effDate = activeDate || currentDayStr;
 
   if (!window._roomAcTimers || Object.keys(window._roomAcTimers).length === 0) {
     try {
-      const stored = localStorage.getItem(`unama_ac_timers_${activeDate}`);
+      const stored = localStorage.getItem(`unama_ac_timers_${effDate}`);
       if (stored) window._roomAcTimers = JSON.parse(stored);
     } catch (e) {}
   }
-  return (window._roomAcTimers && window._roomAcTimers[key]) || null;
+  const timer = (window._roomAcTimers && window._roomAcTimers[key]) || null;
+  if (!timer) return null;
+
+  // Pastikan timer HANYA berlaku untuk tanggal yang diminta (tidak bocor dari hari lain/kemarin)
+  if (timer.tanggal && timer.tanggal !== effDate) {
+    return null;
+  }
+  return timer;
 }
 window.getRoomAcTimer = getRoomAcTimer;
 
@@ -2765,6 +2775,9 @@ function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
   const newTimers = {};
 
   data.forEach(stat => {
+    // Abaikan data timer yang tanggalnya tidak sesuai dengan targetDate
+    if (targetDate && stat.tanggal && stat.tanggal !== targetDate) return;
+
     if (stat.timer_aktif && stat.timer_aktif !== 'none') {
       const key = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
       newTimers[key] = {
@@ -2879,27 +2892,36 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const effectiveIsToday = (isToday !== undefined) ? isToday : (activeDate === currentDayStr);
 
+  const parseClockToMins = (str) => {
+    if (!str || !str.includes(':')) return null;
+    const [h, m] = str.split(':').map(Number);
+    return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+  };
+  const tOnM = acTimer ? parseClockToMins(acTimer.timer_on) : null;
+  const tOffM = acTimer ? parseClockToMins(acTimer.timer_off) : null;
+
   const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
   let isAcRecordedOn = (opStatus.status === 'buka');
 
   // Sinkronisasi otomatis status AC berdasarkan jam realtime dan pengaturan Timer Remote Asmot
   if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none' && effectiveIsToday) {
-    const parseClockToMins = (str) => {
-      if (!str || !str.includes(':')) return null;
-      const [h, m] = str.split(':').map(Number);
-      return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
-    };
-    const tOnM = parseClockToMins(acTimer.timer_on);
-    const tOffM = parseClockToMins(acTimer.timer_off);
-
     if (acTimer.timer_aktif === 'both' && tOnM !== null && tOffM !== null) {
-      if (currentMinutes >= tOnM && currentMinutes < tOffM) {
+      if (currentMinutes < tOnM) {
+        // Sebelum jam timer ON: AC belum dinyalakan remote (masih padam)
+        isAcRecordedOn = false;
+      } else if (currentMinutes >= tOnM && currentMinutes < tOffM) {
+        // Rentang aktif timer
         isAcRecordedOn = true;
       } else if (currentMinutes >= tOffM) {
+        // Sudah lewat jam timer OFF: AC padam
         isAcRecordedOn = false;
       }
     } else if (acTimer.timer_aktif === 'on' && tOnM !== null) {
-      if (currentMinutes >= tOnM) {
+      if (currentMinutes < tOnM) {
+        // Sebelum jam ON: AC masih padam
+        isAcRecordedOn = false;
+      } else if (currentMinutes >= tOnM) {
+        // Sudah lewat/mencapai jam ON
         isAcRecordedOn = true;
       }
     } else if (acTimer.timer_aktif === 'off' && tOffM !== null) {
@@ -2928,19 +2950,19 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     });
   }
 
-  // Filter kelas fisik (abaikan CC jika batal total)
-  const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC');
+  // Filter kelas fisik (abaikan CC jika batal total dan OL jika daring)
+  const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
   if (physicalSchedules.length === 0) {
     return withTimer({
       code: 'ONLINE_OR_CANCELLED',
       isAcOn: isAcRecordedOn,
-      statusText: isAcRecordedOn ? 'AC Menyala (Kelas Dibatalkan)' : 'AC Padam (Kuliah Batal / CC)',
-      subtext: `${timerSubtitleText} • Seluruh perkuliahan dibatalkan (CC)`,
+      statusText: isAcRecordedOn ? 'AC Masih Nyala (Kuliah Online / Batal)' : 'AC Padam (Kuliah Online / CC)',
+      subtext: `${timerSubtitleText} • Tidak ada sesi fisik yang memerlukan AC`,
       badgeType: isAcRecordedOn ? 'warning-off' : 'ol-cc',
       actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
       targetAction: isAcRecordedOn ? 'tutup' : 'buka',
       countdownMinutes: null,
-      recommendation: 'Kelas dibatalkan oleh dosen, matikan AC untuk penghematan.',
+      recommendation: isAcRecordedOn ? 'Seluruh perkuliahan hari ini daring/dibatalkan. Matikan AC agar hemat listrik.' : 'Tidak ada sesi tatap muka fisik di ruangan hari ini. AC tetap padam.',
       stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
       dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
       btnClass: isAcRecordedOn ? 'tutup' : 'buka',
@@ -2956,20 +2978,22 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   // 1. Apakah sekarang SEBELUM Sesi Pertama?
   if (currentMinutes < firstS._startM) {
     const timeUntilFirst = firstS._startM - currentMinutes;
+    const hasPendingTimerOn = (acTimer && (acTimer.timer_aktif === 'on' || acTimer.timer_aktif === 'both') && tOnM !== null && currentMinutes < tOnM);
+
     if (timeUntilFirst <= 20) {
       // Masa persiapan H-20
       return withTimer({
         code: 'PREP_ON',
         isAcOn: isAcRecordedOn,
-        statusText: isAcRecordedOn ? 'AC Aktif (Masa Persiapan)' : 'Perlu Hidupkan AC',
-        subtext: `${timerSubtitleText} • Kelas mulai ${firstS._startTimeStr} WIB (Sisa ${timeUntilFirst} mnt)`,
-        badgeType: isAcRecordedOn ? 'on' : 'warning-on',
+        statusText: isAcRecordedOn ? 'AC Aktif (Masa Persiapan)' : (hasPendingTimerOn ? `AC Padam (Timer ON ${acTimer.timer_on})` : 'Perlu Hidupkan AC'),
+        subtext: `${timerSubtitleText} • Kelas fisik mulai ${firstS._startTimeStr} WIB (Sisa ${timeUntilFirst} mnt)`,
+        badgeType: isAcRecordedOn ? 'on' : (hasPendingTimerOn ? 'off' : 'warning-on'),
         actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC Sekarang',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: timeUntilFirst,
-        recommendation: 'Hidupkan AC 15–20 menit sebelum kelas dimulai agar ruangan nyaman saat perkuliahan dimulai.',
-        stripClass: isAcRecordedOn ? 'is-ac-on' : 'is-ac-prep',
-        dotClass: isAcRecordedOn ? 'dot-buka' : 'dot-prep',
+        recommendation: hasPendingTimerOn ? `AC telah disetel menyala otomatis pada pukul ${acTimer.timer_on} WIB via remote.` : 'Hidupkan AC 15–20 menit sebelum kelas dimulai agar ruangan nyaman saat perkuliahan dimulai.',
+        stripClass: isAcRecordedOn ? 'is-ac-on' : (hasPendingTimerOn ? 'is-ac-off' : 'is-ac-prep'),
+        dotClass: isAcRecordedOn ? 'dot-buka' : (hasPendingTimerOn ? 'dot-belum' : 'dot-prep'),
         btnClass: isAcRecordedOn ? 'tutup' : 'buka-prep',
         btnIcon: isAcRecordedOn
           ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
@@ -2977,16 +3001,21 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       });
     } else {
       // Masih lama (> 20 menit sebelum sesi 1)
+      const waitTitle = isAcRecordedOn ? 'AC Menyala (Terlalu Awal)' : (hasPendingTimerOn ? `AC Padam (Timer ON ${acTimer.timer_on})` : 'AC Padam');
+      const waitRec = isAcRecordedOn
+        ? 'AC belum perlu dinyalakan. Nyalakan pada H-20 menit sebelum jadwal.'
+        : (hasPendingTimerOn ? `AC telah disetel menyala otomatis pada pukul ${acTimer.timer_on} WIB via remote.` : 'AC belum perlu dinyalakan. Nyalakan pada H-20 menit sebelum jadwal.');
+
       return withTimer({
         code: 'WAITING_PREP',
         isAcOn: isAcRecordedOn,
-        statusText: isAcRecordedOn ? 'AC Menyala (Terlalu Awal)' : 'AC Padam',
-        subtext: `${timerSubtitleText} • Sesi 1 mulai jam ${firstS._startTimeStr} WIB`,
+        statusText: waitTitle,
+        subtext: `${timerSubtitleText} • Sesi 1 Fisik mulai jam ${firstS._startTimeStr} WIB`,
         badgeType: isAcRecordedOn ? 'warning-off' : 'off',
         actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
         targetAction: isAcRecordedOn ? 'tutup' : 'buka',
         countdownMinutes: timeUntilFirst,
-        recommendation: 'AC belum perlu dinyalakan. Nyalakan pada H-20 menit sebelum jadwal.',
+        recommendation: waitRec,
         stripClass: isAcRecordedOn ? 'is-ac-warn-off' : 'is-ac-off',
         dotClass: isAcRecordedOn ? 'dot-tutup' : 'dot-belum',
         btnClass: isAcRecordedOn ? 'tutup' : 'buka',
@@ -4574,6 +4603,15 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusName);
   const isAcActive = Boolean(acStatus && acStatus.isAcOn);
 
+  const parseClock = (str) => {
+    if (!str || !str.includes(':')) return null;
+    const [h, m] = str.split(':').map(Number);
+    return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+  };
+  const tData = (acStatus && acStatus.timerData) || {};
+  const tOffM = parseClock(tData.timer_off);
+  const isTimerOffPassed = Boolean(isToday && (tData.timer_aktif === 'off' || tData.timer_aktif === 'both') && tOffM !== null && currentTime >= tOffM);
+
   let isOccupied = false;
   let hasFutureClass = false;
   let activeClass = null;
@@ -4602,10 +4640,11 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Cek status operasional aktual buka/tutup yang dicatat oleh Aslab / Asmot
   const opStatus = getRoomOperationalStatus(schedules, isToday);
 
-  // Jika kelas saat ini aktif menurut jam tetapi telah ditutup secara eksplisit oleh aslab
-  // ATURAN PENTING: Jika AC sedang aktif (karena Timer ON tercapai atau dinyalakan), ruangan TIDAK PERNAH dianggap ditutup!
+  // Jika kelas saat ini aktif menurut jam tetapi telah ditutup secara eksplisit oleh aslab atau waktu timer off sudah lewat
   let isExplicitlyClosed = false;
-  if (!isAcActive && opStatus.status === 'tutup' && (activeClass || validPhysicalClasses.length > 0) && opStatus.label === 'tutup') {
+  if (isTimerOffPassed) {
+    isExplicitlyClosed = true;
+  } else if (!isAcActive && opStatus.status === 'tutup' && (activeClass || validPhysicalClasses.length > 0) && opStatus.label === 'tutup') {
     isExplicitlyClosed = true;
   }
 
@@ -4613,7 +4652,12 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   let text = 'Kosong';
   let jamText = '';
 
-  if (isOccupied && (!isExplicitlyClosed || isAcActive)) {
+  if (isTimerOffPassed) {
+    // Timer OFF telah lewat: status langsung selesai (ditutup) seperti halnya lab ditutup
+    state = 'finished';
+    text = 'Selesai';
+    jamText = '(Ditutup)';
+  } else if (isOccupied && (!isExplicitlyClosed || isAcActive)) {
     // Sesi perkuliahan sedang aktif saat ini (atau AC sedang aktif pada rentang sesi ini)
     state = 'occupied';
     text = activeClass.nama;
@@ -4663,7 +4707,9 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
 
   // Status gembok buka/tutup (lockStatus):
   let lockStatus = isToday ? opStatus.status : 'tutup';
-  if (isToday && isAcActive) {
+  if (isTimerOffPassed) {
+    lockStatus = 'tutup';
+  } else if (isToday && isAcActive) {
     lockStatus = 'buka';
   }
 
@@ -4926,30 +4972,68 @@ function updateActiveLabPanel() {
 
       // Badge Timer Mini: Sisi kiri ada indikator I (ON), O (OFF), atau I/O (Both), tanpa garis pinggir warna
       let timerBadgeHtml = '';
-      if (!isLabEntity && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
+      if (!isLabEntity && isToday && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
         const tStatus = data.acStatus.timerStatus;
         const tData = data.acStatus.timerData || {};
-        if (tStatus === 'on') {
-          timerBadgeHtml = `
-            <div class="lab-card-timer-mini timer-on" title="Timer AC Remote: Hidup (Jam ${escapeHtml(tData.timer_on || '')} WIB)">
-              <span class="timer-tag">I</span>
-              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            </div>
-          `;
-        } else if (tStatus === 'off') {
-          timerBadgeHtml = `
-            <div class="lab-card-timer-mini timer-off" title="Timer AC Remote: Mati (Jam ${escapeHtml(tData.timer_off || '')} WIB)">
-              <span class="timer-tag">O</span>
-              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            </div>
-          `;
-        } else if (tStatus === 'both') {
-          timerBadgeHtml = `
-            <div class="lab-card-timer-mini timer-both" title="Timer AC Remote: Hidup ${escapeHtml(tData.timer_on || '')} • Mati ${escapeHtml(tData.timer_off || '')} WIB">
-              <span class="timer-tag">I/O</span>
-              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            </div>
-          `;
+        const timerDate = tData.tanggal || '';
+
+        // Tanda timer HANYA untuk hari ini. Hari sebelumnya atau tanggal lain tidak boleh menampilkan tanda timer!
+        if (timerDate && timerDate === currentDayStr) {
+          const parseClock = (str) => {
+            if (!str || !str.includes(':')) return null;
+            const [h, m] = str.split(':').map(Number);
+            return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+          };
+          const tOnM = parseClock(tData.timer_on);
+          const tOffM = parseClock(tData.timer_off);
+
+          // Evaluasi status realtime tanda timer:
+          // 1. Timer ON: tampilkan "I" selama currentTime < tOnM. Begitu sudah jamnya ON (currentTime >= tOnM), tanda dihilangkan ("udah lewat")!
+          // 2. Timer OFF: tampilkan "O" selama currentTime < tOffM. Begitu sudah jamnya OFF (currentTime >= tOffM), tanda dihilangkan!
+          // 3. Both:
+          //    - Sebelum tOnM: tampilkan "I/O"
+          //    - Antara tOnM dan tOffM: waktu ON sudah lewat, tampilkan "O"
+          //    - Setelah tOffM: waktu OFF sudah lewat, tanda dihilangkan!
+          let showBadgeType = null; // 'on', 'off', 'both'
+
+          if (tStatus === 'on') {
+            if (tOnM !== null && currentTime < tOnM) {
+              showBadgeType = 'on';
+            }
+          } else if (tStatus === 'off') {
+            if (tOffM !== null && currentTime < tOffM) {
+              showBadgeType = 'off';
+            }
+          } else if (tStatus === 'both') {
+            if (tOnM !== null && currentTime < tOnM) {
+              showBadgeType = 'both';
+            } else if (tOffM !== null && currentTime < tOffM) {
+              showBadgeType = 'off';
+            }
+          }
+
+          if (showBadgeType === 'on') {
+            timerBadgeHtml = `
+              <div class="lab-card-timer-mini timer-on" title="Timer AC Remote: Hidup (Jam ${escapeHtml(tData.timer_on || '')} WIB)">
+                <span class="timer-tag">I</span>
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+            `;
+          } else if (showBadgeType === 'off') {
+            timerBadgeHtml = `
+              <div class="lab-card-timer-mini timer-off" title="Timer AC Remote: Mati (Jam ${escapeHtml(tData.timer_off || '')} WIB)">
+                <span class="timer-tag">O</span>
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+            `;
+          } else if (showBadgeType === 'both') {
+            timerBadgeHtml = `
+              <div class="lab-card-timer-mini timer-both" title="Timer AC Remote: Hidup ${escapeHtml(tData.timer_on || '')} • Mati ${escapeHtml(tData.timer_off || '')} WIB">
+                <span class="timer-tag">I/O</span>
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+            `;
+          }
         }
       }
 
