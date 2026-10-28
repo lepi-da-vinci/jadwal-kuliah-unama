@@ -2911,11 +2911,27 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const isAllPhysicalEnded = Boolean(effectiveIsToday && physicalSchedules.length > 0 && lastPhysical && currentMinutes > lastPhysical._endM);
   const isManuallyClosed = (opStatus.status === 'tutup');
 
+  // Apakah ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30)?
+  const hasPendingTimerOff = Boolean(
+    acTimer &&
+    (acTimer.timer_aktif === 'off' || acTimer.timer_aktif === 'both') &&
+    tOffM !== null &&
+    currentMinutes < tOffM
+  );
+
   // Sinkronisasi otomatis status AC berdasarkan jam realtime dan pengaturan Timer Remote Asmot
   if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none' && effectiveIsToday) {
-    if (isManuallyClosed || isAllPhysicalEnded) {
-      // Manual override & status kelas selesai adalah prioritas tertinggi:
-      // Status AC wajib padam, timer lama yang jamnya sudah lewat TIDAK BOLEH membatalkan status tutup!
+    if (isManuallyClosed) {
+      // Jika pengguna secara manual mematikan AC / menutup ruangan:
+      // Manual action adalah prioritas tertinggi, status AC wajib padam
+      isAcRecordedOn = false;
+    } else if (hasPendingTimerOff) {
+      // Jika disetel Timer OFF mendatang dan belum lewat jamnya:
+      // AC tetap aktif sampai waktu Timer OFF tiba!
+      isAcRecordedOn = true;
+    } else if (isAllPhysicalEnded) {
+      // Jika seluruh kelas selesai dan tidak ada Timer OFF mendatang:
+      // AC padam
       isAcRecordedOn = false;
     } else {
       if (acTimer.timer_aktif === 'both' && tOnM !== null && tOffM !== null) {
@@ -3200,6 +3216,26 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
 
   // 4. Apakah sekarang SETELAH Sesi Terakhir Hari Ini?
   if (currentMinutes > lastS._endM) {
+    // Jika ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30):
+    if (hasPendingTimerOff && !isManuallyClosed) {
+      const remainingMins = Math.max(1, tOffM - currentMinutes);
+      return withTimer({
+        code: 'TIMER_OFF_WAITING',
+        isAcOn: true,
+        statusText: `AC Menyala (Timer OFF ${acTimer.timer_off} WIB)`,
+        subtext: `${timerSubtitleText} • Menunggu mati otomatis (Sisa ${remainingMins} mnt)`,
+        badgeType: 'on',
+        actionLabel: 'Matikan AC Total',
+        targetAction: 'tutup',
+        countdownMinutes: remainingMins,
+        recommendation: `Perkuliahan hari ini telah selesai. AC tetap menyala dan akan mati otomatis pada pukul ${acTimer.timer_off} WIB sesuai timer remote.`,
+        stripClass: 'is-ac-on',
+        dotClass: 'dot-buka',
+        btnClass: 'tutup',
+        btnIcon: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+      });
+    }
+
     const timeSinceLastEnd = currentMinutes - lastS._endM;
     if (timeSinceLastEnd <= 20 && isAcRecordedOn) {
       return withTimer({
@@ -3578,19 +3614,18 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
 
   // Jika untuk hari ini, periksa apakah timer sudah lewat waktunya (sudah tuntas dieksekusi)
   if (effectiveIsToday) {
-    // 1. Jika seluruh perkuliahan fisik hari ini sudah selesai, semua timer dianggap tuntas/selesai
-    if (physicalSchedules.length > 0 && currentMinutes > lastEndM) {
+    // 1. Timer ON hanya nonaktif jika waktu ON sudah lewat sekarang (currentMinutes >= tOnM)
+    //    atau jika kelas sudah selesai dan waktu ON ada di masa lalu
+    if (tOnM !== null && currentMinutes >= tOnM) {
       isOnActive = false;
+    } else if (physicalSchedules.length > 0 && currentMinutes > lastEndM && (!existingTimer || !existingTimer.timer_on)) {
+      isOnActive = false;
+    }
+
+    // 2. Timer OFF HANYA nonaktif jika waktu OFF sudah lewat sekarang (currentMinutes >= tOffM)!
+    //    Jangan matikan toggle OFF jika waktu OFF masih di masa depan (misal set jam 17:00 tapi sekarang jam 16:19)!
+    if (tOffM !== null && currentMinutes >= tOffM) {
       isOffActive = false;
-    } else {
-      // 2. Jika waktu timer ON sudah lewat sekarang, toggle ON harus mati
-      if (tOnM !== null && currentMinutes >= tOnM) {
-        isOnActive = false;
-      }
-      // 3. Jika waktu timer OFF sudah lewat sekarang, toggle OFF harus mati
-      if (tOffM !== null && currentMinutes >= tOffM) {
-        isOffActive = false;
-      }
     }
 
     // Jika timer di database sebelumnya aktif tapi sekarang semua waktunya sudah lewat,
@@ -4753,44 +4788,52 @@ function checkAndTriggerAcTimers() {
       }
     }
 
-    if (t.timer_aktif === 'on' && ((tOnM !== null && curM > tOnM) || (roomLastEndM > 0 && curM > roomLastEndM))) {
-      delete window._roomAcTimers[key];
-      try {
-        localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
-      } catch (e) {}
-      fetch(`${API_BASE_URL}/api/timer-ac`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tanggal: t.tanggal,
-          nama_ruangan: t.roomName,
-          kampus: t.kampus,
-          timer_on: null,
-          timer_off: null,
-          timer_aktif: 'none',
-          diubah_oleh: 'Asmot (Web)'
-        })
-      }).catch(err => console.error(err));
-    } else if (t.timer_aktif === 'off' && ((tOffM !== null && curM > tOffM) || (roomLastEndM > 0 && curM > roomLastEndM))) {
-      delete window._roomAcTimers[key];
-      try {
-        localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
-      } catch (e) {}
-      fetch(`${API_BASE_URL}/api/timer-ac`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tanggal: t.tanggal,
-          nama_ruangan: t.roomName,
-          kampus: t.kampus,
-          timer_on: null,
-          timer_off: null,
-          timer_aktif: 'none',
-          diubah_oleh: 'Asmot (Web)'
-        })
-      }).catch(err => console.error(err));
+    // Realtime Expiration & Auto-Cleanup:
+    // Timer ON dianggap selesai HANYA jika waktu ON sudah lewat (curM > tOnM)
+    // Timer OFF dianggap selesai HANYA jika waktu OFF sudah lewat (curM > tOffM)
+    // JANGAN PERNAH menghapus Timer OFF hanya karena jam kelas di jadwal sudah lewat (karena asmot menyetel timer off lebih lama dari jadwal)!
+    if (t.timer_aktif === 'on') {
+      if (tOnM !== null && curM > tOnM) {
+        delete window._roomAcTimers[key];
+        try {
+          localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
+        } catch (e) {}
+        fetch(`${API_BASE_URL}/api/timer-ac`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tanggal: t.tanggal,
+            nama_ruangan: t.roomName,
+            kampus: t.kampus,
+            timer_on: null,
+            timer_off: null,
+            timer_aktif: 'none',
+            diubah_oleh: 'Asmot (Web)'
+          })
+        }).catch(err => console.error(err));
+      }
+    } else if (t.timer_aktif === 'off') {
+      if (tOffM !== null && curM > tOffM) {
+        delete window._roomAcTimers[key];
+        try {
+          localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
+        } catch (e) {}
+        fetch(`${API_BASE_URL}/api/timer-ac`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tanggal: t.tanggal,
+            nama_ruangan: t.roomName,
+            kampus: t.kampus,
+            timer_on: null,
+            timer_off: null,
+            timer_aktif: 'none',
+            diubah_oleh: 'Asmot (Web)'
+          })
+        }).catch(err => console.error(err));
+      }
     } else if (t.timer_aktif === 'both') {
-      if ((roomLastEndM > 0 && curM > roomLastEndM) || (tOffM !== null && curM > tOffM)) {
+      if (tOffM !== null && curM > tOffM) {
         delete window._roomAcTimers[key];
         try {
           localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
@@ -4908,7 +4951,20 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     const maxEndMinutes = Math.max(...validPhysicalClasses.map(s => s.end || 0));
     const allEnded = currentTime > maxEndMinutes;
 
-    if (allEnded || (isExplicitlyClosed && !isAcActive)) {
+    const hasPendingTimerOff = Boolean(isToday && (tData.timer_aktif === 'off' || tData.timer_aktif === 'both') && tOffM !== null && currentTime < tOffM);
+
+    if (isTimerOffPassed || (isExplicitlyClosed && !hasPendingTimerOff)) {
+      // Waktu Timer OFF telah lewat atau ruangan telah ditutup: status selesai (ditutup)
+      state = 'finished';
+      text = 'Selesai';
+      jamText = '(Ditutup)';
+    } else if (allEnded && hasPendingTimerOff && !isExplicitlyClosed) {
+      // Kelas selesai tapi ada Timer OFF mendatang (misal set mati jam 17:00 tapi kelas selesai 16:30):
+      // AC tetap aktif menunggu waktu timer OFF
+      state = 'occupied';
+      text = 'AC Standby';
+      jamText = `(OFF ${tData.timer_off})`;
+    } else if (allEnded) {
       state = 'finished';
       text = 'Selesai';
       jamText = isExplicitlyClosed ? '(Ditutup)' : '';
@@ -5207,8 +5263,9 @@ function updateActiveLabPanel() {
 
       // Badge Timer Mini: Sisi kiri ada indikator I (ON), O (OFF), atau I/O (Both), tanpa garis pinggir warna
       let timerBadgeHtml = '';
-      const isRoomFinishedOrClosed = (data.state === 'finished' || (data.acStatus && !data.acStatus.isAcOn && data.acStatus.targetAction === 'buka') || (data.state === 'empty'));
-      if (!isLabEntity && isToday && !isRoomFinishedOrClosed && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
+      // Ruangan dianggap ditutup HANYA jika waktu timer OFF sudah lewat atau ditutup manual
+      const isRoomExplicitlyClosed = Boolean(data.acStatus && !data.acStatus.isAcOn && data.acStatus.targetAction === 'buka' && (!data.acStatus.timerData || !data.acStatus.timerData.timer_aktif || data.acStatus.timerData.timer_aktif === 'none'));
+      if (!isLabEntity && isToday && !isRoomExplicitlyClosed && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
         const tStatus = data.acStatus.timerStatus;
         const tData = data.acStatus.timerData || {};
         const timerDate = tData.tanggal || '';
