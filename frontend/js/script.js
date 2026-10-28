@@ -2942,6 +2942,18 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   // Teks ringkas timer untuk subtitle kartu status ruang
   const timerSubtitleText = timerSummary ? `Timer AC: ${timerSummary}` : 'Timer AC: Belum Disetel';
 
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const effectiveIsToday = (isToday !== undefined) ? isToday : (activeDate === currentDayStr);
+
+  const schedules = (Array.isArray(rawSchedules) && rawSchedules.length > 0)
+    ? rawSchedules.map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM)
+    : [];
+
+  const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
+  const isManuallyClosed = Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup');
+
   function withTimer(res) {
     if (!res) return res;
     res.timerData = acTimer;
@@ -2954,11 +2966,11 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     res.timerBadgeClass = timerBadgeClass;
     res.timerIcon = timerIcon;
     res.timerActionLabel = timerActionLabel;
-    res.isManuallyClosed = Boolean(isManuallyClosed);
+    res.isManuallyClosed = isManuallyClosed;
     return res;
   }
 
-  if (!Array.isArray(rawSchedules) || rawSchedules.length === 0) {
+  if (schedules.length === 0) {
     return withTimer({
       code: 'NO_SCHEDULE',
       isAcOn: false,
@@ -2976,12 +2988,6 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     });
   }
 
-  const schedules = rawSchedules.map(normalizeScheduleItem).sort((a, b) => a._startM - b._startM);
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const effectiveIsToday = (isToday !== undefined) ? isToday : (activeDate === currentDayStr);
-
   const parseClockToMins = (str) => {
     if (!str || !str.includes(':')) return null;
     const [h, m] = str.split(':').map(Number);
@@ -2990,14 +2996,12 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const tOnM = acTimer ? parseClockToMins(acTimer.timer_on) : null;
   const tOffM = acTimer ? parseClockToMins(acTimer.timer_off) : null;
 
-  const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
   let isAcRecordedOn = (opStatus.status === 'buka');
 
   // Filter kelas fisik untuk penentuan status akhir kelas
   const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
   const lastPhysical = physicalSchedules.length > 0 ? physicalSchedules[physicalSchedules.length - 1] : null;
   const isAllPhysicalEnded = Boolean(effectiveIsToday && physicalSchedules.length > 0 && lastPhysical && currentMinutes > lastPhysical._endM);
-  const isManuallyClosed = (opStatus.status === 'tutup' && opStatus.label === 'tutup');
 
   // Apakah ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30)?
   const hasPendingTimerOff = Boolean(
@@ -5477,54 +5481,62 @@ function updateActiveLabPanel() {
   const processedKeys = new Set();
 
   allRuanganData.forEach(r => {
-    let rawName = r.nama_ruangan;
-    let kampus = formatCampusName(r.kampus) || getRoomCampus(rawName);
-    let cleanName = getCleanRoom(rawName);
-    const roomKey = getRoomKey(rawName, kampus);
+    try {
+      let rawName = r.nama_ruangan;
+      let kampus = formatCampusName(r.kampus) || getRoomCampus(rawName);
+      let cleanName = getCleanRoom(rawName);
+      const roomKey = getRoomKey(rawName, kampus);
 
-    if (filterRuangan !== 'semua') {
-      const rClean = cleanName.toLowerCase();
-      if (roomKey !== filterKey && rClean !== filterClean && rawName !== filterRuangan) return;
+      if (filterRuangan !== 'semua') {
+        const rClean = cleanName.toLowerCase();
+        if (roomKey !== filterKey && rClean !== filterClean && rawName !== filterRuangan) return;
+      }
+
+      let isThehok = !kampus.includes('Kobar');
+      let isKobar = !isThehok;
+      let isRoomLab = isLab(cleanName);
+
+      let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
+
+      processedKeys.add(roomKey);
+
+      let schedules = (roomSchedules[roomKey] || []).slice();
+      schedules.sort((a, b) => a.start - b.start);
+
+      const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, cleanName, kampus);
+      targetDict[cleanName] = statusObj;
+    } catch (err) {
+      console.warn("Gagal mengevaluasi status kartu ruangan", r, err);
     }
-
-    let isThehok = !kampus.includes('Kobar');
-    let isKobar = !isThehok;
-    let isRoomLab = isLab(cleanName);
-
-    let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
-
-    processedKeys.add(roomKey);
-
-    let schedules = (roomSchedules[roomKey] || []).slice();
-    schedules.sort((a, b) => a.start - b.start);
-
-    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, cleanName, kampus);
-    targetDict[cleanName] = statusObj;
   });
 
   // Handle rooms that are in schedule but not in allRuanganData (e.g., specific regular rooms)
   Object.keys(roomSchedules).forEach(key => {
-    if (processedKeys.has(key)) return;
-    processedKeys.add(key);
+    try {
+      if (processedKeys.has(key)) return;
+      processedKeys.add(key);
 
-    let schedules = roomSchedules[key] || [];
-    if (schedules.length === 0) return;
+      let schedules = roomSchedules[key] || [];
+      if (schedules.length === 0) return;
 
-    let sample = schedules[0];
-    let rawName = sample.rawName;
-    let kampus = formatCampusName(sample.kampus) || getRoomCampus(rawName);
-    let isThehok = !kampus.includes('Kobar');
-    let cleanName = getCleanRoom(rawName);
-    let isRoomLab = isLab(cleanName);
+      let sample = schedules[0];
+      let rawName = sample.rawName;
+      let kampus = formatCampusName(sample.kampus) || getRoomCampus(rawName);
+      let isThehok = !kampus.includes('Kobar');
+      let cleanName = getCleanRoom(rawName);
+      let isRoomLab = isLab(cleanName);
 
-    let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
+      let targetDict = isRoomLab ? (isThehok ? labsThehok : labsKobar) : (isThehok ? roomsThehok : roomsKobar);
 
-    if (targetDict[cleanName] && targetDict[cleanName].state !== 'empty') return;
+      if (targetDict[cleanName] && targetDict[cleanName].state !== 'empty') return;
 
-    schedules.sort((a, b) => a.start - b.start);
+      schedules.sort((a, b) => a.start - b.start);
 
-    const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, cleanName, kampus);
-    targetDict[cleanName] = statusObj;
+      const statusObj = evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, cleanName, kampus);
+      targetDict[cleanName] = statusObj;
+    } catch (err) {
+      console.warn("Gagal mengevaluasi status kartu dari jadwal", key, err);
+    }
   });
 
   // Live warnings for both Labor and Ruang Kelas
