@@ -1820,6 +1820,7 @@ body.modal-open {
   cursor: grabbing;
 }
 .modal-box.dragging,
+.modal-timer-ac-dialog.dragging,
 .setting-modal-box.dragging,
 .lab-modal-box.dragging {
   animation: none !important;
@@ -1886,6 +1887,7 @@ body.modal-open {
   transform: translateY(2px) scale(1.2);
 }
 
+.modal-timer-ac-dialog::before,
 .setting-modal-box::before,
 .modal-box:has(.modal-drag-handle-zone)::before {
   display: none !important;
