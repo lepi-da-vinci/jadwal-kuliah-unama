@@ -3987,6 +3987,11 @@ def update_status_lab(data: StatusLabUpdateInput):
                 
             if row:
                 id_ruangan = row['id_ruangan']
+            elif data.nama_ruangan and data.nama_ruangan.strip():
+                camp_insert = detected_camp or data.kampus or ("Kobar" if "kobar" in data.nama_ruangan.lower() else "Thehok")
+                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (data.nama_ruangan.strip(), camp_insert))
+                conn.commit()
+                id_ruangan = cursor.lastrowid
             cursor.close()
             conn.close()
 
@@ -4103,6 +4108,11 @@ def update_timer_ac(data: TimerAcUpdateInput):
                 row = cursor.fetchone()
             if row:
                 id_ruangan = row['id_ruangan']
+            elif data.nama_ruangan and data.nama_ruangan.strip():
+                camp_insert = detected_camp or data.kampus or ("Kobar" if "kobar" in data.nama_ruangan.lower() else "Thehok")
+                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (data.nama_ruangan.strip(), camp_insert))
+                conn.commit()
+                id_ruangan = cursor.lastrowid
             cursor.close()
             conn.close()
 
@@ -4147,9 +4157,9 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
         wa_notifier.ensure_db_schema()
 
         query = """
-            SELECT sol.*, r.nama_ruangan, r.kampus
+            SELECT sol.*, COALESCE(r.nama_ruangan, sol.nama_mk) AS nama_ruangan, r.kampus
             FROM status_operasional_lab sol
-            JOIN ruangan r ON sol.id_ruangan = r.id_ruangan
+            LEFT JOIN ruangan r ON sol.id_ruangan = r.id_ruangan
             WHERE sol.tanggal = %s
         """
         params = [tanggal]
