@@ -2605,30 +2605,53 @@ function getRoomOperationalStatus(schedules, isToday) {
     }
   }
 
-  // Jika ada sesi aktif/mendatang dan statusnya sudah tercatat, jadikan penentu status ruangan utama
-  const activeOrNext = ongoingSession || upcomingSession;
-  if (activeOrNext) {
-    const st = (activeOrNext.status_lab || '').toLowerCase();
+  // 1. Jika ada sesi yang sedang berlangsung saat ini:
+  if (ongoingSession) {
+    const st = (ongoingSession.status_lab || '').toLowerCase();
     if (st === 'buka') {
       return {
         status: 'buka',
         label: 'buka',
-        session: activeOrNext,
-        waktu: activeOrNext.status_lab_waktu || '',
-        oleh: activeOrNext.status_lab_oleh || ''
+        session: ongoingSession,
+        waktu: ongoingSession.status_lab_waktu || '',
+        oleh: ongoingSession.status_lab_oleh || ''
       };
     } else if (st === 'tutup') {
       return {
         status: 'tutup',
         label: 'tutup',
-        session: activeOrNext,
-        waktu: activeOrNext.status_lab_waktu || '',
-        oleh: activeOrNext.status_lab_oleh || ''
+        session: ongoingSession,
+        waktu: ongoingSession.status_lab_waktu || '',
+        oleh: ongoingSession.status_lab_oleh || ''
+      };
+    }
+    // Sesi aktif saat ini belum ada tindakan manual: status belum, jangan mewarisi status tutup dari sesi masa lalu!
+    return { status: 'tutup', label: 'belum', session: ongoingSession, waktu: '', oleh: '' };
+  }
+
+  // Jika ada sesi mendatang terdekat yang dibuka lebih awal:
+  if (upcomingSession) {
+    const st = (upcomingSession.status_lab || '').toLowerCase();
+    if (st === 'buka') {
+      return {
+        status: 'buka',
+        label: 'buka',
+        session: upcomingSession,
+        waktu: upcomingSession.status_lab_waktu || '',
+        oleh: upcomingSession.status_lab_oleh || ''
+      };
+    } else if (st === 'tutup') {
+      return {
+        status: 'tutup',
+        label: 'tutup',
+        session: upcomingSession,
+        waktu: upcomingSession.status_lab_waktu || '',
+        oleh: upcomingSession.status_lab_oleh || ''
       };
     }
   }
 
-  // 2. Evaluasi berdasarkan tindakan operasional terbaru antar seluruh sesi
+  // 2. Evaluasi berdasarkan tindakan operasional terbaru antar seluruh sesi jika tidak ada sesi aktif saat ini
   let latestActionMinutes = -1;
   let latestStatus = null;
   let latestSession = null;
@@ -2644,7 +2667,6 @@ function getRoomOperationalStatus(schedules, isToday) {
         if (!isNaN(h) && !isNaN(m)) actionMin = h * 60 + m;
       }
 
-      // Jika ada waktu tindakan yang lebih baru, atau waktu sama dan statusnya 'buka' (utamakan aksi buka kembali)
       if (actionMin >= 0) {
         if (actionMin > latestActionMinutes || (actionMin === latestActionMinutes && st === 'buka')) {
           latestActionMinutes = actionMin;
@@ -2867,6 +2889,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     res.timerBadgeClass = timerBadgeClass;
     res.timerIcon = timerIcon;
     res.timerActionLabel = timerActionLabel;
+    res.isManuallyClosed = Boolean(isManuallyClosed);
     return res;
   }
 
@@ -2909,7 +2932,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
   const lastPhysical = physicalSchedules.length > 0 ? physicalSchedules[physicalSchedules.length - 1] : null;
   const isAllPhysicalEnded = Boolean(effectiveIsToday && physicalSchedules.length > 0 && lastPhysical && currentMinutes > lastPhysical._endM);
-  const isManuallyClosed = (opStatus.status === 'tutup');
+  const isManuallyClosed = (opStatus.status === 'tutup' && opStatus.label === 'tutup');
 
   // Apakah ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30)?
   const hasPendingTimerOff = Boolean(
@@ -3091,17 +3114,21 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     }
 
     if (!isAcRecordedOn) {
-      // Sesi jadwal ada di jam ini, namun AC padam (kelas selesai lebih awal atau AC dimatikan manual)
+      // Sesi jadwal ada di jam ini, namun AC padam (kelas selesai lebih awal atau AC belum dinyalakan/dimatikan manual)
       return withTimer({
         code: 'IN_SESSION_OFF',
         isAcOn: false,
-        statusText: isManuallyClosed ? 'Kelas Selesai (AC Padam)' : 'Sesi Berlangsung (AC Padam)',
-        subtext: `${timerSubtitleText} • ${ongoingS.nama_mk || 'Kuliah'} (Ruangan Ditutup)`,
+        statusText: isManuallyClosed ? 'Kelas Selesai (AC Padam)' : 'Sesi Berlangsung (AC Belum Nyala)',
+        subtext: isManuallyClosed
+          ? `${timerSubtitleText} • ${ongoingS.nama_mk || 'Kuliah'} (Ruangan Ditutup)`
+          : `${timerSubtitleText} • Selesai ${ongoingS._endTimeStr} WIB (${ongoingS.nama_mk || 'Kuliah'})`,
         badgeType: 'off',
         actionLabel: 'Hidupkan AC',
         targetAction: 'buka',
         countdownMinutes: remainingMin,
-        recommendation: isManuallyClosed ? 'Ruangan telah ditutup oleh Asmot/Aslab. Klik Hidupkan AC jika kelas dilanjutkan.' : 'AC saat ini padam. Klik Hidupkan AC jika perkuliahan memerlukan pendingin.',
+        recommendation: isManuallyClosed
+          ? 'Ruangan telah ditutup oleh Asmot/Aslab. Klik Hidupkan AC jika kelas dilanjutkan.'
+          : 'Sesi perkuliahan sedang berlangsung namun AC belum dinyalakan. Klik Hidupkan AC jika ruangan memerlukan pendingin.',
         stripClass: 'is-ac-off',
         dotClass: 'dot-tutup',
         btnClass: 'buka',
@@ -5187,10 +5214,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   const opStatus = getRoomOperationalStatus(schedules, isToday);
 
   // Jika kelas saat ini aktif menurut jam tetapi telah ditutup secara eksplisit oleh aslab atau waktu timer off sudah lewat
-  let isExplicitlyClosed = false;
-  if (isTimerOffPassed || opStatus.status === 'tutup') {
-    isExplicitlyClosed = true;
-  }
+  let isExplicitlyClosed = Boolean(isTimerOffPassed || (opStatus.status === 'tutup' && opStatus.label === 'tutup'));
 
   let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
   let text = 'Kosong';
@@ -5529,8 +5553,8 @@ function updateActiveLabPanel() {
 
       // Badge Timer Mini: Sisi kiri ada indikator I (ON), O (OFF), atau I/O (Both), tanpa garis pinggir warna
       let timerBadgeHtml = '';
-      // Ruangan dianggap ditutup HANYA jika waktu timer OFF sudah lewat atau ditutup manual
-      const isRoomExplicitlyClosed = Boolean(data.acStatus && !data.acStatus.isAcOn && data.acStatus.targetAction === 'buka' && (!data.acStatus.timerData || !data.acStatus.timerData.timer_aktif || data.acStatus.timerData.timer_aktif === 'none'));
+      // Ruangan dianggap ditutup HANYA jika status kelas selesai atau ditutup manual
+      const isRoomExplicitlyClosed = Boolean(data.state === 'finished' || (data.acStatus && data.acStatus.isManuallyClosed));
       if (!isLabEntity && isToday && !isRoomExplicitlyClosed && data.acStatus && data.acStatus.timerStatus && data.acStatus.timerStatus !== 'none') {
         const tStatus = data.acStatus.timerStatus;
         const tData = data.acStatus.timerData || {};
@@ -11440,15 +11464,10 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
           const matchRoom = (targetIdRuangan && j.id_ruangan && Number(targetIdRuangan) === Number(j.id_ruangan)) ||
                             isSameRoomName(j.nama_ruangan, roomName);
           if (j.tanggal === tanggal && matchRoom && matchCamp) {
-            if (targetStatus === 'tutup') {
-              // Jika ditutup, seluruh sesi hari ini untuk ruangan ini ditutup
-              j.status_lab = 'tutup';
-              j.status_lab_oleh = 'Aslab (Web)';
-              j.status_lab_waktu = actionWaktu;
-            } else if (targetStatus === 'buka') {
-              // Jika dibuka kembali, seluruh sesi ruangan hari ini dibuka kembali
-              j.status_lab = 'buka';
-              j.status_lab_oleh = 'Aslab (Web)';
+            const isMatchSession = (!cleanJam || jJam === cleanJam);
+            if (isMatchSession) {
+              j.status_lab = targetStatus;
+              j.status_lab_oleh = isLabOrComputer ? 'Aslab (Web)' : 'Asmot (Web)';
               j.status_lab_waktu = actionWaktu;
             }
 
