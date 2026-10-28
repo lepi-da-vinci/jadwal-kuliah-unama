@@ -3559,9 +3559,7 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   };
   const tOnM = existingTimer ? parseClock(existingTimer.timer_on) : null;
   const tOffM = existingTimer ? parseClock(existingTimer.timer_off) : null;
-  const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const effectiveIsToday = (activeDate === currentDayStr);
 
   let isOnActive = false;
