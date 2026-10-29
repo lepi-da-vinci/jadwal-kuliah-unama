@@ -4126,7 +4126,8 @@ def update_timer_ac(data: TimerAcUpdateInput):
             timer_on=data.timer_on,
             timer_off=data.timer_off,
             timer_aktif=data.timer_aktif,
-            diubah_oleh=data.diubah_oleh or "Asmot (Web)"
+            diubah_oleh=data.diubah_oleh or "Asmot (Web)",
+            nama_ruangan=data.nama_ruangan
         )
 
         sukses = res_tuple[0] if isinstance(res_tuple, (tuple, list)) else bool(res_tuple)
@@ -4157,7 +4158,9 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
         wa_notifier.ensure_db_schema()
 
         query = """
-            SELECT sol.*, COALESCE(r.nama_ruangan, sol.nama_mk) AS nama_ruangan, r.kampus
+            SELECT sol.*, 
+                   COALESCE(r.nama_ruangan, sol.nama_mk, 'Ruangan') AS nama_ruangan, 
+                   COALESCE(r.kampus, 'Thehok') AS kampus
             FROM status_operasional_lab sol
             LEFT JOIN ruangan r ON sol.id_ruangan = r.id_ruangan
             WHERE sol.tanggal = %s
@@ -4176,14 +4179,24 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
                 r['waktu_aksi_str'] = r['waktu_aksi'].strftime('%H:%M:%S')
                 r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
             if r.get('timer_on'):
-                r['timer_on_str'] = str(r['timer_on'])[:5]
+                if hasattr(r['timer_on'], 'total_seconds'):
+                    tot = int(r['timer_on'].total_seconds())
+                    r['timer_on'] = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
+                else:
+                    r['timer_on'] = str(r['timer_on'])[:5]
+                r['timer_on_str'] = r['timer_on']
             if r.get('timer_off'):
-                r['timer_off_str'] = str(r['timer_off'])[:5]
+                if hasattr(r['timer_off'], 'total_seconds'):
+                    tot = int(r['timer_off'].total_seconds())
+                    r['timer_off'] = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
+                else:
+                    r['timer_off'] = str(r['timer_off'])[:5]
+                r['timer_off_str'] = r['timer_off']
             if r.get('jam'):
                 total_sec = int(r['jam'].total_seconds()) if hasattr(r['jam'], 'total_seconds') else 0
                 r['jam'] = f"{total_sec//3600:02d}:{(total_sec%3600)//60:02d}"
             if r.get('tanggal'):
-                r['tanggal'] = str(r['tanggal'])
+                r['tanggal'] = str(r['tanggal'])[:10]
 
         return {"status": "success", "tanggal": tanggal, "data": rows}
     except Exception as e:

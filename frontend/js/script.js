@@ -2762,6 +2762,28 @@ function getCleanRoom(str) {
 }
 window.getCleanRoom = getCleanRoom;
 
+// Universal Clock to Minutes Parser (mendukung 24h '17:00' dan 12h '05:00 PM' / '5:00 PM')
+function parseClockToMins(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  if (!s.includes(':')) return null;
+
+  const isPm = /pm/i.test(s);
+  const isAm = /am/i.test(s);
+  const cleaned = s.replace(/[^0-9:]/g, '');
+  const parts = cleaned.split(':').map(Number);
+  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+
+  let h = parts[0];
+  const m = parts[1];
+  if (isPm || isAm) {
+    if (isPm && h < 12) h += 12;
+    if (isAm && h === 12) h = 0;
+  }
+  return h * 60 + m;
+}
+window.parseClockToMins = parseClockToMins;
+
 window._roomAcTimers = {};
 
 function getRoomAcTimerKey(roomName = '', campusName = '') {
@@ -2785,16 +2807,14 @@ function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
   }
   let timer = (window._roomAcTimers && window._roomAcTimers[key]) || null;
 
-  // Fallback: pencarian fleksibel berdasarkan nama ruangan bersih jika kampus berbeda/kosong
+  // Fallback 1: pencarian berdasarkan cleanRoom
+  const cleanRoom = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName || '').trim().toLowerCase();
   if (!timer && window._roomAcTimers) {
-    const cleanRoom = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName || '').trim().toLowerCase();
     const matchingKey = Object.keys(window._roomAcTimers).find(k => k === cleanRoom || k.startsWith(`${cleanRoom}__`));
-    if (matchingKey) {
-      timer = window._roomAcTimers[matchingKey];
-    }
+    if (matchingKey) timer = window._roomAcTimers[matchingKey];
   }
 
-  // Fallback: periksa localStorage langsung jika belum ter-load di memori
+  // Fallback 2: periksa localStorage langsung jika belum tersinkron di memori
   if (!timer) {
     try {
       const stored = localStorage.getItem(`unama_ac_timers_${effDate}`);
@@ -2803,17 +2823,12 @@ function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
         if (parsed && typeof parsed === 'object') {
           if (parsed[key]) {
             timer = parsed[key];
-            if (!window._roomAcTimers) window._roomAcTimers = {};
-            window._roomAcTimers[key] = timer;
           } else {
-            const cleanRoom = (typeof getCleanRoom === 'function' ? getCleanRoom(roomName) : roomName || '').trim().toLowerCase();
             const matchingKey = Object.keys(parsed).find(k => k === cleanRoom || k.startsWith(`${cleanRoom}__`));
-            if (matchingKey) {
-              timer = parsed[matchingKey];
-              if (!window._roomAcTimers) window._roomAcTimers = {};
-              window._roomAcTimers[matchingKey] = timer;
-            }
+            if (matchingKey) timer = parsed[matchingKey];
           }
+          if (timer && !window._roomAcTimers) window._roomAcTimers = {};
+          if (timer) window._roomAcTimers[key] = timer;
         }
       }
     } catch (e) {}
@@ -2821,8 +2836,9 @@ function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
 
   if (!timer) return null;
 
-  // Pastikan timer HANYA berlaku untuk tanggal yang diminta (tidak bocor dari hari lain/kemarin)
-  if (timer.tanggal && timer.tanggal !== effDate) {
+  // Pastikan timer HANYA berlaku untuk tanggal yang diminta (tidak bocor dari hari lain)
+  const timerDateStr = String(timer.tanggal || '').substring(0, 10);
+  if (timerDateStr && timerDateStr !== effDate) {
     return null;
   }
   return timer;
@@ -2834,15 +2850,16 @@ function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
   const newTimers = {};
 
   data.forEach(stat => {
+    const statDate = String(stat.tanggal || '').substring(0, 10);
     // Abaikan data timer yang tanggalnya tidak sesuai dengan targetDate
-    if (targetDate && stat.tanggal && stat.tanggal !== targetDate) return;
+    if (targetDate && statDate && statDate !== targetDate) return;
 
-    if (stat.timer_aktif && stat.timer_aktif !== 'none') {
+    if (stat.timer_aktif && stat.timer_aktif !== 'none' && stat.nama_ruangan) {
       const key = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
       newTimers[key] = {
         roomName: stat.nama_ruangan,
         kampus: stat.kampus,
-        tanggal: stat.tanggal,
+        tanggal: statDate || targetDate,
         timer_on: stat.timer_on_str || (stat.timer_on ? String(stat.timer_on).substring(0, 5) : ''),
         timer_off: stat.timer_off_str || (stat.timer_off ? String(stat.timer_off).substring(0, 5) : ''),
         timer_aktif: stat.timer_aktif,
@@ -2851,31 +2868,14 @@ function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
     }
   });
 
-  // Pertahankan timer aktif lokal yang belum kadaluarsa agar tidak tertimpa/hilang saat polling background
-  const now = new Date();
-  const curM = now.getHours() * 60 + now.getMinutes();
-  const parseClock = (str) => {
-    if (!str || !str.includes(':')) return null;
-    const [h, m] = str.split(':').map(Number);
-    return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
-  };
-
+  // Pertahankan timer aktif lokal hari ini agar tidak tertimpa kosong jika backend merespon lambat
   if (window._roomAcTimers && typeof window._roomAcTimers === 'object') {
     Object.keys(window._roomAcTimers).forEach(key => {
       const existing = window._roomAcTimers[key];
-      if (existing && (!targetDate || !existing.tanggal || existing.tanggal === targetDate)) {
-        if (!newTimers[key]) {
-          const offM = parseClock(existing.timer_off);
-          const onM = parseClock(existing.timer_on);
-          let isStillValid = false;
-          if ((existing.timer_aktif === 'off' || existing.timer_aktif === 'both') && offM !== null && curM < offM) {
-            isStillValid = true;
-          } else if (existing.timer_aktif === 'on' && onM !== null && curM < onM) {
-            isStillValid = true;
-          }
-          if (isStillValid) {
-            newTimers[key] = existing;
-          }
+      const exDate = String(existing?.tanggal || '').substring(0, 10);
+      if (existing && (!targetDate || !exDate || exDate === targetDate)) {
+        if (!newTimers[key] && existing.timer_aktif && existing.timer_aktif !== 'none') {
+          newTimers[key] = existing;
         }
       }
     });
@@ -2988,23 +2988,36 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     });
   }
 
-  const parseClockToMins = (str) => {
+  const parseClock = (typeof window.parseClockToMins === 'function') ? window.parseClockToMins : (str) => {
     if (!str || !str.includes(':')) return null;
-    const [h, m] = str.split(':').map(Number);
-    return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+    const parts = str.replace(/[^0-9:]/g, '').split(':').map(Number);
+    return (!isNaN(parts[0]) && !isNaN(parts[1])) ? (parts[0] * 60 + parts[1]) : null;
   };
-  const tOnM = acTimer ? parseClockToMins(acTimer.timer_on) : null;
-  const tOffM = acTimer ? parseClockToMins(acTimer.timer_off) : null;
+  const tOnM = acTimer ? parseClock(acTimer.timer_on) : null;
+  const tOffM = acTimer ? parseClock(acTimer.timer_off) : null;
 
-  let isAcRecordedOn = (opStatus.status === 'buka');
+  // Apakah waktu Timer OFF sudah lewat hari ini?
+  const isTimerOffPassed = Boolean(
+    effectiveIsToday &&
+    acTimer &&
+    (acTimer.timer_aktif === 'off' || acTimer.timer_aktif === 'both') &&
+    tOffM !== null &&
+    currentMinutes >= tOffM
+  );
 
-  // Filter kelas fisik untuk penentuan status akhir kelas
-  const physicalSchedules = schedules.filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
+  let isAcRecordedOn = (opStatus.status === 'buka' && !isTimerOffPassed);
+
+  // Filter kelas fisik untuk penentuan status akhir kelas (periksa metode & metode_pembelajaran)
+  const physicalSchedules = schedules.filter(s => {
+    const m = (s.metode_pembelajaran || s.metode || '').toUpperCase();
+    return m !== 'CC' && m !== 'OL';
+  });
   const lastPhysical = physicalSchedules.length > 0 ? physicalSchedules[physicalSchedules.length - 1] : null;
   const isAllPhysicalEnded = Boolean(effectiveIsToday && physicalSchedules.length > 0 && lastPhysical && currentMinutes > lastPhysical._endM);
 
-  // Apakah ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30)?
+  // Apakah ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30 atau sesi malam CC)?
   const hasPendingTimerOff = Boolean(
+    effectiveIsToday &&
     acTimer &&
     (acTimer.timer_aktif === 'off' || acTimer.timer_aktif === 'both') &&
     tOffM !== null &&
@@ -3741,30 +3754,8 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
       isOffActive = false;
     }
 
-    // Jika timer di database sebelumnya aktif tapi sekarang semua waktunya sudah lewat,
-    // sinkronkan deaktifasi ke database agar tidak terus berstatus aktif
-    if (existingTimer && existingTimer.timer_aktif && existingTimer.timer_aktif !== 'none' && !isOnActive && !isOffActive) {
-      const timerKey = getRoomAcTimerKey(roomName, campusLabel);
-      if (window._roomAcTimers && window._roomAcTimers[timerKey]) {
-        delete window._roomAcTimers[timerKey];
-        try {
-          localStorage.setItem(`unama_ac_timers_${activeDate}`, JSON.stringify(window._roomAcTimers));
-        } catch (e) {}
-      }
-      fetch(`${API_BASE_URL}/api/timer-ac`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tanggal: activeDate,
-          nama_ruangan: roomName,
-          kampus: campusLabel,
-          timer_on: null,
-          timer_off: null,
-          timer_aktif: 'none',
-          diubah_oleh: 'Asmot (Web)'
-        })
-      }).catch(err => console.error("Failed to auto-clear expired timer:", err));
-    }
+    // Timer yang waktunya sudah lewat tetap tersimpan sebagai riwayat eksekusi hari ini
+    // Membuka modal TIDAK BOLEH menghapus data timer aktif dari server/memori!
   }
 
   if (onToggle) onToggle.checked = isOnActive;
@@ -5167,88 +5158,10 @@ function checkAndTriggerAcTimers() {
       }
     }
 
-    // Realtime Expiration & Auto-Cleanup:
-    // Timer ON dianggap selesai HANYA jika waktu ON sudah lewat (curM > tOnM)
-    // Timer OFF dianggap selesai HANYA jika waktu OFF sudah lewat (curM > tOffM)
-    // JANGAN PERNAH menghapus Timer OFF hanya karena jam kelas di jadwal sudah lewat (karena asmot menyetel timer off lebih lama dari jadwal)!
-    if (t.timer_aktif === 'on') {
-      if (tOnM !== null && curM > tOnM) {
-        delete window._roomAcTimers[key];
-        try {
-          localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
-        } catch (e) {}
-        fetch(`${API_BASE_URL}/api/timer-ac`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tanggal: t.tanggal,
-            nama_ruangan: t.roomName,
-            kampus: t.kampus,
-            timer_on: null,
-            timer_off: null,
-            timer_aktif: 'none',
-            diubah_oleh: 'Asmot (Web)'
-          })
-        }).catch(err => console.error(err));
-      }
-    } else if (t.timer_aktif === 'off') {
-      if (tOffM !== null && curM > tOffM) {
-        delete window._roomAcTimers[key];
-        try {
-          localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
-        } catch (e) {}
-        fetch(`${API_BASE_URL}/api/timer-ac`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tanggal: t.tanggal,
-            nama_ruangan: t.roomName,
-            kampus: t.kampus,
-            timer_on: null,
-            timer_off: null,
-            timer_aktif: 'none',
-            diubah_oleh: 'Asmot (Web)'
-          })
-        }).catch(err => console.error(err));
-      }
-    } else if (t.timer_aktif === 'both') {
-      if (tOffM !== null && curM > tOffM) {
-        delete window._roomAcTimers[key];
-        try {
-          localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
-        } catch (e) {}
-        fetch(`${API_BASE_URL}/api/timer-ac`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tanggal: t.tanggal,
-            nama_ruangan: t.roomName,
-            kampus: t.kampus,
-            timer_on: null,
-            timer_off: null,
-            timer_aktif: 'none',
-            diubah_oleh: 'Asmot (Web)'
-          })
-        }).catch(err => console.error(err));
-      } else if (tOnM !== null && curM > tOnM && t.timer_aktif === 'both') {
-        t.timer_aktif = 'off';
-        try {
-          localStorage.setItem(`unama_ac_timers_${t.tanggal}`, JSON.stringify(window._roomAcTimers));
-        } catch (e) {}
-        fetch(`${API_BASE_URL}/api/timer-ac`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tanggal: t.tanggal,
-            nama_ruangan: t.roomName,
-            kampus: t.kampus,
-            timer_on: t.timer_on,
-            timer_off: t.timer_off,
-            timer_aktif: 'off',
-            diubah_oleh: 'Asmot (Web)'
-          })
-        }).catch(err => console.error(err));
-      }
+    // Setelah waktu timer terlewati, tandai eksekusi selesai tanpa menghapus konfigurasi hari ini
+    // Data timer tetap dipertahankan sepanjang tanggal ini agar status ruangan tetap 'Selesai (Ditutup)'
+    if (tOffM !== null && curM >= tOffM) {
+      t.executed = true;
     }
   });
 }
@@ -5256,16 +5169,19 @@ window.checkAndTriggerAcTimers = checkAndTriggerAcTimers;
 
 function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, currentTime, roomName = '', campusName = '') {
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
-  const validPhysicalClasses = (schedules || []).filter(s => s.metode !== 'CC' && s.metode !== 'OL');
+  const validPhysicalClasses = (schedules || []).filter(s => {
+    const m = (s.metode || s.metode_pembelajaran || '').toUpperCase();
+    return m !== 'CC' && m !== 'OL';
+  });
 
   // 1. Hitung status AC terlebih dahulu (ground truth untuk timer & pendingin ruangan)
   const acStatus = calculateRoomAcStatus(schedules, isToday, activeDate, roomName, campusName);
   const isAcActive = Boolean(acStatus && acStatus.isAcOn);
 
-  const parseClock = (str) => {
+  const parseClock = (typeof window.parseClockToMins === 'function') ? window.parseClockToMins : (str) => {
     if (!str || !str.includes(':')) return null;
-    const [h, m] = str.split(':').map(Number);
-    return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+    const parts = str.replace(/[^0-9:]/g, '').split(':').map(Number);
+    return (!isNaN(parts[0]) && !isNaN(parts[1])) ? (parts[0] * 60 + parts[1]) : null;
   };
   const tData = (acStatus && acStatus.timerData) || {};
   const tOffM = parseClock(tData.timer_off);
@@ -5657,11 +5573,11 @@ function updateActiveLabPanel() {
         const timerDate = tData.tanggal || '';
 
         // Tanda timer HANYA untuk hari ini. Hari sebelumnya atau tanggal lain tidak boleh menampilkan tanda timer!
-        if (timerDate && timerDate === currentDayStr) {
-          const parseClock = (str) => {
+        if (!timerDate || timerDate === currentDayStr || timerDate === activeDate) {
+          const parseClock = (typeof window.parseClockToMins === 'function') ? window.parseClockToMins : (str) => {
             if (!str || !str.includes(':')) return null;
-            const [h, m] = str.split(':').map(Number);
-            return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+            const parts = str.replace(/[^0-9:]/g, '').split(':').map(Number);
+            return (!isNaN(parts[0]) && !isNaN(parts[1])) ? (parts[0] * 60 + parts[1]) : null;
           };
           const tOnM = parseClock(tData.timer_on);
           const tOffM = parseClock(tData.timer_off);

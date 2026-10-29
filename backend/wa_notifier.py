@@ -358,7 +358,7 @@ def set_status_operasional_lab(tanggal: str, id_ruangan: int, jam: str, status_l
             except: pass
 
 
-def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: str = None, timer_off: str = None, timer_aktif: str = 'none', diubah_oleh: str = "Asmot (Web)"):
+def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: str = None, timer_off: str = None, timer_aktif: str = 'none', diubah_oleh: str = "Asmot (Web)", nama_ruangan: str = None):
     """
     Menyimpan atau memperbarui konfigurasi timer AC (Timer On & Timer Off) untuk ruangan.
     Otomatis melakukan self-healing migration jika kolom timer belum ada di database server.
@@ -395,30 +395,31 @@ def set_timer_ac(tanggal: str, id_ruangan: int, jam: str = "08:00", timer_on: st
             if init_status == 'tutup':
                 cursor.execute("""
                     UPDATE status_operasional_lab
-                    SET timer_on = %s, timer_off = %s, timer_aktif = %s, status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW()
+                    SET timer_on = %s, timer_off = %s, timer_aktif = %s, status_lab = 'tutup', diubah_oleh = %s, nama_mk = COALESCE(nama_mk, %s), waktu_aksi = NOW()
                     WHERE tanggal = %s AND id_ruangan = %s
-                """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
+                """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, nama_ruangan, tanggal, id_ruangan))
             else:
                 cursor.execute("""
                     UPDATE status_operasional_lab
-                    SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, waktu_aksi = NOW()
+                    SET timer_on = %s, timer_off = %s, timer_aktif = %s, diubah_oleh = %s, nama_mk = COALESCE(nama_mk, %s), waktu_aksi = NOW()
                     WHERE tanggal = %s AND id_ruangan = %s
-                """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, tanggal, id_ruangan))
+                """, (t_on_sql, t_off_sql, timer_aktif, diubah_oleh, nama_ruangan, tanggal, id_ruangan))
 
             # 2. Jika belum ada entri sama sekali hari ini, insert baris baru
             if cursor.rowcount == 0:
                 cursor.execute("""
                     INSERT INTO status_operasional_lab (
-                        tanggal, id_ruangan, jam, status_lab, timer_on, timer_off, timer_aktif, diubah_oleh, waktu_aksi
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        tanggal, id_ruangan, jam, status_lab, timer_on, timer_off, timer_aktif, diubah_oleh, nama_mk, waktu_aksi
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON DUPLICATE KEY UPDATE
                         timer_on = VALUES(timer_on),
                         timer_off = VALUES(timer_off),
                         timer_aktif = VALUES(timer_aktif),
                         status_lab = VALUES(status_lab),
                         diubah_oleh = VALUES(diubah_oleh),
+                        nama_mk = COALESCE(nama_mk, VALUES(nama_mk)),
                         waktu_aksi = NOW()
-                """, (tanggal, id_ruangan, jam_sql, init_status, t_on_sql, t_off_sql, timer_aktif, diubah_oleh))
+                """, (tanggal, id_ruangan, jam_sql, init_status, t_on_sql, t_off_sql, timer_aktif, diubah_oleh, nama_ruangan))
 
         try:
             _execute_timer_queries()
