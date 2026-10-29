@@ -838,15 +838,36 @@ body.dark-theme .btn-secondary:hover:not(:disabled) {
   z-index: 2147483648 !important;
 }
 
+.status-ruangan-section:fullscreen #modal-timer-ac,
+.status-ruangan-section:-webkit-full-screen #modal-timer-ac,
+.status-ruangan-section.is-fullscreen #modal-timer-ac {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 2147483660 !important;
+}
+
 .status-ruangan-section:fullscreen #test-wa-modal.open,
 .status-ruangan-section:-webkit-full-screen #test-wa-modal.open,
 .status-ruangan-section.is-fullscreen #test-wa-modal.open,
 .status-ruangan-section:fullscreen #room-detail-modal.open,
 .status-ruangan-section:-webkit-full-screen #room-detail-modal.open,
-.status-ruangan-section.is-fullscreen #room-detail-modal.open {
+.status-ruangan-section.is-fullscreen #room-detail-modal.open,
+.status-ruangan-section:fullscreen #modal-timer-ac.open,
+.status-ruangan-section:-webkit-full-screen #modal-timer-ac.open,
+.status-ruangan-section.is-fullscreen #modal-timer-ac.open {
   display: flex !important;
   opacity: 1 !important;
   visibility: visible !important;
+}
+
+.status-ruangan-section:fullscreen #modal-timer-ac .modal-timer-ac-dialog,
+.status-ruangan-section:-webkit-full-screen #modal-timer-ac .modal-timer-ac-dialog,
+.status-ruangan-section.is-fullscreen #modal-timer-ac .modal-timer-ac-dialog {
+  z-index: 2147483661 !important;
 }
 
 #lab-modal .modal-box {
@@ -13961,7 +13982,7 @@ body.dark .lab-card-timer-mini svg {
   left: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-  z-index: 2147483648 !important; /* Wajib lebih tinggi dari room-detail-modal (2147483647) */
+  z-index: 2147483660 !important; /* Wajib lebih tinggi dari room-detail-modal (2147483647) dan modal-box nya (2147483649) */
   background: rgba(15, 23, 42, 0.78) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
@@ -13976,6 +13997,7 @@ body.dark .lab-card-timer-mini svg {
 #modal-timer-ac[style*="display: block"],
 #modal-timer-ac[style*="display: flex"] {
   display: flex !important;
+  z-index: 2147483660 !important;
 }
 
 #modal-timer-ac .modal-timer-ac-dialog {
@@ -13990,7 +14012,7 @@ body.dark .lab-card-timer-mini svg {
   display: flex;
   flex-direction: column;
   position: relative;
-  z-index: 2147483649;
+  z-index: 2147483661 !important;
   animation: modal-timer-ac-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

@@ -3719,6 +3719,11 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
     return;
   }
 
+  // Jika sedang mode fullscreen, pastikan modal dipindahkan ke dalam container fullscreen
+  if (typeof ensureModalInFullscreen === 'function') {
+    ensureModalInFullscreen(modal);
+  }
+
   // Guard flag dan timestamp agar tidak tertutup oleh ghost clicks / gestures di mobile
   window._isTimerAcModalOpen = true;
   window._timerModalOpenedAt = Date.now();
@@ -5203,16 +5208,56 @@ window.resetTimerAc = async function () {
   await window.saveTimerAc();
 };
 
+// Toast notification pill lightweight untuk feedback operasi
+window.showToast = function (msg, type = 'info') {
+  try {
+    const containerId = 'app-toast-container';
+    let container = document.getElementById(containerId);
+    if (!container) {
+      container = document.createElement('div');
+      container.id = containerId;
+      container.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2147483665;display:flex;flex-direction:column;gap:8px;pointer-events:none;align-items:center;max-width:92vw;';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    const bg = type === 'error' ? 'rgba(239, 68, 68, 0.95)' : type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(15, 23, 42, 0.92)';
+    toast.style.cssText = `background:${bg};color:#fff;padding:10px 18px;border-radius:12px;font-size:0.85rem;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.3);backdrop-filter:blur(6px);pointer-events:auto;transition:all 0.25s ease;opacity:0;transform:translateY(10px);display:flex;align-items:center;gap:8px;text-align:center;`;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+    });
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+      setTimeout(() => { if (toast.parentElement) toast.remove(); }, 250);
+    }, 3200);
+  } catch (e) {
+    console.log('[Toast]', msg);
+  }
+};
+
 function checkAndTriggerAcTimers() {
   const now = new Date();
   const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const curM = now.getHours() * 60 + now.getMinutes();
 
   if (!window._roomAcTimers) return;
+
+  const parseClock = (str) => {
+    if (!str || !str.includes(':')) return null;
+    const [h, m] = str.split(':').map(Number);
+    return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
+  };
 
   Object.keys(window._roomAcTimers).forEach(key => {
     const t = window._roomAcTimers[key];
     if (!t || t.tanggal !== currentDayStr || !t.timer_aktif || t.timer_aktif === 'none') return;
+
+    const tOnM = parseClock(t.timer_on);
+    const tOffM = parseClock(t.timer_off);
 
     // Temukan jam sesi yang ada di ruangan ini hari ini
     let targetJamOn = '08:00';
@@ -5256,16 +5301,6 @@ function checkAndTriggerAcTimers() {
         }
       }
     }
-
-    // Realtime Expiration & Auto-Cleanup:
-    const parseClock = (str) => {
-      if (!str || !str.includes(':')) return null;
-      const [h, m] = str.split(':').map(Number);
-      return (!isNaN(h) && !isNaN(m)) ? (h * 60 + m) : null;
-    };
-    const tOnM = parseClock(t.timer_on);
-    const tOffM = parseClock(t.timer_off);
-    const curM = now.getHours() * 60 + now.getMinutes();
 
     let roomLastEndM = 0;
     if (Array.isArray(allJadwal)) {
@@ -16753,6 +16788,7 @@ function restoreModalFromFullscreen(modalEl) {
 window.restoreModalFromFullscreen = restoreModalFromFullscreen;
 
 const FULLSCREEN_PORTAL_MODAL_IDS = [
+  'modal-timer-ac',
   'test-wa-modal',
   'room-detail-modal',
   'modal-fs-filter',
