@@ -714,8 +714,8 @@ def get_semua_jadwal(semester: str = None):
                 COALESCE(j.nama_mk, mk.nama_mk) AS nama_mk, 
                 j.kelas,
                 CASE 
-                    WHEN r.nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
-                    WHEN (r.nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND r.nama_ruangan NOT LIKE '%2.7%') OR r.nama_ruangan LIKE '%1.6%' OR r.nama_ruangan LIKE '%1.7%' OR r.nama_ruangan LIKE '%1.8%' OR r.nama_ruangan LIKE '%1.9%' OR (r.nama_ruangan LIKE '%1.5%' AND (r.kampus LIKE '%Kobar%' OR r.nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
+                    WHEN r.nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7|(r\\.|ruang|^)\\s*1\\.[67]' THEN 'Thehok'
+                    WHEN (r.nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND r.nama_ruangan NOT LIKE '%2.7%') OR (r.nama_ruangan REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') OR (r.nama_ruangan LIKE '%1.5%' AND (r.kampus LIKE '%Kobar%' OR r.nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
                     ELSE COALESCE(r.kampus, 'Thehok')
                 END AS kampus,
                 r.nama_ruangan, 
@@ -2527,8 +2527,8 @@ def get_ruangan():
         cursor.execute("""
             SELECT id_ruangan, nama_ruangan,
                    CASE 
-                       WHEN nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
-                       WHEN (nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND nama_ruangan NOT LIKE '%2.7%') OR nama_ruangan LIKE '%1.6%' OR nama_ruangan LIKE '%1.7%' OR nama_ruangan LIKE '%1.8%' OR nama_ruangan LIKE '%1.9%' OR (nama_ruangan LIKE '%1.5%' AND (kampus LIKE '%Kobar%' OR nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
+                       WHEN nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7|(r\\.|ruang|^)\\s*1\\.[67]' THEN 'Thehok'
+                       WHEN (nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND nama_ruangan NOT LIKE '%2.7%') OR (nama_ruangan REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') OR (nama_ruangan LIKE '%1.5%' AND (kampus LIKE '%Kobar%' OR nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
                        ELSE COALESCE(kampus, 'Thehok')
                    END AS kampus
             FROM ruangan
@@ -4101,9 +4101,10 @@ def update_timer_ac(data: TimerAcUpdateInput):
             conn = get_db()
             cursor = conn.cursor(dictionary=True)
             clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
-            if any(k in (data.nama_ruangan or "").lower() for k in ["s2", "pasca", "b2.", "b1.", "b3.", "cisco", "2.7", "4."]):
+            lower_rname = (data.nama_ruangan or "").lower()
+            if any(k in lower_rname for k in ["s2", "pasca", "b2.", "b1.", "b3.", "cisco", "2.7", "4."]) or (re.search(r'(?:r\.|ruang|^|\s)1\.[67]', lower_rname) and 'lab' not in lower_rname):
                 detected_camp = "Thehok"
-            elif not detected_camp and re.search(r'(^|[^a-zA-Z0-9])2\.(?!7\b)\d+', data.nama_ruangan or ""):
+            elif not detected_camp and (re.search(r'(^|[^a-zA-Z0-9])2\.(?!7)\d+', data.nama_ruangan or "") or re.search(r'(?i)(labor|lab)\s*1\.[6-9]', data.nama_ruangan or "")):
                 detected_camp = "Kobar"
             query_exact = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
             params_exact = [data.nama_ruangan.strip()]
@@ -4193,8 +4194,8 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
             SELECT sol.*, 
                    COALESCE(r.nama_ruangan, sol.nama_mk, 'Ruangan') AS nama_ruangan, 
                    CASE 
-                       WHEN COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
-                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND COALESCE(r.nama_ruangan, sol.nama_mk, '') NOT LIKE '%2.7%') OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.6%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.7%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.8%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.9%' OR (COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.5%' AND (COALESCE(r.kampus, '') LIKE '%Kobar%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%Kobar%')) THEN 'Kobar'
+                       WHEN COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7|(r\\.|ruang|^)\\s*1\\.[67]' THEN 'Thehok'
+                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND COALESCE(r.nama_ruangan, sol.nama_mk, '') NOT LIKE '%2.7%') OR (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') OR (COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.5%' AND (COALESCE(r.kampus, '') LIKE '%Kobar%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%Kobar%')) THEN 'Kobar'
                        ELSE COALESCE(r.kampus, 'Thehok')
                    END AS kampus
             FROM status_operasional_lab sol
