@@ -2347,6 +2347,9 @@ body.dark-theme .spotlight-modal {
 .spotlight-backdrop.open .spotlight-modal {
   transform: translateY(0) scale(1);
 }
+.spotlight-drag-handle {
+  display: none;
+}
 .spotlight-input-wrap {
   display: flex;
   align-items: center;
@@ -7485,17 +7488,21 @@ body.dark-theme #btn-show-absensi-aslab .aslab-btn-badge {
   /* Spotlight Search & Details on Mobile */
   .spotlight-backdrop {
     padding: 0 !important;
+    padding-top: max(env(safe-area-inset-top, 0px), 16px) !important;
     align-items: flex-end !important;
     background: rgba(0, 0, 0, 0.65) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
+    box-sizing: border-box !important;
   }
 
   .spotlight-modal {
     width: 100% !important;
     max-width: 100% !important;
-    height: 90vh !important;
-    max-height: 90vh !important;
+    height: 82vh !important;
+    height: 82dvh !important;
+    max-height: calc(100vh - 60px) !important;
+    max-height: calc(100dvh - env(safe-area-inset-top, 20px) - 20px) !important;
     border-radius: 24px 24px 0 0 !important;
     margin: 0 !important;
     border-bottom: none !important;
@@ -7504,24 +7511,50 @@ body.dark-theme #btn-show-absensi-aslab .aslab-btn-badge {
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.45) !important;
     transform: translateY(100%) !important;
     transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .spotlight-backdrop.open .spotlight-modal {
     transform: translateY(0) !important;
   }
 
+  .spotlight-drag-handle {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 10px 0 4px 0 !important;
+    background: var(--bg-elevated) !important;
+    border-radius: 24px 24px 0 0 !important;
+    cursor: grab !important;
+    flex-shrink: 0 !important;
+  }
+
+  .spotlight-drag-bar {
+    width: 38px !important;
+    height: 4.5px !important;
+    background: var(--border-strong, #cbd5e1) !important;
+    border-radius: 999px !important;
+    opacity: 0.85 !important;
+  }
+
+  body.dark-theme .spotlight-drag-bar {
+    background: rgba(255, 255, 255, 0.25) !important;
+  }
+
   .spotlight-input-wrap {
-    padding: 12px 14px !important;
+    padding: 10px 14px 12px 14px !important;
     gap: 10px !important;
     box-sizing: border-box !important;
     width: 100% !important;
+    min-height: 50px !important;
   }
 
   .spotlight-input {
     min-width: 0 !important;
     flex: 1 1 0% !important;
-    font-size: 0.95rem !important;
-    padding: 0 4px !important;
+    font-size: 16px !important; /* 16px mencegah auto-zoom di iOS Safari */
+    padding: 2px 4px !important;
   }
 
   .spotlight-btn-close-wrap {
@@ -7590,7 +7623,7 @@ body.dark-theme #btn-show-absensi-aslab .aslab-btn-badge {
   }
 
   .spotlight-footer {
-    padding: 10px 14px !important;
+    padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px)) 14px !important;
     font-size: 0.78rem !important;
     justify-content: center !important;
   }

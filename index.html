@@ -14,7 +14,7 @@
   <meta name="unama-dashboard" content="true">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <link rel="stylesheet" href="frontend/css/style.css?v=20261029_timer_zindex_fix_v36">
+  <link rel="stylesheet" href="frontend/css/style.css?v=20261029_spotlight_ios_fix_v38">
 </head>
 
 <body>
@@ -5503,6 +5503,9 @@
     <!-- ==================== SPOTLIGHT SEARCH MODAL (CTRL+K) ==================== -->
   <div id="spotlight-backdrop" class="spotlight-backdrop" onclick="closeSpotlightModal(event)">
     <div class="spotlight-modal" onclick="event.stopPropagation()">
+      <div class="spotlight-drag-handle">
+        <span class="spotlight-drag-bar"></span>
+      </div>
       <div class="spotlight-input-wrap" onclick="document.getElementById('spotlight-input')?.focus()">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); flex-shrink: 0;">
@@ -5854,7 +5857,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="frontend/js/script.js?v=20261029_remove_toast_v37"></script>
+  <script src="frontend/js/script.js?v=20261029_spotlight_ios_fix_v38"></script>
 </body>
 
 </html>

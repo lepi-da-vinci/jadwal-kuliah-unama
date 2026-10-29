@@ -17341,7 +17341,10 @@ function openSpotlightModal() {
     if (typeof syncMobileNavActiveState === 'function') syncMobileNavActiveState();
     setTimeout(() => {
       input.focus();
-      input.select();
+      if (typeof input.select === 'function') input.select();
+      if (window.innerWidth <= 768) {
+        window.scrollTo(0, 0);
+      }
     }, 60);
   }
 }
