@@ -5382,7 +5382,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
   } else if (isToday && (validPhysicalClasses.length > 0 || (schedules || []).length > 0)) {
-    if (isTimerOffPassed || (isExplicitlyClosed && !hasPendingTimerOff)) {
+    if (isTimerOffPassed || (isExplicitlyClosed && !hasPendingTimerOff && !isAcActive)) {
       state = 'finished';
       text = 'Selesai';
       jamText = '(Ditutup)';
@@ -5393,7 +5393,9 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     } else if (allEnded) {
       state = 'finished';
       text = 'Selesai';
-      jamText = '(Ditutup)';
+      // Hanya tampilkan '(Ditutup)' jika ruangan / AC memang sudah padam / ditutup!
+      // Jika AC masih menyala dan belum dimatikan, hanya tampilkan 'Selesai'
+      jamText = (!isAcActive && (isExplicitlyClosed || allEnded)) ? '(Ditutup)' : '';
     } else if (activeClass) {
       state = 'occupied';
       text = activeClass.nama;
