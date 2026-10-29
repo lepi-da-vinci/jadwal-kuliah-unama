@@ -2924,18 +2924,64 @@ function getRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
 }
 window.getRoomAcTimer = getRoomAcTimer;
 
+function clearRoomAcTimer(roomName = '', campusName = '', activeDate = '') {
+  if (!roomName) return;
+  const now = new Date();
+  const currentDayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const effDate = activeDate || currentDayStr;
+  const canon = (typeof canonicalRoomId === 'function') ? canonicalRoomId(roomName) : '';
+  const exactKey = getRoomAcTimerKey(roomName, campusName);
+
+  if (window._roomAcTimers && typeof window._roomAcTimers === 'object') {
+    if (canon && window._roomAcTimers[canon]) delete window._roomAcTimers[canon];
+    if (exactKey && window._roomAcTimers[exactKey]) delete window._roomAcTimers[exactKey];
+    Object.keys(window._roomAcTimers).forEach(k => {
+      const t = window._roomAcTimers[k];
+      if (!t) return;
+      if (canon && (canonicalRoomId(k) === canon || canonicalRoomId(t.roomName) === canon)) {
+        delete window._roomAcTimers[k];
+      } else if (typeof isSameRoomName === 'function' && (isSameRoomName(k, roomName) || isSameRoomName(t.roomName, roomName))) {
+        delete window._roomAcTimers[k];
+      }
+    });
+    try {
+      localStorage.setItem(`unama_ac_timers_${effDate}`, JSON.stringify(window._roomAcTimers));
+    } catch (e) {}
+  }
+
+  fetch(`${API_BASE_URL}/api/timer-ac`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tanggal: effDate,
+      nama_ruangan: roomName,
+      kampus: campusName,
+      timer_on: null,
+      timer_off: null,
+      timer_aktif: 'none',
+      diubah_oleh: 'Asmot (Web)'
+    })
+  }).catch(err => console.error("Failed to clear timer on backend:", err));
+}
+window.clearRoomAcTimer = clearRoomAcTimer;
+
 function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
   if (!Array.isArray(data)) return;
   const newTimers = {};
+  const explicitlyNoneRooms = new Set();
 
   data.forEach(stat => {
     const statDate = String(stat.tanggal || '').substring(0, 10);
     // Abaikan data timer yang tanggalnya tidak sesuai dengan targetDate
     if (targetDate && statDate && statDate !== targetDate) return;
 
-    if (stat.timer_aktif && stat.timer_aktif !== 'none' && stat.nama_ruangan) {
-      const canon = (typeof canonicalRoomId === 'function') ? canonicalRoomId(stat.nama_ruangan) : '';
-      const exactKey = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
+    const canon = (typeof canonicalRoomId === 'function') ? canonicalRoomId(stat.nama_ruangan) : '';
+    const exactKey = getRoomAcTimerKey(stat.nama_ruangan, stat.kampus);
+
+    if (stat.timer_aktif === 'none') {
+      if (canon) explicitlyNoneRooms.add(canon);
+      if (exactKey) explicitlyNoneRooms.add(exactKey);
+    } else if (stat.timer_aktif && stat.nama_ruangan) {
       const timerObj = {
         roomName: stat.nama_ruangan,
         kampus: stat.kampus,
@@ -2950,13 +2996,15 @@ function syncRoomAcTimersFromBackend(data = [], targetDate = '') {
     }
   });
 
-  // Pertahankan timer aktif lokal hari ini
+  // Pertahankan timer aktif lokal hari ini HANYA jika ruangan tersebut TIDAK ditandai 'none' oleh server
   if (window._roomAcTimers && typeof window._roomAcTimers === 'object') {
     Object.keys(window._roomAcTimers).forEach(key => {
       const existing = window._roomAcTimers[key];
       const exDate = String(existing?.tanggal || '').substring(0, 10);
       if (existing && (!targetDate || !exDate || exDate === targetDate)) {
         const canon = (typeof canonicalRoomId === 'function') ? canonicalRoomId(existing.roomName || key) : '';
+        if (canon && explicitlyNoneRooms.has(canon)) return;
+        if (explicitlyNoneRooms.has(key)) return;
         if (!newTimers[canon] && !newTimers[key] && existing.timer_aktif && existing.timer_aktif !== 'none') {
           if (canon) newTimers[canon] = existing;
           newTimers[key] = existing;
@@ -3073,8 +3121,8 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   );
 
   const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
-  // Ruangan dianggap ditutup manual HANYA jika status tutup dan TIDAK ADA Timer OFF mendatang yang masih berjalan!
-  const isManuallyClosed = Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup' && !hasPendingTimerOff);
+  // Ruangan dianggap ditutup manual jika status tutup dan label tutup
+  const isManuallyClosed = Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup');
 
   let isAcRecordedOn = (opStatus.status === 'buka' && !isTimerOffPassed);
 
@@ -3555,27 +3603,9 @@ window.onHeaderAcToggleClick = async function (targetAction) {
 
       // Jangan hapus timer jika ada Timer ON mendatang di hari ini
       if (!isPendingFutureTimerOn) {
-        const key = getRoomAcTimerKey(roomName, kampusStr);
-        if (window._roomAcTimers && window._roomAcTimers[key]) {
-          delete window._roomAcTimers[key];
-          try {
-            localStorage.setItem(`unama_ac_timers_${activeDate}`, JSON.stringify(window._roomAcTimers));
-          } catch (e) {}
+        if (typeof clearRoomAcTimer === 'function') {
+          clearRoomAcTimer(roomName, kampusStr, activeDate);
         }
-        // Kirim deaktifasi timer ke server di background
-        fetch(`${API_BASE_URL}/api/timer-ac`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tanggal: activeDate,
-            nama_ruangan: roomName,
-            kampus: kampusStr,
-            timer_on: null,
-            timer_off: null,
-            timer_aktif: 'none',
-            diubah_oleh: 'Asmot (Web)'
-          })
-        }).catch(err => console.error("Failed to clear timer on manual off:", err));
       }
     }
   }
@@ -5143,6 +5173,15 @@ window.saveTimerAc = async function () {
     } else {
       if (canon) delete window._roomAcTimers[canon];
       if (key) delete window._roomAcTimers[key];
+      Object.keys(window._roomAcTimers).forEach(k => {
+        const t = window._roomAcTimers[k];
+        if (!t) return;
+        if (canon && (canonicalRoomId(k) === canon || canonicalRoomId(t.roomName) === canon)) {
+          delete window._roomAcTimers[k];
+        } else if (typeof isSameRoomName === 'function' && (isSameRoomName(k, ctx.roomName) || isSameRoomName(t.roomName, ctx.roomName))) {
+          delete window._roomAcTimers[k];
+        }
+      });
     }
     try {
       localStorage.setItem(`unama_ac_timers_${ctx.activeDate}`, JSON.stringify(window._roomAcTimers));
@@ -5352,8 +5391,8 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     : Math.max(...(schedules || []).map(s => s.end || 0));
   const allEnded = currentTime > maxEndMinutes;
 
-  // Ruangan dianggap ditutup eksplisit HANYA jika waktu timer off lewat ATAU ditutup manual TANPA ada Timer OFF mendatang!
-  let isExplicitlyClosed = Boolean(isTimerOffPassed || (opStatus.status === 'tutup' && opStatus.label === 'tutup' && !hasPendingTimerOff));
+  // Ruangan dianggap ditutup eksplisit jika waktu timer off lewat ATAU ditutup manual
+  let isExplicitlyClosed = Boolean(isTimerOffPassed || (opStatus.status === 'tutup' && opStatus.label === 'tutup'));
 
   let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
   let text = 'Kosong';
@@ -5364,7 +5403,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     state = 'finished';
     text = 'Selesai';
     jamText = '(Ditutup)';
-  } else if (hasPendingTimerOff && (allEnded || validPhysicalClasses.length === 0)) {
+  } else if (!isExplicitlyClosed && hasPendingTimerOff && (allEnded || validPhysicalClasses.length === 0)) {
     // Seluruh kelas fisik telah selesai (atau dibatalkan CC/OL) tetapi Timer OFF mendatang masih aktif:
     // AC tetap standby menunggu waktu timer OFF tiba sesuai settingan remote Asmot
     state = 'waiting';
@@ -5382,11 +5421,11 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
   } else if (isToday && (validPhysicalClasses.length > 0 || (schedules || []).length > 0)) {
-    if (isTimerOffPassed || (isExplicitlyClosed && !hasPendingTimerOff && !isAcActive)) {
+    if (isTimerOffPassed || (isExplicitlyClosed && !isAcActive)) {
       state = 'finished';
       text = 'Selesai';
       jamText = '(Ditutup)';
-    } else if ((allEnded || validPhysicalClasses.length === 0) && hasPendingTimerOff) {
+    } else if (!isExplicitlyClosed && (allEnded || validPhysicalClasses.length === 0) && hasPendingTimerOff) {
       state = 'waiting';
       text = 'AC Standby';
       jamText = `(OFF ${tData.timer_off})`;
