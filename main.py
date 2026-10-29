@@ -1,4281 +1,4315 @@
-import asyncio
-import collections
-import datetime
-import hashlib
-import hmac
-import os
-import re
-import secrets
-import socket
-import time
-import threading
-import requests
-from dotenv import load_dotenv
-
-import mysql.connector
-from fastapi import FastAPI, Depends, Header, HTTPException, Request, Response, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Union
-
-import sys
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-if os.path.exists(os.path.join(BASE_DIR, "backend")) and os.path.join(BASE_DIR, "backend") not in sys.path:
-    sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
-if os.path.exists(os.path.join(BASE_DIR, "scripts")) and os.path.join(BASE_DIR, "scripts") not in sys.path:
-    sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
-
-try:
-    from build_html import build_html
-except ImportError:
-    build_html = None
-
-import logging
-import scraper
-import wa_notifier
-
-# Filter logging agar access log tidak dipenuhi spam polling /api/sync/pending
-class NoisyEndpointFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        return "/api/sync/pending" not in msg
-
-logging.getLogger("uvicorn.access").addFilter(NoisyEndpointFilter())
-
-app = FastAPI(title="API Analitik Jadwal Kuliah")
-
-@app.on_event("startup")
-async def startup_event():
-    try:
-        logging.getLogger("uvicorn.access").addFilter(NoisyEndpointFilter())
-    except Exception:
-        pass
-    if build_html:
-        try:
-            build_html()
-        except Exception as e:
-            print(f"Auto-build HTML notice: {e}")
-    scraper.init_db_schema()
-    try:
-        wa_notifier.init_sent_notifications_on_startup()
-    except Exception as e:
-        print(f"[Startup] Error init wa notifications: {e}")
-    asyncio.create_task(wa_notifier.wa_notifier_loop())
-
-# ==================== SECURITY & CACHE HEADERS MIDDLEWARE (SEC-10) ====================
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response: Response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    
-    path = request.url.path
-    if path == "/" or path.endswith((".js", ".css", ".html")) or "sw.js" in path:
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        
-    return response
-
-# Mengizinkan Frontend mengakses API dengan batasan origin yang aman
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_origin_regex=r"^https?:\/\/([a-zA-Z0-9-]+\.)*(trycloudflare\.com|ngrok-free\.app|ngrok\.io|unama\.ac\.id)(:[0-9]+)?$",
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition", "X-Backup-Filename"],
-)
-
-load_dotenv(override=False)
-
-# ==================== ADMIN AUTH, RATE LIMITER & TOKEN STORE ====================
-admin_tokens = {}  # token -> expiry_timestamp
-login_failed_attempts = {}  # ip -> [timestamp, timestamp, ...]
-
-class LoginRequest(BaseModel):
-    password: str
-    master_password: str | None = None
-
-def get_admin_secret() -> str:
-    return os.getenv("ADMIN_SECRET_KEY", "e83a9f14d8b2413a967c52684b39174fb80f2d91ac6e4f3a7c8b0e12d4a5b6c7")
-
-def create_admin_token() -> str:
-    secret = get_admin_secret()
-    expiry = int(time.time() + 43200)  # 12 jam
-    sig = hmac.new(secret.encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
-    token = f"{expiry}.{sig}"
-    admin_tokens[token] = expiry
-    return token
-
-def is_valid_admin_token(token: str) -> bool:
-    if not token:
-        return False
-    now = time.time()
-    # 1. Cek in-memory store
-    if token in admin_tokens and admin_tokens[token] >= now:
-        return True
-    # 2. Cek validasi kriptografi HMAC (bertahan saat server restart)
-    try:
-        if "." in token:
-            parts = token.split(".", 1)
-            expiry_str, sig = parts[0], parts[1]
-            expiry = int(expiry_str)
-            if expiry >= now:
-                secret = get_admin_secret()
-                expected_sig = hmac.new(secret.encode(), expiry_str.encode(), hashlib.sha256).hexdigest()
-                if hmac.compare_digest(sig, expected_sig):
-                    admin_tokens[token] = expiry  # Re-cache di memory
-                    return True
-    except Exception:
-        pass
-    return False
-
-def verify_admin_token(authorization: str = Header(None)) -> str:
-    """Memvalidasi Bearer Token Admin untuk endpoint mutasi data sensitif"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Akses ditolak: Memerlukan otentikasi Admin."
-        )
-    token = authorization.split(" ", 1)[1].strip()
-    if not is_valid_admin_token(token):
-        if token in admin_tokens:
-            del admin_tokens[token]
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Akses ditolak: Token Admin tidak valid atau telah kedaluwarsa. Silakan login ulang."
-        )
-    return token
-
-def verify_bot_secret(x_bot_secret: str = Header(None)) -> bool:
-    """Memvalidasi secret header dari Node.js WhatsApp bot"""
-    expected_secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
-    if not x_bot_secret or not hmac.compare_digest(x_bot_secret.strip(), expected_secret.strip()):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Akses ditolak: Bot secret token tidak valid."
-        )
-    return True
-
-def is_admin_authenticated(authorization: str = Header(None)) -> bool:
-    """Cek status admin tanpa exception untuk keperluan PII masking"""
-    if not authorization or not authorization.startswith("Bearer "):
-        return False
-    token = authorization.split(" ", 1)[1].strip()
-    return is_valid_admin_token(token)
-
-@app.post("/api/auth/login")
-def admin_login(req: LoginRequest, request: Request):
-    """Verifikasi password Admin & Master dengan Rate Limiting anti brute-force"""
-    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-        
-    now = time.time()
-    # Bersihkan percobaan yang lebih lama dari 5 menit (300 detik)
-    attempts = [t for t in login_failed_attempts.get(client_ip, []) if now - t < 300]
-    login_failed_attempts[client_ip] = attempts
-    
-    # Blokir jika sudah 5 kali gagal dalam 5 menit
-    if len(attempts) >= 5:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Terlalu banyak percobaan login gagal. Akses login dikunci sementara selama 5 menit untuk keamanan."
-        )
-
-    expected_admin_pass = os.getenv("ADMIN_PASSWORD", "unama123")
-    expected_master_pass = os.getenv("MASTER_PASSWORD", "makannasipadangdepangang!")
-    
-    # 1. Validasi Password Admin
-    if not hmac.compare_digest(req.password.strip(), expected_admin_pass.strip()):
-        attempts.append(now)
-        login_failed_attempts[client_ip] = attempts
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Password Admin salah! (Percobaan gagal {len(attempts)}/5)"
-        )
-    
-    # 2. Validasi Password Master jika disertakan
-    if req.master_password is not None:
-        if not hmac.compare_digest(req.master_password.strip(), expected_master_pass.strip()):
-            attempts.append(now)
-            login_failed_attempts[client_ip] = attempts
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Password Master salah! (Percobaan gagal {len(attempts)}/5)"
-            )
-    else:
-        # Mengindikasikan langkah 2 (Master Password) diperlukan
-        return {"status": "need_master", "message": "Memerlukan otorisasi Password Master."}
-    
-    # Sukses -> Reset failed attempts untuk IP ini
-    login_failed_attempts.pop(client_ip, None)
-    
-    # 3. Terbitkan Secure HMAC-signed Token
-    token = create_admin_token()
-    
-    return {
-        "status": "success",
-        "message": "Autentikasi Admin berhasil!",
-        "token": token,
-        "expires_in": 43200
-    }
-
-@app.post("/api/auth/logout")
-def admin_logout(authorization: str = Header(None)):
-    """Menghapus token admin saat logout"""
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-        admin_tokens.pop(token, None)
-    return {"status": "success", "message": "Logout admin berhasil."}
-
-@app.get("/api/auth/verify")
-def admin_verify(token: str = Depends(verify_admin_token)):
-    """Memeriksa keabsahan token admin saat ini"""
-    return {"status": "success", "message": "Token admin valid."}
-
-# ==================================================================
-
-def get_db():
-    pwd = os.getenv("DB_PASSWORD", "")
-    host = os.getenv("DB_HOST", "127.0.0.1")
-    configured_port = int(os.getenv("DB_PORT", 3307))
-    user = os.getenv("DB_USER", "root")
-    db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
-
-    ports_to_try = [configured_port]
-    for p in [3307, 3306]:
-        if p not in ports_to_try:
-            ports_to_try.append(p)
-
-    passwords_to_try = [pwd]
-    for p_word in ["", "123456", "root"]:
-        if p_word not in passwords_to_try:
-            passwords_to_try.append(p_word)
-
-    last_err = None
-    for p in ports_to_try:
-        for p_word in passwords_to_try:
-            try:
-                return mysql.connector.connect(
-                    host=host,
-                    port=p,
-                    user=user,
-                    password=p_word,
-                    database=db_name
-                )
-            except mysql.connector.Error as err:
-                last_err = err
-                continue
-    if last_err:
-        raise last_err
-
-@app.get("/api/server-urls")
-def get_server_urls(refresh: bool = False):
-    """Mengembalikan daftar link akses server real-time (Cloudflare, Ngrok, LAN IP, Localhost) untuk QR Code & Link HP"""
-    urls = []
-    seen = set()
-
-    # 1. Domain kustom / URL dari .env
-    env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
-    if env_url and env_url.startswith("http"):
-        urls.append({"label": "Cloudflare / Custom Domain (Internet)", "url": env_url, "primary": True})
-        seen.add(env_url)
-
-    # 2. Live Cloudflare Quick Tunnel dari tunnel_logs/tunnel.log
-    cf_url = None
-    log_paths = [
-        "tunnel_logs/tunnel.log",
-        "/var/log/cloudflared/tunnel.log",
-        "/app/tunnel_logs/tunnel.log",
-        "tunnel.log"
-    ]
-    for lp in log_paths:
-        if os.path.exists(lp):
-            try:
-                with open(lp, "r", encoding="utf-8", errors="ignore") as f:
-                    log_data = f.read()
-                    matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', log_data)
-                    if matches:
-                        cf_url = matches[-1]
-                        with open("last_tunnel.txt", "w", encoding="utf-8") as tf:
-                            tf.write(cf_url)
-                        break
-            except Exception:
-                pass
-
-    # 2b. Fallback ke last_tunnel.txt
-    if not cf_url and os.path.exists("last_tunnel.txt"):
-        try:
-            with open("last_tunnel.txt", "r", encoding="utf-8") as f:
-                saved = f.read().strip()
-                if saved.startswith("http"):
-                    cf_url = saved
-        except Exception:
-            pass
-
-    if cf_url and cf_url not in seen:
-        urls.append({"label": "Cloudflare Tunnel (Internet)", "url": cf_url, "primary": True})
-        seen.add(cf_url)
-
-    # 3. Ngrok API & last_ngrok.txt
-    try:
-        r = requests.get("http://localhost:4040/api/tunnels", timeout=1)
-        if r.status_code == 200:
-            for t in r.json().get('tunnels', []):
-                pub = t.get('public_url', '')
-                if pub.startswith("https") and pub not in seen:
-                    urls.append({"label": "Ngrok Tunnel (Internet)", "url": pub, "primary": len(urls) == 0})
-                    seen.add(pub)
-                    break
-    except Exception:
-        pass
-
-    if os.path.exists("last_ngrok.txt"):
-        try:
-            with open("last_ngrok.txt", "r", encoding="utf-8") as f:
-                saved = f.read().strip()
-                if saved.startswith("http") and saved not in seen:
-                    urls.append({"label": "Ngrok Tunnel (Internet)", "url": saved, "primary": len(urls) == 0})
-                    seen.add(saved)
-        except Exception:
-            pass
-
-    # 4. Local LAN IP (Wi-Fi / Ethernet di Ruang Lab)
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        lan_url = f"http://{local_ip}:8000"
-        if lan_url not in seen:
-            urls.append({"label": f"Wi-Fi / LAN Ruang Aslab ({local_ip})", "url": lan_url, "primary": len(urls) == 0})
-            seen.add(lan_url)
-    except Exception:
-        pass
-
-    urls.append({"label": "Localhost (Komputer Server)", "url": "http://localhost:8000", "primary": len(urls) == 0})
-    best_url = urls[0]["url"] if urls else "http://localhost:8000"
-
-    return {
-        "status": "success",
-        "best_url": best_url,
-        "urls": urls,
-        "updated_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-
-@app.get("/api/server-link/status")
-def get_server_link_status():
-    """Mengembalikan status link server publik saat ini, link sebelumnya di DB, dan riwayat pergantian link"""
-    try:
-        current_url = wa_notifier.detect_current_public_url()
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        wa_notifier.init_server_link_tables(cursor)
-        conn.commit()
-
-        cursor.execute("SELECT * FROM server_link_config ORDER BY id DESC LIMIT 1")
-        cfg = cursor.fetchone()
-
-        cursor.execute("SELECT * FROM server_link_history ORDER BY id DESC LIMIT 10")
-        history = cursor.fetchall()
-        for h in history:
-            if h.get('created_at'):
-                h['created_at'] = h['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-
-        cursor.close()
-        conn.close()
-
-        return {
-            "status": "success",
-            "current_detected_url": current_url,
-            "saved_config": {
-                "current_url": cfg.get('current_url') if cfg else None,
-                "previous_url": cfg.get('previous_url') if cfg else None,
-                "last_checked_at": cfg.get('last_checked_at').strftime('%Y-%m-%d %H:%M:%S') if cfg and cfg.get('last_checked_at') else None,
-                "last_notified_at": cfg.get('last_notified_at').strftime('%Y-%m-%d %H:%M:%S') if cfg and cfg.get('last_notified_at') else None,
-            } if cfg else None,
-            "history": history
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/server-link/broadcast")
-def trigger_server_link_broadcast(admin: str = Depends(verify_admin_token)):
-    """Memicu pengiriman siaran link server terbaru ke seluruh kontak Aslab/Asmot/Admin via WA (memerlukan token Admin)"""
-    try:
-        res = wa_notifier.check_and_broadcast_server_url_change(force_broadcast=True)
-        return {
-            "status": "success",
-            "result": res
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-
-
-class SemesterActiveRequest(BaseModel):
-    nama_semester: str
-
-class SemesterAddRequest(BaseModel):
-    nama_semester: str
-    set_active: bool | None = False
-
-@app.get("/api/semesters")
-def get_semesters():
-    """Mengambil daftar seluruh semester, status aktif, statistik jumlah jadwal, serta rentang tanggal awal & akhir"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT 
-                s.id_semester, 
-                s.nama_semester, 
-                s.is_active,
-                COUNT(j.id_jadwal) AS total_jadwal,
-                MIN(j.tanggal) AS start_date,
-                MAX(j.tanggal) AS end_date
-            FROM semester s
-            LEFT JOIN jadwal j ON s.nama_semester = j.semester
-            GROUP BY s.id_semester, s.nama_semester, s.is_active
-            ORDER BY s.id_semester DESC
-        """)
-        rows = cursor.fetchall()
-        
-        active_sem = rows[0].get('nama_semester', 'Ganjil 2026') if rows else 'Ganjil 2026'
-        for r in rows:
-            if r.get('start_date'):
-                r['start_date'] = str(r['start_date'])
-            if r.get('end_date'):
-                r['end_date'] = str(r['end_date'])
-            if r.get('is_active') == 1:
-                active_sem = r.get('nama_semester')
-                
-        return {
-            "status": "success",
-            "active_semester": active_sem,
-            "data": rows
-        }
-    except mysql.connector.Error as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/semesters/resolve-date")
-def resolve_semester_by_date(tanggal: str, auto_switch: bool = False):
-    """
-    Mendeteksi semester yang sesuai berdasarkan tanggal tertentu.
-    Jika auto_switch=True dan tanggal milik semester berbeda, otomatis update semester aktif di database.
-    """
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # 1. Cek semester aktif saat ini
-        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
-        active_row = cursor.fetchone()
-        current_active = active_row['nama_semester'] if active_row else 'Ganjil 2026'
-        
-        # 2. Cek apakah ada jadwal langsung pada tanggal ini (di jadwal atau jadwal_permanent)
-        cursor.execute("""
-            SELECT semester 
-            FROM (
-                SELECT semester FROM jadwal WHERE tanggal = %s
-                UNION
-                SELECT semester FROM jadwal_permanent WHERE tanggal = %s
-            ) t LIMIT 1
-        """, (tanggal, tanggal))
-        matched = cursor.fetchone()
-        
-        matched_semester = matched['semester'] if matched else None
-        
-        # 3. Jika tanggal tidak ada jadwal persis (misal hari Minggu/Libur), cari berdasarkan rentang tanggal semester
-        if not matched_semester:
-            cursor.execute("""
-                SELECT s.nama_semester
-                FROM semester s
-                JOIN (
-                    SELECT semester, MIN(tanggal) as min_d, MAX(tanggal) as max_d 
-                    FROM (
-                        SELECT semester, tanggal FROM jadwal WHERE tanggal IS NOT NULL
-                        UNION ALL
-                        SELECT semester, tanggal FROM jadwal_permanent WHERE tanggal IS NOT NULL
-                    ) all_j
-                    GROUP BY semester
-                ) rng ON s.nama_semester = rng.semester
-                WHERE %s BETWEEN rng.min_d AND rng.max_d
-                ORDER BY s.id_semester DESC
-                LIMIT 1
-            """, (tanggal,))
-            range_match = cursor.fetchone()
-            if range_match:
-                matched_semester = range_match['nama_semester']
-                
-        # Jika tetap tidak cocok dengan rentang manapun, tetap di current_active
-        if not matched_semester:
-            matched_semester = current_active
-            
-        is_different = (matched_semester != current_active)
-        switched = False
-        
-        # 4. Jika auto_switch diminta dan semester berbeda, aktifkan semester baru di DB
-        if auto_switch and is_different:
-            cursor.execute("UPDATE semester SET is_active = 0")
-            cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (matched_semester,))
-            conn.commit()
-            switched = True
-            print(f"[Auto-Switch] Berhasil mengalihkan database aktif ke '{matched_semester}' untuk tanggal {tanggal}.")
-            
-        return {
-            "status": "success",
-            "tanggal": tanggal,
-            "matched_semester": matched_semester,
-            "current_active": current_active,
-            "is_different": is_different,
-            "switched": switched
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/semesters/active")
-def set_active_semester(req: SemesterActiveRequest):
-    """Mengubah semester aktif sistem"""
-    try:
-        nama_sem = req.nama_semester.strip()
-        if not nama_sem:
-            return {"status": "error", "message": "Nama semester tidak boleh kosong"}
-            
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT id_semester FROM semester WHERE nama_semester = %s", (nama_sem,))
-        if not cursor.fetchone():
-            cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES (%s, 0)", (nama_sem,))
-            
-        cursor.execute("UPDATE semester SET is_active = 0")
-        cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (nama_sem,))
-        conn.commit()
-        
-        return {
-            "status": "success", 
-            "message": f"Semester aktif berhasil diubah menjadi {nama_sem}",
-            "active_semester": nama_sem
-        }
-    except mysql.connector.Error as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/semesters/add")
-def add_new_semester(req: SemesterAddRequest, admin: str = Depends(verify_admin_token)):
-    """Menambahkan nama semester baru ke dalam sistem (memerlukan token Admin)"""
-    try:
-        nama_sem = req.nama_semester.strip()
-        if not nama_sem:
-            return {"status": "error", "message": "Nama semester tidak boleh kosong"}
-            
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT id_semester FROM semester WHERE nama_semester = %s", (nama_sem,))
-        if cursor.fetchone():
-            return {"status": "error", "message": f"Semester '{nama_sem}' sudah terdaftar"}
-            
-        is_act = 1 if req.set_active else 0
-        if is_act == 1:
-            cursor.execute("UPDATE semester SET is_active = 0")
-            
-        cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES (%s, %s)", (nama_sem, is_act))
-        conn.commit()
-        
-        return {
-            "status": "success",
-            "message": f"Semester '{nama_sem}' berhasil ditambahkan.",
-            "nama_semester": nama_sem,
-            "is_active": is_act == 1
-        }
-    except mysql.connector.Error as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/semesters/{nama_semester}")
-def delete_semester(nama_semester: str, token: str = Depends(verify_admin_token)):
-    """Menghapus semester dan seluruh jadwal di dalamnya (Admin only)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT id_semester, is_active FROM semester WHERE nama_semester = %s", (nama_semester,))
-        row = cursor.fetchone()
-        if not row:
-            return {"status": "error", "message": f"Semester '{nama_semester}' tidak ditemukan"}
-            
-        is_act = row[1]
-        
-        # Hapus transaksi data terkait semester ini
-        cursor.execute("DELETE FROM jadwal WHERE semester = %s", (nama_semester,))
-        deleted_count = cursor.rowcount
-        cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (nama_semester,))
-        cursor.execute("DELETE FROM notifikasi_lab WHERE semester = %s", (nama_semester,))
-        cursor.execute("DELETE FROM semester WHERE nama_semester = %s", (nama_semester,))
-        
-        # Jika yang dihapus adalah semester aktif, aktifkan semester lain yang tersisa
-        if is_act == 1:
-            cursor.execute("SELECT nama_semester FROM semester ORDER BY id_semester DESC LIMIT 1")
-            fallback_row = cursor.fetchone()
-            if fallback_row:
-                cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (fallback_row[0],))
-            else:
-                cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES ('Genap 2025', 1)")
-                
-        conn.commit()
-        return {
-            "status": "success", 
-            "message": f"Semester '{nama_semester}' dan {deleted_count} jadwal terkait berhasil dihapus."
-        }
-    except mysql.connector.Error as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/jadwal")
-def get_semua_jadwal(semester: str = None):
-    """Mengembalikan daftar semua jadwal dengan filter semester aktif (atau spesifik)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        target_sem = semester
-        if not target_sem:
-            target_sem = scraper.get_active_semester(conn, cursor)
-            
-        # ─── AUTO-RECOVERY DENGAN JADWAL_PERMANENT (HANYA JIKA TABEL JADWAL KOSONG) ───
-        scraper.ensure_permanent_table_exists(cursor)
-        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
-        cnt_active = cursor.fetchone()['cnt']
-        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
-        cnt_perm = cursor.fetchone()['cnt']
-        
-        is_enriched = False
-        missing_count = 0
-        if cnt_active == 0 and cnt_perm > 0:
-            # Pulihkan data HANYA jika tabel jadwal utama benar-benar kosong (misal sehabis reset)
-            heal_query = '''
-                INSERT IGNORE INTO jadwal (
-                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                )
-                SELECT 
-                    jp.tanggal, jp.hari, jp.jam, jp.id_dosen, jp.kode_mk, jp.nama_mk, jp.kelas, jp.id_ruangan, jp.status_jadwal, jp.metode_pembelajaran, jp.semester
-                FROM jadwal_permanent jp
-                WHERE jp.semester = %s AND jp.tanggal IS NOT NULL
-            '''
-            cursor.execute(heal_query, (target_sem,))
-            conn.commit()
-            missing_count = cursor.rowcount
-            if missing_count > 0:
-                is_enriched = True
-                print(f"[Initial-Restore] Berhasil memulihkan {missing_count} jadwal dari arsip permanen untuk semester {target_sem} karena tabel jadwal kosong.")
-
-        wa_notifier.ensure_db_schema()
-        query = '''
-            SELECT 
-                j.id_jadwal,
-                j.hari, 
-                j.tanggal, 
-                j.jam, 
-                j.id_ruangan,
-                d.nama_dosen, 
-                COALESCE(j.nama_mk, mk.nama_mk) AS nama_mk, 
-                j.kelas,
-                r.kampus,
-                r.nama_ruangan, 
-                j.status_jadwal, 
-                j.metode_pembelajaran,
-                j.semester,
-                sol.status_lab,
-                sol.diubah_oleh AS status_lab_oleh,
-                sol.waktu_aksi AS status_lab_waktu
-            FROM jadwal j
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            LEFT JOIN mata_kuliah mk ON j.kode_mk = mk.kode_mk
-            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-            LEFT JOIN status_operasional_lab sol ON j.tanggal = sol.tanggal AND j.id_ruangan = sol.id_ruangan AND j.jam = sol.jam
-            WHERE j.semester = %s
-            ORDER BY j.tanggal ASC, j.jam ASC
-        '''
-        cursor.execute(query, (target_sem,))
-        hasil = cursor.fetchall()
-        
-        # Format date and time for JSON serialization
-        for item in hasil:
-            if item.get('status_lab_waktu'):
-                item['status_lab_waktu'] = item['status_lab_waktu'].strftime('%H:%M')
-
-            if item['tanggal']:
-                # Create formatted date for display (e.g. 18/07/2026)
-                item['tanggal_format'] = item['tanggal'].strftime('%d/%m/%Y')
-                item['tanggal'] = str(item['tanggal']) # keep original format for filtering
-            
-            if item['jam']:
-                # Format jam from timedelta to HH:MM
-                total_seconds = int(item['jam'].total_seconds())
-                hours = total_seconds // 3600
-                minutes = (total_seconds % 3600) // 60
-                item['jam'] = f"{hours:02d}:{minutes:02d}"
-                
-            if item.get('kampus'):
-                item['kampus'] = re.sub(r'\bKampus\s+', '', item['kampus']).strip()
-
-            if item.get('nama_ruangan'):
-                # Ruang 3.1 dan 3.4 adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
-                if 'b3.4' not in item['nama_ruangan'].lower():
-                    item['nama_ruangan'] = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', item['nama_ruangan'], flags=re.I)
-                item['nama_ruangan'] = re.sub(r'^(?:(?:Ruang|R\.)\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', item['nama_ruangan'], flags=re.I)
-                # Bersihkan kata 'Kampus ' berulang
-                item['nama_ruangan'] = re.sub(r'\(Kampus\s+(Thehok|Kobar)\)', r'(\1)', item['nama_ruangan'], flags=re.I)
-                item['nama_ruangan'] = re.sub(r'\bKampus\s+(Thehok|Kobar)\b', r'\1', item['nama_ruangan'], flags=re.I)
-
-                if item.get('kampus') and f"({item['kampus']})" not in item['nama_ruangan']:
-                    item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
-
-                item['sks'] = scraper.get_class_sks(item.get('nama_mk') or '', item.get('kelas'))
-                item['durasi_menit'] = scraper.get_class_duration(item.get('nama_mk') or '', item.get('kelas'))
-                
-        return {
-            "status": "success", 
-            "active_semester": target_sem,
-            "total": len(hasil),
-            "total_permanent": cnt_perm,
-            "is_enriched": is_enriched,
-            "missing_recovered": missing_count,
-            "data": hasil
-        }
-    except mysql.connector.Error as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/jadwal/comparison")
-def get_jadwal_comparison(semester: str = None):
-    """Membandingkan jumlah dan status kelengkapan data jadwal aktif vs cadangan permanen"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        target_sem = semester or scraper.get_active_semester(conn, cursor)
-        scraper.ensure_permanent_table_exists(cursor)
-        
-        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
-        cnt_active = cursor.fetchone()['cnt']
-        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
-        cnt_perm = cursor.fetchone()['cnt']
-        
-        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal")
-        cnt_active_all = cursor.fetchone()['cnt']
-        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent")
-        cnt_perm_all = cursor.fetchone()['cnt']
-        
-        diff = cnt_perm - cnt_active
-        is_synced = (diff <= 0)
-        
-        return {
-            "status": "success",
-            "semester": target_sem,
-            "total_active": cnt_active,
-            "total_permanent": cnt_perm,
-            "total_active_all_semesters": cnt_active_all,
-            "total_permanent_all_semesters": cnt_perm_all,
-            "is_synchronized": is_synced,
-            "difference": max(0, diff),
-            "message": "Data jadwal aktif 100% lengkap dan selaras dengan arsip permanen." if is_synced else f"Terdapat selisih {diff} jadwal pada arsip permanen yang dapat dipulihkan."
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/jadwal/restore-from-permanent")
-def restore_from_permanent(semester: str = None, admin: str = Depends(verify_admin_token)):
-    """Memulihkan seluruh jadwal dari arsip permanen ke tabel jadwal aktif (memerlukan token Admin)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        scraper.ensure_permanent_table_exists(cursor)
-        
-        if semester and semester.strip().lower() != 'all':
-            sem = semester.strip()
-            query = """
-                INSERT IGNORE INTO jadwal (
-                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                )
-                SELECT 
-                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                FROM jadwal_permanent
-                WHERE semester = %s AND tanggal IS NOT NULL;
-            """
-            cursor.execute(query, (sem,))
-        else:
-            query = """
-                INSERT IGNORE INTO jadwal (
-                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                )
-                SELECT 
-                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
-                FROM jadwal_permanent
-                WHERE tanggal IS NOT NULL;
-            """
-            cursor.execute(query)
-            
-        conn.commit()
-        restored_cnt = cursor.rowcount
-        return {
-            "status": "success",
-            "message": f"Berhasil memulihkan {restored_cnt} jadwal dari arsip permanen.",
-            "restored_count": restored_cnt
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-class ClearDbRequest(BaseModel):
-    targets: list[str] | None = []
-
-@app.get("/api/db/stats")
-def get_db_stats():
-    """Mengambil statistik jumlah baris data di database untuk panel pembersihan selektif"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(buffered=True)
-        
-        counts = {
-            "jadwal": 0,
-            "jadwal_temp": 0,
-            "jadwal_permanent": 0,
-            "mata_kuliah": 0,
-            "ruangan": 0,
-            "ruangan_lab": 0,
-            "ruangan_kelas": 0,
-            "ruangan_unused": 0,
-            "aslab": 0,
-            "aslab_thehok": 0,
-            "aslab_kobar": 0,
-            "aslab_noroom": 0,
-            "dosen": 0,
-            "dosen_active": 0,
-            "dosen_inactive": 0,
-            "notif_all": 0,
-            "notif_tambahan": 0,
-            "notif_perubahan": 0,
-            "notif_jeda": 0
-        }
-        
-        queries = {
-            "jadwal": "SELECT COUNT(*) FROM jadwal",
-            "jadwal_temp": "SELECT COUNT(*) FROM jadwal_temp",
-            "jadwal_permanent": "SELECT COUNT(*) FROM jadwal_permanent",
-            "mata_kuliah": "SELECT COUNT(*) FROM mata_kuliah",
-            "ruangan": "SELECT COUNT(*) FROM ruangan",
-            "ruangan_lab": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'",
-            "ruangan_kelas": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%'",
-            "ruangan_unused": "SELECT COUNT(*) FROM ruangan WHERE id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL)",
-            "aslab": "SELECT COUNT(*) FROM asisten_lab",
-            "aslab_thehok": "SELECT COUNT(*) FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan WHERE LOWER(r.kampus) LIKE '%thehok%'",
-            "aslab_kobar": "SELECT COUNT(*) FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan WHERE LOWER(r.kampus) LIKE '%kobar%'",
-            "aslab_noroom": "SELECT COUNT(*) FROM asisten_lab WHERE id_ruangan IS NULL",
-            "dosen": "SELECT COUNT(*) FROM dosen",
-            "dosen_active": "SELECT COUNT(*) FROM dosen WHERE id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)",
-            "dosen_inactive": "SELECT COUNT(*) FROM dosen WHERE id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)",
-            "notif_all": "SELECT COUNT(*) FROM notifikasi_lab",
-            "notif_tambahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'",
-            "notif_perubahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'",
-            "notif_jeda": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'JEDA'"
-        }
-        
-        for key, q in queries.items():
-            try:
-                cursor.execute(q)
-                res = cursor.fetchone()
-                if res is not None and len(res) > 0 and res[0] is not None:
-                    counts[key] = int(res[0])
-            except Exception as q_err:
-                print(f"[Stats] Notice for table '{key}': {q_err}")
-                counts[key] = 0
-                
-        return {"status": "success", "counts": counts}
-    except Exception as e:
-        print(f"[Stats] Error: {e}")
-        return {"status": "error", "message": str(e), "counts": {}}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/statistics")
-def get_statistics(semester: str = None):
-    """
-    Mengambil data statistik dan analitik komprehensif:
-    1. lab_stats: Utilisasi lab, perbandingan Kobar vs Thehok, ranking lab tersibuk/terkosong, rasio TM/OL/CC.
-    2. kelas_stats: Total kelas unik, distribusi hari & jam perkuliahan, kelas dengan tingkat OL/CC terbanyak.
-    3. dosen_stats: Total dosen aktif, Top dosen jam mengajar terbanyak, dosen tertinggi OL & CC.
-    4. summary: Ringkasan metrik kartu dashboard utama.
-    """
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        target_sem = semester
-        if not target_sem or target_sem == "all":
-            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
-            active_row = cursor.fetchone()
-            if active_row:
-                target_sem = active_row["nama_semester"]
-            else:
-                cursor.execute("SELECT semester FROM jadwal WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
-                j_row = cursor.fetchone()
-                target_sem = j_row["semester"] if j_row else "Genap 2025"
-
-        cursor.execute("SELECT COUNT(*) AS c FROM jadwal WHERE semester = %s", (target_sem,))
-        j_cnt = cursor.fetchone()["c"]
-        table_source = "jadwal" if j_cnt > 0 else "jadwal_permanent"
-
-        query = f'''
-            SELECT 
-                j.hari, j.tanggal, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
-                r.nama_ruangan, r.kampus, d.nama_dosen
-            FROM {table_source} j
-            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE j.semester = %s
-        '''
-        cursor.execute(query, (target_sem,))
-        rows = cursor.fetchall()
-
-        if not rows:
-            return {
-                "status": "success",
-                "semester": target_sem,
-                "summary": {
-                    "total_perkuliahan": 0,
-                    "total_jam_operasional": 0,
-                    "total_lab_aktif": 0,
-                    "total_kelas": 0,
-                    "total_dosen": 0,
-                    "rata_sesi_dosen": 0
-                },
-                "lab_stats": {"summary": {}, "rankings": [], "kampus": {}},
-                "kelas_stats": {"total_kelas": 0, "distribusi_hari": [], "distribusi_jam": [], "top_aktif": [], "top_cc": [], "top_ol": []},
-                "dosen_stats": {"total_dosen": 0, "top_jam": [], "top_ol": [], "top_cc": []}
-            }
-
-        all_ruangan_data = collections.defaultdict(lambda: {
-            "nama_ruangan": "", "kampus": "", "tipe": "Ruang Kelas", "total_sesi": 0, "total_jam": 0.0,
-            "tm": 0, "ol": 0, "cc": 0
-        })
-        lab_data = collections.defaultdict(lambda: {
-            "nama_ruangan": "", "kampus": "", "tipe": "Laboratorium", "total_sesi": 0, "total_jam": 0.0,
-            "tm": 0, "ol": 0, "cc": 0
-        })
-        dosen_data = collections.defaultdict(lambda: {
-            "nama_dosen": "", "total_sesi": 0, "total_jam": 0.0,
-            "tm": 0, "ol": 0, "cc": 0
-        })
-        kelas_data = collections.defaultdict(lambda: {
-            "kelas": "", "total_sesi": 0, "total_jam": 0.0,
-            "tm": 0, "ol": 0, "cc": 0
-        })
-        
-        hari_counts = collections.defaultdict(int)
-        jam_counts = collections.defaultdict(int)
-        
-        total_jam_keseluruhan = 0.0
-        total_lab_jam = 0.0
-        total_lab_tm = 0
-        total_lab_ol = 0
-        total_lab_cc = 0
-        univ_tm = 0
-        univ_ol = 0
-        univ_cc = 0
-
-        kampus_lab = {
-            "Kobar": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0},
-            "Thehok": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0}
-        }
-
-        mk_kelas_map = collections.defaultdict(lambda: {
-            "nama_mk": "", "kelas_set": set(), "total_sesi": 0, "total_jam": 0.0,
-            "tm": 0, "ol": 0, "cc": 0
-        })
-        prodi_map = collections.defaultdict(lambda: {
-            "kode_prodi": "", "nama_prodi": "", "kelas_set": set(),
-            "total_sesi": 0, "total_jam": 0.0
-        })
-        ruang_mk_dict = collections.defaultdict(lambda: {
-            "nama_ruangan": "", "kampus": "", "tipe": "Ruang Kelas",
-            "total_sesi": 0, "total_jam": 0.0,
-            "mk_dict": collections.defaultdict(lambda: {
-                "nama_mk": "",
-                "total_sesi": 0,
-                "total_jam": 0.0,
-                "kelas_set": set(),
-                "dosen_set": set(),
-                "tm": 0, "ol": 0, "cc": 0
-            })
-        })
-        prodi_names = {
-            "PT": "Teknik Informatika (Pagi)",
-            "MT": "Teknik Informatika (Malam)",
-            "PS": "Sistem Informasi (Pagi)",
-            "MS": "Sistem Informasi (Malam)",
-            "PK": "Sistem Komputer (Pagi)",
-            "MK": "Sistem Komputer (Malam)",
-            "SK": "Sistem Komputer",
-            "PB": "Bisnis Digital (Pagi)",
-            "MB": "Bisnis Digital (Malam)",
-            "PM": "Manajemen (Pagi)",
-            "MM": "Manajemen (Malam)",
-            "PW": "Kewirausahaan (Pagi)",
-            "MW": "Kewirausahaan (Malam)",
-            "MI": "Manajemen Informatika (D3)",
-            "KA": "Komputerisasi Akuntansi (D3)"
-        }
-
-        for r in rows:
-            dur_min = scraper.get_class_duration(r.get("nama_mk") or "", r.get("kelas")) if hasattr(scraper, "get_class_duration") else 135
-            dur_hour = round(dur_min / 60.0, 2)
-            total_jam_keseluruhan += dur_hour
-
-            metode = (r.get("metode_pembelajaran") or "TM").upper()
-            status_low = (r.get("status_jadwal") or "").lower()
-            if re.search(r'\b(?:cc|cancel|batal)\b', status_low):
-                metode = "CC"
-            elif re.search(r'\b(?:ol|online|daring)\b', status_low):
-                metode = "OL"
-            elif metode not in ["TM", "OL", "CC"]:
-                metode = "TM"
-
-            if metode == "TM": univ_tm += 1
-            elif metode == "OL": univ_ol += 1
-            elif metode == "CC": univ_cc += 1
-
-            # 1. Agregasi Ruangan (Labor & Ruang Kelas Teori)
-            ruang = r.get("nama_ruangan") or ""
-            kampus = (r.get("kampus") or "Kobar").strip()
-            if ruang:
-                clean_ruang = re.sub(r"\s*\((Thehok|Kobar|Kampus.*?)\)", "", ruang, flags=re.IGNORECASE).strip()
-                room_key = f"{clean_ruang}_{kampus}"
-                is_lab_room = scraper.is_lab(clean_ruang)
-                tipe_ruang = "Labor" if is_lab_room else "Ruang Kelas"
-
-                # Semua Ruangan (41 Ruang)
-                r_entry = all_ruangan_data[room_key]
-                r_entry["nama_ruangan"] = clean_ruang
-                r_entry["kampus"] = kampus
-                r_entry["tipe"] = tipe_ruang
-                r_entry["total_sesi"] += 1
-                r_entry["total_jam"] = round(r_entry["total_jam"] + dur_hour, 2)
-                if metode == "TM": r_entry["tm"] += 1
-                elif metode == "OL": r_entry["ol"] += 1
-                elif metode == "CC": r_entry["cc"] += 1
-
-                # Khusus Labor (13 Lab)
-                if is_lab_room:
-                    lab_entry = lab_data[room_key]
-                    lab_entry["nama_ruangan"] = clean_ruang
-                    lab_entry["kampus"] = kampus
-                    lab_entry["tipe"] = "Labor"
-                    lab_entry["total_sesi"] += 1
-                    lab_entry["total_jam"] = round(lab_entry["total_jam"] + dur_hour, 2)
-                    
-                    total_lab_jam += dur_hour
-                    if metode == "TM":
-                        lab_entry["tm"] += 1
-                        total_lab_tm += 1
-                    elif metode == "OL":
-                        lab_entry["ol"] += 1
-                        total_lab_ol += 1
-                    elif metode == "CC":
-                        lab_entry["cc"] += 1
-                        total_lab_cc += 1
-
-                # Kampus stats
-                k_key = "Kobar" if "kobar" in kampus.lower() else "Thehok"
-                kampus_lab[k_key]["total_sesi"] += 1
-                kampus_lab[k_key]["total_jam"] = round(kampus_lab[k_key]["total_jam"] + dur_hour, 2)
-                if metode == "TM": kampus_lab[k_key]["tm"] += 1
-                elif metode == "OL": kampus_lab[k_key]["ol"] += 1
-                elif metode == "CC": kampus_lab[k_key]["cc"] += 1
-
-            # 2. Agregasi Dosen
-            dosen = (r.get("nama_dosen") or "").strip()
-            if not dosen or dosen.lower() == "none":
-                dosen = "Belum Ditentukan"
-            dosen_entry = dosen_data[dosen]
-            dosen_entry["nama_dosen"] = dosen
-            dosen_entry["total_sesi"] += 1
-            dosen_entry["total_jam"] = round(dosen_entry["total_jam"] + dur_hour, 2)
-            if metode == "TM": dosen_entry["tm"] += 1
-            elif metode == "OL": dosen_entry["ol"] += 1
-            elif metode == "CC": dosen_entry["cc"] += 1
-
-            # 3. Agregasi Kelas
-            kelas = (r.get("kelas") or "").strip()
-            if not kelas: kelas = "Lainnya"
-            kelas_entry = kelas_data[kelas]
-            kelas_entry["kelas"] = kelas
-            kelas_entry["total_sesi"] += 1
-            kelas_entry["total_jam"] = round(kelas_entry["total_jam"] + dur_hour, 2)
-            if metode == "TM": kelas_entry["tm"] += 1
-            elif metode == "OL": kelas_entry["ol"] += 1
-            elif metode == "CC": kelas_entry["cc"] += 1
-
-            # 4. Distribusi Hari & Jam
-            if r.get("hari"):
-                hari_counts[r["hari"]] += 1
-            if r.get("jam"):
-                tot_sec = int(r["jam"].total_seconds())
-                jam_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
-                jam_counts[jam_str] += 1
-
-            # 5. Agregasi Mata Kuliah per Kelas
-            mk_name = (r.get("nama_mk") or "").strip()
-            if mk_name:
-                mk_entry = mk_kelas_map[mk_name]
-                mk_entry["nama_mk"] = mk_name
-                if kelas and kelas != "Lainnya":
-                    mk_entry["kelas_set"].add(kelas)
-                mk_entry["total_sesi"] += 1
-                mk_entry["total_jam"] = round(mk_entry["total_jam"] + dur_hour, 2)
-                if metode == "TM": mk_entry["tm"] += 1
-                elif metode == "OL": mk_entry["ol"] += 1
-                elif metode == "CC": mk_entry["cc"] += 1
-
-            # 6. Agregasi Program Studi (Prodi)
-            if kelas and kelas != "Lainnya":
-                m_prodi = re.search(r'([A-Za-z]+)', kelas)
-                raw_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
-                
-                # Normalisasi prefix kode prodi UNAMA (contoh: PSP/PST -> PS, PTP/PTT -> PT, PKP/PKT -> SK)
-                p_code = raw_code
-                if raw_code.startswith("PS"): p_code = "PS"
-                elif raw_code.startswith("PT"): p_code = "PT"
-                elif raw_code.startswith("PK") or raw_code.startswith("SK"): p_code = "SK"
-                elif raw_code.startswith("PM"): p_code = "PM"
-                elif raw_code.startswith("MS"): p_code = "MS"
-                elif raw_code.startswith("MM"): p_code = "MM"
-                elif raw_code.startswith("MT"): p_code = "MT"
-                elif raw_code.startswith("MK"): p_code = "MK"
-                elif raw_code.startswith("MW"): p_code = "MW"
-                elif raw_code.startswith("PW"): p_code = "PW"
-                elif raw_code.startswith("PB"): p_code = "PB"
-                elif raw_code.startswith("MB"): p_code = "MB"
-                elif raw_code.startswith("MI"): p_code = "MI"
-                elif raw_code.startswith("KA"): p_code = "KA"
-                
-                p_entry = prodi_map[p_code]
-                p_entry["kode_prodi"] = p_code
-                p_entry["nama_prodi"] = prodi_names.get(p_code, f"Program Studi {p_code}")
-                p_entry["kelas_set"].add(kelas)
-                p_entry["total_sesi"] += 1
-                p_entry["total_jam"] = round(p_entry["total_jam"] + dur_hour, 2)
-
-            # 7. Agregasi Mata Kuliah per Ruangan
-            if ruang:
-                rm_entry = ruang_mk_dict[room_key]
-                rm_entry["nama_ruangan"] = clean_ruang
-                rm_entry["kampus"] = kampus
-                rm_entry["tipe"] = tipe_ruang
-                rm_entry["total_sesi"] += 1
-                rm_entry["total_jam"] = round(rm_entry["total_jam"] + dur_hour, 2)
-
-                if mk_name:
-                    mk_rm = rm_entry["mk_dict"][mk_name]
-                    mk_rm["nama_mk"] = mk_name
-                    mk_rm["total_sesi"] += 1
-                    mk_rm["total_jam"] = round(mk_rm["total_jam"] + dur_hour, 2)
-                    if kelas and kelas != "Lainnya":
-                        mk_rm["kelas_set"].add(kelas)
-                    if dosen and dosen != "Belum Ditentukan":
-                        mk_rm["dosen_set"].add(dosen)
-                    if metode == "TM": mk_rm["tm"] += 1
-                    elif metode == "OL": mk_rm["ol"] += 1
-                    elif metode == "CC": mk_rm["cc"] += 1
-
-        # Format Ruangan Rankings (Semua Ruangan: Lab + Ruang Kelas)
-        all_ruangan_rankings = sorted(all_ruangan_data.values(), key=lambda x: x["total_jam"], reverse=True)
-        max_ruang_jam = all_ruangan_rankings[0]["total_jam"] if all_ruangan_rankings else 1.0
-        for rb in all_ruangan_rankings:
-            rb["utilization_pct"] = round((rb["total_jam"] / max_ruang_jam) * 100, 1) if max_ruang_jam > 0 else 0
-
-        lab_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Labor"]
-        ruang_kelas_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Ruang Kelas"]
-
-        total_lab_sesi = total_lab_tm + total_lab_ol + total_lab_cc
-        lab_summary = {
-            "total_sesi": total_lab_sesi,
-            "total_jam": round(total_lab_jam, 2),
-            "tm": total_lab_tm,
-            "ol": total_lab_ol,
-            "cc": total_lab_cc,
-            "persen_tm": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
-            "persen_ol": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
-            "persen_cc": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
-            "metode_rasio": {
-                "total_sesi": total_lab_sesi,
-                "tm": total_lab_tm,
-                "ol": total_lab_ol,
-                "cc": total_lab_cc,
-                "tm_pct": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
-                "ol_pct": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
-                "cc_pct": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
-            },
-            "lab_tersibuk": lab_rankings[0] if lab_rankings else None,
-            "lab_terkosong": lab_rankings[-1] if len(lab_rankings) > 1 else None,
-        }
-
-        # Format Kelas Rankings
-        top_kelas_aktif = sorted(kelas_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
-        top_kelas_ol = sorted([k for k in kelas_data.values() if k["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
-        top_kelas_cc = sorted([k for k in kelas_data.values() if k["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
-
-        top_mk_kelas = []
-        for m_item in sorted(mk_kelas_map.values(), key=lambda x: (len(x["kelas_set"]), x["total_sesi"]), reverse=True)[:15]:
-            top_mk_kelas.append({
-                "nama_mk": m_item["nama_mk"],
-                "total_kelas": len(m_item["kelas_set"]),
-                "total_sesi": m_item["total_sesi"],
-                "total_jam": m_item["total_jam"],
-                "tm": m_item["tm"],
-                "ol": m_item["ol"],
-                "cc": m_item["cc"]
-            })
-
-        distribusi_prodi = []
-        for p_item in sorted(prodi_map.values(), key=lambda x: len(x["kelas_set"]), reverse=True):
-            distribusi_prodi.append({
-                "kode": p_item["kode_prodi"],
-                "nama": p_item["nama_prodi"],
-                "total_kelas": len(p_item["kelas_set"]),
-                "total_sesi": p_item["total_sesi"],
-                "total_jam": p_item["total_jam"]
-            })
-
-        urutan_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
-        sorted_hari = [{"hari": h, "total": hari_counts.get(h, 0)} for h in urutan_hari if hari_counts.get(h, 0) > 0]
-        sorted_jam = [{"jam": j, "total": cnt} for j, cnt in sorted(jam_counts.items(), key=lambda x: x[0])]
-
-        # Format Dosen Rankings
-        top_dosen_jam = sorted(dosen_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
-        top_dosen_ol = sorted([d for d in dosen_data.values() if d["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
-        top_dosen_cc = sorted([d for d in dosen_data.values() if d["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
-
-        dosen_aktif_count = len([d for d in dosen_data.keys() if d != "Belum Ditentukan"])
-        total_dosen_sesi = sum(d["total_sesi"] for d in dosen_data.values())
-        rata_sesi_dosen = round(total_dosen_sesi / dosen_aktif_count, 1) if dosen_aktif_count > 0 else 0
-
-        # Format Detail Mata Kuliah per Ruangan
-        ruang_mk_list = []
-        for rm_k, rm_v in ruang_mk_dict.items():
-            mk_list = []
-            tot_rm_jam = rm_v["total_jam"]
-            for m in sorted(rm_v["mk_dict"].values(), key=lambda x: x["total_jam"], reverse=True):
-                jam_mk = round(m["total_jam"], 2)
-                pct = round((jam_mk / tot_rm_jam) * 100, 1) if tot_rm_jam > 0 else 0
-                mk_list.append({
-                    "nama_mk": m["nama_mk"],
-                    "total_sesi": m["total_sesi"],
-                    "total_jam": jam_mk,
-                    "persentase": pct,
-                    "kelas": sorted(list(m["kelas_set"])),
-                    "dosen": sorted(list(m["dosen_set"])),
-                    "tm": m["tm"],
-                    "ol": m["ol"],
-                    "cc": m["cc"]
-                })
-            ruang_mk_list.append({
-                "nama_ruangan": rm_v["nama_ruangan"],
-                "kampus": rm_v["kampus"],
-                "tipe": rm_v["tipe"],
-                "total_sesi": rm_v["total_sesi"],
-                "total_jam": round(rm_v["total_jam"], 2),
-                "total_mk": len(mk_list),
-                "mata_kuliah": mk_list
-            })
-
-        ruang_mk_list.sort(key=lambda x: x["total_jam"], reverse=True)
-
-        total_rows = len(rows)
-        total_ruang_aktif_cnt = len(all_ruangan_rankings)
-        total_lab_cnt = len(lab_rankings)
-        total_ruang_kelas_cnt = len(ruang_kelas_rankings)
-
-        summary = {
-            "total_perkuliahan": total_rows,
-            "total_jam_operasional": round(total_jam_keseluruhan, 2),
-            "total_ruang_aktif": total_ruang_aktif_cnt,
-            "total_lab_aktif": total_lab_cnt,
-            "total_ruang_kelas_aktif": total_ruang_kelas_cnt,
-            "total_kelas": len(kelas_data),
-            "total_dosen": dosen_aktif_count,
-            "rata_sesi_dosen": rata_sesi_dosen,
-            "metode_rasio": {
-                "total_sesi": total_rows,
-                "tm": univ_tm,
-                "ol": univ_ol,
-                "cc": univ_cc,
-                "tm_pct": round((univ_tm / total_rows) * 100, 1) if total_rows > 0 else 0,
-                "ol_pct": round((univ_ol / total_rows) * 100, 1) if total_rows > 0 else 0,
-                "cc_pct": round((univ_cc / total_rows) * 100, 1) if total_rows > 0 else 0,
-            }
-        }
-
-        return {
-            "status": "success",
-            "semester": target_sem,
-            "source_table": table_source,
-            "summary": summary,
-            "lab_stats": {
-                "summary": lab_summary,
-                "rankings": all_ruangan_rankings,
-                "all_rankings": all_ruangan_rankings,
-                "lab_rankings": lab_rankings,
-                "ruang_kelas_rankings": ruang_kelas_rankings,
-                "total_ruang": total_ruang_aktif_cnt,
-                "total_lab": total_lab_cnt,
-                "total_ruang_kelas": total_ruang_kelas_cnt,
-                "kampus": kampus_lab
-            },
-            "kelas_stats": {
-                "total_kelas": len(kelas_data),
-                "distribusi_hari": sorted_hari,
-                "distribusi_jam": sorted_jam,
-                "top_aktif": top_kelas_aktif,
-                "top_ol": top_kelas_ol,
-                "top_cc": top_kelas_cc,
-                "top_mk": top_mk_kelas,
-                "distribusi_prodi": distribusi_prodi
-            },
-            "dosen_stats": {
-                "total_dosen": dosen_aktif_count,
-                "top_jam": top_dosen_jam,
-                "top_ol": top_dosen_ol,
-                "top_cc": top_dosen_cc
-            },
-            "ruang_mk_stats": ruang_mk_list
-        }
-    except Exception as e:
-        print(f"[API Statistics Error] {e}")
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-# ==================== ENDPOINT KURIKULUM AKADEMIK ====================
-
-@app.get("/api/kurikulum")
-def get_kurikulum(
-    prodi: str = None, 
-    tahun: str = None, 
-    semester: str = None, 
-    status_mk: str = None, 
-    kategori: str = None, 
-    search: str = None
-):
-    """
-    Mengambil data mata kuliah kurikulum (TI, SI, SK untuk Kurikulum 2024 & 2025).
-    Mendukung filter prodi, tahun_kurikulum, semester, status (Wajib/Pilihan), dan pencarian nama/kode.
-    """
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        query = "SELECT * FROM kurikulum_mata_kuliah WHERE 1=1"
-        params = []
-        
-        if prodi and prodi.strip() != '' and prodi.lower() != 'all':
-            query += " AND prodi = %s"
-            params.append(prodi.upper().strip())
-            
-        if tahun and tahun.strip() != '' and tahun.lower() != 'all':
-            query += " AND tahun_kurikulum = %s"
-            params.append(tahun.strip())
-            
-        if semester and semester.strip() != '' and semester.lower() != 'all':
-            sem_clean = semester.strip()
-            if sem_clean.isdigit():
-                query += " AND semester_angka = %s"
-                params.append(int(sem_clean))
-            elif 'pilihan' in sem_clean.lower():
-                query += " AND status_mk = 'Pilihan'"
-            else:
-                query += " AND semester_label LIKE %s"
-                params.append(f"%{sem_clean}%")
-                
-        if status_mk and status_mk.strip() != '' and status_mk.lower() != 'all':
-            query += " AND status_mk = %s"
-            params.append(status_mk.capitalize().strip())
-            
-        if kategori and kategori.strip() != '' and kategori.lower() != 'all':
-            query += " AND kategori_mk = %s"
-            params.append(kategori.strip())
-            
-        if search and search.strip() != '':
-            query += " AND (kode_mk LIKE %s OR nama_mk LIKE %s)"
-            params.append(f"%{search.strip()}%")
-            params.append(f"%{search.strip()}%")
-            
-        query += " ORDER BY prodi, tahun_kurikulum, CASE WHEN semester_angka IS NULL THEN 99 ELSE semester_angka END, kode_mk"
-        
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        
-        total_sks = sum(r.get('sks', 0) for r in rows)
-        
-        # Kelompokkan per semester
-        breakdown_sem = {}
-        for r in rows:
-            s_label = r['semester_label']
-            if s_label not in breakdown_sem:
-                breakdown_sem[s_label] = {'semester': s_label, 'total_mk': 0, 'total_sks': 0}
-            breakdown_sem[s_label]['total_mk'] += 1
-            breakdown_sem[s_label]['total_sks'] += r.get('sks', 0)
-            
-        return {
-            "status": "success",
-            "total_mk": len(rows),
-            "total_sks": total_sks,
-            "breakdown_semester": list(breakdown_sem.values()),
-            "data": rows
-        }
-    except Exception as e:
-        print(f"[API Kurikulum Error] {e}")
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/kurikulum/summary")
-def get_kurikulum_summary():
-    """
-    Mengambil ringkasan matrik kurikulum (total SKS wajib, total MK pilihan, per prodi dan tahun).
-    """
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT 
-                prodi, 
-                nama_prodi, 
-                tahun_kurikulum, 
-                status_mk, 
-                COUNT(*) as total_mk, 
-                SUM(sks) as total_sks
-            FROM kurikulum_mata_kuliah
-            GROUP BY prodi, nama_prodi, tahun_kurikulum, status_mk
-            ORDER BY prodi, tahun_kurikulum, status_mk DESC
-        """)
-        rows = cursor.fetchall()
-        
-        cursor.execute("SELECT prodi, COUNT(*) as total_perubahan FROM kurikulum_perubahan GROUP BY prodi")
-        perubahan_counts = {r['prodi']: r['total_perubahan'] for r in cursor.fetchall()}
-        
-        return {
-            "status": "success",
-            "matrix": rows,
-            "perubahan_counts": perubahan_counts
-        }
-    except Exception as e:
-        print(f"[API Kurikulum Summary Error] {e}")
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/sks-map")
-def get_sks_map():
-    """Mengembalikan peta SKS kurikulum untuk percepatan lookup di frontend"""
-    try:
-        cache = scraper.load_curriculum_sks_cache()
-        prodi_map = {f"{k[0]}:::{k[1]}": v for k, v in cache.get('prodi', {}).items()}
-        sem_map = {f"{k[0]}:::{k[1]}:::{k[2]}": v for k, v in cache.get('sem', {}).items()}
-        return {
-            "status": "success",
-            "name_map": cache.get('name', {}),
-            "prodi_map": prodi_map,
-            "sem_map": sem_map,
-            "two_sks_patterns": scraper.TWO_SKS_PATTERNS
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/api/kurikulum/perubahan")
-def get_kurikulum_perubahan(prodi: str = None):
-    """
-    Mengambil data analisis komparatif perubahan kurikulum 2024 vs 2025.
-    """
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        query = "SELECT * FROM kurikulum_perubahan WHERE 1=1"
-        params = []
-        if prodi and prodi.strip() != '' and prodi.lower() != 'all':
-            query += " AND prodi = %s"
-            params.append(prodi.upper().strip())
-            
-        query += " ORDER BY prodi, id_perubahan"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        
-        return {
-            "status": "success",
-            "total": len(rows),
-            "data": rows
-        }
-    except Exception as e:
-        print(f"[API Kurikulum Perubahan Error] {e}")
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/db/clear")
-@app.delete("/api/db/clear")
-@app.post("/api/clear-db")
-def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depends(verify_admin_token)):
-    """Menghapus data tertentu secara selektif dari database (memerlukan token Admin)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-        
-        deleted_summary = {}
-        targets = set(req.targets or [])
-        is_all = "all" in targets or "semua" in targets
-        
-        # GUARD KEBAL: Tabel jadwal_permanent dilindungi secara mutlak dan tidak boleh dihapus
-        if "jadwal_permanent" in targets:
-            targets.remove("jadwal_permanent")
-        print("[Security Guard] Tabel jadwal_permanent kebal dan tetap aman dari penghapusan.")
-        
-        # 1. Jadwal Perkuliahan & Temp & Master MK & Jeda Lab
-        if is_all or "jadwal" in targets or "jadwal_all" in targets:
-            cursor.execute("DELETE FROM jadwal")
-            cnt_j = cursor.rowcount
-            cursor.execute("DELETE FROM jadwal_temp")
-            cnt_jt = cursor.rowcount
-            try:
-                cursor.execute("DELETE FROM mata_kuliah")
-                cnt_mk = cursor.rowcount
-            except Exception:
-                cnt_mk = 0
-            try:
-                cursor.execute("DELETE FROM jeda_lab")
-            except Exception:
-                pass
-            deleted_summary["jadwal_all"] = cnt_j + cnt_jt + cnt_mk
-        else:
-            if "jadwal_utama" in targets:
-                cursor.execute("DELETE FROM jadwal")
-                deleted_summary["jadwal_utama"] = cursor.rowcount
-            if "jadwal_temp" in targets:
-                cursor.execute("DELETE FROM jadwal_temp")
-                deleted_summary["jadwal_temp"] = cursor.rowcount
-            if "mata_kuliah" in targets:
-                try:
-                    cursor.execute("DELETE FROM mata_kuliah")
-                    deleted_summary["mata_kuliah"] = cursor.rowcount
-                except Exception:
-                    pass
-            
-        # 2. Master Ruangan
-        if is_all or "ruangan" in targets or "ruangan_all" in targets:
-            cursor.execute("DELETE FROM ruangan")
-            deleted_summary["ruangan_all"] = cursor.rowcount
-        else:
-            if "ruangan_lab" in targets:
-                cursor.execute("DELETE FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'")
-                deleted_summary["ruangan_lab"] = cursor.rowcount
-            if "ruangan_kelas" in targets:
-                cursor.execute("DELETE FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%'")
-                deleted_summary["ruangan_kelas"] = cursor.rowcount
-            if "ruangan_unused" in targets:
-                cursor.execute("DELETE FROM ruangan WHERE id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL)")
-                deleted_summary["ruangan_unused"] = cursor.rowcount
-            
-        # 3. Notifikasi (Granular: Semua, Tambahan, Perubahan, Jeda)
-        if is_all or "notif_all" in targets:
-            cursor.execute("DELETE FROM notifikasi_lab")
-            deleted_summary["notif_all"] = cursor.rowcount
-            try:
-                cursor.execute("DELETE FROM jeda_lab")
-            except Exception:
-                pass
-        else:
-            if "notif_tambahan" in targets:
-                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'")
-                deleted_summary["notif_tambahan"] = cursor.rowcount
-            if "notif_perubahan" in targets:
-                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'")
-                deleted_summary["notif_perubahan"] = cursor.rowcount
-            if "notif_jeda" in targets:
-                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'JEDA'")
-                deleted_summary["notif_jeda"] = cursor.rowcount
-                try:
-                    cursor.execute("DELETE FROM jeda_lab")
-                except Exception:
-                    pass
-                
-        # 4. Asisten Lab
-        if is_all or "aslab" in targets or "aslab_all" in targets or "aslab_dosen" in targets:
-            cursor.execute("DELETE FROM asisten_lab")
-            deleted_summary["aslab_all"] = cursor.rowcount
-        else:
-            if "aslab_thehok" in targets:
-                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%thehok%')")
-                deleted_summary["aslab_thehok"] = cursor.rowcount
-            if "aslab_kobar" in targets:
-                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%kobar%')")
-                deleted_summary["aslab_kobar"] = cursor.rowcount
-            if "aslab_noroom" in targets:
-                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IS NULL")
-                deleted_summary["aslab_noroom"] = cursor.rowcount
-
-        # 5. Master Dosen
-        if is_all or "dosen" in targets or "dosen_all" in targets or "aslab_dosen" in targets:
-            cursor.execute("DELETE FROM dosen")
-            deleted_summary["dosen_all"] = cursor.rowcount
-        else:
-            if "dosen_active" in targets:
-                cursor.execute("DELETE FROM dosen WHERE id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
-                deleted_summary["dosen_active"] = cursor.rowcount
-            if "dosen_inactive" in targets:
-                cursor.execute("DELETE FROM dosen WHERE id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
-                deleted_summary["dosen_inactive"] = cursor.rowcount
-
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-        conn.commit()
-        
-        # Susun pesan ringkasan yang ramah dan informatif
-        parts_msg = []
-        if "jadwal_all" in deleted_summary and deleted_summary["jadwal_all"] > 0:
-            parts_msg.append(f"{deleted_summary['jadwal_all']} baris Data Jadwal & Temp")
-        if "jadwal_utama" in deleted_summary and deleted_summary["jadwal_utama"] > 0:
-            parts_msg.append(f"{deleted_summary['jadwal_utama']} baris Jadwal Utama")
-        if "jadwal_temp" in deleted_summary and deleted_summary["jadwal_temp"] > 0:
-            parts_msg.append(f"{deleted_summary['jadwal_temp']} baris Data Temp/Staging")
-        if "mata_kuliah" in deleted_summary and deleted_summary["mata_kuliah"] > 0:
-            parts_msg.append(f"{deleted_summary['mata_kuliah']} Master Mata Kuliah")
-
-        if "ruangan_all" in deleted_summary and deleted_summary["ruangan_all"] > 0:
-            parts_msg.append(f"{deleted_summary['ruangan_all']} Master Ruangan")
-        if "ruangan_lab" in deleted_summary and deleted_summary["ruangan_lab"] > 0:
-            parts_msg.append(f"{deleted_summary['ruangan_lab']} Ruang Labor")
-        if "ruangan_kelas" in deleted_summary and deleted_summary["ruangan_kelas"] > 0:
-            parts_msg.append(f"{deleted_summary['ruangan_kelas']} Ruang Kelas/Teori")
-        if "ruangan_unused" in deleted_summary and deleted_summary["ruangan_unused"] > 0:
-            parts_msg.append(f"{deleted_summary['ruangan_unused']} Ruangan Tanpa Jadwal")
-
-        if "notif_all" in deleted_summary and deleted_summary["notif_all"] > 0:
-            parts_msg.append(f"{deleted_summary['notif_all']} Semua Notifikasi")
-        if "notif_tambahan" in deleted_summary and deleted_summary["notif_tambahan"] > 0:
-            parts_msg.append(f"{deleted_summary['notif_tambahan']} Notifikasi Kelas Tambahan")
-        if "notif_perubahan" in deleted_summary and deleted_summary["notif_perubahan"] > 0:
-            parts_msg.append(f"{deleted_summary['notif_perubahan']} Notifikasi Perubahan Jadwal")
-        if "notif_jeda" in deleted_summary and deleted_summary["notif_jeda"] > 0:
-            parts_msg.append(f"{deleted_summary['notif_jeda']} Notifikasi Jeda Ruangan")
-
-        if "aslab_all" in deleted_summary and deleted_summary["aslab_all"] > 0:
-            parts_msg.append(f"{deleted_summary['aslab_all']} Kontak Asisten Lab")
-        if "aslab_thehok" in deleted_summary and deleted_summary["aslab_thehok"] > 0:
-            parts_msg.append(f"{deleted_summary['aslab_thehok']} Aslab Kampus Thehok")
-        if "aslab_kobar" in deleted_summary and deleted_summary["aslab_kobar"] > 0:
-            parts_msg.append(f"{deleted_summary['aslab_kobar']} Aslab Kampus Kobar")
-        if "aslab_noroom" in deleted_summary and deleted_summary["aslab_noroom"] > 0:
-            parts_msg.append(f"{deleted_summary['aslab_noroom']} Aslab Tanpa Ruangan")
-
-        if "dosen_all" in deleted_summary and deleted_summary["dosen_all"] > 0:
-            parts_msg.append(f"{deleted_summary['dosen_all']} Master Dosen")
-        if "dosen_active" in deleted_summary and deleted_summary["dosen_active"] > 0:
-            parts_msg.append(f"{deleted_summary['dosen_active']} Dosen Berjadwal")
-        if "dosen_inactive" in deleted_summary and deleted_summary["dosen_inactive"] > 0:
-            parts_msg.append(f"{deleted_summary['dosen_inactive']} Dosen Tanpa Jadwal")
-        
-        if is_all:
-            resp_msg = "Database berhasil di-reset total! Seluruh data (jadwal, ruangan, notifikasi, aslab, dan dosen) telah dibersihkan."
-        elif parts_msg:
-            resp_msg = f"Berhasil menghapus: {', '.join(parts_msg)}."
-        else:
-            resp_msg = "Pembersihan database selesai (tidak ada baris data yang terpengaruh)."
-
-        return {
-            "status": "success",
-            "message": resp_msg,
-            "deleted": deleted_summary
-        }
-    except Exception as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-class BackupDbRequest(BaseModel):
-    targets: list[str] | None = []
-
-def sql_escape_value(val):
-    if val is None:
-        return "NULL"
-    elif isinstance(val, bool):
-        return "1" if val else "0"
-    elif isinstance(val, (int, float)):
-        return str(val)
-    elif isinstance(val, datetime.timedelta):
-        total_seconds = int(val.total_seconds())
-        hours = total_seconds // 3600
-        mins = (total_seconds % 3600) // 60
-        secs = total_seconds % 60
-        return f"'{hours:02d}:{mins:02d}:{secs:02d}'"
-    elif isinstance(val, datetime.datetime):
-        return f"'{val.strftime('%Y-%m-%d %H:%M:%S')}'"
-    elif isinstance(val, datetime.date):
-        return f"'{val.strftime('%Y-%m-%d')}'"
-    else:
-        s = str(val).replace('\\', '\\\\').replace("'", "''").replace('\r', '\\r').replace('\n', '\\n')
-        return f"'{s}'"
-
-def generate_table_sql_dump(cursor, table_name, query=None):
-    out = []
-    try:
-        cursor.execute(f"SHOW CREATE TABLE `{table_name}`")
-        res_create = cursor.fetchone()
-        if not res_create or len(res_create) < 2:
-            return ""
-        create_sql = res_create[1]
-    except Exception as e:
-        return f"-- Gagal mengambil skema tabel `{table_name}`: {e}\n"
-
-    out.append(f"-- --------------------------------------------------------")
-    out.append(f"-- Struktur tabel `{table_name}`")
-    out.append(f"-- --------------------------------------------------------")
-    out.append(f"DROP TABLE IF EXISTS `{table_name}`;")
-    out.append(f"{create_sql};\n")
-
-    if query is None:
-        query = f"SELECT * FROM `{table_name}`"
-
-    try:
-        cursor.execute(query)
-        rows = cursor.fetchall()
-    except Exception as e:
-        out.append(f"-- Gagal mengambil data tabel `{table_name}`: {e}\n")
-        return "\n".join(out)
-
-    if not rows:
-        out.append(f"-- Tidak ada data baris untuk tabel `{table_name}`\n")
-        return "\n".join(out)
-
-    cols = [f"`{col[0]}`" for col in cursor.description]
-    cols_str = ", ".join(cols)
-
-    out.append(f"-- Dumping data untuk tabel `{table_name}` ({len(rows)} baris)")
-    batch_size = 100
-    for i in range(0, len(rows), batch_size):
-        batch = rows[i:i + batch_size]
-        row_strings = []
-        for r in batch:
-            val_strs = [sql_escape_value(val) for val in r]
-            row_strings.append(f"  ({', '.join(val_strs)})")
-        out.append(f"INSERT INTO `{table_name}` ({cols_str}) VALUES\n" + ",\n".join(row_strings) + ";\n")
-
-    return "\n".join(out)
-
-@app.post("/api/db/backup")
-def backup_selective_db(req: BackupDbRequest = BackupDbRequest(), admin: str = Depends(verify_admin_token)):
-    """Mengekspor data database ke skrip SQL (memerlukan token Admin)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        targets = set(req.targets or [])
-        is_all = not targets or "all" in targets or "semua" in targets or "backup_all" in targets or "wipe_all" in targets
-        
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ts_slug = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        sql_parts = []
-        sql_parts.append("-- ========================================================")
-        sql_parts.append("-- Jadwal Kuliah UNAMA - Database Backup (.SQL)")
-        sql_parts.append(f"-- Dibuat secara otomatis pada: {now_str}")
-        sql_parts.append(f"-- Kategori Backup: {'Semua Database (Total)' if is_all else ', '.join(targets)}")
-        sql_parts.append("-- ========================================================\n")
-        sql_parts.append("/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;")
-        sql_parts.append("/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;")
-        sql_parts.append("/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;")
-        sql_parts.append("/*!40101 SET NAMES utf8mb4 */;")
-        sql_parts.append("SET FOREIGN_KEY_CHECKS = 0;")
-        sql_parts.append("SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";")
-        sql_parts.append("SET AUTOCOMMIT = 0;")
-        sql_parts.append("START TRANSACTION;")
-        sql_parts.append("SET time_zone = \"+07:00\";\n")
-        
-        # 1. Tabel Ruangan
-        if is_all or "ruangan" in targets or "ruangan_all" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "ruangan", "SELECT * FROM ruangan"))
-        else:
-            r_conds = []
-            if "ruangan_lab" in targets:
-                r_conds.append("(LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%')")
-            if "ruangan_kelas" in targets:
-                r_conds.append("(LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%')")
-            if "ruangan_unused" in targets:
-                r_conds.append("(id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL))")
-            if r_conds:
-                sql_parts.append(generate_table_sql_dump(cursor, "ruangan", f"SELECT * FROM ruangan WHERE {' OR '.join(r_conds)}"))
-
-        # 2. Tabel Dosen
-        if is_all or "dosen" in targets or "dosen_all" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "dosen", "SELECT * FROM dosen"))
-        else:
-            d_conds = []
-            if "dosen_active" in targets:
-                d_conds.append("id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
-            if "dosen_inactive" in targets:
-                d_conds.append("id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
-            if d_conds:
-                sql_parts.append(generate_table_sql_dump(cursor, "dosen", f"SELECT * FROM dosen WHERE {' OR '.join(d_conds)}"))
-
-        # 3. Tabel Mata Kuliah
-        if is_all or "jadwal" in targets or "jadwal_all" in targets or "mata_kuliah" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "mata_kuliah", "SELECT * FROM mata_kuliah"))
-
-        # 4. Tabel Jadwal Utama
-        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_utama" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "jadwal", "SELECT * FROM jadwal"))
-
-        # 5. Tabel Jadwal Temp
-        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_temp" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "jadwal_temp", "SELECT * FROM jadwal_temp"))
-
-        # 5b. Tabel Cadangan Permanen Jadwal (Master Arsip Anti-Hilang)
-        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_permanent" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "jadwal_permanent", "SELECT * FROM jadwal_permanent"))
-
-        # 6. Tabel Jeda Lab (opsional, tabel legacy — skip jika tidak ada)
-        if is_all or "jadwal" in targets or "jadwal_all" in targets or "notif_all" in targets or "notif_jeda" in targets:
-            try:
-                conn_check = get_db()
-                cur_check = conn_check.cursor()
-                cur_check.execute("SHOW TABLES LIKE 'jeda_lab'")
-                if cur_check.fetchone():
-                    sql_parts.append(generate_table_sql_dump(cursor, "jeda_lab", "SELECT * FROM jeda_lab"))
-                cur_check.close()
-                conn_check.close()
-            except Exception:
-                pass
-
-        # 7. Tabel Notifikasi Lab
-        if is_all or "notif_all" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "notifikasi_lab", "SELECT * FROM notifikasi_lab"))
-        else:
-            n_subtypes = []
-            if "notif_tambahan" in targets: n_subtypes.append("'TAMBAHAN'")
-            if "notif_perubahan" in targets: n_subtypes.append("'PERUBAHAN'")
-            if "notif_jeda" in targets: n_subtypes.append("'JEDA'")
-            if n_subtypes:
-                sql_parts.append(generate_table_sql_dump(cursor, "notifikasi_lab", f"SELECT * FROM notifikasi_lab WHERE tipe_notif IN ({','.join(n_subtypes)})"))
-
-        # 8. Tabel Asisten Lab
-        if is_all or "aslab" in targets or "aslab_all" in targets:
-            sql_parts.append(generate_table_sql_dump(cursor, "asisten_lab", "SELECT * FROM asisten_lab"))
-        else:
-            a_conds = []
-            if "aslab_thehok" in targets:
-                a_conds.append("id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%thehok%')")
-            if "aslab_kobar" in targets:
-                a_conds.append("id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%kobar%')")
-            if "aslab_noroom" in targets:
-                a_conds.append("id_ruangan IS NULL")
-            if a_conds:
-                sql_parts.append(generate_table_sql_dump(cursor, "asisten_lab", f"SELECT * FROM asisten_lab WHERE {' OR '.join(a_conds)}"))
-
-        # 9. Tabel Absensi (Master Aslab, Master Lab, & Riwayat Absensi)
-        if is_all:
-            try:
-                sql_parts.append(generate_table_sql_dump(cursor, "absensi_master_aslab", "SELECT * FROM absensi_master_aslab"))
-                sql_parts.append(generate_table_sql_dump(cursor, "absensi_master_lab", "SELECT * FROM absensi_master_lab"))
-                sql_parts.append(generate_table_sql_dump(cursor, "absensi_aslab", "SELECT * FROM absensi_aslab"))
-            except Exception:
-                pass
-
-        sql_parts.append("COMMIT;")
-        sql_parts.append("SET FOREIGN_KEY_CHECKS = 1;")
-        sql_parts.append("/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;")
-        sql_parts.append("/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;")
-        sql_parts.append("/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;")
-
-        final_sql = "\n".join(sql_parts)
-        filename = f"backup_jadwal_unama_{ts_slug}.sql"
-        
-        return Response(
-            content=final_sql,
-            media_type="application/sql; charset=utf-8",
-            headers={
-                "Content-Disposition": f"attachment; filename=\"{filename}\"",
-                "X-Backup-Filename": filename
-            }
-        )
-    except Exception as err:
-        return Response(
-            content=f"-- Error generating backup: {err}",
-            status_code=500,
-            media_type="text/plain"
-        )
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-# ==================== PUSAT RESTORE / IMPOR DATABASE (.SQL) ====================
-class RestorePreviewRequest(BaseModel):
-    sql_content: str
-    filename: str = "backup.sql"
-
-class RestoreExecuteRequest(BaseModel):
-    sql_content: str
-    filename: str = "backup.sql"
-
-def parse_sql_statements(sql_text: str) -> list[str]:
-    """Memecah teks dump SQL menjadi daftar kueri/pernyataan yang dapat dieksekusi secara aman"""
-    statements = []
-    current = []
-    in_single_quote = False
-    in_double_quote = False
-    in_backtick = False
-    in_multiline_comment = False
-    
-    lines = sql_text.splitlines()
-    for line in lines:
-        stripped = line.strip()
-        # Lewati komentar satu baris
-        if not in_single_quote and not in_double_quote and not in_multiline_comment:
-            if stripped.startswith("--") or stripped.startswith("#"):
-                continue
-        
-        i = 0
-        n = len(line)
-        while i < n:
-            c = line[i]
-            
-            if not in_single_quote and not in_double_quote and not in_backtick:
-                if not in_multiline_comment and i + 1 < n and line[i:i+2] == "/*":
-                    if i + 2 < n and line[i+2] == "!":
-                        pass
-                    else:
-                        in_multiline_comment = True
-                        i += 2
-                        continue
-                elif in_multiline_comment and i + 1 < n and line[i:i+2] == "*/":
-                    in_multiline_comment = False
-                    i += 2
-                    continue
-            
-            if in_multiline_comment:
-                i += 1
-                continue
-            
-            if c == "'" and not in_double_quote and not in_backtick:
-                num_backslashes = 0
-                k = i - 1
-                while k >= 0 and line[k] == '\\':
-                    num_backslashes += 1
-                    k -= 1
-                if num_backslashes % 2 == 0:
-                    in_single_quote = not in_single_quote
-            elif c == '"' and not in_single_quote and not in_backtick:
-                num_backslashes = 0
-                k = i - 1
-                while k >= 0 and line[k] == '\\':
-                    num_backslashes += 1
-                    k -= 1
-                if num_backslashes % 2 == 0:
-                    in_double_quote = not in_double_quote
-            elif c == '`' and not in_single_quote and not in_double_quote:
-                in_backtick = not in_backtick
-            elif c == ';' and not in_single_quote and not in_double_quote and not in_backtick:
-                stmt = "".join(current).strip()
-                if stmt:
-                    statements.append(stmt)
-                current = []
-                i += 1
-                continue
-            
-            current.append(c)
-            i += 1
-        current.append("\n")
-        
-    remaining = "".join(current).strip()
-    if remaining:
-        statements.append(remaining)
-        
-    return statements
-
-def extract_sql_preview(sql_text: str, filename: str = "backup.sql") -> dict:
-    statements = parse_sql_statements(sql_text)
-    tables = set()
-    total_inserts = 0
-    estimated_rows = 0
-    has_drop = False
-    has_create = False
-    
-    table_pattern = re.compile(r'(?:CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|INSERT\s+INTO)\s+[`"]?([a-zA-Z0-9_]+)[`"]?', re.IGNORECASE)
-    
-    for stmt in statements:
-        upper = stmt[:60].upper()
-        if "DROP TABLE" in upper:
-            has_drop = True
-        if "CREATE TABLE" in upper:
-            has_create = True
-            
-        m = table_pattern.search(stmt)
-        if m:
-            tbl = m.group(1).lower()
-            if tbl not in ("table", "if", "not", "exists", "temporary"):
-                tables.add(tbl)
-        
-        if upper.startswith("INSERT INTO"):
-            total_inserts += 1
-            val_count = len(re.findall(r'\([^\)]+\)', stmt))
-            estimated_rows += max(1, val_count)
-
-    return {
-        "status": "success",
-        "filename": filename,
-        "total_statements": len(statements),
-        "total_tables": len(tables),
-        "tables": sorted(list(tables)),
-        "total_insert_batches": total_inserts,
-        "estimated_rows": estimated_rows,
-        "has_drop_table": has_drop,
-        "has_create_table": has_create
-    }
-
-@app.post("/api/db/restore/preview")
-def preview_restore_db(req: RestorePreviewRequest):
-    """Menganalisis file skrip SQL dan mengembalikan pratinjau tabel tanpa mengeksekusi ke DB"""
-    if not req.sql_content or not req.sql_content.strip():
-        return {"status": "error", "message": "Konten file SQL kosong atau tidak valid."}
-    
-    try:
-        preview = extract_sql_preview(req.sql_content, req.filename)
-        return preview
-    except Exception as e:
-        return {"status": "error", "message": f"Gagal membaca format SQL: {e}"}
-
-@app.post("/api/db/restore")
-def execute_restore_db(req: RestoreExecuteRequest, admin: str = Depends(verify_admin_token)):
-    """Memulihkan data database dari skrip SQL (memerlukan token Admin)"""
-    if not req.sql_content or not req.sql_content.strip():
-        return {"status": "error", "message": "Konten file SQL kosong atau tidak valid."}
-        
-    try:
-        statements = parse_sql_statements(req.sql_content)
-        if not statements:
-            return {"status": "error", "message": "Tidak ada kueri SQL valid yang dapat dieksekusi."}
-            
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
-        cursor.execute("SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';")
-        
-        executed_count = 0
-        for stmt in statements:
-            s_clean = stmt.strip()
-            if not s_clean:
-                continue
-            try:
-                cursor.execute(s_clean)
-                executed_count += 1
-            except Exception as stmt_err:
-                if s_clean.upper().startswith("SET ") or "/*!40101" in s_clean:
-                    continue
-                else:
-                    raise stmt_err
-                    
-        conn.commit()
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
-        
-        preview = extract_sql_preview(req.sql_content, req.filename)
-        
-        return {
-            "status": "success",
-            "message": f"Database berhasil dipulihkan ({executed_count} kueri dieksekusi).",
-            "executed_count": executed_count,
-            "tables": preview.get("tables", []),
-            "estimated_rows": preview.get("estimated_rows", 0)
-        }
-    except Exception as err:
-        if 'conn' in locals() and conn.is_connected():
-            try:
-                conn.rollback()
-                cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
-            except Exception:
-                pass
-        return {"status": "error", "message": f"Gagal merestore database: {err}"}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/jadwal")
-def clear_jadwal(admin: str = Depends(verify_admin_token)):
-    """Menghapus seluruh jadwal dari database (memerlukan token Admin) - Legacy Wrapper"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-        tables_to_clear = ["jadwal", "jadwal_temp", "notifikasi_lab", "jeda_lab", "mata_kuliah"]
-        for tbl in tables_to_clear:
-            try:
-                cursor.execute(f"DELETE FROM {tbl}")
-            except Exception:
-                pass
-        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-        conn.commit()
-        return {"status": "success", "message": "Jadwal dan mata kuliah berhasil dibersihkan."}
-    except Exception as err:
-        return {"status": "error", "message": str(err)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-class SyncRequest(BaseModel):
-    tanggal: str | None = None
-    from_dashboard: bool | None = False
-    semester: str | None = None
-
-class SyncHtmlRequest(BaseModel):
-    html: str
-    tanggal: str | None = None
-    page: str | None = "1"
-    semester: str | None = None
-
-class SyncCompleteRequest(BaseModel):
-    tanggal: str | None = None
-    semester: str | None = None
-
-import time
-
-sync_status = {}
-pending_sync_queue = {}
-last_sync_times = {}
-sync_lock = asyncio.Lock()
-
-@app.post("/api/sync")
-async def sync_data(req: SyncRequest):
-    """Sinkronisasi data dengan proteksi anti-DoS Cooldown & Async Lock (SEC-07)"""
-    tgl_key = req.tanggal or ""
-    now = time.time()
-    
-    # 1. Cek Cooldown (Minimal jeda 15 detik untuk tanggal yang sama)
-    last_time = last_sync_times.get(tgl_key, 0)
-    if now - last_time < 15:
-        sisa = int(15 - (now - last_time))
-        return {
-            "status": "cooldown",
-            "message": f"Sinkronisasi baru saja dilakukan. Harap tunggu {sisa} detik sebelum sinkronisasi ulang.",
-            "count": 0
-        }
-
-    async with sync_lock:
-        try:
-            start_time = time.time()
-            last_sync_times[tgl_key] = start_time
-            
-            # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
-            success, count, msg = scraper.scrape_baak_direct(req.tanggal, None)
-            if success:
-                sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
-                pending_sync_queue.pop(tgl_key, None)
-                return {"status": "success", "message": msg, "count": count}
-            
-            # 2. Fallback: Ekstensi Chrome di PC
-            print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
-            sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
-            target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
-            
-            pending_sync_queue[tgl_key] = {
-                "tanggal": tgl_key,
-                "url": target_url,
-                "time": start_time
-            }
-            
-            # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
-            for _ in range(40):
-                await asyncio.sleep(0.8)
-                current = sync_status.get(tgl_key, {})
-                if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
-                    count_got = current.get("count", 0)
-                    return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({count_got} jadwal)!", "count": count_got}
-
-            current = sync_status.get(tgl_key, {})
-            if current.get("status") == "done" and current.get("count", 0) > 0:
-                return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({current.get('count', 0)} data)!", "count": current.get("count", 0)}
-
-            # Jika ekstensi tidak menghasilkan data (terhalang 403 atau tidak terbuka)
-            scraper.record_scraping_log(
-                "Chrome Extension (Browser)",
-                target_url,
-                tgl_key,
-                403,
-                "BLOCKED (403)",
-                "Ekstensi di browser tidak berhasil menarik data baru (terindikasi penolakan akses 403 Forbidden atau tab tertutup).",
-                int((time.time() - start_time) * 1000),
-                0
-            )
-            return {
-                "status": "warning",
-                "message": "Sinkronisasi tidak dapat menarik data baru dari BAAK UNAMA karena server menolak akses (HTTP 403 Forbidden) pada backend dan browser. Data jadwal lokal yang sudah ada tetap aman dan aktif.",
-                "count": 0,
-                "blocked_403": True
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-@app.get("/api/sync/pending")
-def get_pending_sync():
-    """Mengambil tugas sinkronisasi yang diminta (misal dari HP) untuk dijalankan oleh Chrome Extension"""
-    now = time.time()
-    for tgl, task in list(pending_sync_queue.items()):
-        if now - task.get("time", 0) < 60:
-            return {"status": "success", "task": task}
-        else:
-            pending_sync_queue.pop(tgl, None)
-    return {"status": "empty"}
-
-class ClearPendingRequest(BaseModel):
-    tanggal: str | None = None
-
-class ScraperLogReportRequest(BaseModel):
-    engine: str
-    target_url: str | None = None
-    target_tanggal: str | None = None
-    http_status: int | None = None
-    status: str
-    pesan: str | None = None
-    durasi_ms: int | None = 0
-    jumlah_data: int | None = 0
-
-@app.post("/api/sync/pending/clear")
-def clear_pending_sync(req: ClearPendingRequest = None):
-    """Menghapus tugas sinkronisasi setelah diambil oleh ekstensi"""
-    if req and req.tanggal:
-        tgl_key = req.tanggal or ""
-        pending_sync_queue.pop(tgl_key, None)
-    else:
-        pending_sync_queue.clear()
-    return {"status": "success"}
-
-@app.get("/api/scraper/logs")
-def get_scraper_logs(limit: int = 50):
-    """Mengambil riwayat log percobaan setiap scraping engine dan ringkasan status terkini."""
-    try:
-        logs = scraper.get_scraping_engine_logs(limit)
-        summary = scraper.get_scraping_engine_summary()
-        return {
-            "status": "success",
-            "logs": logs,
-            "summary": summary
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e), "logs": [], "summary": {}}
-
-@app.post("/api/scraper/test")
-async def test_scraper_engines(req: SyncRequest = None):
-    """Menjalankan probe test ke seluruh engine secara non-blocking via asyncio.to_thread."""
-    try:
-        target_tgl = req.tanggal if req else None
-        results = await asyncio.to_thread(scraper.test_all_scraping_engines, target_tgl)
-        summary = await asyncio.to_thread(scraper.get_scraping_engine_summary)
-        return {
-            "status": "success",
-            "results": results,
-            "summary": summary
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e), "results": [], "summary": {}}
-
-@app.post("/api/scraper/log-engine")
-def report_scraper_log(req: ScraperLogReportRequest):
-    """Menerima laporan status/log dari client atau Chrome Extension (misal saat browser terkena 403 Forbidden)."""
-    try:
-        scraper.record_scraping_log(
-            engine=req.engine,
-            target_url=req.target_url,
-            target_tanggal=req.target_tanggal,
-            http_status=req.http_status,
-            status=req.status,
-            pesan=req.pesan,
-            durasi_ms=req.durasi_ms or 0,
-            jumlah_data=req.jumlah_data or 0
-        )
-        return {"status": "success"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/scraper/clear-logs")
-def clear_scraper_logs(admin: str = Depends(verify_admin_token)):
-    """Mengosongkan riwayat log engine scraping (memerlukan hak akses Admin)."""
-    try:
-        scraper.clear_scraping_engine_logs()
-        return {"status": "success", "message": "Seluruh riwayat log engine scraping berhasil dibersihkan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/sync-html")
-def sync_html_data(req: SyncHtmlRequest):
-    """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
-    try:
-        detected = scraper.detect_semester_from_html(req.html)
-        sem_to_use = detected or req.semester or scraper.get_active_semester()
-        data = scraper.parse_html_content(req.html, req.tanggal, sem_to_use)
-        scraper.save_to_db(data, req.tanggal, req.page, sem_to_use)
-        tgl_key = req.tanggal or ""
-        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
-        sync_status[tgl_key] = {"status": "in_progress", "time": time.time(), "count": prev_count + len(data), "semester": sem_to_use}
-        return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi ({sem_to_use}).", "count": len(data), "semester": sem_to_use}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/sync-complete")
-def sync_complete(req: SyncCompleteRequest):
-    """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
-    try:
-        tgl_key = (req.tanggal or "").strip()
-        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
-        
-        # Guard: Jika data baru yang dikirim oleh ekstensi 0, tidak perlu finalisasi penghapusan
-        if prev_count == 0:
-            return {"status": "warning", "message": "Tidak ada data baru yang disinkronisasi. Data jadwal yang sudah ada tetap aman.", "count": 0}
-
-        sem_to_use = req.semester or sync_status.get(tgl_key, {}).get("semester") or scraper.get_active_semester()
-        target_tgl = tgl_key if tgl_key else None
-        scraper.compare_and_finalize_sync(target_tgl, sem_to_use)
-        sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
-        return {"status": "success", "message": f"Proses perbandingan dan finalisasi selesai ({sem_to_use}).", "count": prev_count, "semester": sem_to_use}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/finalize-temp")
-def finalize_temp(admin: str = Depends(verify_admin_token)):
-    """Memindahkan seluruh data yang ada di jadwal_temp ke tabel jadwal utama (memerlukan token Admin)"""
-    try:
-        scraper.compare_and_finalize_sync(None)
-        return {"status": "success", "message": "Seluruh data dari jadwal_temp berhasil dipindahkan ke tabel jadwal."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/api/notifikasi-lab")
-def get_notifikasi_lab(tanggal: str, semester: str = None):
-    """Ambil notifikasi ruangan (Labor & Ruang Kelas) untuk tanggal dan semester tertentu"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        sem_active = semester or scraper.get_active_semester(conn, cursor)
-        # Hitung dan pastikan jeda ruangan untuk tanggal ini selalu sinkron & up-to-date
-        try:
-            scraper.calculate_and_save_gaps(conn, cursor, tanggal, sem_active)
-        except Exception as e_gap:
-            print(f"Error calculating gaps on fetch: {e_gap}")
-
-        now_dt = datetime.datetime.now()
-        is_today = (tanggal == now_dt.strftime('%Y-%m-%d'))
-        current_min = (now_dt.hour * 60 + now_dt.minute) if is_today else -1
-
-        cursor.execute("""
-            SELECT id, tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu, DATE_FORMAT(tanggal, '%Y-%m-%d') as tanggal, UNIX_TIMESTAMP(created_at) as created_ts
-            FROM notifikasi_lab 
-            WHERE tanggal = %s AND (semester = %s OR semester IS NULL)
-            ORDER BY id DESC
-        """, (tanggal, sem_active))
-        results = cursor.fetchall()
-
-        cleaned_results = []
-        seen_change_rooms = set()
-        seen_move_classes = set()
-        obsolete_ids_to_delete = []
-
-        for item in results:
-            item_id = item.get("id")
-            t = (item.get("tipe_notif") or "").upper()
-            pesan = item.get("pesan") or ""
-
-            # Jika hari ini, periksa apakah waktu kegiatan sudah lewat di masa lalu
-            if is_today:
-                if t == "JEDA":
-                    m_range = re.search(r'([0-2]?[0-9]:[0-5][0-9])\s*-\s*([0-2]?[0-9]:[0-5][0-9])', pesan)
-                    if m_range:
-                        gap_end_min = scraper.parse_time_to_minutes(m_range.group(2))
-                        if gap_end_min is not None and gap_end_min <= current_min:
-                            if item_id:
-                                obsolete_ids_to_delete.append(item_id)
-                            continue
-                elif t in ("PERUBAHAN", "TAMBAHAN"):
-                    time_str = scraper.extract_time_from_notification(pesan)
-                    if time_str:
-                        start_min = scraper.parse_time_to_minutes(time_str)
-                        if start_min is not None and (start_min + 120) <= current_min:
-                            # Kelas sudah selesai lebih dari 2 jam lalu -> obsolete, hapus dari DB & lewati
-                            if item_id:
-                                obsolete_ids_to_delete.append(item_id)
-                            continue
-
-            # Deduplikasi kelas pindah ruangan (jika ada MASUK dan KELUAR untuk kelas yang sama, prioritaskan yang MASUK)
-            if "PINDAH RUANGAN" in pesan.upper():
-                mk_match = re.search(r'Kelas\s+([^(\n\r]+?)\s*\(([^)]+)\)', pesan, re.I)
-                if mk_match:
-                    class_key = f"{mk_match.group(1).strip().lower()}___{mk_match.group(2).strip().lower()}"
-                    if class_key in seen_move_classes:
-                        continue
-                    seen_move_classes.add(class_key)
-
-            # Deduplikasi per ruangan untuk notifikasi PERUBAHAN dan TAMBAHAN
-            if t in ("PERUBAHAN", "TAMBAHAN"):
-                room_str = scraper.extract_room_from_notification(pesan)
-                room_key = re.sub(r'\s*\([^)]*\)', '', room_str).strip().lower() if room_str else ""
-                if room_key:
-                    if room_key in seen_change_rooms:
-                        continue
-                    seen_change_rooms.add(room_key)
-
-            cleaned_results.append(item)
-
-        if obsolete_ids_to_delete:
-            try:
-                format_strings = ','.join(['%s'] * len(obsolete_ids_to_delete))
-                cursor.execute(f"DELETE FROM notifikasi_lab WHERE id IN ({format_strings})", tuple(obsolete_ids_to_delete))
-                conn.commit()
-            except Exception as e_del:
-                print(f"Error deleting obsolete notifikasi_lab rows: {e_del}")
-
-        return {"status": "success", "semester": sem_active, "data": cleaned_results}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-class TestWARequest(BaseModel):
-    id_aslab: int | None = None
-    action_type: str = "test"
-    ngrok_link: str | None = None
-
-class AddAslabRequest(BaseModel):
-    nama_aslab: str
-    no_wa: str
-    id_ruangan: int
-
-@app.get("/api/ruangan")
-def get_ruangan():
-    """Mengambil daftar semua ruangan lab"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan")
-        results = cursor.fetchall()
-        results.sort(key=lambda x: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', x.get('nama_ruangan') or '')])
-        return {"status": "success", "data": results}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/aslab")
-def get_aslab(authorization: str = Header(None)):
-    """Mengambil daftar asisten lab beserta nama ruangannya dan nomor WA (nomor disensor jika bukan admin)"""
-    is_admin = is_admin_authenticated(authorization)
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT a.id_aslab, a.nama_aslab, a.no_wa, r.nama_ruangan, r.kampus, a.id_ruangan 
-            FROM asisten_lab a
-            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
-            WHERE a.no_wa IS NOT NULL 
-              AND a.no_wa != '' 
-              AND a.no_wa NOT LIKE '%@lid%' 
-              AND a.no_wa NOT LIKE '%lid%'
-            ORDER BY a.id_aslab ASC
-        """)
-        results = cursor.fetchall()
-        
-        return {"status": "success", "data": results, "is_admin": is_admin}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/aslab/{id_aslab}")
-def delete_aslab(id_aslab: int, admin: str = Depends(verify_admin_token)):
-    """Menghapus kontak WA asisten lab dari tabel asisten_lab (WA Bot). Tidak memengaruhi master data absensi."""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM asisten_lab WHERE id_aslab = %s", (id_aslab,))
-        conn.commit()
-        if cursor.rowcount > 0:
-            return {"status": "success", "message": "Kontak WA asisten lab berhasil dihapus."}
-        else:
-            return {"status": "error", "message": "Data tidak ditemukan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-
-class AddRuanganRequest(BaseModel):
-    kampus: str
-    nama_ruangan: str
-
-@app.post("/api/ruangan/add")
-def add_ruangan(req: AddRuanganRequest, admin: str = Depends(verify_admin_token)):
-    """Menambahkan data ruangan baru (memerlukan token Admin)"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        
-        # Cek apakah ruangan sudah ada
-        cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s", (req.nama_ruangan,))
-        if cursor.fetchone():
-            return {"status": "error", "message": "Nama ruangan sudah ada di database."}
-            
-        cursor.execute(
-            "INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", 
-            (req.kampus, req.nama_ruangan)
-        )
-        conn.commit()
-        return {"status": "success", "message": "Ruangan berhasil ditambahkan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/ruangan/{id_ruangan}")
-def delete_ruangan(id_ruangan: int, admin: str = Depends(verify_admin_token)):
-    """Menghapus data ruangan (memerlukan token Admin)"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        
-        # Cek apakah ruangan sedang dipakai oleh aslab
-        cursor.execute("SELECT COUNT(*) FROM asisten_lab WHERE id_ruangan = %s", (id_ruangan,))
-        if cursor.fetchone()[0] > 0:
-            return {"status": "error", "message": "Ruangan tidak dapat dihapus karena sedang dipakai oleh Asisten Lab."}
-            
-        cursor.execute("DELETE FROM ruangan WHERE id_ruangan = %s", (id_ruangan,))
-        conn.commit()
-        
-        if cursor.rowcount > 0:
-            return {"status": "success", "message": "Ruangan berhasil dihapus."}
-        else:
-            return {"status": "error", "message": "Ruangan tidak ditemukan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/aslab/add")
-def add_aslab(req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
-    """Menambahkan data asisten lab secara manual (memerlukan token Admin)"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        
-        # Format No WA (pastikan diawali 62 dan valid nomor HP)
-        if not req.no_wa or 'lid' in str(req.no_wa).lower():
-            return {"status": "error", "message": "Nomor WhatsApp tidak valid (masukkan nomor HP asli)."}
-        no_wa = re.sub(r'\D', '', req.no_wa)
-        if len(no_wa) < 9:
-            return {"status": "error", "message": "Nomor WhatsApp terlalu pendek."}
-        if no_wa.startswith('0'):
-            no_wa = '62' + no_wa[1:]
-        elif no_wa.startswith('8'):
-            no_wa = '62' + no_wa
-            
-        cursor.execute(
-            "INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan) VALUES (%s, %s, %s)", 
-            (req.nama_aslab, no_wa, req.id_ruangan)
-        )
-        conn.commit()
-        return {"status": "success", "message": "Data asisten lab berhasil ditambahkan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.put("/api/aslab/{id_aslab}")
-def edit_aslab(id_aslab: int, req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
-    """Mengubah data asisten lab secara manual (memerlukan token Admin)"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        
-        # Format No WA (pastikan diawali 62 dan valid nomor HP)
-        if not req.no_wa or 'lid' in str(req.no_wa).lower():
-            return {"status": "error", "message": "Nomor WhatsApp tidak valid (masukkan nomor HP asli)."}
-        no_wa = re.sub(r'\D', '', req.no_wa)
-        if len(no_wa) < 9:
-            return {"status": "error", "message": "Nomor WhatsApp terlalu pendek."}
-        if no_wa.startswith('0'):
-            no_wa = '62' + no_wa[1:]
-        elif no_wa.startswith('8'):
-            no_wa = '62' + no_wa
-            
-        cursor.execute(
-            "UPDATE asisten_lab SET nama_aslab = %s, no_wa = %s, id_ruangan = %s WHERE id_aslab = %s", 
-            (req.nama_aslab, no_wa, req.id_ruangan, id_aslab)
-        )
-        conn.commit()
-        if cursor.rowcount > 0:
-            return {"status": "success", "message": "Data asisten lab berhasil diubah."}
-        else:
-            return {"status": "error", "message": "Data tidak ditemukan atau tidak ada perubahan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/test-wa")
-def test_wa(req: TestWARequest, admin: str = Depends(verify_admin_token)):
-    """Mengirim pesan WA percobaan ke aslab tertentu atau semua (memerlukan token Admin)"""
-    results = wa_notifier.test_send(req.id_aslab, req.action_type, req.ngrok_link)
-    if isinstance(results, dict) and "error" in results:
-        return {"status": "error", "message": results["error"]}
-    if not results:
-        return {"status": "error", "message": "Tidak ada data aslab atau terjadi kesalahan"}
-    return {"status": "success", "message": "Pesan WA percobaan selesai diproses!", "data": results}
-
-class WebhookRequest(BaseModel):
-    sender: str
-    text: str
-    msg_id: Optional[str] = None
-
-@app.post("/api/webhook/wa")
-def wa_webhook(req: WebhookRequest, valid: bool = Depends(verify_bot_secret)):
-    """Menerima pesan masuk dari WA Bot (Node.js) dengan proteksi Secret Token"""
-    wa_notifier.log_chatbot("INFO", f"Webhook menerima pesan dari {req.sender}: '{req.text}' (id: {req.msg_id})", "WEBHOOK")
-    try:
-        response_msg = wa_notifier.handle_incoming_message(req.sender, req.text, msg_id=req.msg_id)
-        if response_msg:
-            # Kirim balasan
-            wa_notifier.send_wa_message(req.sender, response_msg)
-        else:
-            wa_notifier.log_chatbot("INFO", f"Tidak ada pesan balasan yang dihasilkan untuk {req.sender} (mungkin diabaikan atau tamu)", "WEBHOOK")
-    except Exception as e:
-        wa_notifier.log_chatbot("ERROR", f"Exception pada wa_webhook saat memproses pesan dari {req.sender}: {e}", "WEBHOOK")
-    finally:
-        # Pastikan status mengetik dihentikan agar tidak menggantung di WA
-        wa_notifier.send_wa_typing(req.sender, 'paused')
-    return {"status": "ok"}
-
-@app.get("/api/admin/chatbot-logs")
-def get_chatbot_logs(lines: int = 150):
-    """Membaca isi file logs/chatbot.log untuk memantau performa dan diagnosa error chatbot secara langsung."""
-    log_path = os.path.join("logs", "chatbot.log")
-    if not os.path.exists(log_path):
-        return {"status": "ok", "total_lines": 0, "logs": [], "message": "Belum ada log chatbot yang tercatat."}
-    
-    try:
-        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            all_lines = f.readlines()
-            tail_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
-        return {
-            "status": "ok",
-            "total_lines": len(all_lines),
-            "returned_lines": len(tail_lines),
-            "logs": [l.rstrip("\r\n") for l in tail_lines]
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Gagal membaca file log: {e}"}
-
-@app.get("/api/cek_kosong")
-async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
-    """Mendapatkan data lab kosong dengan algoritma gap jam"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # Cek apakah ada jadwal sama sekali di tanggal tersebut
-        cursor.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = %s", (tanggal,))
-        count_jadwal = cursor.fetchone()['count']
-        
-        if count_jadwal == 0:
-            import datetime
-            dt_obj = datetime.datetime.strptime(tanggal, "%Y-%m-%d")
-            if dt_obj.weekday() == 6:
-                return {"status": "error", "message": f"Libur mas, soalnya hari Minggu tanggal {tanggal}."}
-            else:
-                return {"status": "error", "message": "Belum ada data untuk tanggal ini. Silakan klik tombol 'Sinkronkan Data' untuk menarik jadwal terbaru.", "need_sync": True}
-        
-        if jenis == "Kelas":
-            filter_kondisi = "AND r.nama_ruangan NOT LIKE '%lab%' AND r.nama_ruangan NOT LIKE '%praktek%'"
-        elif jenis == "Lab":
-            filter_kondisi = "AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%' OR LOWER(r.nama_ruangan) LIKE '%cisco%')"
-        else:
-            filter_kondisi = ""
-
-        query = f'''
-            SELECT r.nama_ruangan, j.jam, j.nama_mk
-            FROM ruangan r
-            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
-                               AND j.tanggal = %s 
-                               AND j.metode_pembelajaran NOT IN ('CC', 'OL')
-                               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
-            WHERE r.kampus LIKE %s 
-              {filter_kondisi}
-            ORDER BY r.nama_ruangan, j.jam
-        '''
-        cursor.execute(query, (tanggal, f"%{kampus}%"))
-        results = cursor.fetchall()
-        
-        room_schedules = {}
-        for r in results:
-            rname = r['nama_ruangan']
-            if rname not in room_schedules:
-                room_schedules[rname] = []
-            if r['jam']:
-                sm = int(r['jam'].total_seconds()) // 60
-                dur = scraper.get_class_duration(r.get('nama_mk', ''), r.get('kelas')) if hasattr(scraper, 'get_class_duration') else 135
-                room_schedules[rname].append((sm, dur))
-        
-        data = []
-        for rname, scheds in room_schedules.items():
-            if not scheds:
-                data.append({"ruangan": rname, "status": "full kosong aja", "gaps": []})
-            else:
-                gaps = []
-                scheds = sorted(scheds, key=lambda x: x[0])
-                current = 480
-                end_of_day = max(1020, max((s + d for s, d in scheds), default=1020))
-                
-                for sm, dur in scheds:
-                    if sm > current:
-                        gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{sm//60:02d}:{sm%60:02d}", "note": "setelahnya ada kelas"})
-                    current = max(current, sm + dur)
-                if current < end_of_day:
-                    gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{end_of_day//60:02d}:{end_of_day%60:02d}", "note": ""})
-                
-                data.append({"ruangan": rname, "status": "ada kelas", "gaps": gaps})
-        
-        return {"status": "success", "data": data}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/cari_dosen")
-def cari_dosen(nama: str, tanggal: str | None = None):
-    """Mencari jadwal dosen berdasarkan nama"""
-    if not nama:
-        return {"status": "error", "message": "Nama dosen tidak boleh kosong"}
-    
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        if tanggal:
-            cursor.execute('''
-                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
-                FROM jadwal j
-                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
-                ORDER BY j.jam ASC
-            ''', (f"%{nama.upper()}%", tanggal))
-        else:
-            cursor.execute('''
-                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
-                FROM jadwal j
-                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE UPPER(d.nama_dosen) LIKE %s
-                ORDER BY j.tanggal DESC, j.jam ASC
-            ''', (f"%{nama.upper()}%",))
-            
-        results = cursor.fetchall()
-        
-        for row in results:
-            if row['jam']:
-                ts = int(row['jam'].total_seconds())
-                h = ts // 3600
-                m = (ts % 3600) // 60
-                dur = scraper.get_class_duration(row.get('nama_mk', ''), row.get('kelas')) if hasattr(scraper, 'get_class_duration') else 135
-                eh = (ts // 60 + dur) // 60
-                em = (ts // 60 + dur) % 60
-                row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
-            else:
-                row['waktu'] = "-"
-            row['tanggal'] = str(row['tanggal'])
-            del row['jam']
-            
-        return {"status": "success", "data": results}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/cari_kelas")
-def cari_kelas(kode: str):
-    """Mencari daftar mata kuliah yang dipelajari suatu kelas pada semester aktif (tanpa jadwal jam belajar)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        clean_kode = kode.strip().upper()
-        
-        cursor.execute('''
-            SELECT DISTINCT j.nama_mk, j.kelas, d.nama_dosen
-            FROM jadwal j
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE UPPER(j.kelas) = %s OR UPPER(j.kelas) LIKE %s
-            ORDER BY j.nama_mk ASC
-        ''', (clean_kode, f"%{clean_kode}%"))
-            
-        raw_results = cursor.fetchall()
-        
-        # Kelompokkan per mata kuliah agar jika ada tim dosen tidak duplikat baris
-        mk_dict = {}
-        for row in raw_results:
-            mk = (row.get('nama_mk') or '').strip()
-            if not mk:
-                continue
-            if mk not in mk_dict:
-                mk_dict[mk] = {
-                    'nama_mk': mk,
-                    'kelas': row.get('kelas', clean_kode),
-                    'dosens': set()
-                }
-            if row.get('nama_dosen') and row.get('nama_dosen') != '-':
-                # Split jika multiple dosen
-                for d in str(row['nama_dosen']).split(','):
-                    dt = d.strip()
-                    if dt and dt != '-':
-                        mk_dict[mk]['dosens'].add(dt)
-                
-        results = []
-        for mk, data in sorted(mk_dict.items(), key=lambda x: x[0]):
-            results.append({
-                'nama_mk': data['nama_mk'],
-                'kelas': data['kelas'],
-                'nama_dosen': ", ".join(sorted(data['dosens'])) if data['dosens'] else "Dosen Belum Ditentukan"
-            })
-            
-        return {"status": "success", "total_mk": len(results), "data": results}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/detail_kelas")
-def get_detail_kelas(kelas: str, semester: str = None):
-    """
-    Mengambil jadwal komprehensif suatu kelas untuk tampilan Halaman Detail Kelas Interaktif:
-    - Informasi Program Studi, Angkatan, Semester/Tingkat
-    - Ringkasan KPI (Total MK, Total Jam, Total Sesi, Rasio TM/OL/CC)
-    - Daftar jadwal per sesi (hari, jam mulai - jam selesai, durasi, nama_mk, dosen, nama_ruangan, kampus, is_lab, metode, status)
-    """
-    if not kelas:
-        return {"status": "error", "message": "Parameter kelas tidak boleh kosong"}
-
-    clean_kelas = kelas.strip().upper()
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-
-        target_sem = semester
-        if not target_sem or target_sem == "all":
-            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
-            active_row = cursor.fetchone()
-            if active_row:
-                target_sem = active_row["nama_semester"]
-            else:
-                cursor.execute("SELECT semester FROM jadwal WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
-                j_row = cursor.fetchone()
-                target_sem = j_row["semester"] if j_row else "Genap 2025"
-
-        # Cek ketersediaan di tabel jadwal aktif
-        cursor.execute("SELECT COUNT(*) AS c FROM jadwal WHERE UPPER(kelas) = %s AND (semester = %s OR %s IS NULL)", (clean_kelas, target_sem, target_sem))
-        cnt = cursor.fetchone()["c"]
-        table_source = "jadwal" if cnt > 0 else "jadwal_permanent"
-
-        query = f'''
-            SELECT 
-                j.id_jadwal, j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
-                r.nama_ruangan, r.kampus, d.nama_dosen
-            FROM {table_source} j
-            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE UPPER(j.kelas) = %s AND (j.semester = %s OR %s IS NULL)
-            ORDER BY 
-                CASE j.hari
-                    WHEN 'Senin' THEN 1
-                    WHEN 'Selasa' THEN 2
-                    WHEN 'Rabu' THEN 3
-                    WHEN 'Kamis' THEN 4
-                    WHEN 'Jumat' THEN 5
-                    WHEN 'Sabtu' THEN 6
-                    WHEN 'Minggu' THEN 7
-                    ELSE 8
-                END ASC,
-                j.jam ASC
-        '''
-        cursor.execute(query, (clean_kelas, target_sem, target_sem))
-        raw_rows = cursor.fetchall()
-
-        if not raw_rows:
-            cursor.execute(f'''
-                SELECT 
-                    j.id_jadwal, j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
-                    r.nama_ruangan, r.kampus, d.nama_dosen
-                FROM {table_source} j
-                LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-                WHERE UPPER(j.kelas) LIKE %s AND (j.semester = %s OR %s IS NULL)
-                ORDER BY 
-                    CASE j.hari
-                        WHEN 'Senin' THEN 1
-                        WHEN 'Selasa' THEN 2
-                        WHEN 'Rabu' THEN 3
-                        WHEN 'Kamis' THEN 4
-                        WHEN 'Jumat' THEN 5
-                        WHEN 'Sabtu' THEN 6
-                        ELSE 7
-                    END ASC,
-                    j.jam ASC
-            ''', (f"%{clean_kelas}%", target_sem, target_sem))
-            raw_rows = cursor.fetchall()
-
-        import re
-        m_prodi = re.search(r'([A-Za-z]+)', clean_kelas)
-        prodi_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
-        prodi_map_names = {
-            "PT": "Teknik Informatika (Pagi)",
-            "MT": "Teknik Informatika (Malam)",
-            "PS": "Sistem Informasi (Pagi)",
-            "MS": "Sistem Informasi (Malam)",
-            "PK": "Sistem Komputer (Pagi)",
-            "MK": "Sistem Komputer (Malam)",
-            "SK": "Sistem Komputer",
-            "PB": "Bisnis Digital (Pagi)",
-            "MB": "Bisnis Digital (Malam)",
-            "PM": "Manajemen (Pagi)",
-            "MM": "Manajemen (Malam)",
-            "PW": "Kewirausahaan (Pagi)",
-            "MW": "Kewirausahaan (Malam)",
-            "MI": "Manajemen Informatika (D3)",
-            "KA": "Komputerisasi Akuntansi (D3)"
-        }
-        nama_prodi = prodi_map_names.get(prodi_code, f"Program Studi {prodi_code}")
-
-        m_num = re.search(r'^(\d+)', clean_kelas)
-        sem_num = int(m_num.group(1)) if m_num else None
-        tingkat_str = f"Semester {sem_num}" if sem_num else "Reguler"
-
-        mk_set = set()
-        dosen_set = set()
-        kampus_counts = {"Kobar": 0, "Thehok": 0}
-        total_jam = 0.0
-        tm_count = 0
-        ol_count = 0
-        cc_count = 0
-
-        jadwal_list = []
-        for r in raw_rows:
-            dur_min = scraper.get_class_duration(r.get("nama_mk") or "", r.get("kelas")) if hasattr(scraper, "get_class_duration") else 135
-            dur_hour = round(dur_min / 60.0, 2)
-            total_jam += dur_hour
-
-            mk_name = (r.get("nama_mk") or "-").strip()
-            if mk_name != "-": mk_set.add(mk_name)
-
-            dosen_name = (r.get("nama_dosen") or "-").strip()
-            if dosen_name and dosen_name != "-": dosen_set.add(dosen_name)
-
-            metode = (r.get("metode_pembelajaran") or "TM").upper()
-            status_low = (r.get("status_jadwal") or "").lower()
-            if re.search(r'\b(?:cc|cancel|batal)\b', status_low):
-                metode = "CC"
-                cc_count += 1
-            elif re.search(r'\b(?:ol|online|daring)\b', status_low):
-                metode = "OL"
-                ol_count += 1
-            else:
-                metode = "TM"
-                tm_count += 1
-
-            jam_mulai = "-"
-            jam_selesai = "-"
-            if r.get("jam"):
-                tot_sec = int(r["jam"].total_seconds())
-                sh = tot_sec // 3600
-                sm = (tot_sec % 3600) // 60
-                jam_mulai = f"{sh:02d}:{sm:02d}"
-                eh = (tot_sec // 60 + dur_min) // 60
-                em = (tot_sec // 60 + dur_min) % 60
-                jam_selesai = f"{eh:02d}:{em:02d}"
-
-            ruang = (r.get("nama_ruangan") or "-").strip()
-            kampus = (r.get("kampus") or "Kobar").strip()
-            if "kobar" in kampus.lower(): kampus_counts["Kobar"] += 1
-            else: kampus_counts["Thehok"] += 1
-
-            is_lab = scraper.is_lab(ruang)
-
-            jadwal_list.append({
-                "id_jadwal": r.get("id_jadwal"),
-                "hari": r.get("hari") or "Lainnya",
-                "jam_mulai": jam_mulai,
-                "jam_selesai": jam_selesai,
-                "waktu": f"{jam_mulai} - {jam_selesai}" if jam_mulai != "-" else "-",
-                "durasi_menit": dur_min,
-                "durasi_jam": dur_hour,
-                "nama_mk": mk_name,
-                "nama_dosen": dosen_name if dosen_name else "Dosen Belum Ditentukan",
-                "nama_ruangan": ruang,
-                "kampus": kampus,
-                "is_lab": is_lab,
-                "metode": metode,
-                "status_jadwal": r.get("status_jadwal") or ("Tatap Muka" if metode == "TM" else ("Kuliah Online" if metode == "OL" else "Dibatalkan"))
-            })
-
-        kampus_dominan = "Thehok" if kampus_counts["Thehok"] > kampus_counts["Kobar"] else "Kobar"
-        total_sesi = len(jadwal_list)
-
-        # Agregasi Jadwal Mingguan Terstruktur (Unik per Hari & Jam)
-        weekly_dict = {}
-        for item in jadwal_list:
-            w_key = f"{item['hari']}_{item['jam_mulai']}_{item['nama_mk']}_{item['nama_ruangan']}"
-            if w_key not in weekly_dict:
-                weekly_dict[w_key] = {
-                    "hari": item["hari"],
-                    "jam_mulai": item["jam_mulai"],
-                    "jam_selesai": item["jam_selesai"],
-                    "waktu": item["waktu"],
-                    "durasi_menit": item["durasi_menit"],
-                    "durasi_jam": item["durasi_jam"],
-                    "nama_mk": item["nama_mk"],
-                    "nama_dosen": item["nama_dosen"],
-                    "nama_ruangan": item["nama_ruangan"],
-                    "kampus": item["kampus"],
-                    "is_lab": item["is_lab"],
-                    "total_pertemuan": 1,
-                    "tm": 1 if item["metode"] == "TM" else 0,
-                    "ol": 1 if item["metode"] == "OL" else 0,
-                    "cc": 1 if item["metode"] == "CC" else 0,
-                    "status_jadwal": item["status_jadwal"]
-                }
-            else:
-                ws = weekly_dict[w_key]
-                ws["total_pertemuan"] += 1
-                if item["metode"] == "TM": ws["tm"] += 1
-                elif item["metode"] == "OL": ws["ol"] += 1
-                elif item["metode"] == "CC": ws["cc"] += 1
-
-        hari_order = {"Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6, "Minggu": 7}
-        jadwal_mingguan = sorted(weekly_dict.values(), key=lambda x: (hari_order.get(x["hari"], 8), x["jam_mulai"]))
-
-        return {
-            "status": "success",
-            "kelas": clean_kelas,
-            "semester": target_sem,
-            "source_table": table_source,
-            "info": {
-                "kode_kelas": clean_kelas,
-                "nama_prodi": nama_prodi,
-                "tingkat": tingkat_str,
-                "kampus_dominan": kampus_dominan,
-                "total_mk": len(mk_set),
-                "total_dosen": len(dosen_set),
-                "total_jam": round(total_jam, 2),
-                "total_sesi": total_sesi,
-                "total_slot_mingguan": len(jadwal_mingguan),
-                "tm": tm_count,
-                "ol": ol_count,
-                "cc": cc_count,
-                "persen_tm": round((tm_count / total_sesi) * 100, 1) if total_sesi > 0 else 0,
-                "persen_ol": round((ol_count / total_sesi) * 100, 1) if total_sesi > 0 else 0,
-                "persen_cc": round((cc_count / total_sesi) * 100, 1) if total_sesi > 0 else 0
-            },
-            "jadwal_mingguan": jadwal_mingguan,
-            "jadwal_semua": jadwal_list
-        }
-    except Exception as e:
-        print(f"[API Detail Kelas Error] {e}")
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-# ─────────────────────────────────────────────────────────────
-# API ABSENSI ASISTEN LABORATORIUM (INTEGRASI FORM GOOGLE)
-# ─────────────────────────────────────────────────────────────
-class AbsensiInput(BaseModel):
-    id_absensi: Optional[int] = None
-    id_aslab: Optional[int] = None
-    nama_aslab: str
-    kampus: Optional[str] = None
-    nomor_lab: str
-    tanggal: str
-    jam_masuk: str
-    nama_dosen: Optional[str] = ""
-    nama_mk: Optional[str] = ""
-    kode_kelas: Optional[str] = ""
-    status_perkuliahan: Optional[str] = "Tatap Muka"
-    keterangan: Optional[str] = None
-
-class MasterLabInput(BaseModel):
-    nama_lab: str
-    kampus: Optional[str] = "Thehok"
-    aslab_tugas: Optional[str] = None
-
-class MasterAslabInput(BaseModel):
-    nama_aslab: str
-    kampus_tugas: Optional[str] = "Thehok"
-    lab_tugas: Optional[str] = None
-
-OFFICIAL_ASLAB_MASTER = [
-    # Kampus Kobar (5 Lab + 1 Remote)
-    {"nama": "Dwi Cahya Medika", "kampus": "Kobar", "lab": "1.5"},
-    {"nama": "Iqbal Prasetyo", "kampus": "Kobar", "lab": "1.6"},
-    {"nama": "M. Ghalih. M", "kampus": "Kobar", "lab": "1.7"},
-    {"nama": "Haykal Wais Alqorni", "kampus": "Kobar", "lab": "1.8"},
-    {"nama": "M.Raffi Pra Diestyawan", "kampus": "Kobar", "lab": "1.9"},
-    {"nama": "Muhammad Reza Fahlevi", "kampus": "Kobar", "lab": "Remote"},
-    # Kampus Thehok (9 Lab + 2 Remote)
-    {"nama": "Isodorus Bakti Pangestu", "kampus": "Thehok", "lab": "1.3"},
-    {"nama": "Ahmad Idris", "kampus": "Thehok", "lab": "1.4"},
-    {"nama": "Delvio Pasha", "kampus": "Thehok", "lab": "1.5"},
-    {"nama": "Bayu Zaidan Azizi", "kampus": "Thehok", "lab": "2.7"},
-    {"nama": "Rezky Cahya Gandana", "kampus": "Thehok", "lab": "3.1"},
-    {"nama": "Andi Noor", "kampus": "Thehok", "lab": "3.2"},
-    {"nama": "Zuan Vivaldi", "kampus": "Thehok", "lab": "3.4"},
-    {"nama": "Trio Prananda", "kampus": "Thehok", "lab": "4.1"},
-    {"nama": "Rafli Maulana", "kampus": "Thehok", "lab": "4.3"},
-    {"nama": "Farrel Algazel", "kampus": "Thehok", "lab": "Remote"},
-    {"nama": "Yeremias Laga", "kampus": "Thehok", "lab": "Remote"},
-]
-
-@app.get("/api/absensi/master")
-def get_absensi_master():
-    """Mengambil master data aslab dan opsi lab absensi dinamis dari database beserta info penugasan lab"""
-    fallback_labs = [
-        "1.5 Kobar", "1.6 Kobar", "1.7 Kobar", "1.8 Kobar", "1.9 Kobar",
-        "1.3 Thehok", "1.4 Thehok", "1.5 Thehok", "2.7 Thehok", 
-        "3.1 Thehok", "3.2 Thehok", "3.4 Thehok", "4.1 Thehok", "4.3 Thehok", 
-        "Lab S2"
-    ]
-    jam_options = [
-        "08.00 WIB", "08.45 WIB", "09.30 WIB", "10.15 WIB", 
-        "11.00 WIB", "11.45 WIB", "12.30 WIB", "13.15 WIB", 
-        "14.00 WIB", "14.45 WIB", "15.30 WIB", "16.15 WIB", 
-        "17.00 WIB", "17.45 WIB", "18.30 WIB", "19.15 WIB", 
-        "20.00 WIB", "20.45 WIB"
-    ]
-    status_options = ["Tatap Muka", "Online", "Cancel"]
-
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-
-        aslab_list = []
-        try:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS absensi_master_aslab (
-                    id_aslab INT AUTO_INCREMENT PRIMARY KEY,
-                    nama_aslab VARCHAR(100) NOT NULL UNIQUE,
-                    kampus_tugas VARCHAR(50) NOT NULL DEFAULT 'Thehok',
-                    lab_tugas VARCHAR(100) DEFAULT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            """)
-            try:
-                cursor.execute("ALTER TABLE absensi_master_aslab ADD COLUMN lab_tugas VARCHAR(100) DEFAULT NULL")
-            except Exception:
-                pass
-
-            cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
-            aslab_list = cursor.fetchall()
-            
-            # Jika tabel kosong atau kurang dari master resmi, auto-seed
-            if not aslab_list:
-                for o in OFFICIAL_ASLAB_MASTER:
-                    assigned_lab = f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
-                    cursor.execute("""
-                        INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas)
-                        VALUES (%s, %s, %s)
-                        ON DUPLICATE KEY UPDATE kampus_tugas = VALUES(kampus_tugas), lab_tugas = VALUES(lab_tugas)
-                    """, (o["nama"], o["kampus"], assigned_lab))
-                conn.commit()
-                cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
-                aslab_list = cursor.fetchall()
-            else:
-                # Cek jika ada lab_tugas yang masih null, coba lengkapi dari data resmi
-                has_null_lab = any(not row.get("lab_tugas") for row in aslab_list)
-                if has_null_lab:
-                    for o in OFFICIAL_ASLAB_MASTER:
-                        assigned_lab = f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
-                        cursor.execute("""
-                            UPDATE absensi_master_aslab 
-                            SET lab_tugas = %s 
-                            WHERE nama_aslab = %s AND (lab_tugas IS NULL OR lab_tugas = '')
-                        """, (assigned_lab, o["nama"]))
-                    conn.commit()
-                    cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
-                    aslab_list = cursor.fetchall()
-        except Exception:
-            pass
-        
-        labs_data = []
-        try:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS absensi_master_lab (
-                    id_lab_opsi INT AUTO_INCREMENT PRIMARY KEY,
-                    nama_lab VARCHAR(50) NOT NULL UNIQUE,
-                    kampus VARCHAR(50) NOT NULL DEFAULT 'Thehok',
-                    urutan INT DEFAULT 0,
-                    aslab_tugas VARCHAR(100) DEFAULT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            """)
-            try:
-                cursor.execute("ALTER TABLE absensi_master_lab ADD COLUMN aslab_tugas VARCHAR(100) DEFAULT NULL")
-            except Exception:
-                pass
-
-            cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan, aslab_tugas FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
-            labs_data = cursor.fetchall()
-
-            if not labs_data:
-                for idx, name in enumerate(fallback_labs):
-                    kmp = "Kobar" if "kobar" in name.lower() else "Thehok"
-                    # Cari aslab resmi untuk lab ini
-                    aslab_match = None
-                    for o in OFFICIAL_ASLAB_MASTER:
-                        if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower():
-                            aslab_match = o["nama"]
-                            break
-                    cursor.execute("""
-                        INSERT INTO absensi_master_lab (nama_lab, kampus, urutan, aslab_tugas)
-                        VALUES (%s, %s, %s, %s)
-                    """, (name, kmp, idx + 1, aslab_match))
-                conn.commit()
-                cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan, aslab_tugas FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
-                labs_data = cursor.fetchall()
-            else:
-                # Lengkapi aslab_tugas jika masih kosong dari aslab_list
-                for lab_row in labs_data:
-                    if not lab_row.get("aslab_tugas"):
-                        for aslab_item in aslab_list:
-                            if aslab_item.get("lab_tugas") and aslab_item.get("lab_tugas").strip().lower() == (lab_row.get("nama_lab") or "").strip().lower():
-                                cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE id_lab_opsi = %s", (aslab_item.get("nama_aslab"), lab_row["id_lab_opsi"]))
-                                lab_row["aslab_tugas"] = aslab_item.get("nama_aslab")
-                                break
-                conn.commit()
-        except Exception:
-            pass
-
-        if not labs_data:
-            labs_data = [
-                {
-                    "id_lab_opsi": idx + 1, 
-                    "nama_lab": name, 
-                    "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", 
-                    "urutan": idx + 1,
-                    "aslab_tugas": next((o["nama"] for o in OFFICIAL_ASLAB_MASTER if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower()), None)
-                }
-                for idx, name in enumerate(fallback_labs)
-            ]
-        
-        labs = [row["nama_lab"] for row in labs_data]
-
-        return {
-            "status": "success",
-            "aslab": aslab_list,
-            "labs": labs,
-            "labs_detail": labs_data,
-            "jam_options": jam_options,
-            "status_options": status_options
-        }
-    except Exception as e:
-        fallback_aslab = [
-            {
-                "id_aslab": idx + 1, 
-                "nama_aslab": o["nama"], 
-                "kampus_tugas": o["kampus"],
-                "lab_tugas": f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
-            }
-            for idx, o in enumerate(OFFICIAL_ASLAB_MASTER)
-        ]
-        return {
-            "status": "success",
-            "aslab": fallback_aslab,
-            "labs": fallback_labs,
-            "labs_detail": [
-                {
-                    "id_lab_opsi": idx + 1, 
-                    "nama_lab": name, 
-                    "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", 
-                    "urutan": idx + 1,
-                    "aslab_tugas": next((o["nama"] for o in OFFICIAL_ASLAB_MASTER if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower()), None)
-                }
-                for idx, name in enumerate(fallback_labs)
-            ],
-            "jam_options": jam_options,
-            "status_options": status_options
-        }
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/absensi/master/lab")
-def add_master_lab(data: MasterLabInput, admin: str = Depends(verify_admin_token)):
-    nama = (data.nama_lab or "").strip()
-    if not nama:
-        return {"status": "error", "message": "Nama lab tidak boleh kosong."}
-    kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
-    aslab_tugas = (data.aslab_tugas or "").strip() or None
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO absensi_master_lab (nama_lab, kampus, aslab_tugas) VALUES (%s, %s, %s)", (nama, kampus, aslab_tugas))
-        if aslab_tugas:
-            # Hubungkan juga di master aslab
-            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE nama_aslab = %s", (nama, aslab_tugas))
-        conn.commit()
-        return {"status": "success", "message": f"Lab '{nama}' berhasil ditambahkan."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.put("/api/absensi/master/lab/{id_lab_opsi}")
-def edit_master_lab(id_lab_opsi: int, data: MasterLabInput, admin: str = Depends(verify_admin_token)):
-    nama = (data.nama_lab or "").strip()
-    if not nama:
-        return {"status": "error", "message": "Nama lab tidak boleh kosong."}
-    kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
-    aslab_tugas = (data.aslab_tugas or "").strip() or None
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        # Ambil data lab sebelumnya
-        cursor.execute("SELECT nama_lab, aslab_tugas FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
-        old_lab = cursor.fetchone()
-        old_lab_name = old_lab["nama_lab"] if old_lab else nama
-        old_aslab = old_lab.get("aslab_tugas") if old_lab else None
-
-        cursor.execute("UPDATE absensi_master_lab SET nama_lab = %s, kampus = %s, aslab_tugas = %s WHERE id_lab_opsi = %s", (nama, kampus, aslab_tugas, id_lab_opsi))
-        
-        # Sinkronisasi ke master aslab:
-        # 1. Jika nama lab berubah, update aslab yang sebelumnya bertugas di lab ini
-        if old_lab_name != nama:
-            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE lab_tugas = %s", (nama, old_lab_name))
-        # 2. Jika aslab tugas berubah:
-        if old_aslab and old_aslab != aslab_tugas:
-            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = NULL WHERE nama_aslab = %s AND lab_tugas = %s", (old_aslab, nama))
-        if aslab_tugas:
-            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE nama_aslab = %s", (nama, aslab_tugas))
-            
-        conn.commit()
-        return {"status": "success", "message": "Data lab dan penugasan aslab berhasil diperbarui."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/absensi/master/lab/{id_lab_opsi}")
-def delete_master_lab(id_lab_opsi: int, admin: str = Depends(verify_admin_token)):
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT nama_lab FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
-        row = cursor.fetchone()
-        lab_name = row["nama_lab"] if row else ""
-        if lab_name:
-            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = NULL WHERE lab_tugas = %s", (lab_name,))
-        cursor.execute("DELETE FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
-        conn.commit()
-        return {"status": "success", "message": "Opsi lab berhasil dihapus."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/absensi/master/aslab")
-def add_master_aslab(data: MasterAslabInput, admin: str = Depends(verify_admin_token)):
-    nama = (data.nama_aslab or "").strip()
-    if not nama:
-        return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
-    kampus = data.kampus_tugas or "Thehok"
-    lab_tugas = (data.lab_tugas or "").strip() or None
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas) VALUES (%s, %s, %s)", (nama, kampus, lab_tugas))
-        if lab_tugas and not lab_tugas.lower().startswith("remote"):
-            # Update aslab tugas di lab terkait
-            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE nama_lab = %s", (nama, lab_tugas))
-        conn.commit()
-        return {"status": "success", "message": f"Asisten lab '{nama}' berhasil ditambahkan ke master absensi."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.put("/api/absensi/master/aslab/{id_aslab}")
-def edit_master_aslab(id_aslab: int, data: MasterAslabInput, admin: str = Depends(verify_admin_token)):
-    nama = (data.nama_aslab or "").strip()
-    if not nama:
-        return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
-    kampus = data.kampus_tugas or "Thehok"
-    lab_tugas = (data.lab_tugas or "").strip() or None
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT nama_aslab, lab_tugas FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
-        old_aslab = cursor.fetchone()
-        old_nama = old_aslab["nama_aslab"] if old_aslab else nama
-        old_lab = old_aslab.get("lab_tugas") if old_aslab else None
-
-        cursor.execute("UPDATE absensi_master_aslab SET nama_aslab = %s, kampus_tugas = %s, lab_tugas = %s WHERE id_aslab = %s", (nama, kampus, lab_tugas, id_aslab))
-
-        # Sinkronisasi ke master lab:
-        # 1. Jika nama aslab berubah, update lab yang sebelumnya menunjuk nama lama
-        if old_nama != nama:
-            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE aslab_tugas = %s", (nama, old_nama))
-        # 2. Jika lab_tugas berubah:
-        if old_lab and old_lab != lab_tugas:
-            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL WHERE nama_lab = %s AND aslab_tugas = %s", (old_lab, nama))
-        if lab_tugas and not lab_tugas.lower().startswith("remote"):
-            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE nama_lab = %s", (nama, lab_tugas))
-
-        conn.commit()
-        return {"status": "success", "message": "Data asisten lab dan penugasan lab berhasil diperbarui."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/absensi/master/aslab/{id_aslab}")
-def delete_master_aslab(id_aslab: int, admin: str = Depends(verify_admin_token)):
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT nama_aslab FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
-        row = cursor.fetchone()
-        if not row:
-            return {"status": "error", "message": "Data tidak ditemukan."}
-        nama = row.get("nama_aslab", "")
-        if nama:
-            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL WHERE aslab_tugas = %s", (nama,))
-        cursor.execute("DELETE FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
-        conn.commit()
-        return {"status": "success", "message": f"Asisten lab '{nama}' berhasil dihapus dari master absensi."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.post("/api/absensi/master/aslab/reset")
-def reset_official_aslab(admin: str = Depends(verify_admin_token)):
-    """Memulihkan 17 asisten lab resmi (Tahun Ajaran Ganjil 2026/2027) ke tabel master absensi (absensi_master_aslab) beserta penugasan lab"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM absensi_master_aslab")
-        cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL")
-        for item in OFFICIAL_ASLAB_MASTER:
-            assigned_lab = f"{item['lab']} {item['kampus']}" if item["lab"] != "Remote" else f"Remote ({item['kampus']})"
-            cursor.execute("""
-                INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas)
-                VALUES (%s, %s, %s)
-            """, (item["nama"], item["kampus"], assigned_lab))
-            if item["lab"] != "Remote":
-                cursor.execute("""
-                    UPDATE absensi_master_lab 
-                    SET aslab_tugas = %s 
-                    WHERE LOWER(TRIM(nama_lab)) = LOWER(TRIM(%s))
-                """, (item["nama"], assigned_lab))
-        conn.commit()
-        return {
-            "status": "success", 
-            "message": "Berhasil sinkronisasi dan reset 17 Asisten Lab Resmi beserta penugasan lab ke tabel master absensi."
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-
-def forward_absensi_to_google_form(data: AbsensiInput):
-    """
-    Mengirim data absensi secara otomatis ke Google Form Aslab
-    Link: https://forms.gle/yqZRi5D8KTyt1gmN8
-    Action: https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/formResponse
-    """
-    try:
-        url = "https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/formResponse"
-        
-        # Parse tanggal (YYYY-MM-DD)
-        year, month, day = "", "", ""
-        if data.tanggal:
-            parts = data.tanggal.strip().split("-")
-            if len(parts) == 3:
-                year, month, day = parts[0], parts[1], parts[2]
-
-        payload = {
-            "entry.146029558": data.nama_dosen.strip() if data.nama_dosen else "",
-            "entry.404112387": data.nama_mk.strip() if data.nama_mk else "",
-            "entry.380055525": data.kode_kelas.strip() if data.kode_kelas else "",
-            "entry.1558064062": data.status_perkuliahan.strip() if data.status_perkuliahan else "Tatap Muka",
-            "entry.1210016936_year": year,
-            "entry.1210016936_month": month,
-            "entry.1210016936_day": day,
-            "entry.1210016936": data.tanggal.strip() if data.tanggal else "",
-            "entry.1292956818": data.jam_masuk.strip() if data.jam_masuk else "",
-            "entry.1658465425": data.nama_aslab.strip() if data.nama_aslab else "",
-            "entry.1487398951": data.nomor_lab.strip() if data.nomor_lab else "",
-        }
-
-        resp = requests.post(
-            url,
-            data=payload,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10
-        )
-        if resp.status_code in (200, 302):
-            print(f"[Absensi GForm] Berhasil terkirim ke Google Form untuk {data.nama_mk} ({data.nomor_lab})")
-            return True
-        else:
-            print(f"[Absensi GForm] Status respon Google Form: {resp.status_code}")
-            return False
-    except Exception as err:
-        print(f"[Absensi GForm] Gagal meneruskan ke Google Form: {err}")
-        return False
-
-@app.post("/api/absensi")
-def submit_absensi(data: AbsensiInput):
-    """Menyimpan atau memperbarui absensi asisten lab saat dosen masuk kelas di lab"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # Validasi aslab jika id_aslab belum diberikan
-        id_aslab = data.id_aslab
-        kampus = data.kampus
-        if not id_aslab and data.nama_aslab:
-            cursor.execute("SELECT id_aslab, kampus_tugas FROM absensi_master_aslab WHERE nama_aslab = %s LIMIT 1", (data.nama_aslab.strip(),))
-            row = cursor.fetchone()
-            if row:
-                id_aslab = row["id_aslab"]
-                if not kampus:
-                    kampus = row["kampus_tugas"]
-
-        if not kampus:
-            kampus = "Thehok" if "Thehok" in data.nomor_lab or "S2" in data.nomor_lab else "Kobar"
-
-        if data.id_absensi:
-            cursor.execute("""
-                UPDATE absensi_aslab SET
-                    id_aslab = %s, nama_aslab = %s, kampus = %s, nomor_lab = %s,
-                    tanggal = %s, jam_masuk = %s, nama_dosen = %s, nama_mk = %s,
-                    kode_kelas = %s, status_perkuliahan = %s, keterangan = %s
-                WHERE id_absensi = %s
-            """, (
-                id_aslab,
-                data.nama_aslab.strip(),
-                kampus.strip(),
-                data.nomor_lab.strip(),
-                data.tanggal.strip(),
-                data.jam_masuk.strip(),
-                data.nama_dosen.strip(),
-                data.nama_mk.strip(),
-                data.kode_kelas.strip(),
-                data.status_perkuliahan.strip(),
-                data.keterangan.strip() if data.keterangan else None,
-                data.id_absensi
-            ))
-            conn.commit()
-
-            # Otomatis teruskan ke Google Form di background
-            threading.Thread(target=forward_absensi_to_google_form, args=(data,), daemon=True).start()
-
-            return {"status": "success", "message": "Absensi berhasil diperbarui dan dikirim ulang ke Google Form!", "id_absensi": data.id_absensi}
-
-        cursor.execute("""
-            INSERT INTO absensi_aslab (
-                id_aslab, nama_aslab, kampus, nomor_lab, tanggal, jam_masuk,
-                nama_dosen, nama_mk, kode_kelas, status_perkuliahan, keterangan
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            id_aslab,
-            data.nama_aslab.strip(),
-            kampus.strip(),
-            data.nomor_lab.strip(),
-            data.tanggal.strip(),
-            data.jam_masuk.strip(),
-            data.nama_dosen.strip(),
-            data.nama_mk.strip(),
-            data.kode_kelas.strip(),
-            data.status_perkuliahan.strip(),
-            data.keterangan.strip() if data.keterangan else None
-        ))
-        conn.commit()
-        absensi_id = cursor.lastrowid
-
-        # Otomatis teruskan ke Google Form di background
-        threading.Thread(target=forward_absensi_to_google_form, args=(data,), daemon=True).start()
-
-        return {"status": "success", "message": "Absensi berhasil dicatat dan otomatis terkirim ke Google Form!", "id_absensi": absensi_id}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-class AbsensiEditInput(BaseModel):
-    nama_aslab: str
-    status_perkuliahan: Optional[str] = None
-    keterangan: Optional[str] = None
-
-@app.put("/api/absensi/{id_absensi}")
-def edit_absensi(id_absensi: int, data: AbsensiEditInput, admin: str = Depends(verify_admin_token)):
-    """Koreksi nama aslab / status / catatan pada absensi yang sudah tercatat (khusus Admin)"""
-    try:
-        nama = (data.nama_aslab or "").strip()
-        if not nama:
-            return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
-
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute("SELECT * FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
-        current = cursor.fetchone()
-        if not current:
-            return {"status": "error", "message": "Data absensi tidak ditemukan."}
-
-        id_aslab = None
-        kampus = current.get("kampus")
-        cursor.execute("SELECT id_aslab, kampus_tugas FROM absensi_master_aslab WHERE nama_aslab = %s LIMIT 1", (nama,))
-        row = cursor.fetchone()
-        if row:
-            id_aslab = row["id_aslab"]
-            if row.get("kampus_tugas"):
-                kampus = row["kampus_tugas"]
-
-        status = (data.status_perkuliahan or current.get("status_perkuliahan") or "Tatap Muka").strip()
-        keterangan = data.keterangan.strip() if data.keterangan is not None and data.keterangan.strip() else current.get("keterangan")
-
-        cursor.execute(
-            "UPDATE absensi_aslab SET id_aslab = %s, nama_aslab = %s, kampus = %s, status_perkuliahan = %s, keterangan = %s WHERE id_absensi = %s",
-            (id_aslab, nama, kampus, status, keterangan, id_absensi)
-        )
-        conn.commit()
-        return {"status": "success", "message": "Data absensi berhasil dikoreksi."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.get("/api/absensi")
-def get_absensi_list(tanggal: str = None, nomor_lab: str = None, kampus: str = None, nama_aslab: str = None, limit: int = 100):
-    """Mengambil rekap/riwayat absensi aslab"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-        query = "SELECT * FROM absensi_aslab WHERE 1=1"
-        params = []
-        if tanggal:
-            query += " AND tanggal = %s"
-            params.append(tanggal)
-        if nomor_lab:
-            query += " AND nomor_lab = %s"
-            params.append(nomor_lab)
-        if kampus:
-            query += " AND kampus = %s"
-            params.append(kampus)
-        if nama_aslab:
-            query += " AND nama_aslab LIKE %s"
-            params.append(f"%{nama_aslab}%")
-            
-        query += " ORDER BY tanggal DESC, id_absensi DESC LIMIT %s"
-        params.append(limit)
-        
-        cursor.execute(query, tuple(params))
-        rows = cursor.fetchall()
-        return {"status": "success", "data": rows, "total": len(rows)}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-
-@app.get("/api/absensi/lab-sessions")
-def get_lab_sessions(nomor_lab: str, tanggal: str = None):
-    """Mengambil daftar seluruh sesi kelas di lab dan tanggal terpilih beserta status absensinya"""
-    try:
-        if not tanggal:
-            tanggal = datetime.date.today().strftime("%Y-%m-%d")
-
-        conn = scraper.get_db()
-        cursor = conn.cursor(dictionary=True)
-
-        clean_lab_match = re.search(r'(?:\d+\.\d+|S2)', nomor_lab, re.IGNORECASE)
-        clean_lab = clean_lab_match.group(0) if clean_lab_match else nomor_lab
-
-        kampus = None
-        if "thehok" in nomor_lab.lower() or "s2" in nomor_lab.lower():
-            kampus = "Thehok"
-        elif "kobar" in nomor_lab.lower():
-            kampus = "Kobar"
-
-        query_jadwal = """
-            SELECT j.id_jadwal, d.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam, j.status_jadwal,
-                   r.nama_ruangan, r.kampus
-            FROM jadwal j
-            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
-            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
-            WHERE j.tanggal = %s
-              AND (LOWER(r.nama_ruangan) LIKE '%labor%' OR LOWER(r.nama_ruangan) LIKE '%lab%')
-        """
-        params_jadwal = [tanggal]
-        if kampus:
-            query_jadwal += " AND r.kampus LIKE %s"
-            params_jadwal.append(f"%{kampus}%")
-        query_jadwal += " ORDER BY j.jam ASC"
-
-        cursor.execute(query_jadwal, tuple(params_jadwal))
-        raw_schedules = cursor.fetchall()
-
-        # Filter presisi: ruangan lab harus cocok eksak dengan nomor lab (tanpa false-positive misal 3.1 cocok ke 3.10)
-        clean_lab_escaped = re.escape(clean_lab)
-        if clean_lab.upper() == 'S2':
-            lab_pattern = re.compile(rf'(?<![a-zA-Z0-9]){clean_lab_escaped}(?![a-zA-Z0-9])', re.IGNORECASE)
-        else:
-            lab_pattern = re.compile(rf'(?<!\d){clean_lab_escaped}(?!\d)', re.IGNORECASE)
-
-        schedules = [row for row in raw_schedules if lab_pattern.search(row.get("nama_ruangan") or "")]
-
-        # Ambil seluruh absensi di lab dan tanggal tersebut
-        cursor.execute("""
-            SELECT id_absensi, id_aslab, nama_aslab, kampus, nomor_lab, tanggal, jam_masuk,
-                   nama_dosen, nama_mk, kode_kelas, status_perkuliahan, keterangan, created_at
-            FROM absensi_aslab
-            WHERE tanggal = %s AND nomor_lab = %s
-            ORDER BY id_absensi DESC
-        """, (tanggal, nomor_lab))
-        absensi_list = cursor.fetchall()
-
-        matched_absensi_ids = set()
-        session_results = []
-
-        for row in schedules:
-            row_kelas = (row.get("kelas") or "").strip().lower()
-            raw_jam = row.get("jam")
-            formatted_jam = ""
-            if isinstance(raw_jam, datetime.timedelta):
-                total_sec = int(raw_jam.total_seconds())
-                h = total_sec // 3600
-                m = (total_sec % 3600) // 60
-                formatted_jam = f"{h:02d}.{m:02d} WIB"
-            elif isinstance(raw_jam, (int, float)) and raw_jam >= 3600:
-                h = int(raw_jam) // 3600
-                m = (int(raw_jam) % 3600) // 60
-                formatted_jam = f"{h:02d}.{m:02d} WIB"
-            elif raw_jam is not None:
-                str_j = str(raw_jam).strip()
-                if str_j.isdigit() and int(str_j) >= 3600:
-                    val_int = int(str_j)
-                    h = val_int // 3600
-                    m = (val_int % 3600) // 60
-                    formatted_jam = f"{h:02d}.{m:02d} WIB"
-                else:
-                    formatted_jam = str_j
-
-            row_jam = formatted_jam or ""
-            clean_row_jam = row_jam.replace("WIB", "").replace(".", ":").strip()
-            start_jam = clean_row_jam.split("-")[0].strip() if "-" in clean_row_jam else clean_row_jam
-
-            matched_absen = None
-            for ab in absensi_list:
-                ab_kelas = (ab.get("kode_kelas") or "").strip().lower()
-                ab_jam = (ab.get("jam_masuk") or "").replace("WIB", "").replace(".", ":").strip()
-                if row_kelas and ab_kelas and row_kelas == ab_kelas:
-                    matched_absen = ab
-                    break
-                elif start_jam and ab_jam and (start_jam.startswith(ab_jam[:2]) or ab_jam.startswith(start_jam[:2])):
-                    matched_absen = ab
-                    break
-
-            if matched_absen:
-                matched_absensi_ids.add(matched_absen["id_absensi"])
-                session_results.append({
-                    "id_jadwal": row.get("id_jadwal"),
-                    "jam": formatted_jam,
-                    "nama_mk": row.get("nama_mk"),
-                    "kelas": row.get("kelas"),
-                    "nama_dosen": row.get("nama_dosen"),
-                    "metode_pembelajaran": row.get("metode_pembelajaran"),
-                    "status_jadwal": row.get("status_jadwal"),
-                    "is_diabsen": True,
-                    "nama_aslab": matched_absen["nama_aslab"],
-                    "absensi": matched_absen
-                })
-            else:
-                session_results.append({
-                    "id_jadwal": row.get("id_jadwal"),
-                    "jam": formatted_jam,
-                    "nama_mk": row.get("nama_mk"),
-                    "kelas": row.get("kelas"),
-                    "nama_dosen": row.get("nama_dosen"),
-                    "metode_pembelajaran": row.get("metode_pembelajaran"),
-                    "status_jadwal": row.get("status_jadwal"),
-                    "is_diabsen": False,
-                    "nama_aslab": None,
-                    "absensi": None
-                })
-
-        # Cek jika ada absensi di luar jadwal formal
-        extra_absensi = [ab for ab in absensi_list if ab["id_absensi"] not in matched_absensi_ids]
-
-        return {
-            "status": "success",
-            "tanggal": tanggal,
-            "nomor_lab": nomor_lab,
-            "sessions": session_results,
-            "extra_absensi": extra_absensi,
-            "total_sessions": len(session_results),
-            "total_diabsen": len([s for s in session_results if s["is_diabsen"]]) + len(extra_absensi)
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-class StatusLabUpdateInput(BaseModel):
-    tanggal: str
-    id_ruangan: Optional[int] = None
-    nama_ruangan: Optional[str] = None
-    kampus: Optional[str] = None
-    jam: Optional[str] = None
-    status_lab: str = "buka" # "buka" / "tutup"
-    nama_mk: Optional[str] = None
-    kelas: Optional[str] = None
-    diubah_oleh: str = "Aslab (Web)"
-
-@app.post("/api/status-lab")
-def update_status_lab(data: StatusLabUpdateInput):
-    """Memperbarui status operasional lab (buka/tutup) per sesi kelas via dashboard web"""
-    try:
-        id_ruangan = data.id_ruangan
-        if not id_ruangan and data.nama_ruangan:
-            conn = get_db()
-            cursor = conn.cursor(dictionary=True)
-            clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
-            
-            # Coba pencarian eksak terlebih dahulu berdasarkan nama ruangan dan kampus
-            query_exact = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
-            params_exact = [data.nama_ruangan.strip()]
-            if detected_camp:
-                query_exact += " AND kampus = %s"
-                params_exact.append(detected_camp)
-            query_exact += " LIMIT 1"
-            cursor.execute(query_exact, tuple(params_exact))
-            row = cursor.fetchone()
-            
-            if not row:
-                query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
-                params = [f"%{clean_kw}%"]
-                if detected_camp:
-                    query += " AND kampus = %s"
-                    params.append(detected_camp)
-                query += " LIMIT 1"
-                cursor.execute(query, tuple(params))
-                row = cursor.fetchone()
-                
-            if row:
-                id_ruangan = row['id_ruangan']
-            elif data.nama_ruangan and data.nama_ruangan.strip():
-                camp_insert = detected_camp or data.kampus or ("Kobar" if "kobar" in data.nama_ruangan.lower() else "Thehok")
-                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (data.nama_ruangan.strip(), camp_insert))
-                conn.commit()
-                id_ruangan = cursor.lastrowid
-            cursor.close()
-            conn.close()
-
-        if not id_ruangan:
-            return {"status": "error", "message": "Ruangan tidak ditemukan"}
-
-        jam_clean = "08:00"
-        if data.jam:
-            jam_clean = data.jam.split('-')[0].strip() if '-' in data.jam else data.jam.strip()
-            if len(jam_clean) > 5 and ':' in jam_clean:
-                jam_clean = jam_clean[:5]
-
-        target_status = data.status_lab.strip().lower()
-
-        sukses = wa_notifier.set_status_operasional_lab(
-            tanggal=data.tanggal.strip(),
-            id_ruangan=id_ruangan,
-            jam=jam_clean,
-            status_lab=target_status,
-            diubah_oleh=data.diubah_oleh.strip() if data.diubah_oleh else "Aslab (Web)",
-            nama_mk=data.nama_mk.strip() if data.nama_mk else None,
-            kelas=data.kelas.strip() if data.kelas else None
-        )
-
-        if target_status == "tutup":
-            try:
-                conn_t = scraper.get_db()
-                cur_t = conn_t.cursor()
-                # 1. Update seluruh riwayat status operasional ruangan hari ini menjadi tutup
-                cur_t.execute(
-                    "UPDATE status_operasional_lab SET status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW() WHERE tanggal = %s AND id_ruangan = %s",
-                    (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan)
-                )
-                # 2. Sinkronkan seluruh sesi jadwal aktif hari ini di ruangan ini agar tercatat eksplisit ditutup
-                cur_t.execute("""
-                    INSERT INTO status_operasional_lab (tanggal, id_ruangan, jam, nama_mk, kelas, status_lab, diubah_oleh, waktu_aksi)
-                    SELECT j.tanggal, j.id_ruangan, j.jam, j.nama_mk, j.kelas, 'tutup', %s, NOW()
-                    FROM jadwal j
-                    WHERE j.tanggal = %s AND j.id_ruangan = %s
-                    ON DUPLICATE KEY UPDATE status_lab = 'tutup', diubah_oleh = VALUES(diubah_oleh), waktu_aksi = NOW()
-                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
-                conn_t.commit()
-                cur_t.close()
-                conn_t.close()
-            except Exception as err_t:
-                print(f"[Error update all sessions to tutup]: {err_t}")
-
-        elif target_status == "buka":
-            try:
-                conn_b = scraper.get_db()
-                cur_b = conn_b.cursor()
-                # Saat dibuka kembali, pastikan status ruangan hari ini diaktifkan/dibuka sepenuhnya
-                cur_b.execute("""
-                    UPDATE status_operasional_lab
-                    SET status_lab = 'buka', diubah_oleh = %s, waktu_aksi = NOW()
-                    WHERE tanggal = %s AND id_ruangan = %s
-                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
-                conn_b.commit()
-                cur_b.close()
-                conn_b.close()
-            except Exception as err_b:
-                print(f"[Error update sessions to buka]: {err_b}")
-
-        if sukses:
-            return {
-                "status": "success",
-                "message": f"Status lab berhasil diperbarui menjadi {data.status_lab}",
-                "status_lab": data.status_lab,
-                "id_ruangan": id_ruangan,
-                "waktu": datetime.datetime.now().strftime("%H:%M")
-            }
-        else:
-            return {"status": "error", "message": "Gagal menyimpan status ke database"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-class TimerAcUpdateInput(BaseModel):
-    tanggal: str
-    id_ruangan: Optional[int] = None
-    nama_ruangan: Optional[str] = None
-    kampus: Optional[str] = None
-    jam: Optional[str] = "08:00"
-    timer_on: Optional[str] = None
-    timer_off: Optional[str] = None
-    timer_aktif: str = "none" # "none", "on", "off", "both"
-    diubah_oleh: str = "Asmot (Web)"
-
-@app.post("/api/timer-ac")
-def update_timer_ac(data: TimerAcUpdateInput):
-    """Menyimpan atau memperbarui konfigurasi timer AC untuk ruangan dan tanggal tertentu"""
-    try:
-        id_ruangan = data.id_ruangan
-        if not id_ruangan and data.nama_ruangan:
-            conn = get_db()
-            cursor = conn.cursor(dictionary=True)
-            clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
-            query_exact = "SELECT id_ruangan FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
-            params_exact = [data.nama_ruangan.strip()]
-            if detected_camp:
-                query_exact += " AND kampus = %s"
-                params_exact.append(detected_camp)
-            query_exact += " LIMIT 1"
-            cursor.execute(query_exact, tuple(params_exact))
-            row = cursor.fetchone()
-            if not row:
-                query = "SELECT id_ruangan FROM ruangan WHERE nama_ruangan LIKE %s"
-                params = [f"%{clean_kw}%"]
-                if detected_camp:
-                    query += " AND kampus = %s"
-                    params.append(detected_camp)
-                query += " LIMIT 1"
-                cursor.execute(query, tuple(params))
-                row = cursor.fetchone()
-            if row:
-                id_ruangan = row['id_ruangan']
-            elif data.nama_ruangan and data.nama_ruangan.strip():
-                camp_insert = detected_camp or data.kampus or ("Kobar" if "kobar" in data.nama_ruangan.lower() else "Thehok")
-                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (data.nama_ruangan.strip(), camp_insert))
-                conn.commit()
-                id_ruangan = cursor.lastrowid
-            cursor.close()
-            conn.close()
-
-        if not id_ruangan:
-            return {"status": "error", "message": "Ruangan tidak ditemukan"}
-
-        res_tuple = wa_notifier.set_timer_ac(
-            tanggal=data.tanggal.strip(),
-            id_ruangan=id_ruangan,
-            jam=data.jam or "08:00",
-            timer_on=data.timer_on,
-            timer_off=data.timer_off,
-            timer_aktif=data.timer_aktif,
-            diubah_oleh=data.diubah_oleh or "Asmot (Web)",
-            nama_ruangan=data.nama_ruangan
-        )
-
-        sukses = res_tuple[0] if isinstance(res_tuple, (tuple, list)) else bool(res_tuple)
-        err_msg = res_tuple[1] if (isinstance(res_tuple, (tuple, list)) and len(res_tuple) > 1) else None
-
-        if sukses:
-            return {
-                "status": "success",
-                "message": "Pengaturan timer AC berhasil disimpan",
-                "timer_on": data.timer_on,
-                "timer_off": data.timer_off,
-                "timer_aktif": data.timer_aktif,
-                "id_ruangan": id_ruangan
-            }
-        else:
-            return {"status": "error", "message": f"Gagal menyimpan timer AC ke database: {err_msg or 'Kesalahan database'}"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/api/status-lab")
-def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
-    """Mengambil riwayat/status lab real-time untuk tanggal tertentu"""
-    try:
-        if not tanggal:
-            tanggal = datetime.date.today().strftime("%Y-%m-%d")
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        wa_notifier.ensure_db_schema()
-
-        query = """
-            SELECT sol.*, 
-                   COALESCE(r.nama_ruangan, sol.nama_mk, 'Ruangan') AS nama_ruangan, 
-                   COALESCE(r.kampus, 'Thehok') AS kampus
-            FROM status_operasional_lab sol
-            LEFT JOIN ruangan r ON sol.id_ruangan = r.id_ruangan
-            WHERE sol.tanggal = %s
-        """
-        params = [tanggal]
-        if id_ruangan:
-            query += " AND sol.id_ruangan = %s"
-            params.append(id_ruangan)
-
-        query += " ORDER BY sol.waktu_aksi ASC, sol.id ASC"
-
-        cursor.execute(query, tuple(params))
-        rows = cursor.fetchall()
-        for r in rows:
-            if r.get('waktu_aksi'):
-                r['waktu_aksi_str'] = r['waktu_aksi'].strftime('%H:%M:%S')
-                r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
-            if r.get('timer_on'):
-                if hasattr(r['timer_on'], 'total_seconds'):
-                    tot = int(r['timer_on'].total_seconds())
-                    r['timer_on'] = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
-                else:
-                    r['timer_on'] = str(r['timer_on'])[:5]
-                r['timer_on_str'] = r['timer_on']
-            if r.get('timer_off'):
-                if hasattr(r['timer_off'], 'total_seconds'):
-                    tot = int(r['timer_off'].total_seconds())
-                    r['timer_off'] = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
-                else:
-                    r['timer_off'] = str(r['timer_off'])[:5]
-                r['timer_off_str'] = r['timer_off']
-            if r.get('jam'):
-                total_sec = int(r['jam'].total_seconds()) if hasattr(r['jam'], 'total_seconds') else 0
-                r['jam'] = f"{total_sec//3600:02d}:{(total_sec%3600)//60:02d}"
-            if r.get('tanggal'):
-                r['tanggal'] = str(r['tanggal'])[:10]
-
-        return {"status": "success", "tanggal": tanggal, "data": rows}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-@app.delete("/api/absensi/{id_absensi}")
-def delete_absensi(id_absensi: int):
-    """Menghapus data absensi berdasarkan ID"""
-    try:
-        conn = scraper.get_db()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
-        conn.commit()
-        return {"status": "success", "message": f"Absensi #{id_absensi} berhasil dihapus"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
-
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
-# Mount static frontend directory if exists
-if os.path.exists("frontend"):
-    app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
-
-def get_file_path(relative_path: str) -> str:
-    """Helper untuk memeriksa path file baik di root maupun di dalam folder frontend"""
-    frontend_path = os.path.join("frontend", relative_path)
-    if os.path.exists(frontend_path):
-        return frontend_path
-    return relative_path
-
-@app.get("/")
-def serve_index():
-    if build_html:
-        try:
-            build_html()
-        except Exception:
-            pass
-    if os.path.exists("index.html"):
-        return FileResponse("index.html")
-    return FileResponse(os.path.join("frontend", "templates", "index.html"))
-
-@app.get("/style.css")
-@app.get("/css/style.css")
-def serve_css():
-    css_path = get_file_path(os.path.join("css", "style.css"))
-    if not os.path.exists(css_path):
-        css_path = "style.css"
-    return FileResponse(css_path, media_type="text/css")
-
-@app.get("/script.js")
-@app.get("/js/script.js")
-def serve_js():
-    js_path = get_file_path(os.path.join("js", "script.js"))
-    if not os.path.exists(js_path):
-        js_path = "script.js"
-    return FileResponse(js_path, media_type="application/javascript")
-
-@app.get("/notif.mp3")
-@app.get("/audio/notif.mp3")
-def serve_notif():
-    audio_path = get_file_path(os.path.join("audio", "notif.mp3"))
-    if not os.path.exists(audio_path):
-        audio_path = "notif.mp3"
-    return FileResponse(audio_path, media_type="audio/mpeg")
-
-@app.get("/manifest.json")
-def serve_manifest():
-    return FileResponse("manifest.json", media_type="application/manifest+json")
-
-@app.get("/sw.js")
-def serve_sw():
-    return FileResponse("sw.js", media_type="application/javascript")
-
+import asyncio
+import collections
+import datetime
+import hashlib
+import hmac
+import os
+import re
+import secrets
+import socket
+import time
+import threading
+import requests
+from dotenv import load_dotenv
+
+import mysql.connector
+from fastapi import FastAPI, Depends, Header, HTTPException, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any, Union
+
+import sys
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if os.path.exists(os.path.join(BASE_DIR, "backend")) and os.path.join(BASE_DIR, "backend") not in sys.path:
+    sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
+if os.path.exists(os.path.join(BASE_DIR, "scripts")) and os.path.join(BASE_DIR, "scripts") not in sys.path:
+    sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+
+try:
+    from build_html import build_html
+except ImportError:
+    build_html = None
+
+import logging
+import scraper
+import wa_notifier
+
+# Filter logging agar access log tidak dipenuhi spam polling /api/sync/pending
+class NoisyEndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return "/api/sync/pending" not in msg
+
+logging.getLogger("uvicorn.access").addFilter(NoisyEndpointFilter())
+
+app = FastAPI(title="API Analitik Jadwal Kuliah")
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        logging.getLogger("uvicorn.access").addFilter(NoisyEndpointFilter())
+    except Exception:
+        pass
+    if build_html:
+        try:
+            build_html()
+        except Exception as e:
+            print(f"Auto-build HTML notice: {e}")
+    scraper.init_db_schema()
+    try:
+        wa_notifier.init_sent_notifications_on_startup()
+    except Exception as e:
+        print(f"[Startup] Error init wa notifications: {e}")
+    asyncio.create_task(wa_notifier.wa_notifier_loop())
+
+# ==================== SECURITY & CACHE HEADERS MIDDLEWARE (SEC-10) ====================
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    
+    path = request.url.path
+    if path == "/" or path.endswith((".js", ".css", ".html")) or "sw.js" in path:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        
+    return response
+
+# Mengizinkan Frontend mengakses API dengan batasan origin yang aman
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"^https?:\/\/([a-zA-Z0-9-]+\.)*(trycloudflare\.com|ngrok-free\.app|ngrok\.io|unama\.ac\.id)(:[0-9]+)?$",
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Backup-Filename"],
+)
+
+load_dotenv(override=False)
+
+# ==================== ADMIN AUTH, RATE LIMITER & TOKEN STORE ====================
+admin_tokens = {}  # token -> expiry_timestamp
+login_failed_attempts = {}  # ip -> [timestamp, timestamp, ...]
+
+class LoginRequest(BaseModel):
+    password: str
+    master_password: str | None = None
+
+def get_admin_secret() -> str:
+    return os.getenv("ADMIN_SECRET_KEY", "e83a9f14d8b2413a967c52684b39174fb80f2d91ac6e4f3a7c8b0e12d4a5b6c7")
+
+def create_admin_token() -> str:
+    secret = get_admin_secret()
+    expiry = int(time.time() + 43200)  # 12 jam
+    sig = hmac.new(secret.encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
+    token = f"{expiry}.{sig}"
+    admin_tokens[token] = expiry
+    return token
+
+def is_valid_admin_token(token: str) -> bool:
+    if not token:
+        return False
+    now = time.time()
+    # 1. Cek in-memory store
+    if token in admin_tokens and admin_tokens[token] >= now:
+        return True
+    # 2. Cek validasi kriptografi HMAC (bertahan saat server restart)
+    try:
+        if "." in token:
+            parts = token.split(".", 1)
+            expiry_str, sig = parts[0], parts[1]
+            expiry = int(expiry_str)
+            if expiry >= now:
+                secret = get_admin_secret()
+                expected_sig = hmac.new(secret.encode(), expiry_str.encode(), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(sig, expected_sig):
+                    admin_tokens[token] = expiry  # Re-cache di memory
+                    return True
+    except Exception:
+        pass
+    return False
+
+def verify_admin_token(authorization: str = Header(None)) -> str:
+    """Memvalidasi Bearer Token Admin untuk endpoint mutasi data sensitif"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Memerlukan otentikasi Admin."
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    if not is_valid_admin_token(token):
+        if token in admin_tokens:
+            del admin_tokens[token]
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Token Admin tidak valid atau telah kedaluwarsa. Silakan login ulang."
+        )
+    return token
+
+def verify_bot_secret(x_bot_secret: str = Header(None)) -> bool:
+    """Memvalidasi secret header dari Node.js WhatsApp bot"""
+    expected_secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
+    if not x_bot_secret or not hmac.compare_digest(x_bot_secret.strip(), expected_secret.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Bot secret token tidak valid."
+        )
+    return True
+
+def is_admin_authenticated(authorization: str = Header(None)) -> bool:
+    """Cek status admin tanpa exception untuk keperluan PII masking"""
+    if not authorization or not authorization.startswith("Bearer "):
+        return False
+    token = authorization.split(" ", 1)[1].strip()
+    return is_valid_admin_token(token)
+
+@app.post("/api/auth/login")
+def admin_login(req: LoginRequest, request: Request):
+    """Verifikasi password Admin & Master dengan Rate Limiting anti brute-force"""
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+        
+    now = time.time()
+    # Bersihkan percobaan yang lebih lama dari 5 menit (300 detik)
+    attempts = [t for t in login_failed_attempts.get(client_ip, []) if now - t < 300]
+    login_failed_attempts[client_ip] = attempts
+    
+    # Blokir jika sudah 5 kali gagal dalam 5 menit
+    if len(attempts) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Terlalu banyak percobaan login gagal. Akses login dikunci sementara selama 5 menit untuk keamanan."
+        )
+
+    expected_admin_pass = os.getenv("ADMIN_PASSWORD", "unama123")
+    expected_master_pass = os.getenv("MASTER_PASSWORD", "makannasipadangdepangang!")
+    
+    # 1. Validasi Password Admin
+    if not hmac.compare_digest(req.password.strip(), expected_admin_pass.strip()):
+        attempts.append(now)
+        login_failed_attempts[client_ip] = attempts
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Password Admin salah! (Percobaan gagal {len(attempts)}/5)"
+        )
+    
+    # 2. Validasi Password Master jika disertakan
+    if req.master_password is not None:
+        if not hmac.compare_digest(req.master_password.strip(), expected_master_pass.strip()):
+            attempts.append(now)
+            login_failed_attempts[client_ip] = attempts
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Password Master salah! (Percobaan gagal {len(attempts)}/5)"
+            )
+    else:
+        # Mengindikasikan langkah 2 (Master Password) diperlukan
+        return {"status": "need_master", "message": "Memerlukan otorisasi Password Master."}
+    
+    # Sukses -> Reset failed attempts untuk IP ini
+    login_failed_attempts.pop(client_ip, None)
+    
+    # 3. Terbitkan Secure HMAC-signed Token
+    token = create_admin_token()
+    
+    return {
+        "status": "success",
+        "message": "Autentikasi Admin berhasil!",
+        "token": token,
+        "expires_in": 43200
+    }
+
+@app.post("/api/auth/logout")
+def admin_logout(authorization: str = Header(None)):
+    """Menghapus token admin saat logout"""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        admin_tokens.pop(token, None)
+    return {"status": "success", "message": "Logout admin berhasil."}
+
+@app.get("/api/auth/verify")
+def admin_verify(token: str = Depends(verify_admin_token)):
+    """Memeriksa keabsahan token admin saat ini"""
+    return {"status": "success", "message": "Token admin valid."}
+
+# ==================================================================
+
+def get_db():
+    pwd = os.getenv("DB_PASSWORD", "")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    configured_port = int(os.getenv("DB_PORT", 3307))
+    user = os.getenv("DB_USER", "root")
+    db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
+
+    ports_to_try = [configured_port]
+    for p in [3307, 3306]:
+        if p not in ports_to_try:
+            ports_to_try.append(p)
+
+    passwords_to_try = [pwd]
+    for p_word in ["", "123456", "root"]:
+        if p_word not in passwords_to_try:
+            passwords_to_try.append(p_word)
+
+    last_err = None
+    for p in ports_to_try:
+        for p_word in passwords_to_try:
+            try:
+                return mysql.connector.connect(
+                    host=host,
+                    port=p,
+                    user=user,
+                    password=p_word,
+                    database=db_name
+                )
+            except mysql.connector.Error as err:
+                last_err = err
+                continue
+    if last_err:
+        raise last_err
+
+@app.get("/api/server-urls")
+def get_server_urls(refresh: bool = False):
+    """Mengembalikan daftar link akses server real-time (Cloudflare, Ngrok, LAN IP, Localhost) untuk QR Code & Link HP"""
+    urls = []
+    seen = set()
+
+    # 1. Domain kustom / URL dari .env
+    env_url = os.getenv("SERVER_PUBLIC_URL", os.getenv("CLOUDFLARE_URL", "")).strip()
+    if env_url and env_url.startswith("http"):
+        urls.append({"label": "Cloudflare / Custom Domain (Internet)", "url": env_url, "primary": True})
+        seen.add(env_url)
+
+    # 2. Live Cloudflare Quick Tunnel dari tunnel_logs/tunnel.log
+    cf_url = None
+    log_paths = [
+        "tunnel_logs/tunnel.log",
+        "/var/log/cloudflared/tunnel.log",
+        "/app/tunnel_logs/tunnel.log",
+        "tunnel.log"
+    ]
+    for lp in log_paths:
+        if os.path.exists(lp):
+            try:
+                with open(lp, "r", encoding="utf-8", errors="ignore") as f:
+                    log_data = f.read()
+                    matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', log_data)
+                    if matches:
+                        cf_url = matches[-1]
+                        with open("last_tunnel.txt", "w", encoding="utf-8") as tf:
+                            tf.write(cf_url)
+                        break
+            except Exception:
+                pass
+
+    # 2b. Fallback ke last_tunnel.txt
+    if not cf_url and os.path.exists("last_tunnel.txt"):
+        try:
+            with open("last_tunnel.txt", "r", encoding="utf-8") as f:
+                saved = f.read().strip()
+                if saved.startswith("http"):
+                    cf_url = saved
+        except Exception:
+            pass
+
+    if cf_url and cf_url not in seen:
+        urls.append({"label": "Cloudflare Tunnel (Internet)", "url": cf_url, "primary": True})
+        seen.add(cf_url)
+
+    # 3. Ngrok API & last_ngrok.txt
+    try:
+        r = requests.get("http://localhost:4040/api/tunnels", timeout=1)
+        if r.status_code == 200:
+            for t in r.json().get('tunnels', []):
+                pub = t.get('public_url', '')
+                if pub.startswith("https") and pub not in seen:
+                    urls.append({"label": "Ngrok Tunnel (Internet)", "url": pub, "primary": len(urls) == 0})
+                    seen.add(pub)
+                    break
+    except Exception:
+        pass
+
+    if os.path.exists("last_ngrok.txt"):
+        try:
+            with open("last_ngrok.txt", "r", encoding="utf-8") as f:
+                saved = f.read().strip()
+                if saved.startswith("http") and saved not in seen:
+                    urls.append({"label": "Ngrok Tunnel (Internet)", "url": saved, "primary": len(urls) == 0})
+                    seen.add(saved)
+        except Exception:
+            pass
+
+    # 4. Local LAN IP (Wi-Fi / Ethernet di Ruang Lab)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        lan_url = f"http://{local_ip}:8000"
+        if lan_url not in seen:
+            urls.append({"label": f"Wi-Fi / LAN Ruang Aslab ({local_ip})", "url": lan_url, "primary": len(urls) == 0})
+            seen.add(lan_url)
+    except Exception:
+        pass
+
+    urls.append({"label": "Localhost (Komputer Server)", "url": "http://localhost:8000", "primary": len(urls) == 0})
+    best_url = urls[0]["url"] if urls else "http://localhost:8000"
+
+    return {
+        "status": "success",
+        "best_url": best_url,
+        "urls": urls,
+        "updated_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+
+@app.get("/api/server-link/status")
+def get_server_link_status():
+    """Mengembalikan status link server publik saat ini, link sebelumnya di DB, dan riwayat pergantian link"""
+    try:
+        current_url = wa_notifier.detect_current_public_url()
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        wa_notifier.init_server_link_tables(cursor)
+        conn.commit()
+
+        cursor.execute("SELECT * FROM server_link_config ORDER BY id DESC LIMIT 1")
+        cfg = cursor.fetchone()
+
+        cursor.execute("SELECT * FROM server_link_history ORDER BY id DESC LIMIT 10")
+        history = cursor.fetchall()
+        for h in history:
+            if h.get('created_at'):
+                h['created_at'] = h['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "status": "success",
+            "current_detected_url": current_url,
+            "saved_config": {
+                "current_url": cfg.get('current_url') if cfg else None,
+                "previous_url": cfg.get('previous_url') if cfg else None,
+                "last_checked_at": cfg.get('last_checked_at').strftime('%Y-%m-%d %H:%M:%S') if cfg and cfg.get('last_checked_at') else None,
+                "last_notified_at": cfg.get('last_notified_at').strftime('%Y-%m-%d %H:%M:%S') if cfg and cfg.get('last_notified_at') else None,
+            } if cfg else None,
+            "history": history
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/server-link/broadcast")
+def trigger_server_link_broadcast(admin: str = Depends(verify_admin_token)):
+    """Memicu pengiriman siaran link server terbaru ke seluruh kontak Aslab/Asmot/Admin via WA (memerlukan token Admin)"""
+    try:
+        res = wa_notifier.check_and_broadcast_server_url_change(force_broadcast=True)
+        return {
+            "status": "success",
+            "result": res
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+
+
+class SemesterActiveRequest(BaseModel):
+    nama_semester: str
+
+class SemesterAddRequest(BaseModel):
+    nama_semester: str
+    set_active: bool | None = False
+
+@app.get("/api/semesters")
+def get_semesters():
+    """Mengambil daftar seluruh semester, status aktif, statistik jumlah jadwal, serta rentang tanggal awal & akhir"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT 
+                s.id_semester, 
+                s.nama_semester, 
+                s.is_active,
+                COUNT(j.id_jadwal) AS total_jadwal,
+                MIN(j.tanggal) AS start_date,
+                MAX(j.tanggal) AS end_date
+            FROM semester s
+            LEFT JOIN jadwal j ON s.nama_semester = j.semester
+            GROUP BY s.id_semester, s.nama_semester, s.is_active
+            ORDER BY s.id_semester DESC
+        """)
+        rows = cursor.fetchall()
+        
+        active_sem = rows[0].get('nama_semester', 'Ganjil 2026') if rows else 'Ganjil 2026'
+        for r in rows:
+            if r.get('start_date'):
+                r['start_date'] = str(r['start_date'])
+            if r.get('end_date'):
+                r['end_date'] = str(r['end_date'])
+            if r.get('is_active') == 1:
+                active_sem = r.get('nama_semester')
+                
+        return {
+            "status": "success",
+            "active_semester": active_sem,
+            "data": rows
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/semesters/resolve-date")
+def resolve_semester_by_date(tanggal: str, auto_switch: bool = False):
+    """
+    Mendeteksi semester yang sesuai berdasarkan tanggal tertentu.
+    Jika auto_switch=True dan tanggal milik semester berbeda, otomatis update semester aktif di database.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 1. Cek semester aktif saat ini
+        cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+        active_row = cursor.fetchone()
+        current_active = active_row['nama_semester'] if active_row else 'Ganjil 2026'
+        
+        # 2. Cek apakah ada jadwal langsung pada tanggal ini (di jadwal atau jadwal_permanent)
+        cursor.execute("""
+            SELECT semester 
+            FROM (
+                SELECT semester FROM jadwal WHERE tanggal = %s
+                UNION
+                SELECT semester FROM jadwal_permanent WHERE tanggal = %s
+            ) t LIMIT 1
+        """, (tanggal, tanggal))
+        matched = cursor.fetchone()
+        
+        matched_semester = matched['semester'] if matched else None
+        
+        # 3. Jika tanggal tidak ada jadwal persis (misal hari Minggu/Libur), cari berdasarkan rentang tanggal semester
+        if not matched_semester:
+            cursor.execute("""
+                SELECT s.nama_semester
+                FROM semester s
+                JOIN (
+                    SELECT semester, MIN(tanggal) as min_d, MAX(tanggal) as max_d 
+                    FROM (
+                        SELECT semester, tanggal FROM jadwal WHERE tanggal IS NOT NULL
+                        UNION ALL
+                        SELECT semester, tanggal FROM jadwal_permanent WHERE tanggal IS NOT NULL
+                    ) all_j
+                    GROUP BY semester
+                ) rng ON s.nama_semester = rng.semester
+                WHERE %s BETWEEN rng.min_d AND rng.max_d
+                ORDER BY s.id_semester DESC
+                LIMIT 1
+            """, (tanggal,))
+            range_match = cursor.fetchone()
+            if range_match:
+                matched_semester = range_match['nama_semester']
+                
+        # Jika tetap tidak cocok dengan rentang manapun, tetap di current_active
+        if not matched_semester:
+            matched_semester = current_active
+            
+        is_different = (matched_semester != current_active)
+        switched = False
+        
+        # 4. Jika auto_switch diminta dan semester berbeda, aktifkan semester baru di DB
+        if auto_switch and is_different:
+            cursor.execute("UPDATE semester SET is_active = 0")
+            cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (matched_semester,))
+            conn.commit()
+            switched = True
+            print(f"[Auto-Switch] Berhasil mengalihkan database aktif ke '{matched_semester}' untuk tanggal {tanggal}.")
+            
+        return {
+            "status": "success",
+            "tanggal": tanggal,
+            "matched_semester": matched_semester,
+            "current_active": current_active,
+            "is_different": is_different,
+            "switched": switched
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/semesters/active")
+def set_active_semester(req: SemesterActiveRequest):
+    """Mengubah semester aktif sistem"""
+    try:
+        nama_sem = req.nama_semester.strip()
+        if not nama_sem:
+            return {"status": "error", "message": "Nama semester tidak boleh kosong"}
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id_semester FROM semester WHERE nama_semester = %s", (nama_sem,))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES (%s, 0)", (nama_sem,))
+            
+        cursor.execute("UPDATE semester SET is_active = 0")
+        cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (nama_sem,))
+        conn.commit()
+        
+        return {
+            "status": "success", 
+            "message": f"Semester aktif berhasil diubah menjadi {nama_sem}",
+            "active_semester": nama_sem
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/semesters/add")
+def add_new_semester(req: SemesterAddRequest, admin: str = Depends(verify_admin_token)):
+    """Menambahkan nama semester baru ke dalam sistem (memerlukan token Admin)"""
+    try:
+        nama_sem = req.nama_semester.strip()
+        if not nama_sem:
+            return {"status": "error", "message": "Nama semester tidak boleh kosong"}
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id_semester FROM semester WHERE nama_semester = %s", (nama_sem,))
+        if cursor.fetchone():
+            return {"status": "error", "message": f"Semester '{nama_sem}' sudah terdaftar"}
+            
+        is_act = 1 if req.set_active else 0
+        if is_act == 1:
+            cursor.execute("UPDATE semester SET is_active = 0")
+            
+        cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES (%s, %s)", (nama_sem, is_act))
+        conn.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Semester '{nama_sem}' berhasil ditambahkan.",
+            "nama_semester": nama_sem,
+            "is_active": is_act == 1
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/semesters/{nama_semester}")
+def delete_semester(nama_semester: str, token: str = Depends(verify_admin_token)):
+    """Menghapus semester dan seluruh jadwal di dalamnya (Admin only)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id_semester, is_active FROM semester WHERE nama_semester = %s", (nama_semester,))
+        row = cursor.fetchone()
+        if not row:
+            return {"status": "error", "message": f"Semester '{nama_semester}' tidak ditemukan"}
+            
+        is_act = row[1]
+        
+        # Hapus transaksi data terkait semester ini
+        cursor.execute("DELETE FROM jadwal WHERE semester = %s", (nama_semester,))
+        deleted_count = cursor.rowcount
+        cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (nama_semester,))
+        cursor.execute("DELETE FROM notifikasi_lab WHERE semester = %s", (nama_semester,))
+        cursor.execute("DELETE FROM semester WHERE nama_semester = %s", (nama_semester,))
+        
+        # Jika yang dihapus adalah semester aktif, aktifkan semester lain yang tersisa
+        if is_act == 1:
+            cursor.execute("SELECT nama_semester FROM semester ORDER BY id_semester DESC LIMIT 1")
+            fallback_row = cursor.fetchone()
+            if fallback_row:
+                cursor.execute("UPDATE semester SET is_active = 1 WHERE nama_semester = %s", (fallback_row[0],))
+            else:
+                cursor.execute("INSERT INTO semester (nama_semester, is_active) VALUES ('Genap 2025', 1)")
+                
+        conn.commit()
+        return {
+            "status": "success", 
+            "message": f"Semester '{nama_semester}' dan {deleted_count} jadwal terkait berhasil dihapus."
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/jadwal")
+def get_semua_jadwal(semester: str = None):
+    """Mengembalikan daftar semua jadwal dengan filter semester aktif (atau spesifik)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        target_sem = semester
+        if not target_sem:
+            target_sem = scraper.get_active_semester(conn, cursor)
+            
+        # ─── AUTO-RECOVERY DENGAN JADWAL_PERMANENT (HANYA JIKA TABEL JADWAL KOSONG) ───
+        scraper.ensure_permanent_table_exists(cursor)
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
+        cnt_active = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
+        cnt_perm = cursor.fetchone()['cnt']
+        
+        is_enriched = False
+        missing_count = 0
+        if cnt_active == 0 and cnt_perm > 0:
+            # Pulihkan data HANYA jika tabel jadwal utama benar-benar kosong (misal sehabis reset)
+            heal_query = '''
+                INSERT IGNORE INTO jadwal (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT 
+                    jp.tanggal, jp.hari, jp.jam, jp.id_dosen, jp.kode_mk, jp.nama_mk, jp.kelas, jp.id_ruangan, jp.status_jadwal, jp.metode_pembelajaran, jp.semester
+                FROM jadwal_permanent jp
+                WHERE jp.semester = %s AND jp.tanggal IS NOT NULL
+            '''
+            cursor.execute(heal_query, (target_sem,))
+            conn.commit()
+            missing_count = cursor.rowcount
+            if missing_count > 0:
+                is_enriched = True
+                print(f"[Initial-Restore] Berhasil memulihkan {missing_count} jadwal dari arsip permanen untuk semester {target_sem} karena tabel jadwal kosong.")
+
+        wa_notifier.ensure_db_schema()
+        query = '''
+            SELECT 
+                j.id_jadwal,
+                j.hari, 
+                j.tanggal, 
+                j.jam, 
+                j.id_ruangan,
+                d.nama_dosen, 
+                COALESCE(j.nama_mk, mk.nama_mk) AS nama_mk, 
+                j.kelas,
+                CASE 
+                    WHEN (r.nama_ruangan REGEXP '(^|[^0-9])2\\.[0-9]+' AND r.nama_ruangan NOT LIKE '%2.7%') OR r.nama_ruangan LIKE '%1.5%' THEN 'Kobar'
+                    WHEN r.nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
+                    ELSE COALESCE(r.kampus, 'Thehok')
+                END AS kampus,
+                r.nama_ruangan, 
+                j.status_jadwal, 
+                j.metode_pembelajaran,
+                j.semester,
+                sol.status_lab,
+                sol.diubah_oleh AS status_lab_oleh,
+                sol.waktu_aksi AS status_lab_waktu
+            FROM jadwal j
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            LEFT JOIN mata_kuliah mk ON j.kode_mk = mk.kode_mk
+            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN status_operasional_lab sol ON j.tanggal = sol.tanggal AND j.id_ruangan = sol.id_ruangan AND j.jam = sol.jam
+            WHERE j.semester = %s
+            ORDER BY j.tanggal ASC, j.jam ASC
+        '''
+        cursor.execute(query, (target_sem,))
+        hasil = cursor.fetchall()
+        
+        # Format date and time for JSON serialization
+        for item in hasil:
+            if item.get('status_lab_waktu'):
+                item['status_lab_waktu'] = item['status_lab_waktu'].strftime('%H:%M')
+
+            if item['tanggal']:
+                # Create formatted date for display (e.g. 18/07/2026)
+                item['tanggal_format'] = item['tanggal'].strftime('%d/%m/%Y')
+                item['tanggal'] = str(item['tanggal']) # keep original format for filtering
+            
+            if item['jam']:
+                # Format jam from timedelta to HH:MM
+                total_seconds = int(item['jam'].total_seconds())
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                item['jam'] = f"{hours:02d}:{minutes:02d}"
+                
+            if item.get('kampus'):
+                item['kampus'] = re.sub(r'\bKampus\s+', '', item['kampus']).strip()
+
+            if item.get('nama_ruangan'):
+                # Ruang 3.1 dan 3.4 adalah Laboratorium SK (kecuali S2 B3.4 yang merupakan ruang kelas)
+                if 'b3.4' not in item['nama_ruangan'].lower():
+                    item['nama_ruangan'] = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', item['nama_ruangan'], flags=re.I)
+                item['nama_ruangan'] = re.sub(r'^(?:(?:Ruang|R\.)\s+)+(?=R\b|R\.|Labor|Lab|Ruang)', '', item['nama_ruangan'], flags=re.I)
+                # Bersihkan kata 'Kampus ' berulang
+                item['nama_ruangan'] = re.sub(r'\(Kampus\s+(Thehok|Kobar)\)', r'(\1)', item['nama_ruangan'], flags=re.I)
+                item['nama_ruangan'] = re.sub(r'\bKampus\s+(Thehok|Kobar)\b', r'\1', item['nama_ruangan'], flags=re.I)
+
+                if item.get('kampus') and f"({item['kampus']})" not in item['nama_ruangan']:
+                    item['nama_ruangan'] = f"{item['nama_ruangan']} ({item['kampus']})"
+
+                item['sks'] = scraper.get_class_sks(item.get('nama_mk') or '', item.get('kelas'))
+                item['durasi_menit'] = scraper.get_class_duration(item.get('nama_mk') or '', item.get('kelas'))
+                
+        return {
+            "status": "success", 
+            "active_semester": target_sem,
+            "total": len(hasil),
+            "total_permanent": cnt_perm,
+            "is_enriched": is_enriched,
+            "missing_recovered": missing_count,
+            "data": hasil
+        }
+    except mysql.connector.Error as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/jadwal/comparison")
+def get_jadwal_comparison(semester: str = None):
+    """Membandingkan jumlah dan status kelengkapan data jadwal aktif vs cadangan permanen"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        target_sem = semester or scraper.get_active_semester(conn, cursor)
+        scraper.ensure_permanent_table_exists(cursor)
+        
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
+        cnt_active = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
+        cnt_perm = cursor.fetchone()['cnt']
+        
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal")
+        cnt_active_all = cursor.fetchone()['cnt']
+        cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent")
+        cnt_perm_all = cursor.fetchone()['cnt']
+        
+        diff = cnt_perm - cnt_active
+        is_synced = (diff <= 0)
+        
+        return {
+            "status": "success",
+            "semester": target_sem,
+            "total_active": cnt_active,
+            "total_permanent": cnt_perm,
+            "total_active_all_semesters": cnt_active_all,
+            "total_permanent_all_semesters": cnt_perm_all,
+            "is_synchronized": is_synced,
+            "difference": max(0, diff),
+            "message": "Data jadwal aktif 100% lengkap dan selaras dengan arsip permanen." if is_synced else f"Terdapat selisih {diff} jadwal pada arsip permanen yang dapat dipulihkan."
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/jadwal/restore-from-permanent")
+def restore_from_permanent(semester: str = None, admin: str = Depends(verify_admin_token)):
+    """Memulihkan seluruh jadwal dari arsip permanen ke tabel jadwal aktif (memerlukan token Admin)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        scraper.ensure_permanent_table_exists(cursor)
+        
+        if semester and semester.strip().lower() != 'all':
+            sem = semester.strip()
+            query = """
+                INSERT IGNORE INTO jadwal (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT 
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_permanent
+                WHERE semester = %s AND tanggal IS NOT NULL;
+            """
+            cursor.execute(query, (sem,))
+        else:
+            query = """
+                INSERT IGNORE INTO jadwal (
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                )
+                SELECT 
+                    tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
+                FROM jadwal_permanent
+                WHERE tanggal IS NOT NULL;
+            """
+            cursor.execute(query)
+            
+        conn.commit()
+        restored_cnt = cursor.rowcount
+        return {
+            "status": "success",
+            "message": f"Berhasil memulihkan {restored_cnt} jadwal dari arsip permanen.",
+            "restored_count": restored_cnt
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class ClearDbRequest(BaseModel):
+    targets: list[str] | None = []
+
+@app.get("/api/db/stats")
+def get_db_stats():
+    """Mengambil statistik jumlah baris data di database untuk panel pembersihan selektif"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(buffered=True)
+        
+        counts = {
+            "jadwal": 0,
+            "jadwal_temp": 0,
+            "jadwal_permanent": 0,
+            "mata_kuliah": 0,
+            "ruangan": 0,
+            "ruangan_lab": 0,
+            "ruangan_kelas": 0,
+            "ruangan_unused": 0,
+            "aslab": 0,
+            "aslab_thehok": 0,
+            "aslab_kobar": 0,
+            "aslab_noroom": 0,
+            "dosen": 0,
+            "dosen_active": 0,
+            "dosen_inactive": 0,
+            "notif_all": 0,
+            "notif_tambahan": 0,
+            "notif_perubahan": 0,
+            "notif_jeda": 0
+        }
+        
+        queries = {
+            "jadwal": "SELECT COUNT(*) FROM jadwal",
+            "jadwal_temp": "SELECT COUNT(*) FROM jadwal_temp",
+            "jadwal_permanent": "SELECT COUNT(*) FROM jadwal_permanent",
+            "mata_kuliah": "SELECT COUNT(*) FROM mata_kuliah",
+            "ruangan": "SELECT COUNT(*) FROM ruangan",
+            "ruangan_lab": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'",
+            "ruangan_kelas": "SELECT COUNT(*) FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%'",
+            "ruangan_unused": "SELECT COUNT(*) FROM ruangan WHERE id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL)",
+            "aslab": "SELECT COUNT(*) FROM asisten_lab",
+            "aslab_thehok": "SELECT COUNT(*) FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan WHERE LOWER(r.kampus) LIKE '%thehok%'",
+            "aslab_kobar": "SELECT COUNT(*) FROM asisten_lab a JOIN ruangan r ON a.id_ruangan = r.id_ruangan WHERE LOWER(r.kampus) LIKE '%kobar%'",
+            "aslab_noroom": "SELECT COUNT(*) FROM asisten_lab WHERE id_ruangan IS NULL",
+            "dosen": "SELECT COUNT(*) FROM dosen",
+            "dosen_active": "SELECT COUNT(*) FROM dosen WHERE id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)",
+            "dosen_inactive": "SELECT COUNT(*) FROM dosen WHERE id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)",
+            "notif_all": "SELECT COUNT(*) FROM notifikasi_lab",
+            "notif_tambahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'",
+            "notif_perubahan": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'",
+            "notif_jeda": "SELECT COUNT(*) FROM notifikasi_lab WHERE tipe_notif = 'JEDA'"
+        }
+        
+        for key, q in queries.items():
+            try:
+                cursor.execute(q)
+                res = cursor.fetchone()
+                if res is not None and len(res) > 0 and res[0] is not None:
+                    counts[key] = int(res[0])
+            except Exception as q_err:
+                print(f"[Stats] Notice for table '{key}': {q_err}")
+                counts[key] = 0
+                
+        return {"status": "success", "counts": counts}
+    except Exception as e:
+        print(f"[Stats] Error: {e}")
+        return {"status": "error", "message": str(e), "counts": {}}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/statistics")
+def get_statistics(semester: str = None):
+    """
+    Mengambil data statistik dan analitik komprehensif:
+    1. lab_stats: Utilisasi lab, perbandingan Kobar vs Thehok, ranking lab tersibuk/terkosong, rasio TM/OL/CC.
+    2. kelas_stats: Total kelas unik, distribusi hari & jam perkuliahan, kelas dengan tingkat OL/CC terbanyak.
+    3. dosen_stats: Total dosen aktif, Top dosen jam mengajar terbanyak, dosen tertinggi OL & CC.
+    4. summary: Ringkasan metrik kartu dashboard utama.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        target_sem = semester
+        if not target_sem or target_sem == "all":
+            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+            active_row = cursor.fetchone()
+            if active_row:
+                target_sem = active_row["nama_semester"]
+            else:
+                cursor.execute("SELECT semester FROM jadwal WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
+                j_row = cursor.fetchone()
+                target_sem = j_row["semester"] if j_row else "Genap 2025"
+
+        cursor.execute("SELECT COUNT(*) AS c FROM jadwal WHERE semester = %s", (target_sem,))
+        j_cnt = cursor.fetchone()["c"]
+        table_source = "jadwal" if j_cnt > 0 else "jadwal_permanent"
+
+        query = f'''
+            SELECT 
+                j.hari, j.tanggal, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                r.nama_ruangan, r.kampus, d.nama_dosen
+            FROM {table_source} j
+            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.semester = %s
+        '''
+        cursor.execute(query, (target_sem,))
+        rows = cursor.fetchall()
+
+        if not rows:
+            return {
+                "status": "success",
+                "semester": target_sem,
+                "summary": {
+                    "total_perkuliahan": 0,
+                    "total_jam_operasional": 0,
+                    "total_lab_aktif": 0,
+                    "total_kelas": 0,
+                    "total_dosen": 0,
+                    "rata_sesi_dosen": 0
+                },
+                "lab_stats": {"summary": {}, "rankings": [], "kampus": {}},
+                "kelas_stats": {"total_kelas": 0, "distribusi_hari": [], "distribusi_jam": [], "top_aktif": [], "top_cc": [], "top_ol": []},
+                "dosen_stats": {"total_dosen": 0, "top_jam": [], "top_ol": [], "top_cc": []}
+            }
+
+        all_ruangan_data = collections.defaultdict(lambda: {
+            "nama_ruangan": "", "kampus": "", "tipe": "Ruang Kelas", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        lab_data = collections.defaultdict(lambda: {
+            "nama_ruangan": "", "kampus": "", "tipe": "Laboratorium", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        dosen_data = collections.defaultdict(lambda: {
+            "nama_dosen": "", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        kelas_data = collections.defaultdict(lambda: {
+            "kelas": "", "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        
+        hari_counts = collections.defaultdict(int)
+        jam_counts = collections.defaultdict(int)
+        
+        total_jam_keseluruhan = 0.0
+        total_lab_jam = 0.0
+        total_lab_tm = 0
+        total_lab_ol = 0
+        total_lab_cc = 0
+        univ_tm = 0
+        univ_ol = 0
+        univ_cc = 0
+
+        kampus_lab = {
+            "Kobar": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0},
+            "Thehok": {"total_sesi": 0, "total_jam": 0.0, "tm": 0, "ol": 0, "cc": 0}
+        }
+
+        mk_kelas_map = collections.defaultdict(lambda: {
+            "nama_mk": "", "kelas_set": set(), "total_sesi": 0, "total_jam": 0.0,
+            "tm": 0, "ol": 0, "cc": 0
+        })
+        prodi_map = collections.defaultdict(lambda: {
+            "kode_prodi": "", "nama_prodi": "", "kelas_set": set(),
+            "total_sesi": 0, "total_jam": 0.0
+        })
+        ruang_mk_dict = collections.defaultdict(lambda: {
+            "nama_ruangan": "", "kampus": "", "tipe": "Ruang Kelas",
+            "total_sesi": 0, "total_jam": 0.0,
+            "mk_dict": collections.defaultdict(lambda: {
+                "nama_mk": "",
+                "total_sesi": 0,
+                "total_jam": 0.0,
+                "kelas_set": set(),
+                "dosen_set": set(),
+                "tm": 0, "ol": 0, "cc": 0
+            })
+        })
+        prodi_names = {
+            "PT": "Teknik Informatika (Pagi)",
+            "MT": "Teknik Informatika (Malam)",
+            "PS": "Sistem Informasi (Pagi)",
+            "MS": "Sistem Informasi (Malam)",
+            "PK": "Sistem Komputer (Pagi)",
+            "MK": "Sistem Komputer (Malam)",
+            "SK": "Sistem Komputer",
+            "PB": "Bisnis Digital (Pagi)",
+            "MB": "Bisnis Digital (Malam)",
+            "PM": "Manajemen (Pagi)",
+            "MM": "Manajemen (Malam)",
+            "PW": "Kewirausahaan (Pagi)",
+            "MW": "Kewirausahaan (Malam)",
+            "MI": "Manajemen Informatika (D3)",
+            "KA": "Komputerisasi Akuntansi (D3)"
+        }
+
+        for r in rows:
+            dur_min = scraper.get_class_duration(r.get("nama_mk") or "", r.get("kelas")) if hasattr(scraper, "get_class_duration") else 135
+            dur_hour = round(dur_min / 60.0, 2)
+            total_jam_keseluruhan += dur_hour
+
+            metode = (r.get("metode_pembelajaran") or "TM").upper()
+            status_low = (r.get("status_jadwal") or "").lower()
+            if re.search(r'\b(?:cc|cancel|batal)\b', status_low):
+                metode = "CC"
+            elif re.search(r'\b(?:ol|online|daring)\b', status_low):
+                metode = "OL"
+            elif metode not in ["TM", "OL", "CC"]:
+                metode = "TM"
+
+            if metode == "TM": univ_tm += 1
+            elif metode == "OL": univ_ol += 1
+            elif metode == "CC": univ_cc += 1
+
+            # 1. Agregasi Ruangan (Labor & Ruang Kelas Teori)
+            ruang = r.get("nama_ruangan") or ""
+            kampus = (r.get("kampus") or "Kobar").strip()
+            if ruang:
+                clean_ruang = re.sub(r"\s*\((Thehok|Kobar|Kampus.*?)\)", "", ruang, flags=re.IGNORECASE).strip()
+                room_key = f"{clean_ruang}_{kampus}"
+                is_lab_room = scraper.is_lab(clean_ruang)
+                tipe_ruang = "Labor" if is_lab_room else "Ruang Kelas"
+
+                # Semua Ruangan (41 Ruang)
+                r_entry = all_ruangan_data[room_key]
+                r_entry["nama_ruangan"] = clean_ruang
+                r_entry["kampus"] = kampus
+                r_entry["tipe"] = tipe_ruang
+                r_entry["total_sesi"] += 1
+                r_entry["total_jam"] = round(r_entry["total_jam"] + dur_hour, 2)
+                if metode == "TM": r_entry["tm"] += 1
+                elif metode == "OL": r_entry["ol"] += 1
+                elif metode == "CC": r_entry["cc"] += 1
+
+                # Khusus Labor (13 Lab)
+                if is_lab_room:
+                    lab_entry = lab_data[room_key]
+                    lab_entry["nama_ruangan"] = clean_ruang
+                    lab_entry["kampus"] = kampus
+                    lab_entry["tipe"] = "Labor"
+                    lab_entry["total_sesi"] += 1
+                    lab_entry["total_jam"] = round(lab_entry["total_jam"] + dur_hour, 2)
+                    
+                    total_lab_jam += dur_hour
+                    if metode == "TM":
+                        lab_entry["tm"] += 1
+                        total_lab_tm += 1
+                    elif metode == "OL":
+                        lab_entry["ol"] += 1
+                        total_lab_ol += 1
+                    elif metode == "CC":
+                        lab_entry["cc"] += 1
+                        total_lab_cc += 1
+
+                # Kampus stats
+                k_key = "Kobar" if "kobar" in kampus.lower() else "Thehok"
+                kampus_lab[k_key]["total_sesi"] += 1
+                kampus_lab[k_key]["total_jam"] = round(kampus_lab[k_key]["total_jam"] + dur_hour, 2)
+                if metode == "TM": kampus_lab[k_key]["tm"] += 1
+                elif metode == "OL": kampus_lab[k_key]["ol"] += 1
+                elif metode == "CC": kampus_lab[k_key]["cc"] += 1
+
+            # 2. Agregasi Dosen
+            dosen = (r.get("nama_dosen") or "").strip()
+            if not dosen or dosen.lower() == "none":
+                dosen = "Belum Ditentukan"
+            dosen_entry = dosen_data[dosen]
+            dosen_entry["nama_dosen"] = dosen
+            dosen_entry["total_sesi"] += 1
+            dosen_entry["total_jam"] = round(dosen_entry["total_jam"] + dur_hour, 2)
+            if metode == "TM": dosen_entry["tm"] += 1
+            elif metode == "OL": dosen_entry["ol"] += 1
+            elif metode == "CC": dosen_entry["cc"] += 1
+
+            # 3. Agregasi Kelas
+            kelas = (r.get("kelas") or "").strip()
+            if not kelas: kelas = "Lainnya"
+            kelas_entry = kelas_data[kelas]
+            kelas_entry["kelas"] = kelas
+            kelas_entry["total_sesi"] += 1
+            kelas_entry["total_jam"] = round(kelas_entry["total_jam"] + dur_hour, 2)
+            if metode == "TM": kelas_entry["tm"] += 1
+            elif metode == "OL": kelas_entry["ol"] += 1
+            elif metode == "CC": kelas_entry["cc"] += 1
+
+            # 4. Distribusi Hari & Jam
+            if r.get("hari"):
+                hari_counts[r["hari"]] += 1
+            if r.get("jam"):
+                tot_sec = int(r["jam"].total_seconds())
+                jam_str = f"{tot_sec//3600:02d}:{(tot_sec%3600)//60:02d}"
+                jam_counts[jam_str] += 1
+
+            # 5. Agregasi Mata Kuliah per Kelas
+            mk_name = (r.get("nama_mk") or "").strip()
+            if mk_name:
+                mk_entry = mk_kelas_map[mk_name]
+                mk_entry["nama_mk"] = mk_name
+                if kelas and kelas != "Lainnya":
+                    mk_entry["kelas_set"].add(kelas)
+                mk_entry["total_sesi"] += 1
+                mk_entry["total_jam"] = round(mk_entry["total_jam"] + dur_hour, 2)
+                if metode == "TM": mk_entry["tm"] += 1
+                elif metode == "OL": mk_entry["ol"] += 1
+                elif metode == "CC": mk_entry["cc"] += 1
+
+            # 6. Agregasi Program Studi (Prodi)
+            if kelas and kelas != "Lainnya":
+                m_prodi = re.search(r'([A-Za-z]+)', kelas)
+                raw_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
+                
+                # Normalisasi prefix kode prodi UNAMA (contoh: PSP/PST -> PS, PTP/PTT -> PT, PKP/PKT -> SK)
+                p_code = raw_code
+                if raw_code.startswith("PS"): p_code = "PS"
+                elif raw_code.startswith("PT"): p_code = "PT"
+                elif raw_code.startswith("PK") or raw_code.startswith("SK"): p_code = "SK"
+                elif raw_code.startswith("PM"): p_code = "PM"
+                elif raw_code.startswith("MS"): p_code = "MS"
+                elif raw_code.startswith("MM"): p_code = "MM"
+                elif raw_code.startswith("MT"): p_code = "MT"
+                elif raw_code.startswith("MK"): p_code = "MK"
+                elif raw_code.startswith("MW"): p_code = "MW"
+                elif raw_code.startswith("PW"): p_code = "PW"
+                elif raw_code.startswith("PB"): p_code = "PB"
+                elif raw_code.startswith("MB"): p_code = "MB"
+                elif raw_code.startswith("MI"): p_code = "MI"
+                elif raw_code.startswith("KA"): p_code = "KA"
+                
+                p_entry = prodi_map[p_code]
+                p_entry["kode_prodi"] = p_code
+                p_entry["nama_prodi"] = prodi_names.get(p_code, f"Program Studi {p_code}")
+                p_entry["kelas_set"].add(kelas)
+                p_entry["total_sesi"] += 1
+                p_entry["total_jam"] = round(p_entry["total_jam"] + dur_hour, 2)
+
+            # 7. Agregasi Mata Kuliah per Ruangan
+            if ruang:
+                rm_entry = ruang_mk_dict[room_key]
+                rm_entry["nama_ruangan"] = clean_ruang
+                rm_entry["kampus"] = kampus
+                rm_entry["tipe"] = tipe_ruang
+                rm_entry["total_sesi"] += 1
+                rm_entry["total_jam"] = round(rm_entry["total_jam"] + dur_hour, 2)
+
+                if mk_name:
+                    mk_rm = rm_entry["mk_dict"][mk_name]
+                    mk_rm["nama_mk"] = mk_name
+                    mk_rm["total_sesi"] += 1
+                    mk_rm["total_jam"] = round(mk_rm["total_jam"] + dur_hour, 2)
+                    if kelas and kelas != "Lainnya":
+                        mk_rm["kelas_set"].add(kelas)
+                    if dosen and dosen != "Belum Ditentukan":
+                        mk_rm["dosen_set"].add(dosen)
+                    if metode == "TM": mk_rm["tm"] += 1
+                    elif metode == "OL": mk_rm["ol"] += 1
+                    elif metode == "CC": mk_rm["cc"] += 1
+
+        # Format Ruangan Rankings (Semua Ruangan: Lab + Ruang Kelas)
+        all_ruangan_rankings = sorted(all_ruangan_data.values(), key=lambda x: x["total_jam"], reverse=True)
+        max_ruang_jam = all_ruangan_rankings[0]["total_jam"] if all_ruangan_rankings else 1.0
+        for rb in all_ruangan_rankings:
+            rb["utilization_pct"] = round((rb["total_jam"] / max_ruang_jam) * 100, 1) if max_ruang_jam > 0 else 0
+
+        lab_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Labor"]
+        ruang_kelas_rankings = [r for r in all_ruangan_rankings if r["tipe"] == "Ruang Kelas"]
+
+        total_lab_sesi = total_lab_tm + total_lab_ol + total_lab_cc
+        lab_summary = {
+            "total_sesi": total_lab_sesi,
+            "total_jam": round(total_lab_jam, 2),
+            "tm": total_lab_tm,
+            "ol": total_lab_ol,
+            "cc": total_lab_cc,
+            "persen_tm": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "persen_ol": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "persen_cc": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            "metode_rasio": {
+                "total_sesi": total_lab_sesi,
+                "tm": total_lab_tm,
+                "ol": total_lab_ol,
+                "cc": total_lab_cc,
+                "tm_pct": round((total_lab_tm / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+                "ol_pct": round((total_lab_ol / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+                "cc_pct": round((total_lab_cc / total_lab_sesi) * 100, 1) if total_lab_sesi > 0 else 0,
+            },
+            "lab_tersibuk": lab_rankings[0] if lab_rankings else None,
+            "lab_terkosong": lab_rankings[-1] if len(lab_rankings) > 1 else None,
+        }
+
+        # Format Kelas Rankings
+        top_kelas_aktif = sorted(kelas_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
+        top_kelas_ol = sorted([k for k in kelas_data.values() if k["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
+        top_kelas_cc = sorted([k for k in kelas_data.values() if k["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
+
+        top_mk_kelas = []
+        for m_item in sorted(mk_kelas_map.values(), key=lambda x: (len(x["kelas_set"]), x["total_sesi"]), reverse=True)[:15]:
+            top_mk_kelas.append({
+                "nama_mk": m_item["nama_mk"],
+                "total_kelas": len(m_item["kelas_set"]),
+                "total_sesi": m_item["total_sesi"],
+                "total_jam": m_item["total_jam"],
+                "tm": m_item["tm"],
+                "ol": m_item["ol"],
+                "cc": m_item["cc"]
+            })
+
+        distribusi_prodi = []
+        for p_item in sorted(prodi_map.values(), key=lambda x: len(x["kelas_set"]), reverse=True):
+            distribusi_prodi.append({
+                "kode": p_item["kode_prodi"],
+                "nama": p_item["nama_prodi"],
+                "total_kelas": len(p_item["kelas_set"]),
+                "total_sesi": p_item["total_sesi"],
+                "total_jam": p_item["total_jam"]
+            })
+
+        urutan_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+        sorted_hari = [{"hari": h, "total": hari_counts.get(h, 0)} for h in urutan_hari if hari_counts.get(h, 0) > 0]
+        sorted_jam = [{"jam": j, "total": cnt} for j, cnt in sorted(jam_counts.items(), key=lambda x: x[0])]
+
+        # Format Dosen Rankings
+        top_dosen_jam = sorted(dosen_data.values(), key=lambda x: x["total_jam"], reverse=True)[:15]
+        top_dosen_ol = sorted([d for d in dosen_data.values() if d["ol"] > 0], key=lambda x: x["ol"], reverse=True)[:10]
+        top_dosen_cc = sorted([d for d in dosen_data.values() if d["cc"] > 0], key=lambda x: x["cc"], reverse=True)[:10]
+
+        dosen_aktif_count = len([d for d in dosen_data.keys() if d != "Belum Ditentukan"])
+        total_dosen_sesi = sum(d["total_sesi"] for d in dosen_data.values())
+        rata_sesi_dosen = round(total_dosen_sesi / dosen_aktif_count, 1) if dosen_aktif_count > 0 else 0
+
+        # Format Detail Mata Kuliah per Ruangan
+        ruang_mk_list = []
+        for rm_k, rm_v in ruang_mk_dict.items():
+            mk_list = []
+            tot_rm_jam = rm_v["total_jam"]
+            for m in sorted(rm_v["mk_dict"].values(), key=lambda x: x["total_jam"], reverse=True):
+                jam_mk = round(m["total_jam"], 2)
+                pct = round((jam_mk / tot_rm_jam) * 100, 1) if tot_rm_jam > 0 else 0
+                mk_list.append({
+                    "nama_mk": m["nama_mk"],
+                    "total_sesi": m["total_sesi"],
+                    "total_jam": jam_mk,
+                    "persentase": pct,
+                    "kelas": sorted(list(m["kelas_set"])),
+                    "dosen": sorted(list(m["dosen_set"])),
+                    "tm": m["tm"],
+                    "ol": m["ol"],
+                    "cc": m["cc"]
+                })
+            ruang_mk_list.append({
+                "nama_ruangan": rm_v["nama_ruangan"],
+                "kampus": rm_v["kampus"],
+                "tipe": rm_v["tipe"],
+                "total_sesi": rm_v["total_sesi"],
+                "total_jam": round(rm_v["total_jam"], 2),
+                "total_mk": len(mk_list),
+                "mata_kuliah": mk_list
+            })
+
+        ruang_mk_list.sort(key=lambda x: x["total_jam"], reverse=True)
+
+        total_rows = len(rows)
+        total_ruang_aktif_cnt = len(all_ruangan_rankings)
+        total_lab_cnt = len(lab_rankings)
+        total_ruang_kelas_cnt = len(ruang_kelas_rankings)
+
+        summary = {
+            "total_perkuliahan": total_rows,
+            "total_jam_operasional": round(total_jam_keseluruhan, 2),
+            "total_ruang_aktif": total_ruang_aktif_cnt,
+            "total_lab_aktif": total_lab_cnt,
+            "total_ruang_kelas_aktif": total_ruang_kelas_cnt,
+            "total_kelas": len(kelas_data),
+            "total_dosen": dosen_aktif_count,
+            "rata_sesi_dosen": rata_sesi_dosen,
+            "metode_rasio": {
+                "total_sesi": total_rows,
+                "tm": univ_tm,
+                "ol": univ_ol,
+                "cc": univ_cc,
+                "tm_pct": round((univ_tm / total_rows) * 100, 1) if total_rows > 0 else 0,
+                "ol_pct": round((univ_ol / total_rows) * 100, 1) if total_rows > 0 else 0,
+                "cc_pct": round((univ_cc / total_rows) * 100, 1) if total_rows > 0 else 0,
+            }
+        }
+
+        return {
+            "status": "success",
+            "semester": target_sem,
+            "source_table": table_source,
+            "summary": summary,
+            "lab_stats": {
+                "summary": lab_summary,
+                "rankings": all_ruangan_rankings,
+                "all_rankings": all_ruangan_rankings,
+                "lab_rankings": lab_rankings,
+                "ruang_kelas_rankings": ruang_kelas_rankings,
+                "total_ruang": total_ruang_aktif_cnt,
+                "total_lab": total_lab_cnt,
+                "total_ruang_kelas": total_ruang_kelas_cnt,
+                "kampus": kampus_lab
+            },
+            "kelas_stats": {
+                "total_kelas": len(kelas_data),
+                "distribusi_hari": sorted_hari,
+                "distribusi_jam": sorted_jam,
+                "top_aktif": top_kelas_aktif,
+                "top_ol": top_kelas_ol,
+                "top_cc": top_kelas_cc,
+                "top_mk": top_mk_kelas,
+                "distribusi_prodi": distribusi_prodi
+            },
+            "dosen_stats": {
+                "total_dosen": dosen_aktif_count,
+                "top_jam": top_dosen_jam,
+                "top_ol": top_dosen_ol,
+                "top_cc": top_dosen_cc
+            },
+            "ruang_mk_stats": ruang_mk_list
+        }
+    except Exception as e:
+        print(f"[API Statistics Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# ==================== ENDPOINT KURIKULUM AKADEMIK ====================
+
+@app.get("/api/kurikulum")
+def get_kurikulum(
+    prodi: str = None, 
+    tahun: str = None, 
+    semester: str = None, 
+    status_mk: str = None, 
+    kategori: str = None, 
+    search: str = None
+):
+    """
+    Mengambil data mata kuliah kurikulum (TI, SI, SK untuk Kurikulum 2024 & 2025).
+    Mendukung filter prodi, tahun_kurikulum, semester, status (Wajib/Pilihan), dan pencarian nama/kode.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM kurikulum_mata_kuliah WHERE 1=1"
+        params = []
+        
+        if prodi and prodi.strip() != '' and prodi.lower() != 'all':
+            query += " AND prodi = %s"
+            params.append(prodi.upper().strip())
+            
+        if tahun and tahun.strip() != '' and tahun.lower() != 'all':
+            query += " AND tahun_kurikulum = %s"
+            params.append(tahun.strip())
+            
+        if semester and semester.strip() != '' and semester.lower() != 'all':
+            sem_clean = semester.strip()
+            if sem_clean.isdigit():
+                query += " AND semester_angka = %s"
+                params.append(int(sem_clean))
+            elif 'pilihan' in sem_clean.lower():
+                query += " AND status_mk = 'Pilihan'"
+            else:
+                query += " AND semester_label LIKE %s"
+                params.append(f"%{sem_clean}%")
+                
+        if status_mk and status_mk.strip() != '' and status_mk.lower() != 'all':
+            query += " AND status_mk = %s"
+            params.append(status_mk.capitalize().strip())
+            
+        if kategori and kategori.strip() != '' and kategori.lower() != 'all':
+            query += " AND kategori_mk = %s"
+            params.append(kategori.strip())
+            
+        if search and search.strip() != '':
+            query += " AND (kode_mk LIKE %s OR nama_mk LIKE %s)"
+            params.append(f"%{search.strip()}%")
+            params.append(f"%{search.strip()}%")
+            
+        query += " ORDER BY prodi, tahun_kurikulum, CASE WHEN semester_angka IS NULL THEN 99 ELSE semester_angka END, kode_mk"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        total_sks = sum(r.get('sks', 0) for r in rows)
+        
+        # Kelompokkan per semester
+        breakdown_sem = {}
+        for r in rows:
+            s_label = r['semester_label']
+            if s_label not in breakdown_sem:
+                breakdown_sem[s_label] = {'semester': s_label, 'total_mk': 0, 'total_sks': 0}
+            breakdown_sem[s_label]['total_mk'] += 1
+            breakdown_sem[s_label]['total_sks'] += r.get('sks', 0)
+            
+        return {
+            "status": "success",
+            "total_mk": len(rows),
+            "total_sks": total_sks,
+            "breakdown_semester": list(breakdown_sem.values()),
+            "data": rows
+        }
+    except Exception as e:
+        print(f"[API Kurikulum Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/kurikulum/summary")
+def get_kurikulum_summary():
+    """
+    Mengambil ringkasan matrik kurikulum (total SKS wajib, total MK pilihan, per prodi dan tahun).
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT 
+                prodi, 
+                nama_prodi, 
+                tahun_kurikulum, 
+                status_mk, 
+                COUNT(*) as total_mk, 
+                SUM(sks) as total_sks
+            FROM kurikulum_mata_kuliah
+            GROUP BY prodi, nama_prodi, tahun_kurikulum, status_mk
+            ORDER BY prodi, tahun_kurikulum, status_mk DESC
+        """)
+        rows = cursor.fetchall()
+        
+        cursor.execute("SELECT prodi, COUNT(*) as total_perubahan FROM kurikulum_perubahan GROUP BY prodi")
+        perubahan_counts = {r['prodi']: r['total_perubahan'] for r in cursor.fetchall()}
+        
+        return {
+            "status": "success",
+            "matrix": rows,
+            "perubahan_counts": perubahan_counts
+        }
+    except Exception as e:
+        print(f"[API Kurikulum Summary Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/sks-map")
+def get_sks_map():
+    """Mengembalikan peta SKS kurikulum untuk percepatan lookup di frontend"""
+    try:
+        cache = scraper.load_curriculum_sks_cache()
+        prodi_map = {f"{k[0]}:::{k[1]}": v for k, v in cache.get('prodi', {}).items()}
+        sem_map = {f"{k[0]}:::{k[1]}:::{k[2]}": v for k, v in cache.get('sem', {}).items()}
+        return {
+            "status": "success",
+            "name_map": cache.get('name', {}),
+            "prodi_map": prodi_map,
+            "sem_map": sem_map,
+            "two_sks_patterns": scraper.TWO_SKS_PATTERNS
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/kurikulum/perubahan")
+def get_kurikulum_perubahan(prodi: str = None):
+    """
+    Mengambil data analisis komparatif perubahan kurikulum 2024 vs 2025.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM kurikulum_perubahan WHERE 1=1"
+        params = []
+        if prodi and prodi.strip() != '' and prodi.lower() != 'all':
+            query += " AND prodi = %s"
+            params.append(prodi.upper().strip())
+            
+        query += " ORDER BY prodi, id_perubahan"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        return {
+            "status": "success",
+            "total": len(rows),
+            "data": rows
+        }
+    except Exception as e:
+        print(f"[API Kurikulum Perubahan Error] {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/db/clear")
+@app.delete("/api/db/clear")
+@app.post("/api/clear-db")
+def clear_selective_db(req: ClearDbRequest = ClearDbRequest(), admin: str = Depends(verify_admin_token)):
+    """Menghapus data tertentu secara selektif dari database (memerlukan token Admin)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+        
+        deleted_summary = {}
+        targets = set(req.targets or [])
+        is_all = "all" in targets or "semua" in targets
+        
+        # GUARD KEBAL: Tabel jadwal_permanent dilindungi secara mutlak dan tidak boleh dihapus
+        if "jadwal_permanent" in targets:
+            targets.remove("jadwal_permanent")
+        print("[Security Guard] Tabel jadwal_permanent kebal dan tetap aman dari penghapusan.")
+        
+        # 1. Jadwal Perkuliahan & Temp & Master MK & Jeda Lab
+        if is_all or "jadwal" in targets or "jadwal_all" in targets:
+            cursor.execute("DELETE FROM jadwal")
+            cnt_j = cursor.rowcount
+            cursor.execute("DELETE FROM jadwal_temp")
+            cnt_jt = cursor.rowcount
+            try:
+                cursor.execute("DELETE FROM mata_kuliah")
+                cnt_mk = cursor.rowcount
+            except Exception:
+                cnt_mk = 0
+            try:
+                cursor.execute("DELETE FROM jeda_lab")
+            except Exception:
+                pass
+            deleted_summary["jadwal_all"] = cnt_j + cnt_jt + cnt_mk
+        else:
+            if "jadwal_utama" in targets:
+                cursor.execute("DELETE FROM jadwal")
+                deleted_summary["jadwal_utama"] = cursor.rowcount
+            if "jadwal_temp" in targets:
+                cursor.execute("DELETE FROM jadwal_temp")
+                deleted_summary["jadwal_temp"] = cursor.rowcount
+            if "mata_kuliah" in targets:
+                try:
+                    cursor.execute("DELETE FROM mata_kuliah")
+                    deleted_summary["mata_kuliah"] = cursor.rowcount
+                except Exception:
+                    pass
+            
+        # 2. Master Ruangan
+        if is_all or "ruangan" in targets or "ruangan_all" in targets:
+            cursor.execute("DELETE FROM ruangan")
+            deleted_summary["ruangan_all"] = cursor.rowcount
+        else:
+            if "ruangan_lab" in targets:
+                cursor.execute("DELETE FROM ruangan WHERE LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%'")
+                deleted_summary["ruangan_lab"] = cursor.rowcount
+            if "ruangan_kelas" in targets:
+                cursor.execute("DELETE FROM ruangan WHERE LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%'")
+                deleted_summary["ruangan_kelas"] = cursor.rowcount
+            if "ruangan_unused" in targets:
+                cursor.execute("DELETE FROM ruangan WHERE id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL)")
+                deleted_summary["ruangan_unused"] = cursor.rowcount
+            
+        # 3. Notifikasi (Granular: Semua, Tambahan, Perubahan, Jeda)
+        if is_all or "notif_all" in targets:
+            cursor.execute("DELETE FROM notifikasi_lab")
+            deleted_summary["notif_all"] = cursor.rowcount
+            try:
+                cursor.execute("DELETE FROM jeda_lab")
+            except Exception:
+                pass
+        else:
+            if "notif_tambahan" in targets:
+                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'TAMBAHAN'")
+                deleted_summary["notif_tambahan"] = cursor.rowcount
+            if "notif_perubahan" in targets:
+                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'PERUBAHAN'")
+                deleted_summary["notif_perubahan"] = cursor.rowcount
+            if "notif_jeda" in targets:
+                cursor.execute("DELETE FROM notifikasi_lab WHERE tipe_notif = 'JEDA'")
+                deleted_summary["notif_jeda"] = cursor.rowcount
+                try:
+                    cursor.execute("DELETE FROM jeda_lab")
+                except Exception:
+                    pass
+                
+        # 4. Asisten Lab
+        if is_all or "aslab" in targets or "aslab_all" in targets or "aslab_dosen" in targets:
+            cursor.execute("DELETE FROM asisten_lab")
+            deleted_summary["aslab_all"] = cursor.rowcount
+        else:
+            if "aslab_thehok" in targets:
+                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%thehok%')")
+                deleted_summary["aslab_thehok"] = cursor.rowcount
+            if "aslab_kobar" in targets:
+                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%kobar%')")
+                deleted_summary["aslab_kobar"] = cursor.rowcount
+            if "aslab_noroom" in targets:
+                cursor.execute("DELETE FROM asisten_lab WHERE id_ruangan IS NULL")
+                deleted_summary["aslab_noroom"] = cursor.rowcount
+
+        # 5. Master Dosen
+        if is_all or "dosen" in targets or "dosen_all" in targets or "aslab_dosen" in targets:
+            cursor.execute("DELETE FROM dosen")
+            deleted_summary["dosen_all"] = cursor.rowcount
+        else:
+            if "dosen_active" in targets:
+                cursor.execute("DELETE FROM dosen WHERE id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+                deleted_summary["dosen_active"] = cursor.rowcount
+            if "dosen_inactive" in targets:
+                cursor.execute("DELETE FROM dosen WHERE id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+                deleted_summary["dosen_inactive"] = cursor.rowcount
+
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        conn.commit()
+        
+        # Susun pesan ringkasan yang ramah dan informatif
+        parts_msg = []
+        if "jadwal_all" in deleted_summary and deleted_summary["jadwal_all"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal_all']} baris Data Jadwal & Temp")
+        if "jadwal_utama" in deleted_summary and deleted_summary["jadwal_utama"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal_utama']} baris Jadwal Utama")
+        if "jadwal_temp" in deleted_summary and deleted_summary["jadwal_temp"] > 0:
+            parts_msg.append(f"{deleted_summary['jadwal_temp']} baris Data Temp/Staging")
+        if "mata_kuliah" in deleted_summary and deleted_summary["mata_kuliah"] > 0:
+            parts_msg.append(f"{deleted_summary['mata_kuliah']} Master Mata Kuliah")
+
+        if "ruangan_all" in deleted_summary and deleted_summary["ruangan_all"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_all']} Master Ruangan")
+        if "ruangan_lab" in deleted_summary and deleted_summary["ruangan_lab"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_lab']} Ruang Labor")
+        if "ruangan_kelas" in deleted_summary and deleted_summary["ruangan_kelas"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_kelas']} Ruang Kelas/Teori")
+        if "ruangan_unused" in deleted_summary and deleted_summary["ruangan_unused"] > 0:
+            parts_msg.append(f"{deleted_summary['ruangan_unused']} Ruangan Tanpa Jadwal")
+
+        if "notif_all" in deleted_summary and deleted_summary["notif_all"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_all']} Semua Notifikasi")
+        if "notif_tambahan" in deleted_summary and deleted_summary["notif_tambahan"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_tambahan']} Notifikasi Kelas Tambahan")
+        if "notif_perubahan" in deleted_summary and deleted_summary["notif_perubahan"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_perubahan']} Notifikasi Perubahan Jadwal")
+        if "notif_jeda" in deleted_summary and deleted_summary["notif_jeda"] > 0:
+            parts_msg.append(f"{deleted_summary['notif_jeda']} Notifikasi Jeda Ruangan")
+
+        if "aslab_all" in deleted_summary and deleted_summary["aslab_all"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_all']} Kontak Asisten Lab")
+        if "aslab_thehok" in deleted_summary and deleted_summary["aslab_thehok"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_thehok']} Aslab Kampus Thehok")
+        if "aslab_kobar" in deleted_summary and deleted_summary["aslab_kobar"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_kobar']} Aslab Kampus Kobar")
+        if "aslab_noroom" in deleted_summary and deleted_summary["aslab_noroom"] > 0:
+            parts_msg.append(f"{deleted_summary['aslab_noroom']} Aslab Tanpa Ruangan")
+
+        if "dosen_all" in deleted_summary and deleted_summary["dosen_all"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen_all']} Master Dosen")
+        if "dosen_active" in deleted_summary and deleted_summary["dosen_active"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen_active']} Dosen Berjadwal")
+        if "dosen_inactive" in deleted_summary and deleted_summary["dosen_inactive"] > 0:
+            parts_msg.append(f"{deleted_summary['dosen_inactive']} Dosen Tanpa Jadwal")
+        
+        if is_all:
+            resp_msg = "Database berhasil di-reset total! Seluruh data (jadwal, ruangan, notifikasi, aslab, dan dosen) telah dibersihkan."
+        elif parts_msg:
+            resp_msg = f"Berhasil menghapus: {', '.join(parts_msg)}."
+        else:
+            resp_msg = "Pembersihan database selesai (tidak ada baris data yang terpengaruh)."
+
+        return {
+            "status": "success",
+            "message": resp_msg,
+            "deleted": deleted_summary
+        }
+    except Exception as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class BackupDbRequest(BaseModel):
+    targets: list[str] | None = []
+
+def sql_escape_value(val):
+    if val is None:
+        return "NULL"
+    elif isinstance(val, bool):
+        return "1" if val else "0"
+    elif isinstance(val, (int, float)):
+        return str(val)
+    elif isinstance(val, datetime.timedelta):
+        total_seconds = int(val.total_seconds())
+        hours = total_seconds // 3600
+        mins = (total_seconds % 3600) // 60
+        secs = total_seconds % 60
+        return f"'{hours:02d}:{mins:02d}:{secs:02d}'"
+    elif isinstance(val, datetime.datetime):
+        return f"'{val.strftime('%Y-%m-%d %H:%M:%S')}'"
+    elif isinstance(val, datetime.date):
+        return f"'{val.strftime('%Y-%m-%d')}'"
+    else:
+        s = str(val).replace('\\', '\\\\').replace("'", "''").replace('\r', '\\r').replace('\n', '\\n')
+        return f"'{s}'"
+
+def generate_table_sql_dump(cursor, table_name, query=None):
+    out = []
+    try:
+        cursor.execute(f"SHOW CREATE TABLE `{table_name}`")
+        res_create = cursor.fetchone()
+        if not res_create or len(res_create) < 2:
+            return ""
+        create_sql = res_create[1]
+    except Exception as e:
+        return f"-- Gagal mengambil skema tabel `{table_name}`: {e}\n"
+
+    out.append(f"-- --------------------------------------------------------")
+    out.append(f"-- Struktur tabel `{table_name}`")
+    out.append(f"-- --------------------------------------------------------")
+    out.append(f"DROP TABLE IF EXISTS `{table_name}`;")
+    out.append(f"{create_sql};\n")
+
+    if query is None:
+        query = f"SELECT * FROM `{table_name}`"
+
+    try:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+    except Exception as e:
+        out.append(f"-- Gagal mengambil data tabel `{table_name}`: {e}\n")
+        return "\n".join(out)
+
+    if not rows:
+        out.append(f"-- Tidak ada data baris untuk tabel `{table_name}`\n")
+        return "\n".join(out)
+
+    cols = [f"`{col[0]}`" for col in cursor.description]
+    cols_str = ", ".join(cols)
+
+    out.append(f"-- Dumping data untuk tabel `{table_name}` ({len(rows)} baris)")
+    batch_size = 100
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i:i + batch_size]
+        row_strings = []
+        for r in batch:
+            val_strs = [sql_escape_value(val) for val in r]
+            row_strings.append(f"  ({', '.join(val_strs)})")
+        out.append(f"INSERT INTO `{table_name}` ({cols_str}) VALUES\n" + ",\n".join(row_strings) + ";\n")
+
+    return "\n".join(out)
+
+@app.post("/api/db/backup")
+def backup_selective_db(req: BackupDbRequest = BackupDbRequest(), admin: str = Depends(verify_admin_token)):
+    """Mengekspor data database ke skrip SQL (memerlukan token Admin)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        targets = set(req.targets or [])
+        is_all = not targets or "all" in targets or "semua" in targets or "backup_all" in targets or "wipe_all" in targets
+        
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ts_slug = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        sql_parts = []
+        sql_parts.append("-- ========================================================")
+        sql_parts.append("-- Jadwal Kuliah UNAMA - Database Backup (.SQL)")
+        sql_parts.append(f"-- Dibuat secara otomatis pada: {now_str}")
+        sql_parts.append(f"-- Kategori Backup: {'Semua Database (Total)' if is_all else ', '.join(targets)}")
+        sql_parts.append("-- ========================================================\n")
+        sql_parts.append("/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;")
+        sql_parts.append("/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;")
+        sql_parts.append("/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;")
+        sql_parts.append("/*!40101 SET NAMES utf8mb4 */;")
+        sql_parts.append("SET FOREIGN_KEY_CHECKS = 0;")
+        sql_parts.append("SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";")
+        sql_parts.append("SET AUTOCOMMIT = 0;")
+        sql_parts.append("START TRANSACTION;")
+        sql_parts.append("SET time_zone = \"+07:00\";\n")
+        
+        # 1. Tabel Ruangan
+        if is_all or "ruangan" in targets or "ruangan_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "ruangan", "SELECT * FROM ruangan"))
+        else:
+            r_conds = []
+            if "ruangan_lab" in targets:
+                r_conds.append("(LOWER(nama_ruangan) LIKE '%lab%' OR LOWER(nama_ruangan) LIKE '%praktek%')")
+            if "ruangan_kelas" in targets:
+                r_conds.append("(LOWER(nama_ruangan) NOT LIKE '%lab%' AND LOWER(nama_ruangan) NOT LIKE '%praktek%')")
+            if "ruangan_unused" in targets:
+                r_conds.append("(id_ruangan NOT IN (SELECT DISTINCT id_ruangan FROM jadwal WHERE id_ruangan IS NOT NULL))")
+            if r_conds:
+                sql_parts.append(generate_table_sql_dump(cursor, "ruangan", f"SELECT * FROM ruangan WHERE {' OR '.join(r_conds)}"))
+
+        # 2. Tabel Dosen
+        if is_all or "dosen" in targets or "dosen_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "dosen", "SELECT * FROM dosen"))
+        else:
+            d_conds = []
+            if "dosen_active" in targets:
+                d_conds.append("id_dosen IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+            if "dosen_inactive" in targets:
+                d_conds.append("id_dosen NOT IN (SELECT DISTINCT id_dosen FROM jadwal WHERE id_dosen IS NOT NULL)")
+            if d_conds:
+                sql_parts.append(generate_table_sql_dump(cursor, "dosen", f"SELECT * FROM dosen WHERE {' OR '.join(d_conds)}"))
+
+        # 3. Tabel Mata Kuliah
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "mata_kuliah" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "mata_kuliah", "SELECT * FROM mata_kuliah"))
+
+        # 4. Tabel Jadwal Utama
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_utama" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jadwal", "SELECT * FROM jadwal"))
+
+        # 5. Tabel Jadwal Temp
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_temp" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jadwal_temp", "SELECT * FROM jadwal_temp"))
+
+        # 5b. Tabel Cadangan Permanen Jadwal (Master Arsip Anti-Hilang)
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "jadwal_permanent" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "jadwal_permanent", "SELECT * FROM jadwal_permanent"))
+
+        # 6. Tabel Jeda Lab (opsional, tabel legacy — skip jika tidak ada)
+        if is_all or "jadwal" in targets or "jadwal_all" in targets or "notif_all" in targets or "notif_jeda" in targets:
+            try:
+                conn_check = get_db()
+                cur_check = conn_check.cursor()
+                cur_check.execute("SHOW TABLES LIKE 'jeda_lab'")
+                if cur_check.fetchone():
+                    sql_parts.append(generate_table_sql_dump(cursor, "jeda_lab", "SELECT * FROM jeda_lab"))
+                cur_check.close()
+                conn_check.close()
+            except Exception:
+                pass
+
+        # 7. Tabel Notifikasi Lab
+        if is_all or "notif_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "notifikasi_lab", "SELECT * FROM notifikasi_lab"))
+        else:
+            n_subtypes = []
+            if "notif_tambahan" in targets: n_subtypes.append("'TAMBAHAN'")
+            if "notif_perubahan" in targets: n_subtypes.append("'PERUBAHAN'")
+            if "notif_jeda" in targets: n_subtypes.append("'JEDA'")
+            if n_subtypes:
+                sql_parts.append(generate_table_sql_dump(cursor, "notifikasi_lab", f"SELECT * FROM notifikasi_lab WHERE tipe_notif IN ({','.join(n_subtypes)})"))
+
+        # 8. Tabel Asisten Lab
+        if is_all or "aslab" in targets or "aslab_all" in targets:
+            sql_parts.append(generate_table_sql_dump(cursor, "asisten_lab", "SELECT * FROM asisten_lab"))
+        else:
+            a_conds = []
+            if "aslab_thehok" in targets:
+                a_conds.append("id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%thehok%')")
+            if "aslab_kobar" in targets:
+                a_conds.append("id_ruangan IN (SELECT id_ruangan FROM ruangan WHERE LOWER(kampus) LIKE '%kobar%')")
+            if "aslab_noroom" in targets:
+                a_conds.append("id_ruangan IS NULL")
+            if a_conds:
+                sql_parts.append(generate_table_sql_dump(cursor, "asisten_lab", f"SELECT * FROM asisten_lab WHERE {' OR '.join(a_conds)}"))
+
+        # 9. Tabel Absensi (Master Aslab, Master Lab, & Riwayat Absensi)
+        if is_all:
+            try:
+                sql_parts.append(generate_table_sql_dump(cursor, "absensi_master_aslab", "SELECT * FROM absensi_master_aslab"))
+                sql_parts.append(generate_table_sql_dump(cursor, "absensi_master_lab", "SELECT * FROM absensi_master_lab"))
+                sql_parts.append(generate_table_sql_dump(cursor, "absensi_aslab", "SELECT * FROM absensi_aslab"))
+            except Exception:
+                pass
+
+        sql_parts.append("COMMIT;")
+        sql_parts.append("SET FOREIGN_KEY_CHECKS = 1;")
+        sql_parts.append("/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;")
+        sql_parts.append("/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;")
+        sql_parts.append("/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;")
+
+        final_sql = "\n".join(sql_parts)
+        filename = f"backup_jadwal_unama_{ts_slug}.sql"
+        
+        return Response(
+            content=final_sql,
+            media_type="application/sql; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{filename}\"",
+                "X-Backup-Filename": filename
+            }
+        )
+    except Exception as err:
+        return Response(
+            content=f"-- Error generating backup: {err}",
+            status_code=500,
+            media_type="text/plain"
+        )
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# ==================== PUSAT RESTORE / IMPOR DATABASE (.SQL) ====================
+class RestorePreviewRequest(BaseModel):
+    sql_content: str
+    filename: str = "backup.sql"
+
+class RestoreExecuteRequest(BaseModel):
+    sql_content: str
+    filename: str = "backup.sql"
+
+def parse_sql_statements(sql_text: str) -> list[str]:
+    """Memecah teks dump SQL menjadi daftar kueri/pernyataan yang dapat dieksekusi secara aman"""
+    statements = []
+    current = []
+    in_single_quote = False
+    in_double_quote = False
+    in_backtick = False
+    in_multiline_comment = False
+    
+    lines = sql_text.splitlines()
+    for line in lines:
+        stripped = line.strip()
+        # Lewati komentar satu baris
+        if not in_single_quote and not in_double_quote and not in_multiline_comment:
+            if stripped.startswith("--") or stripped.startswith("#"):
+                continue
+        
+        i = 0
+        n = len(line)
+        while i < n:
+            c = line[i]
+            
+            if not in_single_quote and not in_double_quote and not in_backtick:
+                if not in_multiline_comment and i + 1 < n and line[i:i+2] == "/*":
+                    if i + 2 < n and line[i+2] == "!":
+                        pass
+                    else:
+                        in_multiline_comment = True
+                        i += 2
+                        continue
+                elif in_multiline_comment and i + 1 < n and line[i:i+2] == "*/":
+                    in_multiline_comment = False
+                    i += 2
+                    continue
+            
+            if in_multiline_comment:
+                i += 1
+                continue
+            
+            if c == "'" and not in_double_quote and not in_backtick:
+                num_backslashes = 0
+                k = i - 1
+                while k >= 0 and line[k] == '\\':
+                    num_backslashes += 1
+                    k -= 1
+                if num_backslashes % 2 == 0:
+                    in_single_quote = not in_single_quote
+            elif c == '"' and not in_single_quote and not in_backtick:
+                num_backslashes = 0
+                k = i - 1
+                while k >= 0 and line[k] == '\\':
+                    num_backslashes += 1
+                    k -= 1
+                if num_backslashes % 2 == 0:
+                    in_double_quote = not in_double_quote
+            elif c == '`' and not in_single_quote and not in_double_quote:
+                in_backtick = not in_backtick
+            elif c == ';' and not in_single_quote and not in_double_quote and not in_backtick:
+                stmt = "".join(current).strip()
+                if stmt:
+                    statements.append(stmt)
+                current = []
+                i += 1
+                continue
+            
+            current.append(c)
+            i += 1
+        current.append("\n")
+        
+    remaining = "".join(current).strip()
+    if remaining:
+        statements.append(remaining)
+        
+    return statements
+
+def extract_sql_preview(sql_text: str, filename: str = "backup.sql") -> dict:
+    statements = parse_sql_statements(sql_text)
+    tables = set()
+    total_inserts = 0
+    estimated_rows = 0
+    has_drop = False
+    has_create = False
+    
+    table_pattern = re.compile(r'(?:CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|INSERT\s+INTO)\s+[`"]?([a-zA-Z0-9_]+)[`"]?', re.IGNORECASE)
+    
+    for stmt in statements:
+        upper = stmt[:60].upper()
+        if "DROP TABLE" in upper:
+            has_drop = True
+        if "CREATE TABLE" in upper:
+            has_create = True
+            
+        m = table_pattern.search(stmt)
+        if m:
+            tbl = m.group(1).lower()
+            if tbl not in ("table", "if", "not", "exists", "temporary"):
+                tables.add(tbl)
+        
+        if upper.startswith("INSERT INTO"):
+            total_inserts += 1
+            val_count = len(re.findall(r'\([^\)]+\)', stmt))
+            estimated_rows += max(1, val_count)
+
+    return {
+        "status": "success",
+        "filename": filename,
+        "total_statements": len(statements),
+        "total_tables": len(tables),
+        "tables": sorted(list(tables)),
+        "total_insert_batches": total_inserts,
+        "estimated_rows": estimated_rows,
+        "has_drop_table": has_drop,
+        "has_create_table": has_create
+    }
+
+@app.post("/api/db/restore/preview")
+def preview_restore_db(req: RestorePreviewRequest):
+    """Menganalisis file skrip SQL dan mengembalikan pratinjau tabel tanpa mengeksekusi ke DB"""
+    if not req.sql_content or not req.sql_content.strip():
+        return {"status": "error", "message": "Konten file SQL kosong atau tidak valid."}
+    
+    try:
+        preview = extract_sql_preview(req.sql_content, req.filename)
+        return preview
+    except Exception as e:
+        return {"status": "error", "message": f"Gagal membaca format SQL: {e}"}
+
+@app.post("/api/db/restore")
+def execute_restore_db(req: RestoreExecuteRequest, admin: str = Depends(verify_admin_token)):
+    """Memulihkan data database dari skrip SQL (memerlukan token Admin)"""
+    if not req.sql_content or not req.sql_content.strip():
+        return {"status": "error", "message": "Konten file SQL kosong atau tidak valid."}
+        
+    try:
+        statements = parse_sql_statements(req.sql_content)
+        if not statements:
+            return {"status": "error", "message": "Tidak ada kueri SQL valid yang dapat dieksekusi."}
+            
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
+        cursor.execute("SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';")
+        
+        executed_count = 0
+        for stmt in statements:
+            s_clean = stmt.strip()
+            if not s_clean:
+                continue
+            try:
+                cursor.execute(s_clean)
+                executed_count += 1
+            except Exception as stmt_err:
+                if s_clean.upper().startswith("SET ") or "/*!40101" in s_clean:
+                    continue
+                else:
+                    raise stmt_err
+                    
+        conn.commit()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+        
+        preview = extract_sql_preview(req.sql_content, req.filename)
+        
+        return {
+            "status": "success",
+            "message": f"Database berhasil dipulihkan ({executed_count} kueri dieksekusi).",
+            "executed_count": executed_count,
+            "tables": preview.get("tables", []),
+            "estimated_rows": preview.get("estimated_rows", 0)
+        }
+    except Exception as err:
+        if 'conn' in locals() and conn.is_connected():
+            try:
+                conn.rollback()
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+            except Exception:
+                pass
+        return {"status": "error", "message": f"Gagal merestore database: {err}"}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/jadwal")
+def clear_jadwal(admin: str = Depends(verify_admin_token)):
+    """Menghapus seluruh jadwal dari database (memerlukan token Admin) - Legacy Wrapper"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+        tables_to_clear = ["jadwal", "jadwal_temp", "notifikasi_lab", "jeda_lab", "mata_kuliah"]
+        for tbl in tables_to_clear:
+            try:
+                cursor.execute(f"DELETE FROM {tbl}")
+            except Exception:
+                pass
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        conn.commit()
+        return {"status": "success", "message": "Jadwal dan mata kuliah berhasil dibersihkan."}
+    except Exception as err:
+        return {"status": "error", "message": str(err)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class SyncRequest(BaseModel):
+    tanggal: str | None = None
+    from_dashboard: bool | None = False
+    semester: str | None = None
+
+class SyncHtmlRequest(BaseModel):
+    html: str
+    tanggal: str | None = None
+    page: str | None = "1"
+    semester: str | None = None
+
+class SyncCompleteRequest(BaseModel):
+    tanggal: str | None = None
+    semester: str | None = None
+
+import time
+
+sync_status = {}
+pending_sync_queue = {}
+last_sync_times = {}
+sync_lock = asyncio.Lock()
+
+@app.post("/api/sync")
+async def sync_data(req: SyncRequest):
+    """Sinkronisasi data dengan proteksi anti-DoS Cooldown & Async Lock (SEC-07)"""
+    tgl_key = req.tanggal or ""
+    now = time.time()
+    
+    # 1. Cek Cooldown (Minimal jeda 15 detik untuk tanggal yang sama)
+    last_time = last_sync_times.get(tgl_key, 0)
+    if now - last_time < 15:
+        sisa = int(15 - (now - last_time))
+        return {
+            "status": "cooldown",
+            "message": f"Sinkronisasi baru saja dilakukan. Harap tunggu {sisa} detik sebelum sinkronisasi ulang.",
+            "count": 0
+        }
+
+    async with sync_lock:
+        try:
+            start_time = time.time()
+            last_sync_times[tgl_key] = start_time
+            
+            # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
+            success, count, msg = scraper.scrape_baak_direct(req.tanggal, None)
+            if success:
+                sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
+                pending_sync_queue.pop(tgl_key, None)
+                return {"status": "success", "message": msg, "count": count}
+            
+            # 2. Fallback: Ekstensi Chrome di PC
+            print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
+            sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
+            target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
+            
+            pending_sync_queue[tgl_key] = {
+                "tanggal": tgl_key,
+                "url": target_url,
+                "time": start_time
+            }
+            
+            # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
+            for _ in range(40):
+                await asyncio.sleep(0.8)
+                current = sync_status.get(tgl_key, {})
+                if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
+                    count_got = current.get("count", 0)
+                    return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({count_got} jadwal)!", "count": count_got}
+
+            current = sync_status.get(tgl_key, {})
+            if current.get("status") == "done" and current.get("count", 0) > 0:
+                return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({current.get('count', 0)} data)!", "count": current.get("count", 0)}
+
+            # Jika ekstensi tidak menghasilkan data (terhalang 403 atau tidak terbuka)
+            scraper.record_scraping_log(
+                "Chrome Extension (Browser)",
+                target_url,
+                tgl_key,
+                403,
+                "BLOCKED (403)",
+                "Ekstensi di browser tidak berhasil menarik data baru (terindikasi penolakan akses 403 Forbidden atau tab tertutup).",
+                int((time.time() - start_time) * 1000),
+                0
+            )
+            return {
+                "status": "warning",
+                "message": "Sinkronisasi tidak dapat menarik data baru dari BAAK UNAMA karena server menolak akses (HTTP 403 Forbidden) pada backend dan browser. Data jadwal lokal yang sudah ada tetap aman dan aktif.",
+                "count": 0,
+                "blocked_403": True
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+@app.get("/api/sync/pending")
+def get_pending_sync():
+    """Mengambil tugas sinkronisasi yang diminta (misal dari HP) untuk dijalankan oleh Chrome Extension"""
+    now = time.time()
+    for tgl, task in list(pending_sync_queue.items()):
+        if now - task.get("time", 0) < 60:
+            return {"status": "success", "task": task}
+        else:
+            pending_sync_queue.pop(tgl, None)
+    return {"status": "empty"}
+
+class ClearPendingRequest(BaseModel):
+    tanggal: str | None = None
+
+class ScraperLogReportRequest(BaseModel):
+    engine: str
+    target_url: str | None = None
+    target_tanggal: str | None = None
+    http_status: int | None = None
+    status: str
+    pesan: str | None = None
+    durasi_ms: int | None = 0
+    jumlah_data: int | None = 0
+
+@app.post("/api/sync/pending/clear")
+def clear_pending_sync(req: ClearPendingRequest = None):
+    """Menghapus tugas sinkronisasi setelah diambil oleh ekstensi"""
+    if req and req.tanggal:
+        tgl_key = req.tanggal or ""
+        pending_sync_queue.pop(tgl_key, None)
+    else:
+        pending_sync_queue.clear()
+    return {"status": "success"}
+
+@app.get("/api/scraper/logs")
+def get_scraper_logs(limit: int = 50):
+    """Mengambil riwayat log percobaan setiap scraping engine dan ringkasan status terkini."""
+    try:
+        logs = scraper.get_scraping_engine_logs(limit)
+        summary = scraper.get_scraping_engine_summary()
+        return {
+            "status": "success",
+            "logs": logs,
+            "summary": summary
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e), "logs": [], "summary": {}}
+
+@app.post("/api/scraper/test")
+async def test_scraper_engines(req: SyncRequest = None):
+    """Menjalankan probe test ke seluruh engine secara non-blocking via asyncio.to_thread."""
+    try:
+        target_tgl = req.tanggal if req else None
+        results = await asyncio.to_thread(scraper.test_all_scraping_engines, target_tgl)
+        summary = await asyncio.to_thread(scraper.get_scraping_engine_summary)
+        return {
+            "status": "success",
+            "results": results,
+            "summary": summary
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e), "results": [], "summary": {}}
+
+@app.post("/api/scraper/log-engine")
+def report_scraper_log(req: ScraperLogReportRequest):
+    """Menerima laporan status/log dari client atau Chrome Extension (misal saat browser terkena 403 Forbidden)."""
+    try:
+        scraper.record_scraping_log(
+            engine=req.engine,
+            target_url=req.target_url,
+            target_tanggal=req.target_tanggal,
+            http_status=req.http_status,
+            status=req.status,
+            pesan=req.pesan,
+            durasi_ms=req.durasi_ms or 0,
+            jumlah_data=req.jumlah_data or 0
+        )
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/scraper/clear-logs")
+def clear_scraper_logs(admin: str = Depends(verify_admin_token)):
+    """Mengosongkan riwayat log engine scraping (memerlukan hak akses Admin)."""
+    try:
+        scraper.clear_scraping_engine_logs()
+        return {"status": "success", "message": "Seluruh riwayat log engine scraping berhasil dibersihkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/sync-html")
+def sync_html_data(req: SyncHtmlRequest):
+    """Sinkronisasi data dari HTML mentah yang dikirim oleh Ekstensi Chrome"""
+    try:
+        detected = scraper.detect_semester_from_html(req.html)
+        sem_to_use = detected or req.semester or scraper.get_active_semester()
+        data = scraper.parse_html_content(req.html, req.tanggal, sem_to_use)
+        scraper.save_to_db(data, req.tanggal, req.page, sem_to_use)
+        tgl_key = req.tanggal or ""
+        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
+        sync_status[tgl_key] = {"status": "in_progress", "time": time.time(), "count": prev_count + len(data), "semester": sem_to_use}
+        return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi ({sem_to_use}).", "count": len(data), "semester": sem_to_use}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/sync-complete")
+def sync_complete(req: SyncCompleteRequest):
+    """Menerima sinyal bahwa ekstensi chrome sudah selesai mensinkronisasi semua halaman"""
+    try:
+        tgl_key = (req.tanggal or "").strip()
+        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
+        
+        # Guard: Jika data baru yang dikirim oleh ekstensi 0, tidak perlu finalisasi penghapusan
+        if prev_count == 0:
+            return {"status": "warning", "message": "Tidak ada data baru yang disinkronisasi. Data jadwal yang sudah ada tetap aman.", "count": 0}
+
+        sem_to_use = req.semester or sync_status.get(tgl_key, {}).get("semester") or scraper.get_active_semester()
+        target_tgl = tgl_key if tgl_key else None
+        scraper.compare_and_finalize_sync(target_tgl, sem_to_use)
+        sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
+        return {"status": "success", "message": f"Proses perbandingan dan finalisasi selesai ({sem_to_use}).", "count": prev_count, "semester": sem_to_use}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/finalize-temp")
+def finalize_temp(admin: str = Depends(verify_admin_token)):
+    """Memindahkan seluruh data yang ada di jadwal_temp ke tabel jadwal utama (memerlukan token Admin)"""
+    try:
+        scraper.compare_and_finalize_sync(None)
+        return {"status": "success", "message": "Seluruh data dari jadwal_temp berhasil dipindahkan ke tabel jadwal."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/notifikasi-lab")
+def get_notifikasi_lab(tanggal: str, semester: str = None):
+    """Ambil notifikasi ruangan (Labor & Ruang Kelas) untuk tanggal dan semester tertentu"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        sem_active = semester or scraper.get_active_semester(conn, cursor)
+        # Hitung dan pastikan jeda ruangan untuk tanggal ini selalu sinkron & up-to-date
+        try:
+            scraper.calculate_and_save_gaps(conn, cursor, tanggal, sem_active)
+        except Exception as e_gap:
+            print(f"Error calculating gaps on fetch: {e_gap}")
+
+        now_dt = datetime.datetime.now()
+        is_today = (tanggal == now_dt.strftime('%Y-%m-%d'))
+        current_min = (now_dt.hour * 60 + now_dt.minute) if is_today else -1
+
+        cursor.execute("""
+            SELECT id, tipe_notif, pesan, DATE_FORMAT(created_at, '%H:%i') as waktu, DATE_FORMAT(tanggal, '%Y-%m-%d') as tanggal, UNIX_TIMESTAMP(created_at) as created_ts
+            FROM notifikasi_lab 
+            WHERE tanggal = %s AND (semester = %s OR semester IS NULL)
+            ORDER BY id DESC
+        """, (tanggal, sem_active))
+        results = cursor.fetchall()
+
+        cleaned_results = []
+        seen_change_rooms = set()
+        seen_move_classes = set()
+        obsolete_ids_to_delete = []
+
+        for item in results:
+            item_id = item.get("id")
+            t = (item.get("tipe_notif") or "").upper()
+            pesan = item.get("pesan") or ""
+
+            # Jika hari ini, periksa apakah waktu kegiatan sudah lewat di masa lalu
+            if is_today:
+                if t == "JEDA":
+                    m_range = re.search(r'([0-2]?[0-9]:[0-5][0-9])\s*-\s*([0-2]?[0-9]:[0-5][0-9])', pesan)
+                    if m_range:
+                        gap_end_min = scraper.parse_time_to_minutes(m_range.group(2))
+                        if gap_end_min is not None and gap_end_min <= current_min:
+                            if item_id:
+                                obsolete_ids_to_delete.append(item_id)
+                            continue
+                elif t in ("PERUBAHAN", "TAMBAHAN"):
+                    time_str = scraper.extract_time_from_notification(pesan)
+                    if time_str:
+                        start_min = scraper.parse_time_to_minutes(time_str)
+                        if start_min is not None and (start_min + 120) <= current_min:
+                            # Kelas sudah selesai lebih dari 2 jam lalu -> obsolete, hapus dari DB & lewati
+                            if item_id:
+                                obsolete_ids_to_delete.append(item_id)
+                            continue
+
+            # Deduplikasi kelas pindah ruangan (jika ada MASUK dan KELUAR untuk kelas yang sama, prioritaskan yang MASUK)
+            if "PINDAH RUANGAN" in pesan.upper():
+                mk_match = re.search(r'Kelas\s+([^(\n\r]+?)\s*\(([^)]+)\)', pesan, re.I)
+                if mk_match:
+                    class_key = f"{mk_match.group(1).strip().lower()}___{mk_match.group(2).strip().lower()}"
+                    if class_key in seen_move_classes:
+                        continue
+                    seen_move_classes.add(class_key)
+
+            # Deduplikasi per ruangan untuk notifikasi PERUBAHAN dan TAMBAHAN
+            if t in ("PERUBAHAN", "TAMBAHAN"):
+                room_str = scraper.extract_room_from_notification(pesan)
+                room_key = re.sub(r'\s*\([^)]*\)', '', room_str).strip().lower() if room_str else ""
+                if room_key:
+                    if room_key in seen_change_rooms:
+                        continue
+                    seen_change_rooms.add(room_key)
+
+            cleaned_results.append(item)
+
+        if obsolete_ids_to_delete:
+            try:
+                format_strings = ','.join(['%s'] * len(obsolete_ids_to_delete))
+                cursor.execute(f"DELETE FROM notifikasi_lab WHERE id IN ({format_strings})", tuple(obsolete_ids_to_delete))
+                conn.commit()
+            except Exception as e_del:
+                print(f"Error deleting obsolete notifikasi_lab rows: {e_del}")
+
+        return {"status": "success", "semester": sem_active, "data": cleaned_results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class TestWARequest(BaseModel):
+    id_aslab: int | None = None
+    action_type: str = "test"
+    ngrok_link: str | None = None
+
+class AddAslabRequest(BaseModel):
+    nama_aslab: str
+    no_wa: str
+    id_ruangan: int
+
+@app.get("/api/ruangan")
+def get_ruangan():
+    """Mengambil daftar semua ruangan lab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id_ruangan, nama_ruangan,
+                   CASE 
+                       WHEN (nama_ruangan REGEXP '(^|[^0-9])2\\.[0-9]+' AND nama_ruangan NOT LIKE '%2.7%') OR nama_ruangan LIKE '%1.5%' THEN 'Kobar'
+                       WHEN nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
+                       ELSE COALESCE(kampus, 'Thehok')
+                   END AS kampus
+            FROM ruangan
+        """)
+        results = cursor.fetchall()
+        results.sort(key=lambda x: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', x.get('nama_ruangan') or '')])
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/aslab")
+def get_aslab(authorization: str = Header(None)):
+    """Mengambil daftar asisten lab beserta nama ruangannya dan nomor WA (nomor disensor jika bukan admin)"""
+    is_admin = is_admin_authenticated(authorization)
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT a.id_aslab, a.nama_aslab, a.no_wa, r.nama_ruangan, r.kampus, a.id_ruangan 
+            FROM asisten_lab a
+            LEFT JOIN ruangan r ON a.id_ruangan = r.id_ruangan
+            WHERE a.no_wa IS NOT NULL 
+              AND a.no_wa != '' 
+              AND a.no_wa NOT LIKE '%@lid%' 
+              AND a.no_wa NOT LIKE '%lid%'
+            ORDER BY a.id_aslab ASC
+        """)
+        results = cursor.fetchall()
+        
+        return {"status": "success", "data": results, "is_admin": is_admin}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/aslab/{id_aslab}")
+def delete_aslab(id_aslab: int, admin: str = Depends(verify_admin_token)):
+    """Menghapus kontak WA asisten lab dari tabel asisten_lab (WA Bot). Tidak memengaruhi master data absensi."""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM asisten_lab WHERE id_aslab = %s", (id_aslab,))
+        conn.commit()
+        if cursor.rowcount > 0:
+            return {"status": "success", "message": "Kontak WA asisten lab berhasil dihapus."}
+        else:
+            return {"status": "error", "message": "Data tidak ditemukan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+class AddRuanganRequest(BaseModel):
+    kampus: str
+    nama_ruangan: str
+
+@app.post("/api/ruangan/add")
+def add_ruangan(req: AddRuanganRequest, admin: str = Depends(verify_admin_token)):
+    """Menambahkan data ruangan baru (memerlukan token Admin)"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Cek apakah ruangan sudah ada
+        cursor.execute("SELECT id_ruangan FROM ruangan WHERE nama_ruangan = %s", (req.nama_ruangan,))
+        if cursor.fetchone():
+            return {"status": "error", "message": "Nama ruangan sudah ada di database."}
+            
+        cursor.execute(
+            "INSERT INTO ruangan (kampus, nama_ruangan) VALUES (%s, %s)", 
+            (req.kampus, req.nama_ruangan)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Ruangan berhasil ditambahkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/ruangan/{id_ruangan}")
+def delete_ruangan(id_ruangan: int, admin: str = Depends(verify_admin_token)):
+    """Menghapus data ruangan (memerlukan token Admin)"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Cek apakah ruangan sedang dipakai oleh aslab
+        cursor.execute("SELECT COUNT(*) FROM asisten_lab WHERE id_ruangan = %s", (id_ruangan,))
+        if cursor.fetchone()[0] > 0:
+            return {"status": "error", "message": "Ruangan tidak dapat dihapus karena sedang dipakai oleh Asisten Lab."}
+            
+        cursor.execute("DELETE FROM ruangan WHERE id_ruangan = %s", (id_ruangan,))
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            return {"status": "success", "message": "Ruangan berhasil dihapus."}
+        else:
+            return {"status": "error", "message": "Ruangan tidak ditemukan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/aslab/add")
+def add_aslab(req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
+    """Menambahkan data asisten lab secara manual (memerlukan token Admin)"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Format No WA (pastikan diawali 62 dan valid nomor HP)
+        if not req.no_wa or 'lid' in str(req.no_wa).lower():
+            return {"status": "error", "message": "Nomor WhatsApp tidak valid (masukkan nomor HP asli)."}
+        no_wa = re.sub(r'\D', '', req.no_wa)
+        if len(no_wa) < 9:
+            return {"status": "error", "message": "Nomor WhatsApp terlalu pendek."}
+        if no_wa.startswith('0'):
+            no_wa = '62' + no_wa[1:]
+        elif no_wa.startswith('8'):
+            no_wa = '62' + no_wa
+            
+        cursor.execute(
+            "INSERT INTO asisten_lab (nama_aslab, no_wa, id_ruangan) VALUES (%s, %s, %s)", 
+            (req.nama_aslab, no_wa, req.id_ruangan)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Data asisten lab berhasil ditambahkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.put("/api/aslab/{id_aslab}")
+def edit_aslab(id_aslab: int, req: AddAslabRequest, admin: str = Depends(verify_admin_token)):
+    """Mengubah data asisten lab secara manual (memerlukan token Admin)"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        
+        # Format No WA (pastikan diawali 62 dan valid nomor HP)
+        if not req.no_wa or 'lid' in str(req.no_wa).lower():
+            return {"status": "error", "message": "Nomor WhatsApp tidak valid (masukkan nomor HP asli)."}
+        no_wa = re.sub(r'\D', '', req.no_wa)
+        if len(no_wa) < 9:
+            return {"status": "error", "message": "Nomor WhatsApp terlalu pendek."}
+        if no_wa.startswith('0'):
+            no_wa = '62' + no_wa[1:]
+        elif no_wa.startswith('8'):
+            no_wa = '62' + no_wa
+            
+        cursor.execute(
+            "UPDATE asisten_lab SET nama_aslab = %s, no_wa = %s, id_ruangan = %s WHERE id_aslab = %s", 
+            (req.nama_aslab, no_wa, req.id_ruangan, id_aslab)
+        )
+        conn.commit()
+        if cursor.rowcount > 0:
+            return {"status": "success", "message": "Data asisten lab berhasil diubah."}
+        else:
+            return {"status": "error", "message": "Data tidak ditemukan atau tidak ada perubahan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/test-wa")
+def test_wa(req: TestWARequest, admin: str = Depends(verify_admin_token)):
+    """Mengirim pesan WA percobaan ke aslab tertentu atau semua (memerlukan token Admin)"""
+    results = wa_notifier.test_send(req.id_aslab, req.action_type, req.ngrok_link)
+    if isinstance(results, dict) and "error" in results:
+        return {"status": "error", "message": results["error"]}
+    if not results:
+        return {"status": "error", "message": "Tidak ada data aslab atau terjadi kesalahan"}
+    return {"status": "success", "message": "Pesan WA percobaan selesai diproses!", "data": results}
+
+class WebhookRequest(BaseModel):
+    sender: str
+    text: str
+    msg_id: Optional[str] = None
+
+@app.post("/api/webhook/wa")
+def wa_webhook(req: WebhookRequest, valid: bool = Depends(verify_bot_secret)):
+    """Menerima pesan masuk dari WA Bot (Node.js) dengan proteksi Secret Token"""
+    wa_notifier.log_chatbot("INFO", f"Webhook menerima pesan dari {req.sender}: '{req.text}' (id: {req.msg_id})", "WEBHOOK")
+    try:
+        response_msg = wa_notifier.handle_incoming_message(req.sender, req.text, msg_id=req.msg_id)
+        if response_msg:
+            # Kirim balasan
+            wa_notifier.send_wa_message(req.sender, response_msg)
+        else:
+            wa_notifier.log_chatbot("INFO", f"Tidak ada pesan balasan yang dihasilkan untuk {req.sender} (mungkin diabaikan atau tamu)", "WEBHOOK")
+    except Exception as e:
+        wa_notifier.log_chatbot("ERROR", f"Exception pada wa_webhook saat memproses pesan dari {req.sender}: {e}", "WEBHOOK")
+    finally:
+        # Pastikan status mengetik dihentikan agar tidak menggantung di WA
+        wa_notifier.send_wa_typing(req.sender, 'paused')
+    return {"status": "ok"}
+
+@app.get("/api/admin/chatbot-logs")
+def get_chatbot_logs(lines: int = 150):
+    """Membaca isi file logs/chatbot.log untuk memantau performa dan diagnosa error chatbot secara langsung."""
+    log_path = os.path.join("logs", "chatbot.log")
+    if not os.path.exists(log_path):
+        return {"status": "ok", "total_lines": 0, "logs": [], "message": "Belum ada log chatbot yang tercatat."}
+    
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            all_lines = f.readlines()
+            tail_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        return {
+            "status": "ok",
+            "total_lines": len(all_lines),
+            "returned_lines": len(tail_lines),
+            "logs": [l.rstrip("\r\n") for l in tail_lines]
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Gagal membaca file log: {e}"}
+
+@app.get("/api/cek_kosong")
+async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
+    """Mendapatkan data lab kosong dengan algoritma gap jam"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Cek apakah ada jadwal sama sekali di tanggal tersebut
+        cursor.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = %s", (tanggal,))
+        count_jadwal = cursor.fetchone()['count']
+        
+        if count_jadwal == 0:
+            import datetime
+            dt_obj = datetime.datetime.strptime(tanggal, "%Y-%m-%d")
+            if dt_obj.weekday() == 6:
+                return {"status": "error", "message": f"Libur mas, soalnya hari Minggu tanggal {tanggal}."}
+            else:
+                return {"status": "error", "message": "Belum ada data untuk tanggal ini. Silakan klik tombol 'Sinkronkan Data' untuk menarik jadwal terbaru.", "need_sync": True}
+        
+        if jenis == "Kelas":
+            filter_kondisi = "AND r.nama_ruangan NOT LIKE '%lab%' AND r.nama_ruangan NOT LIKE '%praktek%'"
+        elif jenis == "Lab":
+            filter_kondisi = "AND (r.nama_ruangan LIKE '%lab%' OR r.nama_ruangan LIKE '%praktek%' OR LOWER(r.nama_ruangan) LIKE '%cisco%')"
+        else:
+            filter_kondisi = ""
+
+        query = f'''
+            SELECT r.nama_ruangan, j.jam, j.nama_mk
+            FROM ruangan r
+            LEFT JOIN jadwal j ON r.id_ruangan = j.id_ruangan 
+                               AND j.tanggal = %s 
+                               AND j.metode_pembelajaran NOT IN ('CC', 'OL')
+                               AND (j.status_jadwal NOT IN ('CC', 'Batal') OR j.status_jadwal IS NULL)
+            WHERE r.kampus LIKE %s 
+              {filter_kondisi}
+            ORDER BY r.nama_ruangan, j.jam
+        '''
+        cursor.execute(query, (tanggal, f"%{kampus}%"))
+        results = cursor.fetchall()
+        
+        room_schedules = {}
+        for r in results:
+            rname = r['nama_ruangan']
+            if rname not in room_schedules:
+                room_schedules[rname] = []
+            if r['jam']:
+                sm = int(r['jam'].total_seconds()) // 60
+                dur = scraper.get_class_duration(r.get('nama_mk', ''), r.get('kelas')) if hasattr(scraper, 'get_class_duration') else 135
+                room_schedules[rname].append((sm, dur))
+        
+        data = []
+        for rname, scheds in room_schedules.items():
+            if not scheds:
+                data.append({"ruangan": rname, "status": "full kosong aja", "gaps": []})
+            else:
+                gaps = []
+                scheds = sorted(scheds, key=lambda x: x[0])
+                current = 480
+                end_of_day = max(1020, max((s + d for s, d in scheds), default=1020))
+                
+                for sm, dur in scheds:
+                    if sm > current:
+                        gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{sm//60:02d}:{sm%60:02d}", "note": "setelahnya ada kelas"})
+                    current = max(current, sm + dur)
+                if current < end_of_day:
+                    gaps.append({"start": f"{current//60:02d}:{current%60:02d}", "end": f"{end_of_day//60:02d}:{end_of_day%60:02d}", "note": ""})
+                
+                data.append({"ruangan": rname, "status": "ada kelas", "gaps": gaps})
+        
+        return {"status": "success", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/cari_dosen")
+def cari_dosen(nama: str, tanggal: str | None = None):
+    """Mencari jadwal dosen berdasarkan nama"""
+    if not nama:
+        return {"status": "error", "message": "Nama dosen tidak boleh kosong"}
+    
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        if tanggal:
+            cursor.execute('''
+                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(d.nama_dosen) LIKE %s AND j.tanggal = %s
+                ORDER BY j.jam ASC
+            ''', (f"%{nama.upper()}%", tanggal))
+        else:
+            cursor.execute('''
+                SELECT j.tanggal, j.jam, j.nama_mk, j.kelas, r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM jadwal j
+                JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(d.nama_dosen) LIKE %s
+                ORDER BY j.tanggal DESC, j.jam ASC
+            ''', (f"%{nama.upper()}%",))
+            
+        results = cursor.fetchall()
+        
+        for row in results:
+            if row['jam']:
+                ts = int(row['jam'].total_seconds())
+                h = ts // 3600
+                m = (ts % 3600) // 60
+                dur = scraper.get_class_duration(row.get('nama_mk', ''), row.get('kelas')) if hasattr(scraper, 'get_class_duration') else 135
+                eh = (ts // 60 + dur) // 60
+                em = (ts // 60 + dur) % 60
+                row['waktu'] = f"{h:02d}:{m:02d} - {eh:02d}:{em:02d}"
+            else:
+                row['waktu'] = "-"
+            row['tanggal'] = str(row['tanggal'])
+            del row['jam']
+            
+        return {"status": "success", "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/cari_kelas")
+def cari_kelas(kode: str):
+    """Mencari daftar mata kuliah yang dipelajari suatu kelas pada semester aktif (tanpa jadwal jam belajar)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        clean_kode = kode.strip().upper()
+        
+        cursor.execute('''
+            SELECT DISTINCT j.nama_mk, j.kelas, d.nama_dosen
+            FROM jadwal j
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE UPPER(j.kelas) = %s OR UPPER(j.kelas) LIKE %s
+            ORDER BY j.nama_mk ASC
+        ''', (clean_kode, f"%{clean_kode}%"))
+            
+        raw_results = cursor.fetchall()
+        
+        # Kelompokkan per mata kuliah agar jika ada tim dosen tidak duplikat baris
+        mk_dict = {}
+        for row in raw_results:
+            mk = (row.get('nama_mk') or '').strip()
+            if not mk:
+                continue
+            if mk not in mk_dict:
+                mk_dict[mk] = {
+                    'nama_mk': mk,
+                    'kelas': row.get('kelas', clean_kode),
+                    'dosens': set()
+                }
+            if row.get('nama_dosen') and row.get('nama_dosen') != '-':
+                # Split jika multiple dosen
+                for d in str(row['nama_dosen']).split(','):
+                    dt = d.strip()
+                    if dt and dt != '-':
+                        mk_dict[mk]['dosens'].add(dt)
+                
+        results = []
+        for mk, data in sorted(mk_dict.items(), key=lambda x: x[0]):
+            results.append({
+                'nama_mk': data['nama_mk'],
+                'kelas': data['kelas'],
+                'nama_dosen': ", ".join(sorted(data['dosens'])) if data['dosens'] else "Dosen Belum Ditentukan"
+            })
+            
+        return {"status": "success", "total_mk": len(results), "data": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/detail_kelas")
+def get_detail_kelas(kelas: str, semester: str = None):
+    """
+    Mengambil jadwal komprehensif suatu kelas untuk tampilan Halaman Detail Kelas Interaktif:
+    - Informasi Program Studi, Angkatan, Semester/Tingkat
+    - Ringkasan KPI (Total MK, Total Jam, Total Sesi, Rasio TM/OL/CC)
+    - Daftar jadwal per sesi (hari, jam mulai - jam selesai, durasi, nama_mk, dosen, nama_ruangan, kampus, is_lab, metode, status)
+    """
+    if not kelas:
+        return {"status": "error", "message": "Parameter kelas tidak boleh kosong"}
+
+    clean_kelas = kelas.strip().upper()
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        target_sem = semester
+        if not target_sem or target_sem == "all":
+            cursor.execute("SELECT nama_semester FROM semester WHERE is_active = 1 LIMIT 1")
+            active_row = cursor.fetchone()
+            if active_row:
+                target_sem = active_row["nama_semester"]
+            else:
+                cursor.execute("SELECT semester FROM jadwal WHERE semester IS NOT NULL AND semester != '' LIMIT 1")
+                j_row = cursor.fetchone()
+                target_sem = j_row["semester"] if j_row else "Genap 2025"
+
+        # Cek ketersediaan di tabel jadwal aktif
+        cursor.execute("SELECT COUNT(*) AS c FROM jadwal WHERE UPPER(kelas) = %s AND (semester = %s OR %s IS NULL)", (clean_kelas, target_sem, target_sem))
+        cnt = cursor.fetchone()["c"]
+        table_source = "jadwal" if cnt > 0 else "jadwal_permanent"
+
+        query = f'''
+            SELECT 
+                j.id_jadwal, j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                r.nama_ruangan, r.kampus, d.nama_dosen
+            FROM {table_source} j
+            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE UPPER(j.kelas) = %s AND (j.semester = %s OR %s IS NULL)
+            ORDER BY 
+                CASE j.hari
+                    WHEN 'Senin' THEN 1
+                    WHEN 'Selasa' THEN 2
+                    WHEN 'Rabu' THEN 3
+                    WHEN 'Kamis' THEN 4
+                    WHEN 'Jumat' THEN 5
+                    WHEN 'Sabtu' THEN 6
+                    WHEN 'Minggu' THEN 7
+                    ELSE 8
+                END ASC,
+                j.jam ASC
+        '''
+        cursor.execute(query, (clean_kelas, target_sem, target_sem))
+        raw_rows = cursor.fetchall()
+
+        if not raw_rows:
+            cursor.execute(f'''
+                SELECT 
+                    j.id_jadwal, j.hari, j.jam, j.nama_mk, j.kelas, j.status_jadwal, j.metode_pembelajaran,
+                    r.nama_ruangan, r.kampus, d.nama_dosen
+                FROM {table_source} j
+                LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+                LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+                WHERE UPPER(j.kelas) LIKE %s AND (j.semester = %s OR %s IS NULL)
+                ORDER BY 
+                    CASE j.hari
+                        WHEN 'Senin' THEN 1
+                        WHEN 'Selasa' THEN 2
+                        WHEN 'Rabu' THEN 3
+                        WHEN 'Kamis' THEN 4
+                        WHEN 'Jumat' THEN 5
+                        WHEN 'Sabtu' THEN 6
+                        ELSE 7
+                    END ASC,
+                    j.jam ASC
+            ''', (f"%{clean_kelas}%", target_sem, target_sem))
+            raw_rows = cursor.fetchall()
+
+        import re
+        m_prodi = re.search(r'([A-Za-z]+)', clean_kelas)
+        prodi_code = m_prodi.group(1).upper() if m_prodi else "LAIN"
+        prodi_map_names = {
+            "PT": "Teknik Informatika (Pagi)",
+            "MT": "Teknik Informatika (Malam)",
+            "PS": "Sistem Informasi (Pagi)",
+            "MS": "Sistem Informasi (Malam)",
+            "PK": "Sistem Komputer (Pagi)",
+            "MK": "Sistem Komputer (Malam)",
+            "SK": "Sistem Komputer",
+            "PB": "Bisnis Digital (Pagi)",
+            "MB": "Bisnis Digital (Malam)",
+            "PM": "Manajemen (Pagi)",
+            "MM": "Manajemen (Malam)",
+            "PW": "Kewirausahaan (Pagi)",
+            "MW": "Kewirausahaan (Malam)",
+            "MI": "Manajemen Informatika (D3)",
+            "KA": "Komputerisasi Akuntansi (D3)"
+        }
+        nama_prodi = prodi_map_names.get(prodi_code, f"Program Studi {prodi_code}")
+
+        m_num = re.search(r'^(\d+)', clean_kelas)
+        sem_num = int(m_num.group(1)) if m_num else None
+        tingkat_str = f"Semester {sem_num}" if sem_num else "Reguler"
+
+        mk_set = set()
+        dosen_set = set()
+        kampus_counts = {"Kobar": 0, "Thehok": 0}
+        total_jam = 0.0
+        tm_count = 0
+        ol_count = 0
+        cc_count = 0
+
+        jadwal_list = []
+        for r in raw_rows:
+            dur_min = scraper.get_class_duration(r.get("nama_mk") or "", r.get("kelas")) if hasattr(scraper, "get_class_duration") else 135
+            dur_hour = round(dur_min / 60.0, 2)
+            total_jam += dur_hour
+
+            mk_name = (r.get("nama_mk") or "-").strip()
+            if mk_name != "-": mk_set.add(mk_name)
+
+            dosen_name = (r.get("nama_dosen") or "-").strip()
+            if dosen_name and dosen_name != "-": dosen_set.add(dosen_name)
+
+            metode = (r.get("metode_pembelajaran") or "TM").upper()
+            status_low = (r.get("status_jadwal") or "").lower()
+            if re.search(r'\b(?:cc|cancel|batal)\b', status_low):
+                metode = "CC"
+                cc_count += 1
+            elif re.search(r'\b(?:ol|online|daring)\b', status_low):
+                metode = "OL"
+                ol_count += 1
+            else:
+                metode = "TM"
+                tm_count += 1
+
+            jam_mulai = "-"
+            jam_selesai = "-"
+            if r.get("jam"):
+                tot_sec = int(r["jam"].total_seconds())
+                sh = tot_sec // 3600
+                sm = (tot_sec % 3600) // 60
+                jam_mulai = f"{sh:02d}:{sm:02d}"
+                eh = (tot_sec // 60 + dur_min) // 60
+                em = (tot_sec // 60 + dur_min) % 60
+                jam_selesai = f"{eh:02d}:{em:02d}"
+
+            ruang = (r.get("nama_ruangan") or "-").strip()
+            kampus = (r.get("kampus") or "Kobar").strip()
+            if "kobar" in kampus.lower(): kampus_counts["Kobar"] += 1
+            else: kampus_counts["Thehok"] += 1
+
+            is_lab = scraper.is_lab(ruang)
+
+            jadwal_list.append({
+                "id_jadwal": r.get("id_jadwal"),
+                "hari": r.get("hari") or "Lainnya",
+                "jam_mulai": jam_mulai,
+                "jam_selesai": jam_selesai,
+                "waktu": f"{jam_mulai} - {jam_selesai}" if jam_mulai != "-" else "-",
+                "durasi_menit": dur_min,
+                "durasi_jam": dur_hour,
+                "nama_mk": mk_name,
+                "nama_dosen": dosen_name if dosen_name else "Dosen Belum Ditentukan",
+                "nama_ruangan": ruang,
+                "kampus": kampus,
+                "is_lab": is_lab,
+                "metode": metode,
+                "status_jadwal": r.get("status_jadwal") or ("Tatap Muka" if metode == "TM" else ("Kuliah Online" if metode == "OL" else "Dibatalkan"))
+            })
+
+        kampus_dominan = "Thehok" if kampus_counts["Thehok"] > kampus_counts["Kobar"] else "Kobar"
+        total_sesi = len(jadwal_list)
+
+        # Agregasi Jadwal Mingguan Terstruktur (Unik per Hari & Jam)
+        weekly_dict = {}
+        for item in jadwal_list:
+            w_key = f"{item['hari']}_{item['jam_mulai']}_{item['nama_mk']}_{item['nama_ruangan']}"
+            if w_key not in weekly_dict:
+                weekly_dict[w_key] = {
+                    "hari": item["hari"],
+                    "jam_mulai": item["jam_mulai"],
+                    "jam_selesai": item["jam_selesai"],
+                    "waktu": item["waktu"],
+                    "durasi_menit": item["durasi_menit"],
+                    "durasi_jam": item["durasi_jam"],
+                    "nama_mk": item["nama_mk"],
+                    "nama_dosen": item["nama_dosen"],
+                    "nama_ruangan": item["nama_ruangan"],
+                    "kampus": item["kampus"],
+                    "is_lab": item["is_lab"],
+                    "total_pertemuan": 1,
+                    "tm": 1 if item["metode"] == "TM" else 0,
+                    "ol": 1 if item["metode"] == "OL" else 0,
+                    "cc": 1 if item["metode"] == "CC" else 0,
+                    "status_jadwal": item["status_jadwal"]
+                }
+            else:
+                ws = weekly_dict[w_key]
+                ws["total_pertemuan"] += 1
+                if item["metode"] == "TM": ws["tm"] += 1
+                elif item["metode"] == "OL": ws["ol"] += 1
+                elif item["metode"] == "CC": ws["cc"] += 1
+
+        hari_order = {"Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6, "Minggu": 7}
+        jadwal_mingguan = sorted(weekly_dict.values(), key=lambda x: (hari_order.get(x["hari"], 8), x["jam_mulai"]))
+
+        return {
+            "status": "success",
+            "kelas": clean_kelas,
+            "semester": target_sem,
+            "source_table": table_source,
+            "info": {
+                "kode_kelas": clean_kelas,
+                "nama_prodi": nama_prodi,
+                "tingkat": tingkat_str,
+                "kampus_dominan": kampus_dominan,
+                "total_mk": len(mk_set),
+                "total_dosen": len(dosen_set),
+                "total_jam": round(total_jam, 2),
+                "total_sesi": total_sesi,
+                "total_slot_mingguan": len(jadwal_mingguan),
+                "tm": tm_count,
+                "ol": ol_count,
+                "cc": cc_count,
+                "persen_tm": round((tm_count / total_sesi) * 100, 1) if total_sesi > 0 else 0,
+                "persen_ol": round((ol_count / total_sesi) * 100, 1) if total_sesi > 0 else 0,
+                "persen_cc": round((cc_count / total_sesi) * 100, 1) if total_sesi > 0 else 0
+            },
+            "jadwal_mingguan": jadwal_mingguan,
+            "jadwal_semua": jadwal_list
+        }
+    except Exception as e:
+        print(f"[API Detail Kelas Error] {e}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# ─────────────────────────────────────────────────────────────
+# API ABSENSI ASISTEN LABORATORIUM (INTEGRASI FORM GOOGLE)
+# ─────────────────────────────────────────────────────────────
+class AbsensiInput(BaseModel):
+    id_absensi: Optional[int] = None
+    id_aslab: Optional[int] = None
+    nama_aslab: str
+    kampus: Optional[str] = None
+    nomor_lab: str
+    tanggal: str
+    jam_masuk: str
+    nama_dosen: Optional[str] = ""
+    nama_mk: Optional[str] = ""
+    kode_kelas: Optional[str] = ""
+    status_perkuliahan: Optional[str] = "Tatap Muka"
+    keterangan: Optional[str] = None
+
+class MasterLabInput(BaseModel):
+    nama_lab: str
+    kampus: Optional[str] = "Thehok"
+    aslab_tugas: Optional[str] = None
+
+class MasterAslabInput(BaseModel):
+    nama_aslab: str
+    kampus_tugas: Optional[str] = "Thehok"
+    lab_tugas: Optional[str] = None
+
+OFFICIAL_ASLAB_MASTER = [
+    # Kampus Kobar (5 Lab + 1 Remote)
+    {"nama": "Dwi Cahya Medika", "kampus": "Kobar", "lab": "1.5"},
+    {"nama": "Iqbal Prasetyo", "kampus": "Kobar", "lab": "1.6"},
+    {"nama": "M. Ghalih. M", "kampus": "Kobar", "lab": "1.7"},
+    {"nama": "Haykal Wais Alqorni", "kampus": "Kobar", "lab": "1.8"},
+    {"nama": "M.Raffi Pra Diestyawan", "kampus": "Kobar", "lab": "1.9"},
+    {"nama": "Muhammad Reza Fahlevi", "kampus": "Kobar", "lab": "Remote"},
+    # Kampus Thehok (9 Lab + 2 Remote)
+    {"nama": "Isodorus Bakti Pangestu", "kampus": "Thehok", "lab": "1.3"},
+    {"nama": "Ahmad Idris", "kampus": "Thehok", "lab": "1.4"},
+    {"nama": "Delvio Pasha", "kampus": "Thehok", "lab": "1.5"},
+    {"nama": "Bayu Zaidan Azizi", "kampus": "Thehok", "lab": "2.7"},
+    {"nama": "Rezky Cahya Gandana", "kampus": "Thehok", "lab": "3.1"},
+    {"nama": "Andi Noor", "kampus": "Thehok", "lab": "3.2"},
+    {"nama": "Zuan Vivaldi", "kampus": "Thehok", "lab": "3.4"},
+    {"nama": "Trio Prananda", "kampus": "Thehok", "lab": "4.1"},
+    {"nama": "Rafli Maulana", "kampus": "Thehok", "lab": "4.3"},
+    {"nama": "Farrel Algazel", "kampus": "Thehok", "lab": "Remote"},
+    {"nama": "Yeremias Laga", "kampus": "Thehok", "lab": "Remote"},
+]
+
+@app.get("/api/absensi/master")
+def get_absensi_master():
+    """Mengambil master data aslab dan opsi lab absensi dinamis dari database beserta info penugasan lab"""
+    fallback_labs = [
+        "1.5 Kobar", "1.6 Kobar", "1.7 Kobar", "1.8 Kobar", "1.9 Kobar",
+        "1.3 Thehok", "1.4 Thehok", "1.5 Thehok", "2.7 Thehok", 
+        "3.1 Thehok", "3.2 Thehok", "3.4 Thehok", "4.1 Thehok", "4.3 Thehok", 
+        "Lab S2"
+    ]
+    jam_options = [
+        "08.00 WIB", "08.45 WIB", "09.30 WIB", "10.15 WIB", 
+        "11.00 WIB", "11.45 WIB", "12.30 WIB", "13.15 WIB", 
+        "14.00 WIB", "14.45 WIB", "15.30 WIB", "16.15 WIB", 
+        "17.00 WIB", "17.45 WIB", "18.30 WIB", "19.15 WIB", 
+        "20.00 WIB", "20.45 WIB"
+    ]
+    status_options = ["Tatap Muka", "Online", "Cancel"]
+
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        aslab_list = []
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS absensi_master_aslab (
+                    id_aslab INT AUTO_INCREMENT PRIMARY KEY,
+                    nama_aslab VARCHAR(100) NOT NULL UNIQUE,
+                    kampus_tugas VARCHAR(50) NOT NULL DEFAULT 'Thehok',
+                    lab_tugas VARCHAR(100) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
+            try:
+                cursor.execute("ALTER TABLE absensi_master_aslab ADD COLUMN lab_tugas VARCHAR(100) DEFAULT NULL")
+            except Exception:
+                pass
+
+            cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
+            aslab_list = cursor.fetchall()
+            
+            # Jika tabel kosong atau kurang dari master resmi, auto-seed
+            if not aslab_list:
+                for o in OFFICIAL_ASLAB_MASTER:
+                    assigned_lab = f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
+                    cursor.execute("""
+                        INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE kampus_tugas = VALUES(kampus_tugas), lab_tugas = VALUES(lab_tugas)
+                    """, (o["nama"], o["kampus"], assigned_lab))
+                conn.commit()
+                cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
+                aslab_list = cursor.fetchall()
+            else:
+                # Cek jika ada lab_tugas yang masih null, coba lengkapi dari data resmi
+                has_null_lab = any(not row.get("lab_tugas") for row in aslab_list)
+                if has_null_lab:
+                    for o in OFFICIAL_ASLAB_MASTER:
+                        assigned_lab = f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
+                        cursor.execute("""
+                            UPDATE absensi_master_aslab 
+                            SET lab_tugas = %s 
+                            WHERE nama_aslab = %s AND (lab_tugas IS NULL OR lab_tugas = '')
+                        """, (assigned_lab, o["nama"]))
+                    conn.commit()
+                    cursor.execute("SELECT id_aslab, nama_aslab, kampus_tugas, lab_tugas FROM absensi_master_aslab ORDER BY kampus_tugas, nama_aslab")
+                    aslab_list = cursor.fetchall()
+        except Exception:
+            pass
+        
+        labs_data = []
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS absensi_master_lab (
+                    id_lab_opsi INT AUTO_INCREMENT PRIMARY KEY,
+                    nama_lab VARCHAR(50) NOT NULL UNIQUE,
+                    kampus VARCHAR(50) NOT NULL DEFAULT 'Thehok',
+                    urutan INT DEFAULT 0,
+                    aslab_tugas VARCHAR(100) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
+            try:
+                cursor.execute("ALTER TABLE absensi_master_lab ADD COLUMN aslab_tugas VARCHAR(100) DEFAULT NULL")
+            except Exception:
+                pass
+
+            cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan, aslab_tugas FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
+            labs_data = cursor.fetchall()
+
+            if not labs_data:
+                for idx, name in enumerate(fallback_labs):
+                    kmp = "Kobar" if "kobar" in name.lower() else "Thehok"
+                    # Cari aslab resmi untuk lab ini
+                    aslab_match = None
+                    for o in OFFICIAL_ASLAB_MASTER:
+                        if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower():
+                            aslab_match = o["nama"]
+                            break
+                    cursor.execute("""
+                        INSERT INTO absensi_master_lab (nama_lab, kampus, urutan, aslab_tugas)
+                        VALUES (%s, %s, %s, %s)
+                    """, (name, kmp, idx + 1, aslab_match))
+                conn.commit()
+                cursor.execute("SELECT id_lab_opsi, nama_lab, kampus, urutan, aslab_tugas FROM absensi_master_lab ORDER BY kampus, urutan, nama_lab")
+                labs_data = cursor.fetchall()
+            else:
+                # Lengkapi aslab_tugas jika masih kosong dari aslab_list
+                for lab_row in labs_data:
+                    if not lab_row.get("aslab_tugas"):
+                        for aslab_item in aslab_list:
+                            if aslab_item.get("lab_tugas") and aslab_item.get("lab_tugas").strip().lower() == (lab_row.get("nama_lab") or "").strip().lower():
+                                cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE id_lab_opsi = %s", (aslab_item.get("nama_aslab"), lab_row["id_lab_opsi"]))
+                                lab_row["aslab_tugas"] = aslab_item.get("nama_aslab")
+                                break
+                conn.commit()
+        except Exception:
+            pass
+
+        if not labs_data:
+            labs_data = [
+                {
+                    "id_lab_opsi": idx + 1, 
+                    "nama_lab": name, 
+                    "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", 
+                    "urutan": idx + 1,
+                    "aslab_tugas": next((o["nama"] for o in OFFICIAL_ASLAB_MASTER if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower()), None)
+                }
+                for idx, name in enumerate(fallback_labs)
+            ]
+        
+        labs = [row["nama_lab"] for row in labs_data]
+
+        return {
+            "status": "success",
+            "aslab": aslab_list,
+            "labs": labs,
+            "labs_detail": labs_data,
+            "jam_options": jam_options,
+            "status_options": status_options
+        }
+    except Exception as e:
+        fallback_aslab = [
+            {
+                "id_aslab": idx + 1, 
+                "nama_aslab": o["nama"], 
+                "kampus_tugas": o["kampus"],
+                "lab_tugas": f"{o['lab']} {o['kampus']}" if o['lab'] != "Remote" else f"Remote ({o['kampus']})"
+            }
+            for idx, o in enumerate(OFFICIAL_ASLAB_MASTER)
+        ]
+        return {
+            "status": "success",
+            "aslab": fallback_aslab,
+            "labs": fallback_labs,
+            "labs_detail": [
+                {
+                    "id_lab_opsi": idx + 1, 
+                    "nama_lab": name, 
+                    "kampus": "Kobar" if "kobar" in name.lower() else "Thehok", 
+                    "urutan": idx + 1,
+                    "aslab_tugas": next((o["nama"] for o in OFFICIAL_ASLAB_MASTER if o["lab"] != "Remote" and f"{o['lab']} {o['kampus']}".lower() == name.lower()), None)
+                }
+                for idx, name in enumerate(fallback_labs)
+            ],
+            "jam_options": jam_options,
+            "status_options": status_options
+        }
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/absensi/master/lab")
+def add_master_lab(data: MasterLabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_lab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama lab tidak boleh kosong."}
+    kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
+    aslab_tugas = (data.aslab_tugas or "").strip() or None
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO absensi_master_lab (nama_lab, kampus, aslab_tugas) VALUES (%s, %s, %s)", (nama, kampus, aslab_tugas))
+        if aslab_tugas:
+            # Hubungkan juga di master aslab
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE nama_aslab = %s", (nama, aslab_tugas))
+        conn.commit()
+        return {"status": "success", "message": f"Lab '{nama}' berhasil ditambahkan."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.put("/api/absensi/master/lab/{id_lab_opsi}")
+def edit_master_lab(id_lab_opsi: int, data: MasterLabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_lab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama lab tidak boleh kosong."}
+    kampus = "Kobar" if "kobar" in nama.lower() or "kobar" in (data.kampus or "").lower() else "Thehok"
+    aslab_tugas = (data.aslab_tugas or "").strip() or None
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        # Ambil data lab sebelumnya
+        cursor.execute("SELECT nama_lab, aslab_tugas FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
+        old_lab = cursor.fetchone()
+        old_lab_name = old_lab["nama_lab"] if old_lab else nama
+        old_aslab = old_lab.get("aslab_tugas") if old_lab else None
+
+        cursor.execute("UPDATE absensi_master_lab SET nama_lab = %s, kampus = %s, aslab_tugas = %s WHERE id_lab_opsi = %s", (nama, kampus, aslab_tugas, id_lab_opsi))
+        
+        # Sinkronisasi ke master aslab:
+        # 1. Jika nama lab berubah, update aslab yang sebelumnya bertugas di lab ini
+        if old_lab_name != nama:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE lab_tugas = %s", (nama, old_lab_name))
+        # 2. Jika aslab tugas berubah:
+        if old_aslab and old_aslab != aslab_tugas:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = NULL WHERE nama_aslab = %s AND lab_tugas = %s", (old_aslab, nama))
+        if aslab_tugas:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = %s WHERE nama_aslab = %s", (nama, aslab_tugas))
+            
+        conn.commit()
+        return {"status": "success", "message": "Data lab dan penugasan aslab berhasil diperbarui."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/absensi/master/lab/{id_lab_opsi}")
+def delete_master_lab(id_lab_opsi: int, admin: str = Depends(verify_admin_token)):
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_lab FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
+        row = cursor.fetchone()
+        lab_name = row["nama_lab"] if row else ""
+        if lab_name:
+            cursor.execute("UPDATE absensi_master_aslab SET lab_tugas = NULL WHERE lab_tugas = %s", (lab_name,))
+        cursor.execute("DELETE FROM absensi_master_lab WHERE id_lab_opsi = %s", (id_lab_opsi,))
+        conn.commit()
+        return {"status": "success", "message": "Opsi lab berhasil dihapus."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/absensi/master/aslab")
+def add_master_aslab(data: MasterAslabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_aslab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
+    kampus = data.kampus_tugas or "Thehok"
+    lab_tugas = (data.lab_tugas or "").strip() or None
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas) VALUES (%s, %s, %s)", (nama, kampus, lab_tugas))
+        if lab_tugas and not lab_tugas.lower().startswith("remote"):
+            # Update aslab tugas di lab terkait
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE nama_lab = %s", (nama, lab_tugas))
+        conn.commit()
+        return {"status": "success", "message": f"Asisten lab '{nama}' berhasil ditambahkan ke master absensi."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.put("/api/absensi/master/aslab/{id_aslab}")
+def edit_master_aslab(id_aslab: int, data: MasterAslabInput, admin: str = Depends(verify_admin_token)):
+    nama = (data.nama_aslab or "").strip()
+    if not nama:
+        return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
+    kampus = data.kampus_tugas or "Thehok"
+    lab_tugas = (data.lab_tugas or "").strip() or None
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_aslab, lab_tugas FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
+        old_aslab = cursor.fetchone()
+        old_nama = old_aslab["nama_aslab"] if old_aslab else nama
+        old_lab = old_aslab.get("lab_tugas") if old_aslab else None
+
+        cursor.execute("UPDATE absensi_master_aslab SET nama_aslab = %s, kampus_tugas = %s, lab_tugas = %s WHERE id_aslab = %s", (nama, kampus, lab_tugas, id_aslab))
+
+        # Sinkronisasi ke master lab:
+        # 1. Jika nama aslab berubah, update lab yang sebelumnya menunjuk nama lama
+        if old_nama != nama:
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE aslab_tugas = %s", (nama, old_nama))
+        # 2. Jika lab_tugas berubah:
+        if old_lab and old_lab != lab_tugas:
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL WHERE nama_lab = %s AND aslab_tugas = %s", (old_lab, nama))
+        if lab_tugas and not lab_tugas.lower().startswith("remote"):
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = %s WHERE nama_lab = %s", (nama, lab_tugas))
+
+        conn.commit()
+        return {"status": "success", "message": "Data asisten lab dan penugasan lab berhasil diperbarui."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/absensi/master/aslab/{id_aslab}")
+def delete_master_aslab(id_aslab: int, admin: str = Depends(verify_admin_token)):
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nama_aslab FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
+        row = cursor.fetchone()
+        if not row:
+            return {"status": "error", "message": "Data tidak ditemukan."}
+        nama = row.get("nama_aslab", "")
+        if nama:
+            cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL WHERE aslab_tugas = %s", (nama,))
+        cursor.execute("DELETE FROM absensi_master_aslab WHERE id_aslab = %s", (id_aslab,))
+        conn.commit()
+        return {"status": "success", "message": f"Asisten lab '{nama}' berhasil dihapus dari master absensi."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.post("/api/absensi/master/aslab/reset")
+def reset_official_aslab(admin: str = Depends(verify_admin_token)):
+    """Memulihkan 17 asisten lab resmi (Tahun Ajaran Ganjil 2026/2027) ke tabel master absensi (absensi_master_aslab) beserta penugasan lab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM absensi_master_aslab")
+        cursor.execute("UPDATE absensi_master_lab SET aslab_tugas = NULL")
+        for item in OFFICIAL_ASLAB_MASTER:
+            assigned_lab = f"{item['lab']} {item['kampus']}" if item["lab"] != "Remote" else f"Remote ({item['kampus']})"
+            cursor.execute("""
+                INSERT INTO absensi_master_aslab (nama_aslab, kampus_tugas, lab_tugas)
+                VALUES (%s, %s, %s)
+            """, (item["nama"], item["kampus"], assigned_lab))
+            if item["lab"] != "Remote":
+                cursor.execute("""
+                    UPDATE absensi_master_lab 
+                    SET aslab_tugas = %s 
+                    WHERE LOWER(TRIM(nama_lab)) = LOWER(TRIM(%s))
+                """, (item["nama"], assigned_lab))
+        conn.commit()
+        return {
+            "status": "success", 
+            "message": "Berhasil sinkronisasi dan reset 17 Asisten Lab Resmi beserta penugasan lab ke tabel master absensi."
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+def forward_absensi_to_google_form(data: AbsensiInput):
+    """
+    Mengirim data absensi secara otomatis ke Google Form Aslab
+    Link: https://forms.gle/yqZRi5D8KTyt1gmN8
+    Action: https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/formResponse
+    """
+    try:
+        url = "https://docs.google.com/forms/d/e/1FAIpQLSdSoyuDSrcccQN4brn_dAt3O_aoWeGVf5Qe9Z6miy6JhqBf6A/formResponse"
+        
+        # Parse tanggal (YYYY-MM-DD)
+        year, month, day = "", "", ""
+        if data.tanggal:
+            parts = data.tanggal.strip().split("-")
+            if len(parts) == 3:
+                year, month, day = parts[0], parts[1], parts[2]
+
+        payload = {
+            "entry.146029558": data.nama_dosen.strip() if data.nama_dosen else "",
+            "entry.404112387": data.nama_mk.strip() if data.nama_mk else "",
+            "entry.380055525": data.kode_kelas.strip() if data.kode_kelas else "",
+            "entry.1558064062": data.status_perkuliahan.strip() if data.status_perkuliahan else "Tatap Muka",
+            "entry.1210016936_year": year,
+            "entry.1210016936_month": month,
+            "entry.1210016936_day": day,
+            "entry.1210016936": data.tanggal.strip() if data.tanggal else "",
+            "entry.1292956818": data.jam_masuk.strip() if data.jam_masuk else "",
+            "entry.1658465425": data.nama_aslab.strip() if data.nama_aslab else "",
+            "entry.1487398951": data.nomor_lab.strip() if data.nomor_lab else "",
+        }
+
+        resp = requests.post(
+            url,
+            data=payload,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10
+        )
+        if resp.status_code in (200, 302):
+            print(f"[Absensi GForm] Berhasil terkirim ke Google Form untuk {data.nama_mk} ({data.nomor_lab})")
+            return True
+        else:
+            print(f"[Absensi GForm] Status respon Google Form: {resp.status_code}")
+            return False
+    except Exception as err:
+        print(f"[Absensi GForm] Gagal meneruskan ke Google Form: {err}")
+        return False
+
+@app.post("/api/absensi")
+def submit_absensi(data: AbsensiInput):
+    """Menyimpan atau memperbarui absensi asisten lab saat dosen masuk kelas di lab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Validasi aslab jika id_aslab belum diberikan
+        id_aslab = data.id_aslab
+        kampus = data.kampus
+        if not id_aslab and data.nama_aslab:
+            cursor.execute("SELECT id_aslab, kampus_tugas FROM absensi_master_aslab WHERE nama_aslab = %s LIMIT 1", (data.nama_aslab.strip(),))
+            row = cursor.fetchone()
+            if row:
+                id_aslab = row["id_aslab"]
+                if not kampus:
+                    kampus = row["kampus_tugas"]
+
+        if not kampus:
+            kampus = "Thehok" if "Thehok" in data.nomor_lab or "S2" in data.nomor_lab else "Kobar"
+
+        if data.id_absensi:
+            cursor.execute("""
+                UPDATE absensi_aslab SET
+                    id_aslab = %s, nama_aslab = %s, kampus = %s, nomor_lab = %s,
+                    tanggal = %s, jam_masuk = %s, nama_dosen = %s, nama_mk = %s,
+                    kode_kelas = %s, status_perkuliahan = %s, keterangan = %s
+                WHERE id_absensi = %s
+            """, (
+                id_aslab,
+                data.nama_aslab.strip(),
+                kampus.strip(),
+                data.nomor_lab.strip(),
+                data.tanggal.strip(),
+                data.jam_masuk.strip(),
+                data.nama_dosen.strip(),
+                data.nama_mk.strip(),
+                data.kode_kelas.strip(),
+                data.status_perkuliahan.strip(),
+                data.keterangan.strip() if data.keterangan else None,
+                data.id_absensi
+            ))
+            conn.commit()
+
+            # Otomatis teruskan ke Google Form di background
+            threading.Thread(target=forward_absensi_to_google_form, args=(data,), daemon=True).start()
+
+            return {"status": "success", "message": "Absensi berhasil diperbarui dan dikirim ulang ke Google Form!", "id_absensi": data.id_absensi}
+
+        cursor.execute("""
+            INSERT INTO absensi_aslab (
+                id_aslab, nama_aslab, kampus, nomor_lab, tanggal, jam_masuk,
+                nama_dosen, nama_mk, kode_kelas, status_perkuliahan, keterangan
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            id_aslab,
+            data.nama_aslab.strip(),
+            kampus.strip(),
+            data.nomor_lab.strip(),
+            data.tanggal.strip(),
+            data.jam_masuk.strip(),
+            data.nama_dosen.strip(),
+            data.nama_mk.strip(),
+            data.kode_kelas.strip(),
+            data.status_perkuliahan.strip(),
+            data.keterangan.strip() if data.keterangan else None
+        ))
+        conn.commit()
+        absensi_id = cursor.lastrowid
+
+        # Otomatis teruskan ke Google Form di background
+        threading.Thread(target=forward_absensi_to_google_form, args=(data,), daemon=True).start()
+
+        return {"status": "success", "message": "Absensi berhasil dicatat dan otomatis terkirim ke Google Form!", "id_absensi": absensi_id}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class AbsensiEditInput(BaseModel):
+    nama_aslab: str
+    status_perkuliahan: Optional[str] = None
+    keterangan: Optional[str] = None
+
+@app.put("/api/absensi/{id_absensi}")
+def edit_absensi(id_absensi: int, data: AbsensiEditInput, admin: str = Depends(verify_admin_token)):
+    """Koreksi nama aslab / status / catatan pada absensi yang sudah tercatat (khusus Admin)"""
+    try:
+        nama = (data.nama_aslab or "").strip()
+        if not nama:
+            return {"status": "error", "message": "Nama aslab tidak boleh kosong."}
+
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT * FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
+        current = cursor.fetchone()
+        if not current:
+            return {"status": "error", "message": "Data absensi tidak ditemukan."}
+
+        id_aslab = None
+        kampus = current.get("kampus")
+        cursor.execute("SELECT id_aslab, kampus_tugas FROM absensi_master_aslab WHERE nama_aslab = %s LIMIT 1", (nama,))
+        row = cursor.fetchone()
+        if row:
+            id_aslab = row["id_aslab"]
+            if row.get("kampus_tugas"):
+                kampus = row["kampus_tugas"]
+
+        status = (data.status_perkuliahan or current.get("status_perkuliahan") or "Tatap Muka").strip()
+        keterangan = data.keterangan.strip() if data.keterangan is not None and data.keterangan.strip() else current.get("keterangan")
+
+        cursor.execute(
+            "UPDATE absensi_aslab SET id_aslab = %s, nama_aslab = %s, kampus = %s, status_perkuliahan = %s, keterangan = %s WHERE id_absensi = %s",
+            (id_aslab, nama, kampus, status, keterangan, id_absensi)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Data absensi berhasil dikoreksi."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.get("/api/absensi")
+def get_absensi_list(tanggal: str = None, nomor_lab: str = None, kampus: str = None, nama_aslab: str = None, limit: int = 100):
+    """Mengambil rekap/riwayat absensi aslab"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT * FROM absensi_aslab WHERE 1=1"
+        params = []
+        if tanggal:
+            query += " AND tanggal = %s"
+            params.append(tanggal)
+        if nomor_lab:
+            query += " AND nomor_lab = %s"
+            params.append(nomor_lab)
+        if kampus:
+            query += " AND kampus = %s"
+            params.append(kampus)
+        if nama_aslab:
+            query += " AND nama_aslab LIKE %s"
+            params.append(f"%{nama_aslab}%")
+            
+        query += " ORDER BY tanggal DESC, id_absensi DESC LIMIT %s"
+        params.append(limit)
+        
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        return {"status": "success", "data": rows, "total": len(rows)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+@app.get("/api/absensi/lab-sessions")
+def get_lab_sessions(nomor_lab: str, tanggal: str = None):
+    """Mengambil daftar seluruh sesi kelas di lab dan tanggal terpilih beserta status absensinya"""
+    try:
+        if not tanggal:
+            tanggal = datetime.date.today().strftime("%Y-%m-%d")
+
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        clean_lab_match = re.search(r'(?:\d+\.\d+|S2)', nomor_lab, re.IGNORECASE)
+        clean_lab = clean_lab_match.group(0) if clean_lab_match else nomor_lab
+
+        kampus = None
+        if "thehok" in nomor_lab.lower() or "s2" in nomor_lab.lower():
+            kampus = "Thehok"
+        elif "kobar" in nomor_lab.lower():
+            kampus = "Kobar"
+
+        query_jadwal = """
+            SELECT j.id_jadwal, d.nama_dosen, j.nama_mk, j.kelas, j.metode_pembelajaran, j.jam, j.status_jadwal,
+                   r.nama_ruangan, r.kampus
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            WHERE j.tanggal = %s
+              AND (LOWER(r.nama_ruangan) LIKE '%labor%' OR LOWER(r.nama_ruangan) LIKE '%lab%')
+        """
+        params_jadwal = [tanggal]
+        if kampus:
+            query_jadwal += " AND r.kampus LIKE %s"
+            params_jadwal.append(f"%{kampus}%")
+        query_jadwal += " ORDER BY j.jam ASC"
+
+        cursor.execute(query_jadwal, tuple(params_jadwal))
+        raw_schedules = cursor.fetchall()
+
+        # Filter presisi: ruangan lab harus cocok eksak dengan nomor lab (tanpa false-positive misal 3.1 cocok ke 3.10)
+        clean_lab_escaped = re.escape(clean_lab)
+        if clean_lab.upper() == 'S2':
+            lab_pattern = re.compile(rf'(?<![a-zA-Z0-9]){clean_lab_escaped}(?![a-zA-Z0-9])', re.IGNORECASE)
+        else:
+            lab_pattern = re.compile(rf'(?<!\d){clean_lab_escaped}(?!\d)', re.IGNORECASE)
+
+        schedules = [row for row in raw_schedules if lab_pattern.search(row.get("nama_ruangan") or "")]
+
+        # Ambil seluruh absensi di lab dan tanggal tersebut
+        cursor.execute("""
+            SELECT id_absensi, id_aslab, nama_aslab, kampus, nomor_lab, tanggal, jam_masuk,
+                   nama_dosen, nama_mk, kode_kelas, status_perkuliahan, keterangan, created_at
+            FROM absensi_aslab
+            WHERE tanggal = %s AND nomor_lab = %s
+            ORDER BY id_absensi DESC
+        """, (tanggal, nomor_lab))
+        absensi_list = cursor.fetchall()
+
+        matched_absensi_ids = set()
+        session_results = []
+
+        for row in schedules:
+            row_kelas = (row.get("kelas") or "").strip().lower()
+            raw_jam = row.get("jam")
+            formatted_jam = ""
+            if isinstance(raw_jam, datetime.timedelta):
+                total_sec = int(raw_jam.total_seconds())
+                h = total_sec // 3600
+                m = (total_sec % 3600) // 60
+                formatted_jam = f"{h:02d}.{m:02d} WIB"
+            elif isinstance(raw_jam, (int, float)) and raw_jam >= 3600:
+                h = int(raw_jam) // 3600
+                m = (int(raw_jam) % 3600) // 60
+                formatted_jam = f"{h:02d}.{m:02d} WIB"
+            elif raw_jam is not None:
+                str_j = str(raw_jam).strip()
+                if str_j.isdigit() and int(str_j) >= 3600:
+                    val_int = int(str_j)
+                    h = val_int // 3600
+                    m = (val_int % 3600) // 60
+                    formatted_jam = f"{h:02d}.{m:02d} WIB"
+                else:
+                    formatted_jam = str_j
+
+            row_jam = formatted_jam or ""
+            clean_row_jam = row_jam.replace("WIB", "").replace(".", ":").strip()
+            start_jam = clean_row_jam.split("-")[0].strip() if "-" in clean_row_jam else clean_row_jam
+
+            matched_absen = None
+            for ab in absensi_list:
+                ab_kelas = (ab.get("kode_kelas") or "").strip().lower()
+                ab_jam = (ab.get("jam_masuk") or "").replace("WIB", "").replace(".", ":").strip()
+                if row_kelas and ab_kelas and row_kelas == ab_kelas:
+                    matched_absen = ab
+                    break
+                elif start_jam and ab_jam and (start_jam.startswith(ab_jam[:2]) or ab_jam.startswith(start_jam[:2])):
+                    matched_absen = ab
+                    break
+
+            if matched_absen:
+                matched_absensi_ids.add(matched_absen["id_absensi"])
+                session_results.append({
+                    "id_jadwal": row.get("id_jadwal"),
+                    "jam": formatted_jam,
+                    "nama_mk": row.get("nama_mk"),
+                    "kelas": row.get("kelas"),
+                    "nama_dosen": row.get("nama_dosen"),
+                    "metode_pembelajaran": row.get("metode_pembelajaran"),
+                    "status_jadwal": row.get("status_jadwal"),
+                    "is_diabsen": True,
+                    "nama_aslab": matched_absen["nama_aslab"],
+                    "absensi": matched_absen
+                })
+            else:
+                session_results.append({
+                    "id_jadwal": row.get("id_jadwal"),
+                    "jam": formatted_jam,
+                    "nama_mk": row.get("nama_mk"),
+                    "kelas": row.get("kelas"),
+                    "nama_dosen": row.get("nama_dosen"),
+                    "metode_pembelajaran": row.get("metode_pembelajaran"),
+                    "status_jadwal": row.get("status_jadwal"),
+                    "is_diabsen": False,
+                    "nama_aslab": None,
+                    "absensi": None
+                })
+
+        # Cek jika ada absensi di luar jadwal formal
+        extra_absensi = [ab for ab in absensi_list if ab["id_absensi"] not in matched_absensi_ids]
+
+        return {
+            "status": "success",
+            "tanggal": tanggal,
+            "nomor_lab": nomor_lab,
+            "sessions": session_results,
+            "extra_absensi": extra_absensi,
+            "total_sessions": len(session_results),
+            "total_diabsen": len([s for s in session_results if s["is_diabsen"]]) + len(extra_absensi)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+class StatusLabUpdateInput(BaseModel):
+    tanggal: str
+    id_ruangan: Optional[int] = None
+    nama_ruangan: Optional[str] = None
+    kampus: Optional[str] = None
+    jam: Optional[str] = None
+    status_lab: str = "buka" # "buka" / "tutup"
+    nama_mk: Optional[str] = None
+    kelas: Optional[str] = None
+    diubah_oleh: str = "Aslab (Web)"
+
+@app.post("/api/status-lab")
+def update_status_lab(data: StatusLabUpdateInput):
+    """Memperbarui status operasional lab (buka/tutup) per sesi kelas via dashboard web"""
+    try:
+        id_ruangan = data.id_ruangan
+        if not id_ruangan and data.nama_ruangan:
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
+            
+            # Coba pencarian eksak terlebih dahulu berdasarkan nama ruangan dan kampus
+            query_exact = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
+            params_exact = [data.nama_ruangan.strip()]
+            if detected_camp:
+                query_exact += " AND kampus = %s"
+                params_exact.append(detected_camp)
+            query_exact += " LIMIT 1"
+            cursor.execute(query_exact, tuple(params_exact))
+            row = cursor.fetchone()
+            
+            if not row:
+                query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
+                params = [f"%{clean_kw}%"]
+                if detected_camp:
+                    query += " AND kampus = %s"
+                    params.append(detected_camp)
+                query += " LIMIT 1"
+                cursor.execute(query, tuple(params))
+                row = cursor.fetchone()
+                
+            if row:
+                id_ruangan = row['id_ruangan']
+            elif data.nama_ruangan and data.nama_ruangan.strip():
+                camp_insert = detected_camp or data.kampus or ("Kobar" if "kobar" in data.nama_ruangan.lower() else "Thehok")
+                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (data.nama_ruangan.strip(), camp_insert))
+                conn.commit()
+                id_ruangan = cursor.lastrowid
+            cursor.close()
+            conn.close()
+
+        if not id_ruangan:
+            return {"status": "error", "message": "Ruangan tidak ditemukan"}
+
+        jam_clean = "08:00"
+        if data.jam:
+            jam_clean = data.jam.split('-')[0].strip() if '-' in data.jam else data.jam.strip()
+            if len(jam_clean) > 5 and ':' in jam_clean:
+                jam_clean = jam_clean[:5]
+
+        target_status = data.status_lab.strip().lower()
+
+        sukses = wa_notifier.set_status_operasional_lab(
+            tanggal=data.tanggal.strip(),
+            id_ruangan=id_ruangan,
+            jam=jam_clean,
+            status_lab=target_status,
+            diubah_oleh=data.diubah_oleh.strip() if data.diubah_oleh else "Aslab (Web)",
+            nama_mk=data.nama_mk.strip() if data.nama_mk else None,
+            kelas=data.kelas.strip() if data.kelas else None
+        )
+
+        if target_status == "tutup":
+            try:
+                conn_t = scraper.get_db()
+                cur_t = conn_t.cursor()
+                # 1. Update seluruh riwayat status operasional ruangan hari ini menjadi tutup
+                cur_t.execute(
+                    "UPDATE status_operasional_lab SET status_lab = 'tutup', diubah_oleh = %s, waktu_aksi = NOW() WHERE tanggal = %s AND id_ruangan = %s",
+                    (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan)
+                )
+                # 2. Sinkronkan seluruh sesi jadwal aktif hari ini di ruangan ini agar tercatat eksplisit ditutup
+                cur_t.execute("""
+                    INSERT INTO status_operasional_lab (tanggal, id_ruangan, jam, nama_mk, kelas, status_lab, diubah_oleh, waktu_aksi)
+                    SELECT j.tanggal, j.id_ruangan, j.jam, j.nama_mk, j.kelas, 'tutup', %s, NOW()
+                    FROM jadwal j
+                    WHERE j.tanggal = %s AND j.id_ruangan = %s
+                    ON DUPLICATE KEY UPDATE status_lab = 'tutup', diubah_oleh = VALUES(diubah_oleh), waktu_aksi = NOW()
+                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
+                conn_t.commit()
+                cur_t.close()
+                conn_t.close()
+            except Exception as err_t:
+                print(f"[Error update all sessions to tutup]: {err_t}")
+
+        elif target_status == "buka":
+            try:
+                conn_b = scraper.get_db()
+                cur_b = conn_b.cursor()
+                # Saat dibuka kembali, pastikan status ruangan hari ini diaktifkan/dibuka sepenuhnya
+                cur_b.execute("""
+                    UPDATE status_operasional_lab
+                    SET status_lab = 'buka', diubah_oleh = %s, waktu_aksi = NOW()
+                    WHERE tanggal = %s AND id_ruangan = %s
+                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
+                conn_b.commit()
+                cur_b.close()
+                conn_b.close()
+            except Exception as err_b:
+                print(f"[Error update sessions to buka]: {err_b}")
+
+        if sukses:
+            return {
+                "status": "success",
+                "message": f"Status lab berhasil diperbarui menjadi {data.status_lab}",
+                "status_lab": data.status_lab,
+                "id_ruangan": id_ruangan,
+                "waktu": datetime.datetime.now().strftime("%H:%M")
+            }
+        else:
+            return {"status": "error", "message": "Gagal menyimpan status ke database"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+class TimerAcUpdateInput(BaseModel):
+    tanggal: str
+    id_ruangan: Optional[int] = None
+    nama_ruangan: Optional[str] = None
+    kampus: Optional[str] = None
+    jam: Optional[str] = "08:00"
+    timer_on: Optional[str] = None
+    timer_off: Optional[str] = None
+    timer_aktif: str = "none" # "none", "on", "off", "both"
+    diubah_oleh: str = "Asmot (Web)"
+
+@app.post("/api/timer-ac")
+def update_timer_ac(data: TimerAcUpdateInput):
+    """Menyimpan atau memperbarui konfigurasi timer AC untuk ruangan dan tanggal tertentu"""
+    try:
+        id_ruangan = data.id_ruangan
+        if not id_ruangan and data.nama_ruangan:
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            clean_kw, detected_camp = wa_notifier.normalize_lab_and_kampus(data.nama_ruangan, data.kampus)
+            if not detected_camp and re.search(r'\b2\.(?!7\b)\d+', data.nama_ruangan or ""):
+                detected_camp = "Kobar"
+            query_exact = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s))"
+            params_exact = [data.nama_ruangan.strip()]
+            if detected_camp:
+                query_exact += " AND kampus = %s"
+                params_exact.append(detected_camp)
+            query_exact += " LIMIT 1"
+            cursor.execute(query_exact, tuple(params_exact))
+            row = cursor.fetchone()
+
+            if not row and detected_camp:
+                cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE LOWER(TRIM(nama_ruangan)) = LOWER(TRIM(%s)) LIMIT 1", (data.nama_ruangan.strip(),))
+                row = cursor.fetchone()
+                if row and detected_camp and row.get('kampus') != detected_camp:
+                    cursor.execute("UPDATE ruangan SET kampus = %s WHERE id_ruangan = %s", (detected_camp, row['id_ruangan']))
+                    conn.commit()
+
+            if not row:
+                query = "SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s"
+                params = [f"%{clean_kw}%"]
+                if detected_camp:
+                    query += " AND kampus = %s"
+                    params.append(detected_camp)
+                query += " LIMIT 1"
+                cursor.execute(query, tuple(params))
+                row = cursor.fetchone()
+
+            if not row and detected_camp:
+                cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE nama_ruangan LIKE %s LIMIT 1", (f"%{clean_kw}%",))
+                row = cursor.fetchone()
+                if row and detected_camp and row.get('kampus') != detected_camp:
+                    cursor.execute("UPDATE ruangan SET kampus = %s WHERE id_ruangan = %s", (detected_camp, row['id_ruangan']))
+                    conn.commit()
+
+            if row:
+                id_ruangan = row['id_ruangan']
+            elif data.nama_ruangan and data.nama_ruangan.strip():
+                camp_insert = detected_camp or data.kampus or ("Kobar" if re.search(r'\b2\.(?!7\b)\d+', data.nama_ruangan) else "Thehok")
+                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (data.nama_ruangan.strip(), camp_insert))
+                conn.commit()
+                id_ruangan = cursor.lastrowid
+            cursor.close()
+            conn.close()
+
+        if not id_ruangan:
+            return {"status": "error", "message": "Ruangan tidak ditemukan"}
+
+        res_tuple = wa_notifier.set_timer_ac(
+            tanggal=data.tanggal.strip(),
+            id_ruangan=id_ruangan,
+            jam=data.jam or "08:00",
+            timer_on=data.timer_on,
+            timer_off=data.timer_off,
+            timer_aktif=data.timer_aktif,
+            diubah_oleh=data.diubah_oleh or "Asmot (Web)",
+            nama_ruangan=data.nama_ruangan
+        )
+
+        sukses = res_tuple[0] if isinstance(res_tuple, (tuple, list)) else bool(res_tuple)
+        err_msg = res_tuple[1] if (isinstance(res_tuple, (tuple, list)) and len(res_tuple) > 1) else None
+
+        if sukses:
+            return {
+                "status": "success",
+                "message": "Pengaturan timer AC berhasil disimpan",
+                "timer_on": data.timer_on,
+                "timer_off": data.timer_off,
+                "timer_aktif": data.timer_aktif,
+                "id_ruangan": id_ruangan
+            }
+        else:
+            return {"status": "error", "message": f"Gagal menyimpan timer AC ke database: {err_msg or 'Kesalahan database'}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/status-lab")
+def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
+    """Mengambil riwayat/status lab real-time untuk tanggal tertentu"""
+    try:
+        if not tanggal:
+            tanggal = datetime.date.today().strftime("%Y-%m-%d")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        wa_notifier.ensure_db_schema()
+
+        query = """
+            SELECT sol.*, 
+                   COALESCE(r.nama_ruangan, sol.nama_mk, 'Ruangan') AS nama_ruangan, 
+                   CASE 
+                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(^|[^0-9])2\\.[0-9]+' AND COALESCE(r.nama_ruangan, sol.nama_mk, '') NOT LIKE '%2.7%') OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.5%' THEN 'Kobar'
+                       WHEN COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
+                       ELSE COALESCE(r.kampus, 'Thehok')
+                   END AS kampus
+            FROM status_operasional_lab sol
+            LEFT JOIN ruangan r ON sol.id_ruangan = r.id_ruangan
+            WHERE sol.tanggal = %s
+        """
+        params = [tanggal]
+        if id_ruangan:
+            query += " AND sol.id_ruangan = %s"
+            params.append(id_ruangan)
+
+        query += " ORDER BY sol.waktu_aksi ASC, sol.id ASC"
+
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get('waktu_aksi'):
+                r['waktu_aksi_str'] = r['waktu_aksi'].strftime('%H:%M:%S')
+                r['waktu_aksi'] = r['waktu_aksi'].strftime('%Y-%m-%d %H:%M:%S')
+            if r.get('timer_on'):
+                if hasattr(r['timer_on'], 'total_seconds'):
+                    tot = int(r['timer_on'].total_seconds())
+                    r['timer_on'] = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
+                else:
+                    r['timer_on'] = str(r['timer_on'])[:5]
+                r['timer_on_str'] = r['timer_on']
+            if r.get('timer_off'):
+                if hasattr(r['timer_off'], 'total_seconds'):
+                    tot = int(r['timer_off'].total_seconds())
+                    r['timer_off'] = f"{tot//3600:02d}:{(tot%3600)//60:02d}"
+                else:
+                    r['timer_off'] = str(r['timer_off'])[:5]
+                r['timer_off_str'] = r['timer_off']
+            if r.get('jam'):
+                total_sec = int(r['jam'].total_seconds()) if hasattr(r['jam'], 'total_seconds') else 0
+                r['jam'] = f"{total_sec//3600:02d}:{(total_sec%3600)//60:02d}"
+            if r.get('tanggal'):
+                r['tanggal'] = str(r['tanggal'])[:10]
+
+        return {"status": "success", "tanggal": tanggal, "data": rows}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+@app.delete("/api/absensi/{id_absensi}")
+def delete_absensi(id_absensi: int):
+    """Menghapus data absensi berdasarkan ID"""
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
+        conn.commit()
+        return {"status": "success", "message": f"Absensi #{id_absensi} berhasil dihapus"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+# Mount static frontend directory if exists
+if os.path.exists("frontend"):
+    app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+
+def get_file_path(relative_path: str) -> str:
+    """Helper untuk memeriksa path file baik di root maupun di dalam folder frontend"""
+    frontend_path = os.path.join("frontend", relative_path)
+    if os.path.exists(frontend_path):
+        return frontend_path
+    return relative_path
+
+@app.get("/")
+def serve_index():
+    if build_html:
+        try:
+            build_html()
+        except Exception:
+            pass
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    return FileResponse(os.path.join("frontend", "templates", "index.html"))
+
+@app.get("/style.css")
+@app.get("/css/style.css")
+def serve_css():
+    css_path = get_file_path(os.path.join("css", "style.css"))
+    if not os.path.exists(css_path):
+        css_path = "style.css"
+    return FileResponse(css_path, media_type="text/css")
+
+@app.get("/script.js")
+@app.get("/js/script.js")
+def serve_js():
+    js_path = get_file_path(os.path.join("js", "script.js"))
+    if not os.path.exists(js_path):
+        js_path = "script.js"
+    return FileResponse(js_path, media_type="application/javascript")
+
+@app.get("/notif.mp3")
+@app.get("/audio/notif.mp3")
+def serve_notif():
+    audio_path = get_file_path(os.path.join("audio", "notif.mp3"))
+    if not os.path.exists(audio_path):
+        audio_path = "notif.mp3"
+    return FileResponse(audio_path, media_type="audio/mpeg")
+
+@app.get("/manifest.json")
+def serve_manifest():
+    return FileResponse("manifest.json", media_type="application/manifest+json")
+
+@app.get("/sw.js")
+def serve_sw():
+    return FileResponse("sw.js", media_type="application/javascript")
+
