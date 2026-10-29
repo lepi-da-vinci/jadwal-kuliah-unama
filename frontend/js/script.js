@@ -4449,10 +4449,6 @@ window.applyAsmotSmartSuggestion = function () {
 
   onTimerToggleChange();
   validateTimerInputs();
-
-  if (typeof showToast === 'function') {
-    showToast('Saran Asmot berhasil diterapkan ke pengaturan timer!', 'info');
-  }
 };
 
 // ==============================================================
@@ -5166,10 +5162,6 @@ window.saveTimerAc = async function () {
     else if (timerAktif === 'on') msg = `Timer Hidup AC ${ctx.roomName} aktif: ON ${onVal}`;
     else if (timerAktif === 'off') msg = `Timer Mati AC ${ctx.roomName} aktif: OFF ${offVal}`;
 
-    if (typeof showToast === 'function') {
-      showToast(msg, 'success');
-    }
-
     // Refresh Room Detail & Active Lab Panel & trigger immediate background sync
     if (typeof syncRealtimeLabStatus === 'function') {
       _lastLabStatusHash = '';
@@ -5184,8 +5176,8 @@ window.saveTimerAc = async function () {
       window.showRoomDetail(ctx.roomName, ctx.campus, ctx.activeDate);
     }
   } catch (err) {
-    if (typeof showToast === 'function') {
-      showToast('Gagal menyimpan timer AC: ' + err.message, 'error');
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert('Error', 'Gagal menyimpan timer AC: ' + err.message, 'error');
     } else {
       alert('Gagal menyimpan timer AC: ' + err.message);
     }
@@ -5206,36 +5198,6 @@ window.resetTimerAc = async function () {
   onTimerToggleChange();
 
   await window.saveTimerAc();
-};
-
-// Toast notification pill lightweight untuk feedback operasi
-window.showToast = function (msg, type = 'info') {
-  try {
-    const containerId = 'app-toast-container';
-    let container = document.getElementById(containerId);
-    if (!container) {
-      container = document.createElement('div');
-      container.id = containerId;
-      container.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2147483665;display:flex;flex-direction:column;gap:8px;pointer-events:none;align-items:center;max-width:92vw;';
-      document.body.appendChild(container);
-    }
-    const toast = document.createElement('div');
-    const bg = type === 'error' ? 'rgba(239, 68, 68, 0.95)' : type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 'rgba(15, 23, 42, 0.92)';
-    toast.style.cssText = `background:${bg};color:#fff;padding:10px 18px;border-radius:12px;font-size:0.85rem;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.3);backdrop-filter:blur(6px);pointer-events:auto;transition:all 0.25s ease;opacity:0;transform:translateY(10px);display:flex;align-items:center;gap:8px;text-align:center;`;
-    toast.textContent = msg;
-    container.appendChild(toast);
-    requestAnimationFrame(() => {
-      toast.style.opacity = '1';
-      toast.style.transform = 'translateY(0)';
-    });
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-      setTimeout(() => { if (toast.parentElement) toast.remove(); }, 250);
-    }, 3200);
-  } catch (e) {
-    console.log('[Toast]', msg);
-  }
 };
 
 function checkAndTriggerAcTimers() {
@@ -5279,9 +5241,6 @@ function checkAndTriggerAcTimers() {
         // Execute Turn ON
         if (typeof toggleLabSessionStatus === 'function') {
           toggleLabSessionStatus(t.tanggal, t.roomName, targetJamOn, '', '', 'buka', t.kampus);
-          if (typeof showToast === 'function') {
-            showToast(`Timer Otomatis: AC ${t.roomName} dinyalakan (${t.timer_on} WIB)`, 'info');
-          }
         }
       }
     }
@@ -5295,9 +5254,6 @@ function checkAndTriggerAcTimers() {
         // Execute Turn OFF
         if (typeof toggleLabSessionStatus === 'function') {
           toggleLabSessionStatus(t.tanggal, t.roomName, targetJamOff, '', '', 'tutup', t.kampus);
-          if (typeof showToast === 'function') {
-            showToast(`Timer Otomatis: AC ${t.roomName} dimatikan (${t.timer_off} WIB)`, 'info');
-          }
         }
       }
     }
@@ -11603,9 +11559,6 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
                             (roomName || '').toLowerCase().includes('cisco');
     const entityLabel = isLabOrComputer ? 'lab' : 'ruang';
     const statusText = targetStatus === 'buka' ? 'dibuka' : 'ditutup';
-    if (typeof showToast === 'function') {
-      showToast(`Menyimpan status: ${entityLabel} ${statusText}...`, 'info');
-    }
 
     const targetKampus = kampusStr || (window._currentDetailRoom ? window._currentDetailRoom.kampusStr : null);
 
@@ -11732,20 +11685,11 @@ window.toggleLabSessionStatus = async function (tanggal, roomName, jam, namaMk, 
       if (typeof syncRealtimeLabStatus === 'function') {
         syncRealtimeLabStatus(true);
       }
-
-      if (typeof showToast === 'function') {
-        showToast(`Berhasil: ${roomName} telah ${statusText}`, 'success');
-      }
     } else {
-      if (typeof showToast === 'function') {
-        showToast(data.message || `Gagal mengubah status ${entityLabel}`, 'error');
-      }
+      console.error(data.message || `Gagal mengubah status ${entityLabel}`);
     }
   } catch (err) {
     console.error('Error toggleLabSessionStatus:', err);
-    if (typeof showToast === 'function') {
-      showToast('Terjadi kendala saat memperbarui status', 'error');
-    }
   }
 };
 
@@ -20084,6 +20028,9 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  const staleToast = document.getElementById('app-toast-container');
+  if (staleToast) staleToast.remove();
+
   if (typeof initSettingModalDragToDismiss === 'function') {
     initSettingModalDragToDismiss();
   }
