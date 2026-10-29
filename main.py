@@ -714,8 +714,11 @@ def get_semua_jadwal(semester: str = None):
                 COALESCE(j.nama_mk, mk.nama_mk) AS nama_mk, 
                 j.kelas,
                 CASE 
-                    WHEN r.nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7|(r\\.|ruang|^)\\s*1\\.[67]' THEN 'Thehok'
-                    WHEN (r.nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND r.nama_ruangan NOT LIKE '%2.7%') OR (r.nama_ruangan REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') OR (r.nama_ruangan LIKE '%1.5%' AND (r.kampus LIKE '%Kobar%' OR r.nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
+                    WHEN r.nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
+                    WHEN (r.nama_ruangan REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') THEN 'Kobar'
+                    WHEN (r.nama_ruangan LIKE '%1.5%' AND (r.kampus LIKE '%Kobar%' OR r.nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
+                    WHEN (r.nama_ruangan REGEXP '(?i)(^|[^a-zA-Z0-9])(r\\.|ruang|ruangan)?\\s*1\\.[67]($|[^0-9])' AND r.nama_ruangan NOT REGEXP '(?i)lab') THEN 'Thehok'
+                    WHEN (r.nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND r.nama_ruangan NOT LIKE '%2.7%') THEN 'Kobar'
                     ELSE COALESCE(r.kampus, 'Thehok')
                 END AS kampus,
                 r.nama_ruangan, 
@@ -2527,8 +2530,11 @@ def get_ruangan():
         cursor.execute("""
             SELECT id_ruangan, nama_ruangan,
                    CASE 
-                       WHEN nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7|(r\\.|ruang|^)\\s*1\\.[67]' THEN 'Thehok'
-                       WHEN (nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND nama_ruangan NOT LIKE '%2.7%') OR (nama_ruangan REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') OR (nama_ruangan LIKE '%1.5%' AND (kampus LIKE '%Kobar%' OR nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
+                       WHEN nama_ruangan REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
+                       WHEN (nama_ruangan REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') THEN 'Kobar'
+                       WHEN (nama_ruangan LIKE '%1.5%' AND (kampus LIKE '%Kobar%' OR nama_ruangan LIKE '%Kobar%')) THEN 'Kobar'
+                       WHEN (nama_ruangan REGEXP '(?i)(^|[^a-zA-Z0-9])(r\\.|ruang|ruangan)?\\s*1\\.[67]($|[^0-9])' AND nama_ruangan NOT REGEXP '(?i)lab') THEN 'Thehok'
+                       WHEN (nama_ruangan REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND nama_ruangan NOT LIKE '%2.7%') THEN 'Kobar'
                        ELSE COALESCE(kampus, 'Thehok')
                    END AS kampus
             FROM ruangan
@@ -4194,8 +4200,11 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
             SELECT sol.*, 
                    COALESCE(r.nama_ruangan, sol.nama_mk, 'Ruangan') AS nama_ruangan, 
                    CASE 
-                       WHEN COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7|(r\\.|ruang|^)\\s*1\\.[67]' THEN 'Thehok'
-                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND COALESCE(r.nama_ruangan, sol.nama_mk, '') NOT LIKE '%2.7%') OR (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') OR (COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.5%' AND (COALESCE(r.kampus, '') LIKE '%Kobar%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%Kobar%')) THEN 'Kobar'
+                       WHEN COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)cisco|4\\.|pasca|s2|b2\\.|b1\\.|b3\\.|2\\.7' THEN 'Thehok'
+                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)(labor|lab)\\s*1\\.[6-9]') THEN 'Kobar'
+                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%1.5%' AND (COALESCE(r.kampus, '') LIKE '%Kobar%' OR COALESCE(r.nama_ruangan, sol.nama_mk, '') LIKE '%Kobar%')) THEN 'Kobar'
+                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(?i)(^|[^a-zA-Z0-9])(r\\.|ruang|ruangan)?\\s*1\\.[67]($|[^0-9])' AND COALESCE(r.nama_ruangan, sol.nama_mk, '') NOT REGEXP '(?i)lab') THEN 'Thehok'
+                       WHEN (COALESCE(r.nama_ruangan, sol.nama_mk, '') REGEXP '(^|[^a-zA-Z0-9])2\\.[0-9]+' AND COALESCE(r.nama_ruangan, sol.nama_mk, '') NOT LIKE '%2.7%') THEN 'Kobar'
                        ELSE COALESCE(r.kampus, 'Thehok')
                    END AS kampus
             FROM status_operasional_lab sol

@@ -2331,7 +2331,7 @@ function getRoomCampus(roomName, defaultCampus = '') {
   if (!roomName) return formatCampusName(defaultCampus) || 'Thehok';
   const lower = String(roomName).toLowerCase();
 
-  // Prioritas Utama: Gedung Pascasarjana S2, Cisco, 4.x, Labor 2.7, serta Ruang Kelas 1.6 & 1.7 selalu di Kampus 1 (Thehok)
+  // 1. Prioritas Utama: Gedung Pascasarjana S2, Cisco, 4.x, Labor 2.7 selalu di Kampus 1 (Thehok)
   if (
     lower.includes('s2') ||
     lower.includes('pasca') ||
@@ -2340,14 +2340,28 @@ function getRoomCampus(roomName, defaultCampus = '') {
     lower.includes('b3.') ||
     lower.includes('cisco') ||
     lower.includes('2.7') ||
-    lower.includes('4.') ||
-    ((/(?:r\.|ruang|^|\s)1\.[67]\b/.test(lower)) && !lower.includes('lab') && !lower.includes('labor'))
+    lower.includes('4.')
   ) {
     return 'Thehok';
   }
 
-  // Khusus ruangan Kampus 2 (Kobar): Ruang 2.1 - 2.18 dan Labor 1.6 - 1.9 (serta 1.5 Kobar)
-  if ((/\b2\.(?!7\b)\d+/.test(lower) || /\blabor\s*1\.[6-9]\b/.test(lower) || /\blab\s*1\.[6-9]\b/.test(lower) || (lower.includes('1.5') && lower.includes('kobar'))) && !lower.includes('thehok')) {
+  // 2. Labor 1.6 - 1.9 selalu di Kobar
+  if (/\b(?:labor|lab)\s*1\.[6-9]\b/.test(lower)) {
+    return 'Kobar';
+  }
+
+  // 3. Labor 1.5 jika ada penanda Kobar
+  if (lower.includes('1.5') && (lower.includes('kobar') || String(defaultCampus).toLowerCase().includes('kobar'))) {
+    return 'Kobar';
+  }
+
+  // 4. Ruang Kelas Teori 1.6 dan 1.7 selalu di Kampus 1 (Thehok) - pastikan bukan lab!
+  if (/(?:^|[^a-z0-9])(?:r\.|ruang|ruangan)?\s*1\.[67](?:$|[^0-9])/i.test(lower) && !lower.includes('lab') && !lower.includes('labor')) {
+    return 'Thehok';
+  }
+
+  // 5. Ruang Kelas Kampus 2 (Kobar): Ruang 2.1 - 2.18 (kecuali 2.7)
+  if (/\b2\.(?!7\b)\d+/.test(lower) && !lower.includes('thehok')) {
     return 'Kobar';
   }
 
