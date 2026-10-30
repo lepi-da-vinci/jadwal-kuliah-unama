@@ -3182,7 +3182,10 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   // Filter kelas fisik untuk penentuan status akhir kelas (periksa metode & metode_pembelajaran)
   const physicalSchedules = schedules.filter(s => {
     const m = (s.metode_pembelajaran || s.metode || '').toUpperCase();
-    return m !== 'CC' && m !== 'OL';
+    const st = (s.status_jadwal || '').toLowerCase();
+    const isCancelled = m === 'CC' || st.includes('batal') || st.includes('cancel');
+    const isOnline = m === 'OL' || /online/i.test(st);
+    return !isCancelled && !isOnline;
   });
   const lastPhysical = physicalSchedules.length > 0 ? physicalSchedules[physicalSchedules.length - 1] : null;
   const isAllPhysicalEnded = Boolean(effectiveIsToday && physicalSchedules.length > 0 && lastPhysical && currentMinutes > lastPhysical._endM);
@@ -3829,7 +3832,13 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   window._activeTimerRoomContext.allSchedules = roomSchedules;
 
   // Filter khusus perkuliahan tatap muka fisik (bukan Daring/OL dan bukan Batal/CC)
-  const physicalSchedules = roomSchedules.filter(s => s.metode_pembelajaran !== 'CC' && s.metode_pembelajaran !== 'OL');
+  const physicalSchedules = roomSchedules.filter(s => {
+    const m = (s.metode_pembelajaran || s.metode || '').toUpperCase();
+    const st = (s.status_jadwal || '').toLowerCase();
+    const isCancelled = m === 'CC' || st.includes('batal') || st.includes('cancel');
+    const isOnline = m === 'OL' || /online/i.test(st);
+    return !isCancelled && !isOnline;
+  });
   const targetSchedules = physicalSchedules.length > 0 ? physicalSchedules : roomSchedules;
   window._activeTimerRoomContext.schedules = targetSchedules;
 
@@ -5378,7 +5387,10 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Hanya pertimbangkan kelas tatap muka fisik (bukan dibatalkan CC dan bukan daring OL)
   const validPhysicalClasses = (schedules || []).filter(s => {
     const m = (s.metode || s.metode_pembelajaran || '').toUpperCase();
-    return m !== 'CC' && m !== 'OL';
+    const st = (s.status_jadwal || '').toLowerCase();
+    const isCancelled = m === 'CC' || st.includes('batal') || st.includes('cancel');
+    const isOnline = m === 'OL' || /online/i.test(st);
+    return !isCancelled && !isOnline;
   });
 
   // 1. Hitung status AC terlebih dahulu (ground truth untuk timer & pendingin ruangan)
@@ -5465,8 +5477,8 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Cek apakah seluruh sesi hari ini sudah melewati jam selesai
   const maxEndMinutes = validPhysicalClasses.length > 0
     ? Math.max(...validPhysicalClasses.map(s => s.end || 0))
-    : Math.max(...(schedules || []).map(s => s.end || 0));
-  const allEnded = currentTime > maxEndMinutes;
+    : 0;
+  const allEnded = validPhysicalClasses.length > 0 && currentTime > maxEndMinutes;
 
   // Ruangan dianggap ditutup eksplisit jika waktu timer off lewat ATAU ditutup manual
   let isExplicitlyClosed = Boolean(isTimerOffPassed || (opStatus.status === 'tutup' && opStatus.label === 'tutup'));
@@ -5475,13 +5487,37 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   let text = 'Kosong';
   let jamText = '';
 
+  // 1. KASUS KHUSUS JIKA TIDAK ADA KELAS TATAP MUKA FISIK (TM) HARI INI:
+  // (Seluruh sesi ruangan hari ini adalah Daring/Online (OL) atau Dibatalkan (CC), atau ruangan tidak memiliki jadwal sama sekali)
+  // Sesuai aturan sistem: Jika tidak ada kelas TM fisik di ruangan hari ini, status ruangan WAJIB "Kosong" (bukan Selesai / Ditutup).
+  if (isToday && validPhysicalClasses.length === 0) {
+    if (!isExplicitlyClosed && hasPendingTimerOff) {
+      // Kecuali jika ada Timer OFF remote yang saat ini aktif menjaga AC tetap standby
+      state = 'waiting';
+      text = 'AC Standby';
+      jamText = `(OFF ${tData.timer_off})`;
+    } else if (isAcActive && !isExplicitlyClosed) {
+      // Jika AC dinyalakan secara manual di ruangan kosong
+      state = 'waiting';
+      text = 'AC Aktif';
+      jamText = '';
+    } else {
+      state = 'empty';
+      text = 'Kosong';
+      jamText = '';
+    }
+    const lockStatus = isAcActive ? 'buka' : 'tutup';
+    return { state, text, jamText, lockStatus, acStatus };
+  }
+
+  // 2. KASUS JIKA ADA KELAS TATAP MUKA FISIK (TM):
   if (isTimerOffPassed) {
     // Waktu Timer OFF telah lewat: status langsung selesai (ditutup)
     state = 'finished';
     text = 'Selesai';
     jamText = '(Ditutup)';
-  } else if (!isExplicitlyClosed && hasPendingTimerOff && (allEnded || validPhysicalClasses.length === 0)) {
-    // Seluruh kelas fisik telah selesai (atau dibatalkan CC/OL) tetapi Timer OFF mendatang masih aktif:
+  } else if (!isExplicitlyClosed && hasPendingTimerOff && allEnded) {
+    // Seluruh kelas fisik telah selesai tetapi Timer OFF mendatang masih aktif:
     // AC tetap standby menunggu waktu timer OFF tiba sesuai settingan remote Asmot
     state = 'waiting';
     text = 'AC Standby';
@@ -5497,12 +5533,12 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     text = 'Jeda';
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-  } else if (isToday && (validPhysicalClasses.length > 0 || (schedules || []).length > 0)) {
+  } else if (isToday && validPhysicalClasses.length > 0) {
     if (isTimerOffPassed || (isExplicitlyClosed && !isAcActive)) {
       state = 'finished';
       text = 'Selesai';
       jamText = '(Ditutup)';
-    } else if (!isExplicitlyClosed && (allEnded || validPhysicalClasses.length === 0) && hasPendingTimerOff) {
+    } else if (!isExplicitlyClosed && allEnded && hasPendingTimerOff) {
       state = 'waiting';
       text = 'AC Standby';
       jamText = `(OFF ${tData.timer_off})`;
@@ -5530,10 +5566,10 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     state = 'finished';
     text = 'Selesai';
     jamText = '';
-  } else if (!isToday && activeDate > currentDayStr && (schedules || []).length > 0) {
+  } else if (!isToday && activeDate > currentDayStr && validPhysicalClasses.length > 0) {
     state = 'scheduled';
     text = 'Terjadwal';
-    jamText = `(${schedules.length} Jadwal)`;
+    jamText = `(${validPhysicalClasses.length} Jadwal)`;
   } else {
     state = 'empty';
     text = 'Kosong';
@@ -5711,9 +5747,17 @@ function updateActiveLabPanel() {
   if (isToday) {
     for (const [key, schedules] of Object.entries(roomSchedules)) {
       if (!schedules || schedules.length === 0) continue;
-      const sample = schedules[0];
+      const physicalList = schedules.filter(s => {
+        const m = (s.metode || s.metode_pembelajaran || '').toUpperCase();
+        const st = (s.status_jadwal || '').toLowerCase();
+        const isCancelled = m === 'CC' || st.includes('batal') || st.includes('cancel');
+        const isOnline = m === 'OL' || /online/i.test(st);
+        return !isCancelled && !isOnline;
+      });
+      if (physicalList.length === 0) continue;
+      const sample = physicalList[0];
       const room = sample.cleanName || sample.rawName || key;
-      const lastClassEndTime = Math.max(...schedules.map(s => s.end || (s.start + 135)));
+      const lastClassEndTime = Math.max(...physicalList.map(s => s.end || (s.start + 135)));
       const minsLeft = lastClassEndTime - currentTime;
 
       if (minsLeft >= 0 && minsLeft <= 30) {
