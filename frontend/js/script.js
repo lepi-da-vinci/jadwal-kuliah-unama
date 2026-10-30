@@ -3091,38 +3091,57 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   const tOnM = acTimer ? parseClock(acTimer.timer_on) : null;
   const tOffM = acTimer ? parseClock(acTimer.timer_off) : null;
 
+  const isBoth = (acTimer && acTimer.timer_aktif === 'both' && tOnM !== null && tOffM !== null);
+  const isOnOnly = (acTimer && acTimer.timer_aktif === 'on' && tOnM !== null);
+  const isOffOnly = (acTimer && acTimer.timer_aktif === 'off' && tOffM !== null);
+
   // Apakah ada Timer ON mendatang hari ini (waktu saat ini belum mencapai jam timer_on)?
+  // - on-only: currentMinutes < tOnM
+  // - both standar (tOnM < tOffM): currentMinutes < tOnM (pagi sebelum kelas hidup)
+  // - both jeda panjang (tOffM < tOnM): currentMinutes >= tOffM && currentMinutes < tOnM (saat jeda siang, menunggu sesi sore)
   const hasPendingTimerOn = Boolean(
-    effectiveIsToday &&
-    acTimer &&
-    (acTimer.timer_aktif === 'on' || acTimer.timer_aktif === 'both') &&
-    tOnM !== null &&
-    currentMinutes < tOnM
+    effectiveIsToday && acTimer && (
+      (isOnOnly && currentMinutes < tOnM) ||
+      (isBoth && (
+        (tOnM < tOffM && currentMinutes < tOnM) ||
+        (tOffM < tOnM && currentMinutes >= tOffM && currentMinutes < tOnM)
+      ))
+    )
   );
 
   // Apakah ada Timer OFF mendatang yang saat ini aktif menjaga AC tetap hidup?
-  // HANYA jika mode 'off' DAN currentMinutes < tOffM, ATAU mode 'both' DAN waktu sudah >= tOnM DAN < tOffM!
+  // - off-only: currentMinutes < tOffM
+  // - both standar (tOnM < tOffM): currentMinutes >= tOnM && currentMinutes < tOffM
+  // - both jeda panjang (tOffM < tOnM): currentMinutes < tOffM (pagi hari sebelum jam OFF siang tiba)
   const hasPendingTimerOff = Boolean(
-    effectiveIsToday &&
-    acTimer &&
-    (
-      (acTimer.timer_aktif === 'off' && tOffM !== null && currentMinutes < tOffM) ||
-      (acTimer.timer_aktif === 'both' && tOffM !== null && tOnM !== null && currentMinutes >= tOnM && currentMinutes < tOffM)
+    effectiveIsToday && acTimer && (
+      (isOffOnly && currentMinutes < tOffM) ||
+      (isBoth && (
+        (tOnM < tOffM && currentMinutes >= tOnM && currentMinutes < tOffM) ||
+        (tOffM < tOnM && currentMinutes < tOffM)
+      ))
     )
   );
 
   // Apakah waktu Timer OFF sudah lewat hari ini?
+  // - off-only: currentMinutes >= tOffM
+  // - both standar (tOnM < tOffM): currentMinutes >= tOffM
+  // - both jeda panjang (tOffM < tOnM): currentMinutes >= tOffM && currentMinutes < tOnM (saat jeda siang setelah OFF 11:00)
   const isTimerOffPassed = Boolean(
-    effectiveIsToday &&
-    acTimer &&
-    (acTimer.timer_aktif === 'off' || acTimer.timer_aktif === 'both') &&
-    tOffM !== null &&
-    currentMinutes >= tOffM
+    effectiveIsToday && acTimer && (
+      (isOffOnly && currentMinutes >= tOffM) ||
+      (isBoth && (
+        (tOnM < tOffM && currentMinutes >= tOffM) ||
+        (tOffM < tOnM && currentMinutes >= tOffM && currentMinutes < tOnM)
+      ))
+    )
   );
 
   const opStatus = getRoomOperationalStatus(schedules, effectiveIsToday);
   // Ruangan dianggap ditutup manual jika status tutup dan label tutup
   const isManuallyClosed = Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup');
+  // Ruangan dibuka / AC dihidupkan manual jika status buka
+  const isManuallyOpened = Boolean(opStatus && opStatus.status === 'buka');
 
   let isAcRecordedOn = (opStatus.status === 'buka' && !isTimerOffPassed);
 
@@ -3171,39 +3190,50 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   // Sinkronisasi otomatis status AC berdasarkan jam realtime dan pengaturan Timer Remote Asmot
   if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none' && effectiveIsToday) {
     if (isManuallyClosed) {
-      // Jika pengguna secara manual mematikan AC / menutup ruangan:
-      // Manual action adalah prioritas tertinggi, status AC wajib padam
+      // Manual TUTUP adalah prioritas tertinggi, status AC wajib padam
       isAcRecordedOn = false;
+    } else if (isManuallyOpened) {
+      // Manual BUKA / HIDUPKAN AC adalah prioritas tertinggi pengguna, status AC wajib menyala!
+      isAcRecordedOn = true;
     } else if (hasPendingTimerOn) {
       // Sebelum jam Timer ON tiba: AC WAJIB PADAM DAHULU!
       isAcRecordedOn = false;
     } else if (hasPendingTimerOff) {
-      // Jika dalam rentang aktif Timer (setelah ON dan sebelum OFF, atau mode OFF-only sebelum OFF):
-      // AC tetap aktif sampai waktu Timer OFF tiba!
+      // Jika dalam rentang aktif Timer: AC tetap aktif sampai waktu Timer OFF tiba!
       isAcRecordedOn = true;
     } else if (isTimerOffPassed) {
       // Jam timer OFF sudah lewat: AC padam
       isAcRecordedOn = false;
     } else if (isAllPhysicalEnded) {
-      // Jika seluruh kelas selesai dan tidak ada Timer OFF mendatang:
-      // AC padam
+      // Jika seluruh kelas selesai dan tidak ada Timer OFF mendatang: AC padam
       isAcRecordedOn = false;
     } else {
-      if (acTimer.timer_aktif === 'both' && tOnM !== null && tOffM !== null) {
-        if (currentMinutes < tOnM) {
-          isAcRecordedOn = false;
-        } else if (currentMinutes >= tOnM && currentMinutes < tOffM) {
-          isAcRecordedOn = true;
-        } else if (currentMinutes >= tOffM) {
-          isAcRecordedOn = false;
+      if (isBoth) {
+        if (tOnM < tOffM) {
+          if (currentMinutes < tOnM) {
+            isAcRecordedOn = false;
+          } else if (currentMinutes >= tOnM && currentMinutes < tOffM) {
+            isAcRecordedOn = true;
+          } else if (currentMinutes >= tOffM) {
+            isAcRecordedOn = false;
+          }
+        } else {
+          // Siklus jeda panjang (misal Jumat: OFF 11:00, ON 15:00):
+          if (currentMinutes < tOffM) {
+            isAcRecordedOn = true; // Sesi pagi sebelum jam OFF siang: AC menyala
+          } else if (currentMinutes >= tOffM && currentMinutes < tOnM) {
+            isAcRecordedOn = false; // Jeda siang: AC padam
+          } else if (currentMinutes >= tOnM) {
+            isAcRecordedOn = true; // Sesi sore setelah jam ON: AC menyala lagi
+          }
         }
-      } else if (acTimer.timer_aktif === 'on' && tOnM !== null) {
+      } else if (isOnOnly) {
         if (currentMinutes < tOnM) {
           isAcRecordedOn = false;
         } else if (currentMinutes >= tOnM) {
           isAcRecordedOn = true;
         }
-      } else if (acTimer.timer_aktif === 'off' && tOffM !== null) {
+      } else if (isOffOnly) {
         if (currentMinutes >= tOffM) {
           isAcRecordedOn = false;
         }
@@ -3276,7 +3306,6 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
   // 1. Apakah sekarang SEBELUM Sesi Pertama?
   if (currentMinutes < firstS._startM) {
     const timeUntilFirst = firstS._startM - currentMinutes;
-    const hasPendingTimerOn = (acTimer && (acTimer.timer_aktif === 'on' || acTimer.timer_aktif === 'both') && tOnM !== null && currentMinutes < tOnM);
 
     if (timeUntilFirst <= 20) {
       // Masa persiapan H-20
@@ -5017,11 +5046,20 @@ window.validateTimerInputs = function () {
   if (onActive && onVal && onVal.includes(':')) {
     const onParts = onVal.split(':').map(Number);
     const onM = onParts[0] * 60 + onParts[1];
+    const offParts = (offActive && offVal && offVal.includes(':')) ? offVal.split(':').map(Number) : null;
+    const offM = offParts ? (offParts[0] * 60 + offParts[1]) : null;
 
     // Cari sesi target untuk Timer ON ini:
-    // Jika waktu sekarang sudah melewati sesi awal, cari sesi yang jam mulainya setelah waktu sekarang
-    const upcomingSessions = roomSchedules.filter(s => s._startM > nowMin);
-    const targetSession = upcomingSessions.length > 0 ? upcomingSessions[0] : (roomSchedules[0] || null);
+    let targetSession = null;
+    if (offActive && offM !== null && offM < onM) {
+      // Siklus jeda (misal Jumat: OFF 11:00, ON 15:00):
+      // Sesi target untuk Timer ON adalah sesi yang dimulai setelah jam Timer OFF
+      const afterOffSessions = roomSchedules.filter(s => s._startM >= offM);
+      targetSession = afterOffSessions.length > 0 ? afterOffSessions[0] : null;
+    } else {
+      const upcomingSessions = roomSchedules.filter(s => s._startM > nowMin);
+      targetSession = upcomingSessions.length > 0 ? upcomingSessions[0] : (roomSchedules[0] || null);
+    }
 
     // Hanya tampilkan peringatan JIKA Timer ON disetel MELEWATI jam mulai sesi target
     if (targetSession && onM > targetSession._startM) {
@@ -5271,8 +5309,18 @@ function checkAndTriggerAcTimers() {
       }
     }
 
+    const isBoth = (t.timer_aktif === 'both' && tOnM !== null && tOffM !== null);
+    const isOnOnly = (t.timer_aktif === 'on' && tOnM !== null);
+    const isOffOnly = (t.timer_aktif === 'off' && tOffM !== null);
+
     // Trigger Timer ON
-    if ((t.timer_aktif === 'on' || t.timer_aktif === 'both') && t.timer_on === currentTimeStr) {
+    const shouldTriggerOn = (isOnOnly && (t.timer_on === currentTimeStr || curM >= tOnM)) ||
+      (isBoth && (
+        (tOnM < tOffM && (t.timer_on === currentTimeStr || (curM >= tOnM && curM < tOffM))) ||
+        (tOffM < tOnM && (t.timer_on === currentTimeStr || curM >= tOnM))
+      ));
+
+    if (shouldTriggerOn) {
       const triggerKey = `triggered_on_${t.tanggal}_${key}_${t.timer_on}`;
       if (!window._triggeredAcTimers) window._triggeredAcTimers = new Set();
       if (!window._triggeredAcTimers.has(triggerKey)) {
@@ -5284,8 +5332,14 @@ function checkAndTriggerAcTimers() {
       }
     }
 
-    // Trigger Timer OFF (terpicu saat mencapai atau melewati jam timer_off hari ini)
-    if ((t.timer_aktif === 'off' || t.timer_aktif === 'both') && tOffM !== null && curM >= tOffM) {
+    // Trigger Timer OFF
+    const shouldTriggerOff = (isOffOnly && curM >= tOffM) ||
+      (isBoth && (
+        (tOnM < tOffM && curM >= tOffM) ||
+        (tOffM < tOnM && curM >= tOffM && curM < tOnM)
+      ));
+
+    if (shouldTriggerOff) {
       const triggerKey = `triggered_off_${t.tanggal}_${key}_${t.timer_off}`;
       if (!window._triggeredAcTimers) window._triggeredAcTimers = new Set();
       if (!window._triggeredAcTimers.has(triggerKey)) {
@@ -5306,9 +5360,14 @@ function checkAndTriggerAcTimers() {
       }
     }
 
-    // Setelah waktu timer terlewati, tandai eksekusi selesai tanpa menghapus konfigurasi hari ini
-    // Data timer tetap dipertahankan sepanjang tanggal ini agar status ruangan tetap 'Selesai (Ditutup)'
-    if (tOffM !== null && curM >= tOffM) {
+    // Tandai executed jika seluruh siklus timer hari ini telah terlewati
+    const isCycleCompleted = (isOnOnly && curM >= tOnM) ||
+      (isOffOnly && curM >= tOffM) ||
+      (isBoth && (
+        (tOnM < tOffM && curM >= tOffM) ||
+        (tOffM < tOnM && curM >= tOnM)
+      ));
+    if (isCycleCompleted) {
       t.executed = true;
     }
   });
@@ -5335,24 +5394,41 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   const tOnM = parseClock(tData.timer_on);
   const tOffM = parseClock(tData.timer_off);
 
+  const isBoth = (tData.timer_aktif === 'both' && tOnM !== null && tOffM !== null);
+  const isOnOnly = (tData.timer_aktif === 'on' && tOnM !== null);
+  const isOffOnly = (tData.timer_aktif === 'off' && tOffM !== null);
+
   // Apakah ada Timer ON mendatang hari ini?
   const hasPendingTimerOn = Boolean(
-    isToday &&
-    (tData.timer_aktif === 'on' || tData.timer_aktif === 'both') &&
-    tOnM !== null &&
-    currentTime < tOnM
+    isToday && (
+      (isOnOnly && currentTime < tOnM) ||
+      (isBoth && (
+        (tOnM < tOffM && currentTime < tOnM) ||
+        (tOffM < tOnM && currentTime >= tOffM && currentTime < tOnM)
+      ))
+    )
   );
 
   // Apakah ada Timer OFF mendatang yang saat ini aktif menjaga AC tetap hidup?
   const hasPendingTimerOff = Boolean(
-    isToday &&
-    (
-      (tData.timer_aktif === 'off' && tOffM !== null && currentTime < tOffM) ||
-      (tData.timer_aktif === 'both' && tOffM !== null && tOnM !== null && currentTime >= tOnM && currentTime < tOffM)
+    isToday && (
+      (isOffOnly && currentTime < tOffM) ||
+      (isBoth && (
+        (tOnM < tOffM && currentTime >= tOnM && currentTime < tOffM) ||
+        (tOffM < tOnM && currentTime < tOffM)
+      ))
     )
   );
 
-  const isTimerOffPassed = Boolean(isToday && (tData.timer_aktif === 'off' || tData.timer_aktif === 'both') && tOffM !== null && currentTime >= tOffM);
+  const isTimerOffPassed = Boolean(
+    isToday && (
+      (isOffOnly && currentTime >= tOffM) ||
+      (isBoth && (
+        (tOnM < tOffM && currentTime >= tOffM) ||
+        (tOffM < tOnM && currentTime >= tOffM && currentTime < tOnM)
+      ))
+    )
+  );
 
   let isOccupied = false;
   let hasFutureClass = false;
@@ -5373,17 +5449,18 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     }
   }
 
+  // Cek status operasional aktual buka/tutup yang dicatat oleh Aslab / Asmot
+  const opStatus = getRoomOperationalStatus(schedules, isToday);
+  const isManuallyOpened = Boolean(opStatus && opStatus.status === 'buka');
+
   // Jika aslab membuka kelas masa depan lebih awal:
   // HANYA jika dalam masa persiapan (maksimal 30 menit sebelum sesi) DAN tidak sedang menunggu Timer ON di masa depan
-  if (isToday && !activeClass && nextClass && !hasPendingTimerOn && (nextClass.status_lab || '').toLowerCase() === 'buka') {
+  if (isToday && !activeClass && nextClass && (!hasPendingTimerOn || isManuallyOpened) && (nextClass.status_lab || '').toLowerCase() === 'buka') {
     if (currentTime >= nextClass.start - 30) {
       isOccupied = true;
       activeClass = nextClass;
     }
   }
-
-  // Cek status operasional aktual buka/tutup yang dicatat oleh Aslab / Asmot
-  const opStatus = getRoomOperationalStatus(schedules, isToday);
 
   // Cek apakah seluruh sesi hari ini sudah melewati jam selesai
   const maxEndMinutes = validPhysicalClasses.length > 0
@@ -5409,7 +5486,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     state = 'waiting';
     text = 'AC Standby';
     jamText = `(OFF ${tData.timer_off})`;
-  } else if (isOccupied && (!isExplicitlyClosed || isAcActive) && !hasPendingTimerOn) {
+  } else if (isOccupied && (!isExplicitlyClosed || isAcActive) && (!hasPendingTimerOn || isManuallyOpened || isAcActive)) {
     // Sesi perkuliahan sedang aktif saat ini (atau AC sedang aktif pada rentang sesi ini)
     state = 'occupied';
     text = activeClass.nama;
@@ -5772,10 +5849,21 @@ function updateActiveLabPanel() {
               showBadgeType = 'off';
             }
           } else if (tStatus === 'both') {
-            if (tOnM !== null && currentTime < tOnM) {
-              showBadgeType = 'both';
-            } else if (tOffM !== null && currentTime < tOffM) {
-              showBadgeType = 'off';
+            if (tOnM !== null && tOffM !== null) {
+              if (tOnM < tOffM) {
+                if (currentTime < tOnM) {
+                  showBadgeType = 'both';
+                } else if (currentTime < tOffM) {
+                  showBadgeType = 'off';
+                }
+              } else {
+                // Siklus jeda (tOffM < tOnM, misal OFF 11:00, ON 15:00):
+                if (currentTime < tOffM) {
+                  showBadgeType = 'both';
+                } else if (currentTime < tOnM) {
+                  showBadgeType = 'on';
+                }
+              }
             }
           }
 
