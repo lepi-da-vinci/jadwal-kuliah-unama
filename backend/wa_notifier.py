@@ -1780,7 +1780,7 @@ def asmot_cek_kelas_selesai(kampus_tugas="Kobar"):
                     if not is_last:
                         nxt_item = items[i+1]
                         gap = nxt_item['sm'] - it['em']
-                        if gap > 60:
+                        if gap > 90:
                             nxt_jam = f"{nxt_item['sm']//60:02d}:{nxt_item['sm']%60:02d}"
                             kondisi_info = f"Jeda kosong {gap} mnt (lanjut jam {nxt_jam})"
 
@@ -4694,7 +4694,7 @@ def check_lab_schedules():
                 for i in range(len(scheds) - 1):
                     curr, nxt = scheds[i], scheds[i+1]
                     gap = nxt['start_min'] - curr['end_min']
-                    if gap > 60:
+                    if gap > 90:
                         closings_asmot.append({'cls': curr, 'tipe': 'JEDA', 'gap': gap, 'nxt': nxt})
                         openings_asmot.append(nxt)
 

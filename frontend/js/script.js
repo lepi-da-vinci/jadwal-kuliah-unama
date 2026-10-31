@@ -3441,7 +3441,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
       const timeSincePrevEnd = currentMinutes - prevS._endM;
       const timeUntilNextStart = nextS._startM - currentMinutes;
 
-      if (gapTotal <= 30) {
+      if (gapTotal <= 90) {
         return withTimer({
           code: 'STANDBY',
           isAcOn: isAcRecordedOn,
@@ -3451,7 +3451,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
           actionLabel: isAcRecordedOn ? 'Matikan AC' : 'Hidupkan AC',
           targetAction: isAcRecordedOn ? 'tutup' : 'buka',
           countdownMinutes: timeUntilNextStart,
-          recommendation: 'AC jangan dimatikan saat jeda singkat (< 30 mnt) agar kompresor tidak rusak.',
+          recommendation: 'AC jangan dimatikan saat jeda singkat (≤ 90 mnt) agar tidak boros listrik dan kompresor awet.',
           stripClass: 'is-ac-standby',
           dotClass: 'dot-standby',
           btnClass: isAcRecordedOn ? 'tutup' : 'buka',
@@ -3491,7 +3491,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
           actionLabel: 'Matikan AC Sekarang',
           targetAction: 'tutup',
           countdownMinutes: timeUntilNextStart,
-          recommendation: 'Ruangan kosong lebih dari 30 menit. Matikan AC sekarang untuk menghemat listrik kampus.',
+          recommendation: 'Ruangan kosong lebih dari 90 menit. Matikan AC sekarang untuk menghemat listrik kampus.',
           stripClass: 'is-ac-warn-off',
           dotClass: 'dot-tutup',
           btnClass: 'tutup-urgent',
@@ -11376,7 +11376,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
           const isGapActiveNow = isToday && (currentMinutes >= prevEndM && currentMinutes < startM);
           let acGapAdviceHtml = '';
           if (!isLabEntity) {
-            if (gapMins >= 30) {
+            if (gapMins > 90) {
               acGapAdviceHtml = `
                 <div class="gap-ac-guidance is-turn-off">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
@@ -11387,7 +11387,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
               acGapAdviceHtml = `
                 <div class="gap-ac-guidance is-standby">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
-                  <span>Panduan AC: <b>Tetap Standby</b> (Jeda singkat ${gapMins} mnt, jangan matikan kompresor)</span>
+                  <span>Panduan AC: <b>Tetap Standby</b> (Jeda singkat ${formatGapDuration(gapMins)}, jangan dimatikan agar hemat listrik & kompresor awet)</span>
                 </div>
               `;
             }
@@ -14573,7 +14573,7 @@ function checkLabNotifications() {
     if (scheds.length === 0) continue;
 
     // A. Identifikasi pembukaan (openings) dan penutupan (closings)
-    // Kelas pembuka: kelas pertama hari ini, atau kelas setelah jeda > 60 menit
+    // Kelas pembuka: kelas pertama hari ini, atau kelas setelah jeda > 90 menit
     const openings = [scheds[0]];
     const closings = [];
 
@@ -14581,7 +14581,7 @@ function checkLabNotifications() {
       const curr = scheds[i];
       const nxt = scheds[i + 1];
       const gap = nxt.startMin - curr.endMin;
-      if (gap > 60) {
+      if (gap > 90) {
         closings.push({ cls: curr, tipe: 'JEDA', gap, nxt });
         openings.push(nxt);
       }
