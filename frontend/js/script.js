@@ -5480,23 +5480,58 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     : 0;
   const allEnded = validPhysicalClasses.length > 0 && currentTime > maxEndMinutes;
 
-  // Ruangan dianggap ditutup eksplisit jika waktu timer off lewat ATAU ditutup manual
-  let isExplicitlyClosed = Boolean(isTimerOffPassed || (opStatus.status === 'tutup' && opStatus.label === 'tutup'));
+  const isLabEntity = (typeof isLab === 'function' && isLab(roomName)) ||
+                      (roomName || '').toLowerCase().includes('lab') ||
+                      (roomName || '').toLowerCase().includes('cisco') ||
+                      (schedules || []).some(s => s.is_lab || (s.nama_ruangan && typeof isLab === 'function' && isLab(s.nama_ruangan)));
+
+  const isManuallyClosed = Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup');
+
+  // Apakah lab pernah dibuka hari ini oleh Aslab?
+  const wasEverOpened = (schedules || []).some(s => (s.status_lab || '').toLowerCase().trim() === 'buka') ||
+                        (opStatus && (opStatus.status === 'buka' || (opStatus.status === 'tutup' && opStatus.label === 'tutup' && (schedules || []).some(s => Boolean(s.status_lab_waktu)))));
 
   let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
   let text = 'Kosong';
   let jamText = '';
 
-  // 1. KASUS KHUSUS JIKA TIDAK ADA KELAS TATAP MUKA FISIK (TM) HARI INI:
+  // 1. KASUS JIKA BUKAN HARI INI (TANGGAL LAMPAU ATAU MASA DEPAN):
+  if (!isToday) {
+    if (activeDate < currentDayStr) {
+      if (validPhysicalClasses.length > 0) {
+        state = 'finished';
+        text = 'Selesai';
+        jamText = '';
+      } else {
+        state = 'empty';
+        text = 'Kosong';
+        jamText = '';
+      }
+    } else {
+      if (validPhysicalClasses.length > 0) {
+        state = 'scheduled';
+        text = 'Terjadwal';
+        jamText = `(${validPhysicalClasses.length} Jadwal)`;
+      } else {
+        state = 'empty';
+        text = 'Kosong';
+        jamText = '';
+      }
+    }
+    const lockStatus = 'tutup';
+    return { state, text, jamText, lockStatus, acStatus };
+  }
+
+  // 2. KASUS HARI INI NAMUN TIDAK ADA KELAS TATAP MUKA FISIK (TM):
   // (Seluruh sesi ruangan hari ini adalah Daring/Online (OL) atau Dibatalkan (CC), atau ruangan tidak memiliki jadwal sama sekali)
   // Sesuai aturan sistem: Jika tidak ada kelas TM fisik di ruangan hari ini, status ruangan WAJIB "Kosong" (bukan Selesai / Ditutup).
-  if (isToday && validPhysicalClasses.length === 0) {
-    if (!isExplicitlyClosed && hasPendingTimerOff) {
+  if (validPhysicalClasses.length === 0) {
+    if (!isManuallyClosed && hasPendingTimerOff) {
       // Kecuali jika ada Timer OFF remote yang saat ini aktif menjaga AC tetap standby
       state = 'waiting';
       text = 'AC Standby';
       jamText = `(OFF ${tData.timer_off})`;
-    } else if (isAcActive && !isExplicitlyClosed) {
+    } else if (isAcActive && !isManuallyClosed) {
       // Jika AC dinyalakan secara manual di ruangan kosong
       state = 'waiting';
       text = 'AC Aktif';
@@ -5510,66 +5545,56 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
     return { state, text, jamText, lockStatus, acStatus };
   }
 
-  // 2. KASUS JIKA ADA KELAS TATAP MUKA FISIK (TM):
-  if (isTimerOffPassed) {
-    // Waktu Timer OFF telah lewat: status langsung selesai (ditutup)
-    state = 'finished';
-    text = 'Selesai';
-    jamText = '(Ditutup)';
-  } else if (!isExplicitlyClosed && hasPendingTimerOff && allEnded) {
-    // Seluruh kelas fisik telah selesai tetapi Timer OFF mendatang masih aktif:
-    // AC tetap standby menunggu waktu timer OFF tiba sesuai settingan remote Asmot
-    state = 'waiting';
-    text = 'AC Standby';
-    jamText = `(OFF ${tData.timer_off})`;
-  } else if (isOccupied && (!isExplicitlyClosed || isAcActive) && (!hasPendingTimerOn || isManuallyOpened || isAcActive)) {
-    // Sesi perkuliahan sedang aktif saat ini (atau AC sedang aktif pada rentang sesi ini)
-    state = 'occupied';
-    text = activeClass.nama;
-    jamText = activeClass.jam;
-  } else if (hasFutureClass && nextClass && (!isOccupied || isExplicitlyClosed)) {
-    // Jeda antar sesi kelas
+  // 3. KASUS HARI INI DENGAN KELAS TATAP MUKA FISIK (TM):
+  if (allEnded) {
+    // Seluruh sesi kelas fisik hari ini telah selesai
+    if (hasPendingTimerOff && !isManuallyClosed) {
+      // Timer OFF mendatang masih aktif menjaga AC standby
+      state = 'waiting';
+      text = 'AC Standby';
+      jamText = `(OFF ${tData.timer_off})`;
+    } else {
+      state = 'finished';
+      text = 'Selesai';
+      if (isLabEntity) {
+        // Untuk lab yang tidak pernah dibuka hari ini oleh aslab, tetap tampil 'Selesai' saja tanpa '(Ditutup)'
+        jamText = wasEverOpened ? '(Ditutup)' : '';
+      } else {
+        // Untuk ruang kelas teori: tampil '(Ditutup)' hanya jika AC sudah padam
+        jamText = isAcActive ? '' : '(Ditutup)';
+      }
+    }
+  } else if (isOccupied && activeClass) {
+    // Sesi perkuliahan sedang aktif saat ini
+    if (isManuallyClosed && !isAcActive) {
+      // Sesi ditutup manual lebih awal
+      if (hasFutureClass && nextClass) {
+        state = 'waiting';
+        text = 'Jeda';
+        const isNight = nextClass.start >= 17 * 60;
+        jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
+      } else {
+        state = 'finished';
+        text = 'Selesai';
+        if (isLabEntity) {
+          jamText = wasEverOpened ? '(Ditutup)' : '';
+        } else {
+          jamText = isAcActive ? '' : '(Ditutup)';
+        }
+      }
+    } else {
+      state = 'occupied';
+      text = activeClass.nama;
+      jamText = activeClass.jam;
+    }
+  } else if (hasFutureClass && nextClass) {
+    // Jeda antar sesi atau masa persiapan sebelum sesi berikutnya hari ini.
+    // PENTING: Waktu jeda tetap berstatus 'Jeda', TIDAK BOLEH menjadi 'Selesai (Ditutup)'
+    // meskipun waktu Timer OFF jeda siang telah lewat!
     state = 'waiting';
     text = 'Jeda';
     const isNight = nextClass.start >= 17 * 60;
     jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-  } else if (isToday && validPhysicalClasses.length > 0) {
-    if (isTimerOffPassed || (isExplicitlyClosed && !isAcActive)) {
-      state = 'finished';
-      text = 'Selesai';
-      jamText = '(Ditutup)';
-    } else if (!isExplicitlyClosed && allEnded && hasPendingTimerOff) {
-      state = 'waiting';
-      text = 'AC Standby';
-      jamText = `(OFF ${tData.timer_off})`;
-    } else if (allEnded) {
-      state = 'finished';
-      text = 'Selesai';
-      // Hanya tampilkan '(Ditutup)' jika ruangan / AC memang sudah padam / ditutup!
-      // Jika AC masih menyala dan belum dimatikan, hanya tampilkan 'Selesai'
-      jamText = (!isAcActive && (isExplicitlyClosed || allEnded)) ? '(Ditutup)' : '';
-    } else if (activeClass) {
-      state = 'occupied';
-      text = activeClass.nama;
-      jamText = activeClass.jam;
-    } else if (hasFutureClass && nextClass) {
-      state = 'waiting';
-      text = 'Jeda';
-      const isNight = nextClass.start >= 17 * 60;
-      jamText = isNight ? `(Malam: ${nextClass.jam})` : `(Buka: ${nextClass.jam})`;
-    } else {
-      state = 'empty';
-      text = 'Kosong';
-      jamText = '';
-    }
-  } else if (!isToday && activeDate < currentDayStr && validPhysicalClasses.length > 0) {
-    state = 'finished';
-    text = 'Selesai';
-    jamText = '';
-  } else if (!isToday && activeDate > currentDayStr && validPhysicalClasses.length > 0) {
-    state = 'scheduled';
-    text = 'Terjadwal';
-    jamText = `(${validPhysicalClasses.length} Jadwal)`;
   } else {
     state = 'empty';
     text = 'Kosong';
@@ -5577,11 +5602,11 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   }
 
   // Status gembok buka/tutup (lockStatus):
-  let lockStatus = isToday ? opStatus.status : 'tutup';
-  if (isTimerOffPassed) {
-    lockStatus = 'tutup';
-  } else if (isToday && isAcActive) {
-    lockStatus = 'buka';
+  let lockStatus = 'tutup';
+  if (isLabEntity) {
+    lockStatus = (opStatus && opStatus.status === 'buka') ? 'buka' : 'tutup';
+  } else {
+    lockStatus = isAcActive ? 'buka' : 'tutup';
   }
 
   return { state, text, jamText, lockStatus, acStatus };
