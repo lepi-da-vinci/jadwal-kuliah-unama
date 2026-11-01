@@ -4282,19 +4282,19 @@ def extract_affected_rooms(pesan_text, rooms_list):
                 matched.append(r_dict)
     return matched
 
-def format_info_mase_simple(pesan_raw: str, nama_ruangan: str, kampus: str, is_lab: bool = False) -> str:
+def format_info_mase_item(pesan_raw: str, nama_ruangan: str, kampus: str, is_lab: bool = False):
     """
-    Mengubah pesan notifikasi mentah menjadi format to-the-point dan simpel sesuai permintaan:
-    Contoh: R. 1.1 (Kobar) jam 08:00 *TM* jadi *OL* ruang kosong jam 08:00
+    Mengubah pesan notifikasi mentah menjadi tuple (kategori, format_baris) to-the-point:
+    Contoh: ('batal', '• R. 2.11 (Kobar) jam 13:15 (ruang kosong)')
     """
     clean_pesan = pesan_raw.strip()
     room_tag = f"{nama_ruangan} ({kampus})" if kampus and kampus.lower() not in nama_ruangan.lower() else nama_ruangan
-    
+
     # Ekstraksi jam: cari setelah 'jam', 'pada', 'pukul', atau pola jam HH:MM / HH.MM
     jam_match = re.search(r'\b(?:jam|pada|pukul)\s+([0-2]?[0-9][:.]\d{2})\b', clean_pesan, re.IGNORECASE)
     if not jam_match:
         jam_match = re.search(r'\b([0-2]?[0-9][:.]\d{2})\b', clean_pesan)
-    
+
     jam_val = jam_match.group(1).replace('.', ':') if jam_match else ""
     if jam_val and len(jam_val) == 4 and jam_val[1] == ':':
         jam_val = "0" + jam_val
@@ -4303,42 +4303,105 @@ def format_info_mase_simple(pesan_raw: str, nama_ruangan: str, kampus: str, is_l
     target_entitas = "lab" if is_lab else "ruangan"
     target_entitas_short = "lab" if is_lab else "ruang"
 
-    # Jika jam diketahui, tampilkan jam secara eksplisit agar informatif.
-    # Jika jam tidak ada, HINDARI teks 'jam segitu' yang membingungkan.
-    kosong_note = f"{target_entitas_short} kosong {jam_str}".strip() if jam_str else f"{target_entitas_short} kosong"
-    pakai_note = f"{target_entitas} digunakan {jam_str}".strip() if jam_str else f"{target_entitas} digunakan"
-
-    if 'ONLINE (OL)' in clean_pesan or 'dialihkan ke ONLINE' in clean_pesan or 'jadi OL' in clean_pesan:
-        return f"{room_tag} {jam_str} *TM* jadi *OL* {kosong_note}".replace("  ", " ").strip()
-
+    # 1. Batal / Cancel
     if 'DIBATALKAN (CC)' in clean_pesan or 'batal' in clean_pesan.lower():
-        return f"{room_tag} {jam_str} *BATAL (CC)* {kosong_note}".replace("  ", " ").strip()
+        note = f"({target_entitas_short} kosong)"
+        line = f"• {room_tag} {jam_str} {note}".replace("  ", " ").strip()
+        return 'batal', line
 
+    # 2. Kuliah Online (OL)
+    if 'ONLINE (OL)' in clean_pesan or 'dialihkan ke ONLINE' in clean_pesan or 'jadi OL' in clean_pesan:
+        note = f"({target_entitas_short} kosong)"
+        line = f"• {room_tag} {jam_str} {note}".replace("  ", " ").strip()
+        return 'ol', line
+
+    # 3. Kelas Tambahan
+    if 'KELAS TAMBAHAN' in clean_pesan or 'kelas tambahan' in clean_pesan.lower():
+        note = f"({target_entitas} digunakan)"
+        line = f"• {room_tag} {jam_str} {note}".replace("  ", " ").strip()
+        return 'tambahan', line
+
+    # 4. Kembali Tatap Muka (TM)
     if 'TATAP MUKA (TM)' in clean_pesan or 'kembali TM' in clean_pesan:
-        return f"{room_tag} {jam_str} *KEMBALI TM* {pakai_note}".replace("  ", " ").strip()
+        note = f"({target_entitas} digunakan)"
+        line = f"• {room_tag} {jam_str} {note}".replace("  ", " ").strip()
+        return 'kembali_tm', line
 
+    # 5. Pindah Ruangan
     if 'dipindahkan KELUAR' in clean_pesan or 'PINDAH KELUAR' in clean_pesan:
         tujuan_m = re.search(r'ke\s+((?:R\.\s*|Labor\s*|Lab\s*)?\d+\.\d+(?:\s*\([^)]+\))?)', clean_pesan, re.IGNORECASE)
         tujuan = f" ke {tujuan_m.group(1).strip()}" if tujuan_m else ""
-        return f"{room_tag} {jam_str} *PINDAH KELUAR*{tujuan} {kosong_note}".replace("  ", " ").strip()
+        note = f"(pindah{tujuan}, {target_entitas_short} kosong)"
+        line = f"• {room_tag} {jam_str} {note}".replace("  ", " ").strip()
+        return 'pindah', line
 
     if 'dipindahkan MASUK' in clean_pesan or 'PINDAH MASUK' in clean_pesan:
         asal_m = re.search(r'(?:sebelumnya di|dari)\s+((?:R\.\s*|Labor\s*|Lab\s*)?\d+\.\d+(?:\s*\([^)]+\))?)', clean_pesan, re.IGNORECASE)
         asal = f" dari {asal_m.group(1).strip()}" if asal_m else ""
-        return f"{room_tag} {jam_str} *PINDAH MASUK*{asal} {pakai_note}".replace("  ", " ").strip()
+        note = f"(pindah{asal}, {target_entitas} digunakan)"
+        line = f"• {room_tag} {jam_str} {note}".replace("  ", " ").strip()
+        return 'pindah', line
 
-    if 'KELAS TAMBAHAN' in clean_pesan or 'kelas tambahan' in clean_pesan.lower():
-        return f"{room_tag} {jam_str} *KELAS TAMBAHAN* {pakai_note}".replace("  ", " ").strip()
-
+    # 6. Fallback
     fallback = clean_pesan.replace("PERUBAHAN STATUS:", "").replace("PERUBAHAN STATUS :", "").strip()
-    return f"{room_tag} {jam_str}: {fallback}".replace("  ", " ").strip()
+    line = f"• {room_tag} {jam_str}: {fallback}".replace("  ", " ").strip()
+    return 'lainnya', line
+
+def format_info_mase_simple(pesan_raw: str, nama_ruangan: str, kampus: str, is_lab: bool = False) -> str:
+    """
+    Format baris tunggal untuk kompatibilitas ke belakang.
+    """
+    _, line = format_info_mase_item(pesan_raw, nama_ruangan, kampus, is_lab=is_lab)
+    return line
+
+def build_info_mase_grouped_body(items: list) -> str:
+    """
+    Menyusun daftar item info mase ke dalam kelompok kategori dengan pembatas strip (Pilihan 1):
+    *BATAL (CC)*
+    • R. ...
+    ------------------------------
+    *KULIAH DARING (OL)*
+    • R. ...
+    ------------------------------
+    *KELAS TAMBAHAN*
+    • R. ...
+    """
+    CATEGORY_CONFIG = [
+        ('batal', '*BATAL (CC)*'),
+        ('ol', '*KULIAH DARING (OL)*'),
+        ('tambahan', '*KELAS TAMBAHAN*'),
+        ('kembali_tm', '*KEMBALI TATAP MUKA (TM)*'),
+        ('pindah', '*PERUBAHAN RUANGAN*'),
+        ('lainnya', '*PERUBAHAN LAINNYA*')
+    ]
+
+    grouped = collections.defaultdict(list)
+    for it in items:
+        if isinstance(it, (tuple, list)) and len(it) == 2:
+            cat, line = it
+        else:
+            cat, line = 'lainnya', str(it)
+        if line not in grouped[cat]:
+            grouped[cat].append(line)
+
+    sections = []
+    for cat_key, cat_title in CATEGORY_CONFIG:
+        lines = grouped.get(cat_key, [])
+        if lines:
+            sections.append(f"{cat_title}\n" + "\n".join(lines))
+
+    if not sections:
+        return ""
+
+    divider = "\n------------------------------\n"
+    return divider.join(sections)
 
 def check_and_notify_info_mase():
     """
     Memeriksa dan mengirimkan notifikasi perubahan jadwal & info mase hari ini (kelas tambahan, pindah ruangan, OL, CC/batal)
-    secara presisi dan tertarget:
+    secara presisi dan tertarget dengan format Pilihan 1 (kelompok kategori + garis pembatas):
     - Tidak mengirim di malam/dini hari (00:00 - 06:59). Pengiriman baru aktif mulai jam 07:00 pagi agar tidak mengganggu istirahat.
-    - Format to the point: '{ruangan} ({kampus}) jam {jam} *TM* jadi *OL* ruang kosong jam segitu'
+    - Format dikelompokkan: BATAL (CC), KULIAH DARING (OL), KELAS TAMBAHAN, dst. dengan pembatas strip.
     - Pengiriman di-batch per nomor penerima (Asmot / Aslab) sehingga tidak spam chat terpisah.
     - Penutup: 'Kondisikan AC mas' (Asmot) atau 'Kondisikan lab mas' (Aslab).
     """
@@ -4388,7 +4451,7 @@ def check_and_notify_info_mase():
         """, (today_str,))
         notifs = cursor.fetchall()
 
-        # Struktur batching: target_wa -> {'role': str, 'items': [str], 'keys': [str]}
+        # Struktur batching: target_wa -> {'role': str, 'items': [(cat, line)], 'keys': [str]}
         pending_batches = collections.defaultdict(lambda: {'role': 'asmot', 'items': [], 'keys': []})
 
         for nl in notifs:
@@ -4406,7 +4469,7 @@ def check_and_notify_info_mase():
                 kampus_r = r['kampus']
                 is_lab = r.get('is_lab', False)
 
-                simple_line = format_info_mase_simple(pesan_raw, nama_r, kampus_r, is_lab=is_lab)
+                cat_item = format_info_mase_item(pesan_raw, nama_r, kampus_r, is_lab=is_lab)
 
                 if is_lab:
                     # KASUS A: Laboratorium -> Kirim HANYA ke Aslab lab tersebut!
@@ -4415,7 +4478,7 @@ def check_and_notify_info_mase():
                         notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
                         if not is_notification_sent(notif_key):
                             pending_batches[target_wa]['role'] = 'aslab'
-                            pending_batches[target_wa]['items'].append(simple_line)
+                            pending_batches[target_wa]['items'].append(cat_item)
                             pending_batches[target_wa]['keys'].append(notif_key)
                 else:
                     # KASUS B: Ruang Kelas Teori -> Kirim ke ASMOT kampus tersebut!
@@ -4425,7 +4488,7 @@ def check_and_notify_info_mase():
                         notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
                         if not is_notification_sent(notif_key):
                             pending_batches[target_wa]['role'] = 'asmot'
-                            pending_batches[target_wa]['items'].append(simple_line)
+                            pending_batches[target_wa]['items'].append(cat_item)
                             pending_batches[target_wa]['keys'].append(notif_key)
 
         # Kirim batch per target_wa
@@ -4433,9 +4496,9 @@ def check_and_notify_info_mase():
             if not batch['items']:
                 continue
 
-            # Hilangkan baris duplikat jika ada
-            unique_items = list(dict.fromkeys(batch['items']))
-            items_body = "\n".join(unique_items)
+            items_body = build_info_mase_grouped_body(batch['items'])
+            if not items_body:
+                continue
 
             if batch['role'] == 'asmot':
                 msg = (
@@ -4453,7 +4516,7 @@ def check_and_notify_info_mase():
             if send_wa_message(target_wa, msg):
                 for k in batch['keys']:
                     mark_notification_sent(k)
-                log_chatbot("SUCCESS", f"Info Mase ({len(unique_items)} item) terkirim ke {target_wa}", "INFO-MASE")
+                log_chatbot("SUCCESS", f"Info Mase ({len(batch['items'])} item) terkirim ke {target_wa}", "INFO-MASE")
 
     except Exception as e:
         log_chatbot("ERROR", f"Error in check_and_notify_info_mase: {e}", "INFO-MASE")
