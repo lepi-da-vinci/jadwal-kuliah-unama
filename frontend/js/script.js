@@ -3750,27 +3750,46 @@ window.selectQuickTimerMode = function (mode) {
   const onInput = document.getElementById('timer-on-time');
   const offInput = document.getElementById('timer-off-time');
   const ctx = window._activeTimerRoomContext || {};
+  const activeRemoteType = window._activeRemoteType || '24h';
 
-  const defaultOn = formatMinToTime((ctx.firstStartM ?? 480) - 20);
-  const defaultOff = ctx.lastEndTimeStr || "16:15";
+  // Prioritaskan rekomendasi cerdas Asmot jika tersedia agar tidak menimpa dengan jam default usang
+  const suggestion = window._currentSmartSuggestion || (typeof window.calculateAsmotSmartSuggestion === 'function' ? window.calculateAsmotSmartSuggestion() : null);
+
+  let defaultOn = null;
+  let defaultOff = null;
+
+  if (activeRemoteType === '12h') {
+    defaultOn = suggestion?.on12h || (suggestion?.on ? window.roundTimeToRemote30Min(suggestion.on, 'floor') : null) || window.roundTimeToRemote30Min(formatMinToTime(Math.max(0, (ctx.firstStartM ?? 480) - 60)), 'floor');
+    defaultOff = suggestion?.off12h || (suggestion?.off ? window.roundTimeToRemote30Min(suggestion.off, 'ceil') : null) || window.roundTimeToRemote30Min(ctx.lastEndTimeStr || "17:00", 'ceil');
+  } else {
+    defaultOn = suggestion?.on24 || suggestion?.on || formatMinToTime(Math.max(0, (ctx.firstStartM ?? 480) - 20));
+    defaultOff = suggestion?.off24 || suggestion?.off || ctx.lastEndTimeStr || "17:00";
+  }
 
   if (mode === 'off') {
     if (onToggle) onToggle.checked = false;
     if (offToggle) offToggle.checked = true;
     if (offInput) offInput.value = defaultOff;
+    if (defaultOff && typeof sync24hTo12h === 'function') sync24hTo12h('off', defaultOff);
   } else if (mode === 'on') {
     if (onToggle) onToggle.checked = true;
     if (offToggle) offToggle.checked = false;
     if (onInput) onInput.value = defaultOn;
+    if (defaultOn && typeof sync24hTo12h === 'function') sync24hTo12h('on', defaultOn);
   } else if (mode === 'both') {
     if (onToggle) onToggle.checked = true;
     if (offToggle) offToggle.checked = true;
     if (onInput) onInput.value = defaultOn;
     if (offInput) offInput.value = defaultOff;
+    if (defaultOn && typeof sync24hTo12h === 'function') sync24hTo12h('on', defaultOn);
+    if (defaultOff && typeof sync24hTo12h === 'function') sync24hTo12h('off', defaultOff);
   }
 
   if (typeof onTimerToggleChange === 'function') {
     onTimerToggleChange();
+  }
+  if (typeof validateTimerInputs === 'function') {
+    validateTimerInputs();
   }
 };
 
@@ -3900,8 +3919,27 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   const onTimeInput = document.getElementById('timer-on-time');
   const offTimeInput = document.getElementById('timer-off-time');
 
-  const defaultOn = formatMinToTime(firstStartM - 20);
-  const defaultOff = lastEndTimeStr || "17:00";
+  // Load preferensi tipe remote AC untuk ruangan ini terlebih dahulu (default '24h')
+  let savedRemoteType = '24h';
+  try {
+    savedRemoteType = localStorage.getItem('unama_remote_type_' + roomName) || '24h';
+  } catch (e) {}
+  window._activeRemoteType = savedRemoteType;
+
+  // Hitung Saran Pintar Asmot lebih awal agar nilai default form selaras dengan rekomendasi
+  const initialSuggestion = (typeof window.calculateAsmotSmartSuggestion === 'function') ? window.calculateAsmotSmartSuggestion() : null;
+  window._currentSmartSuggestion = initialSuggestion;
+
+  let defaultOn = null;
+  let defaultOff = null;
+
+  if (savedRemoteType === '12h') {
+    defaultOn = initialSuggestion?.on12h || (initialSuggestion?.on ? window.roundTimeToRemote30Min(initialSuggestion.on, 'floor') : null) || window.roundTimeToRemote30Min(formatMinToTime(Math.max(0, firstStartM - 60)), 'floor');
+    defaultOff = initialSuggestion?.off12h || (initialSuggestion?.off ? window.roundTimeToRemote30Min(initialSuggestion.off, 'ceil') : null) || window.roundTimeToRemote30Min(lastEndTimeStr || "17:00", 'ceil');
+  } else {
+    defaultOn = initialSuggestion?.on24 || initialSuggestion?.on || formatMinToTime(Math.max(0, firstStartM - 20));
+    defaultOff = initialSuggestion?.off24 || initialSuggestion?.off || lastEndTimeStr || "17:00";
+  }
 
   const parseClock = (str) => {
     if (!str || !str.includes(':')) return null;
@@ -3950,14 +3988,8 @@ window.openTimerAcModal = function (roomName, kampusStr, customDate = null) {
   if (onTimeInput) onTimeInput.value = (existingTimer && existingTimer.timer_on) ? existingTimer.timer_on : defaultOn;
   if (offTimeInput) offTimeInput.value = (existingTimer && existingTimer.timer_off) ? existingTimer.timer_off : defaultOff;
 
-  // Hitung dan render Saran Pintar Asmot
+  // Render Saran Pintar Asmot
   updateAsmotSmartSuggestion();
-
-  // Load preferensi tipe remote AC untuk ruangan ini (default '24h')
-  let savedRemoteType = '24h';
-  try {
-    savedRemoteType = localStorage.getItem('unama_remote_type_' + roomName) || '24h';
-  } catch (e) {}
 
   window.selectRemoteType(savedRemoteType, true);
 
@@ -4374,8 +4406,10 @@ window.calculateAsmotSmartSuggestion = function () {
   }
 
   // 4. SUSUN STRUKTUR FORMAT 12H (PEMBULATAN KHUSUS REMOTE 00 & 30 MENIT)
-  const off12Str = window.formatTimeTo12h(offTime24, 'ceil');
-  const on12Str = onTime24 ? window.formatTimeTo12h(onTime24, 'floor') : null;
+  const onTime12h24 = onTime24 ? window.roundTimeToRemote30Min(onTime24, 'floor') : null;
+  const offTime12h24 = offTime24 ? window.roundTimeToRemote30Min(offTime24, 'ceil') : null;
+  const off12Str = offTime12h24 ? window.formatTimeTo12h(offTime12h24) : null;
+  const on12Str = onTime12h24 ? window.formatTimeTo12h(onTime12h24) : null;
 
   // 5. TEKS DESKRIPSI OTOMATIS SESUAI TAB FORMAT REMOTE AKTIF
   let title = '';
@@ -4431,13 +4465,21 @@ window.calculateAsmotSmartSuggestion = function () {
     }
   }
 
+  // Tentukan jam saran on/off default yang langsung cocok dengan remote aktif
+  const chosenOn = (activeRemoteType === '12h') ? onTime12h24 : onTime24;
+  const chosenOff = (activeRemoteType === '12h') ? offTime12h24 : offTime24;
+
   return {
     hasSuggestion: true,
     title,
     desc,
     mode,
-    on: onTime24,
-    off: offTime24,
+    on: chosenOn,
+    off: chosenOff,
+    on24: onTime24,
+    off24: offTime24,
+    on12h: onTime12h24,
+    off12h: offTime12h24,
     durationOn,
     durationOff: isOffExceeds12h ? null : durationOff,
     isOffExceeds12h,
@@ -4474,28 +4516,66 @@ window.updateAsmotSmartSuggestion = function () {
 };
 
 window.applyAsmotSmartSuggestion = function () {
-  const suggestion = window._currentSmartSuggestion;
+  const suggestion = window._currentSmartSuggestion || (typeof window.calculateAsmotSmartSuggestion === 'function' ? window.calculateAsmotSmartSuggestion() : null);
   if (!suggestion || !suggestion.hasSuggestion) return;
 
+  const activeRemoteType = window._activeRemoteType || '24h';
   const onToggle = document.getElementById('timer-on-toggle');
   const offToggle = document.getElementById('timer-off-toggle');
   const onInput = document.getElementById('timer-on-time');
   const offInput = document.getElementById('timer-off-time');
 
+  let targetOn = suggestion.on;
+  let targetOff = suggestion.off;
+
+  if (activeRemoteType === '12h') {
+    targetOn = suggestion.on12h || (suggestion.on ? window.roundTimeToRemote30Min(suggestion.on, 'floor') : null);
+    targetOff = suggestion.off12h || (suggestion.off ? window.roundTimeToRemote30Min(suggestion.off, 'ceil') : null);
+  } else if (activeRemoteType === '24h') {
+    targetOn = suggestion.on24 || suggestion.on;
+    targetOff = suggestion.off24 || suggestion.off;
+  }
+
   if (suggestion.mode === 'off') {
     if (onToggle) onToggle.checked = false;
     if (offToggle) offToggle.checked = true;
-    if (suggestion.off && offInput) offInput.value = suggestion.off;
+    if (targetOff && offInput) offInput.value = targetOff;
   } else if (suggestion.mode === 'both') {
     if (onToggle) onToggle.checked = true;
     if (offToggle) offToggle.checked = true;
-    if (suggestion.on && onInput) onInput.value = suggestion.on;
-    if (suggestion.off && offInput) offInput.value = suggestion.off;
+    if (targetOn && onInput) onInput.value = targetOn;
+    if (targetOff && offInput) offInput.value = targetOff;
+  } else if (suggestion.mode === 'on') {
+    if (onToggle) onToggle.checked = true;
+    if (offToggle) offToggle.checked = false;
+    if (targetOn && onInput) onInput.value = targetOn;
   }
 
-  // Sinkronkan ke input 12 jam jika view 12 jam sedang aktif
-  if (suggestion.on) sync24hTo12h('on', suggestion.on);
-  if (suggestion.off) sync24hTo12h('off', suggestion.off);
+  // Sinkronkan ke input 12 jam jika view 12 jam atau format remote 12h
+  if (targetOn) sync24hTo12h('on', targetOn);
+  if (targetOff) sync24hTo12h('off', targetOff);
+
+  // Jika remote type duration aktif: sorot tombol durasi yang sesuai
+  if (suggestion.durationOn) {
+    const onContainer = document.getElementById('timer-on-duration-grid');
+    if (onContainer) {
+      onContainer.querySelectorAll('.btn-duration-hour').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.getAttribute('data-hour'), 10) === suggestion.durationOn);
+      });
+    }
+  }
+  if (suggestion.durationOff) {
+    const offContainer = document.getElementById('timer-off-duration-grid');
+    if (offContainer) {
+      offContainer.querySelectorAll('.btn-duration-hour').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.getAttribute('data-hour'), 10) === suggestion.durationOff);
+      });
+    }
+  }
+
+  onTimerToggleChange();
+  validateTimerInputs();
+};
 
   // Jika remote type duration aktif: sorot tombol durasi yang sesuai
   if (suggestion.durationOn) {
@@ -4759,11 +4839,13 @@ window.sync24hTo12h = function (which, time24Str) {
     pmBtn.classList.toggle('active', ampm === 'PM');
   }
 
-  // 5. Sinkronkan kembali input utama 24h dengan waktu yang sudah dibulatkan
+  // 5. Sinkronkan kembali input utama 24h dengan waktu yang sudah dibulatkan jika format aktif 12h
   const snappedTime24Str = `${String(h24).padStart(2, '0')}:${minDisplay}`;
-  const mainInput = document.getElementById(`timer-${which}-time`);
-  if (mainInput && mainInput.value !== snappedTime24Str) {
-    mainInput.value = snappedTime24Str;
+  if (window._activeRemoteType === '12h') {
+    const mainInput = document.getElementById(`timer-${which}-time`);
+    if (mainInput && mainInput.value !== snappedTime24Str) {
+      mainInput.value = snappedTime24Str;
+    }
   }
 
   const equivBadge = document.getElementById(`timer-${which}-12h-equiv`);
@@ -4943,19 +5025,27 @@ function renderTimerPresets(formatType) {
 
   const onPresetsContainer = document.getElementById('timer-on-presets');
   if (onPresetsContainer) {
-    const h20 = formatMinToTime(firstStartM - 20);
-    const h15 = formatMinToTime(firstStartM - 15);
-    const h10 = formatMinToTime(firstStartM - 10);
+    if (formatType === '12h') {
+      const h60 = window.roundTimeToRemote30Min(formatMinToTime(Math.max(0, firstStartM - 60)), 'floor');
+      const h30 = window.roundTimeToRemote30Min(formatMinToTime(Math.max(0, firstStartM - 30)), 'floor');
+      const l60 = window.formatTimeTo12h(h60);
+      const l30 = window.formatTimeTo12h(h30);
 
-    const l20 = formatType === '12h' ? formatTimeTo12h(h20, 'floor') : `${h20} WIB`;
-    const l15 = formatType === '12h' ? formatTimeTo12h(h15, 'floor') : `${h15} WIB`;
-    const l10 = formatType === '12h' ? formatTimeTo12h(h10, 'floor') : `${h10} WIB`;
+      onPresetsContainer.innerHTML = `
+        <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h60}')">1 Jam Sebelum (${l60})</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h30}')">30 Mnt Sebelum (${l30})</button>
+      `;
+    } else {
+      const h20 = formatMinToTime(Math.max(0, firstStartM - 20));
+      const h15 = formatMinToTime(Math.max(0, firstStartM - 15));
+      const h10 = formatMinToTime(Math.max(0, firstStartM - 10));
 
-    onPresetsContainer.innerHTML = `
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">H-20 (${l20})</button>
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h15}')">H-15 (${l15})</button>
-      <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h10}')">H-10 (${l10})</button>
-    `;
+      onPresetsContainer.innerHTML = `
+        <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h20}')">H-20 (${h20} WIB)</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h15}')">H-15 (${h15} WIB)</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('on', '${h10}')">H-10 (${h10} WIB)</button>
+      `;
+    }
   }
 
   const offPresetsContainer = document.getElementById('timer-off-presets');
@@ -4963,15 +5053,18 @@ function renderTimerPresets(formatType) {
     let offChips = '';
     if (roomSchedules.length > 0) {
       roomSchedules.forEach((s, idx) => {
-        const lbl = formatType === '12h' ? formatTimeTo12h(s._endTimeStr, 'ceil') : `${s._endTimeStr} WIB`;
-        offChips += `<button type="button" class="preset-chip" onclick="selectPresetTime('off', '${s._endTimeStr}')">Selesai Sesi ${idx + 1} (${lbl})</button>`;
+        const targetOff = (formatType === '12h') ? window.roundTimeToRemote30Min(s._endTimeStr, 'ceil') : s._endTimeStr;
+        const lbl = (formatType === '12h') ? window.formatTimeTo12h(targetOff) : `${s._endTimeStr} WIB`;
+        offChips += `<button type="button" class="preset-chip" onclick="selectPresetTime('off', '${targetOff}')">Selesai Sesi ${idx + 1} (${lbl})</button>`;
       });
     } else {
-      const lbl11 = formatType === '12h' ? formatTimeTo12h('11:00', 'ceil') : '11:00 WIB';
-      const lbl17 = formatType === '12h' ? formatTimeTo12h('17:00', 'ceil') : '17:00 WIB';
+      const target11 = (formatType === '12h') ? window.roundTimeToRemote30Min('11:00', 'ceil') : '11:00';
+      const target17 = (formatType === '12h') ? window.roundTimeToRemote30Min('17:00', 'ceil') : '17:00';
+      const lbl11 = (formatType === '12h') ? window.formatTimeTo12h(target11) : '11:00 WIB';
+      const lbl17 = (formatType === '12h') ? window.formatTimeTo12h(target17) : '17:00 WIB';
       offChips = `
-        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '11:00')">${lbl11}</button>
-        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '17:00')">${lbl17}</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '${target11}')">${lbl11}</button>
+        <button type="button" class="preset-chip" onclick="selectPresetTime('off', '${target17}')">${lbl17}</button>
       `;
     }
     offPresetsContainer.innerHTML = offChips;
@@ -4997,32 +5090,46 @@ window.onTimerToggleChange = function () {
 };
 
 window.selectPresetTime = function (type, timeStr) {
+  const activeRemoteType = window._activeRemoteType || '24h';
+  let finalTimeStr = timeStr;
+  if (activeRemoteType === '12h') {
+    finalTimeStr = window.roundTimeToRemote30Min(timeStr, type === 'off' ? 'ceil' : 'floor');
+  }
+
   if (type === 'on') {
     const onInput = document.getElementById('timer-on-time');
     const onToggle = document.getElementById('timer-on-toggle');
-    if (onInput) onInput.value = timeStr;
+    if (onInput) onInput.value = finalTimeStr;
     if (onToggle && !onToggle.checked) {
       onToggle.checked = true;
       onTimerToggleChange();
     }
-    sync24hTo12h('on', timeStr);
+    sync24hTo12h('on', finalTimeStr);
   } else if (type === 'off') {
     const offInput = document.getElementById('timer-off-time');
     const offToggle = document.getElementById('timer-off-toggle');
-    if (offInput) offInput.value = timeStr;
+    if (offInput) offInput.value = finalTimeStr;
     if (offToggle && !offToggle.checked) {
       offToggle.checked = true;
       onTimerToggleChange();
     }
-    sync24hTo12h('off', timeStr);
+    sync24hTo12h('off', finalTimeStr);
   }
   validateTimerInputs();
 };
 
 window.applySmartOnCorrection = function () {
   const ctx = window._activeTimerRoomContext || {};
+  const activeRemoteType = window._activeRemoteType || '24h';
   const firstStartM = ctx.firstStartM ?? 480;
-  const recommendedOn = formatMinToTime(firstStartM - 20);
+
+  let recommendedOn = null;
+  if (activeRemoteType === '12h') {
+    recommendedOn = window.roundTimeToRemote30Min(formatMinToTime(Math.max(0, firstStartM - 60)), 'floor');
+  } else {
+    recommendedOn = formatMinToTime(Math.max(0, firstStartM - 20));
+  }
+
   const onInput = document.getElementById('timer-on-time');
   if (onInput) onInput.value = recommendedOn;
   sync24hTo12h('on', recommendedOn);
@@ -5162,6 +5269,15 @@ window.saveTimerAc = async function () {
   const ctx = window._activeTimerRoomContext;
   if (!ctx) return;
 
+  // Jika format remote 12 Jam sedang aktif, pastikan sinkronisasi dari input 12h ke input 24h
+  const activeRemoteType = window._activeRemoteType || '24h';
+  if (activeRemoteType === '12h') {
+    if (typeof on12hInputChange === 'function') {
+      on12hInputChange('on');
+      on12hInputChange('off');
+    }
+  }
+
   const onToggle = document.getElementById('timer-on-toggle');
   const offToggle = document.getElementById('timer-off-toggle');
   const onInput = document.getElementById('timer-on-time');
@@ -5169,8 +5285,14 @@ window.saveTimerAc = async function () {
 
   const onActive = onToggle ? onToggle.checked : false;
   const offActive = offToggle ? offToggle.checked : false;
-  const onVal = (onActive && onInput) ? onInput.value : null;
-  const offVal = (offActive && offInput) ? offInput.value : null;
+  let onVal = (onActive && onInput) ? onInput.value : null;
+  let offVal = (offActive && offInput) ? offInput.value : null;
+
+  // Pastikan jika format 12 jam, nilai yang disimpan adalah kelipatan 30 menit remote
+  if (activeRemoteType === '12h') {
+    if (onVal) onVal = window.roundTimeToRemote30Min(onVal, 'floor');
+    if (offVal) offVal = window.roundTimeToRemote30Min(offVal, 'ceil');
+  }
 
   let timerAktif = 'none';
   if (onActive && offActive) timerAktif = 'both';
