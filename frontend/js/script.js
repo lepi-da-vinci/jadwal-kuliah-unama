@@ -4577,28 +4577,6 @@ window.applyAsmotSmartSuggestion = function () {
   validateTimerInputs();
 };
 
-  // Jika remote type duration aktif: sorot tombol durasi yang sesuai
-  if (suggestion.durationOn) {
-    const onContainer = document.getElementById('timer-on-duration-grid');
-    if (onContainer) {
-      onContainer.querySelectorAll('.btn-duration-hour').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.getAttribute('data-hour'), 10) === suggestion.durationOn);
-      });
-    }
-  }
-  if (suggestion.durationOff) {
-    const offContainer = document.getElementById('timer-off-duration-grid');
-    if (offContainer) {
-      offContainer.querySelectorAll('.btn-duration-hour').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.getAttribute('data-hour'), 10) === suggestion.durationOff);
-      });
-    }
-  }
-
-  onTimerToggleChange();
-  validateTimerInputs();
-};
-
 // ==============================================================
 // LOGIKA SELEKTOR TIPE FORMAT REMOTE AC (24H, 12H AM/PM, PER JAM 1-12)
 // ==============================================================
