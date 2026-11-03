@@ -4061,11 +4061,19 @@ def update_status_lab(data: StatusLabUpdateInput):
             try:
                 conn_b = scraper.get_db()
                 cur_b = conn_b.cursor()
-                # Saat dibuka kembali, pastikan status ruangan hari ini diaktifkan/dibuka sepenuhnya
+                # 1. Update seluruh riwayat status operasional ruangan hari ini menjadi buka
                 cur_b.execute("""
                     UPDATE status_operasional_lab
                     SET status_lab = 'buka', diubah_oleh = %s, waktu_aksi = NOW()
                     WHERE tanggal = %s AND id_ruangan = %s
+                """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
+                # 2. Sinkronkan seluruh sesi jadwal aktif hari ini di ruangan ini agar tercatat eksplisit dibuka
+                cur_b.execute("""
+                    INSERT INTO status_operasional_lab (tanggal, id_ruangan, jam, nama_mk, kelas, status_lab, diubah_oleh, waktu_aksi)
+                    SELECT j.tanggal, j.id_ruangan, j.jam, j.nama_mk, j.kelas, 'buka', %s, NOW()
+                    FROM jadwal j
+                    WHERE j.tanggal = %s AND j.id_ruangan = %s
+                    ON DUPLICATE KEY UPDATE status_lab = 'buka', diubah_oleh = VALUES(diubah_oleh), waktu_aksi = NOW()
                 """, (data.diubah_oleh or "Aslab (Web)", data.tanggal.strip(), id_ruangan))
                 conn_b.commit()
                 cur_b.close()

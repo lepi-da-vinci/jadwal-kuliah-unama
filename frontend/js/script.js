@@ -2658,6 +2658,41 @@ function getRoomOperationalStatus(schedules, isToday) {
         oleh: ongoingSession.status_lab_oleh || ''
       };
     }
+    // Failsafe: Jika sesi aktif saat ini belum ada tindakan manual (misal berpindah sesi),
+    // namun ada sesi hari ini yang pernah dibuka dan belum pernah ditutup setelahnya: pertahankan status BUKA!
+    let wasOpenedEarlier = false;
+    let openedSession = null;
+    let latestCloseMin = -1;
+    let latestOpenMin = -1;
+
+    for (const s of schedules) {
+      const sSt = (s.status_lab || '').toLowerCase();
+      let sActionMin = -1;
+      if (s.status_lab_waktu && s.status_lab_waktu.includes(':')) {
+        const parts = s.status_lab_waktu.split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (!isNaN(h) && !isNaN(m)) sActionMin = h * 60 + m;
+      }
+      if (sSt === 'buka') {
+        wasOpenedEarlier = true;
+        openedSession = s;
+        if (sActionMin >= latestOpenMin) latestOpenMin = sActionMin;
+      } else if (sSt === 'tutup') {
+        if (sActionMin >= latestCloseMin) latestCloseMin = sActionMin;
+      }
+    }
+
+    if (wasOpenedEarlier && (latestCloseMin < 0 || latestOpenMin >= latestCloseMin)) {
+      return {
+        status: 'buka',
+        label: 'buka',
+        session: ongoingSession,
+        waktu: openedSession?.status_lab_waktu || '',
+        oleh: openedSession?.status_lab_oleh || 'Aslab'
+      };
+    }
+
     // Sesi aktif saat ini belum ada tindakan manual: status belum, jangan mewarisi status tutup dari sesi masa lalu!
     return { status: 'tutup', label: 'belum', session: ongoingSession, waktu: '', oleh: '' };
   }
@@ -3192,8 +3227,11 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
 
   // Sinkronisasi otomatis status AC berdasarkan jam realtime dan pengaturan Timer Remote Asmot
   if (acTimer && acTimer.timer_aktif && acTimer.timer_aktif !== 'none' && effectiveIsToday) {
-    if (isManuallyClosed) {
-      // Manual TUTUP adalah prioritas tertinggi, status AC wajib padam
+    if (hasPendingTimerOff) {
+      // Jika dalam rentang aktif Timer OFF remote: AC tetap aktif sampai waktu Timer OFF tiba!
+      isAcRecordedOn = true;
+    } else if (isManuallyClosed) {
+      // Manual TUTUP adalah prioritas tertinggi jika tidak dalam siklus Timer OFF aktif
       isAcRecordedOn = false;
     } else if (isManuallyOpened) {
       // Manual BUKA / HIDUPKAN AC adalah prioritas tertinggi pengguna, status AC wajib menyala!
@@ -3201,9 +3239,6 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
     } else if (hasPendingTimerOn) {
       // Sebelum jam Timer ON tiba: AC WAJIB PADAM DAHULU!
       isAcRecordedOn = false;
-    } else if (hasPendingTimerOff) {
-      // Jika dalam rentang aktif Timer: AC tetap aktif sampai waktu Timer OFF tiba!
-      isAcRecordedOn = true;
     } else if (isTimerOffPassed) {
       // Jam timer OFF sudah lewat: AC padam
       isAcRecordedOn = false;
@@ -3521,8 +3556,8 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
 
   // 4. Apakah sekarang SETELAH Sesi Terakhir Hari Ini?
   if (currentMinutes > lastS._endM) {
-    // Jika ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas selesai 16:30):
-    if (hasPendingTimerOff && !isManuallyClosed) {
+    // Jika ada Timer OFF mendatang yang masih berjalan (misal disetel mati 17:00 tapi kelas fisik selesai 14:45):
+    if (hasPendingTimerOff) {
       const remainingMins = Math.max(1, tOffM - currentMinutes);
       return withTimer({
         code: 'TIMER_OFF_WAITING',
@@ -3533,7 +3568,7 @@ function calculateRoomAcStatus(rawSchedules = [], isToday = false, activeDate = 
         actionLabel: 'Matikan AC Total',
         targetAction: 'tutup',
         countdownMinutes: remainingMins,
-        recommendation: `Perkuliahan hari ini telah selesai. AC tetap menyala dan akan mati otomatis pada pukul ${acTimer.timer_off} WIB sesuai timer remote.`,
+        recommendation: `Perkuliahan fisik hari ini telah selesai. AC tetap menyala dan akan mati otomatis pada pukul ${acTimer.timer_off} WIB sesuai timer remote.`,
         stripClass: 'is-ac-on',
         dotClass: 'dot-buka',
         btnClass: 'tutup',
@@ -5404,6 +5439,12 @@ function checkAndTriggerAcTimers() {
     const t = window._roomAcTimers[key];
     if (!t || t.tanggal !== currentDayStr || !t.timer_aktif || t.timer_aktif === 'none') return;
 
+    // Filter: Timer AC HANYA berlaku untuk Ruang Kelas Teori (Asmot), BUKAN Laboratorium!
+    const isLabRoom = (typeof isLab === 'function' && isLab(t.roomName)) ||
+                      (t.roomName || '').toLowerCase().includes('lab') ||
+                      (t.roomName || '').toLowerCase().includes('cisco');
+    if (isLabRoom) return;
+
     const tOnM = parseClock(t.timer_on);
     const tOffM = parseClock(t.timer_off);
 
@@ -5626,8 +5667,8 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // (Seluruh sesi ruangan hari ini adalah Daring/Online (OL) atau Dibatalkan (CC), atau ruangan tidak memiliki jadwal sama sekali)
   // Sesuai aturan sistem: Jika tidak ada kelas TM fisik di ruangan hari ini, status ruangan WAJIB "Kosong" (bukan Selesai / Ditutup).
   if (validPhysicalClasses.length === 0) {
-    if (!isManuallyClosed && hasPendingTimerOff) {
-      // Kecuali jika ada Timer OFF remote yang saat ini aktif menjaga AC tetap standby
+    if (hasPendingTimerOff) {
+      // Ada Timer OFF remote yang saat ini aktif menjaga AC tetap standby
       state = 'waiting';
       text = 'AC Standby';
       jamText = `(OFF ${tData.timer_off})`;
@@ -5641,15 +5682,15 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
       text = 'Kosong';
       jamText = '';
     }
-    const lockStatus = isAcActive ? 'buka' : 'tutup';
+    const lockStatus = (isAcActive || hasPendingTimerOff) ? 'buka' : 'tutup';
     return { state, text, jamText, lockStatus, acStatus };
   }
 
   // 3. KASUS HARI INI DENGAN KELAS TATAP MUKA FISIK (TM):
   if (allEnded) {
     // Seluruh sesi kelas fisik hari ini telah selesai
-    if (hasPendingTimerOff && !isManuallyClosed) {
-      // Timer OFF mendatang masih aktif menjaga AC standby
+    if (hasPendingTimerOff) {
+      // Timer OFF mendatang masih aktif menjaga AC standby hingga waktu mati otomatis tiba
       state = 'waiting';
       text = 'AC Standby';
       jamText = `(OFF ${tData.timer_off})`;
@@ -5661,7 +5702,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
         jamText = wasEverOpened ? '(Ditutup)' : '';
       } else {
         // Untuk ruang kelas teori: tampil '(Ditutup)' hanya jika AC sudah padam
-        jamText = isAcActive ? '' : '(Ditutup)';
+        jamText = (isAcActive || hasPendingTimerOff) ? '' : '(Ditutup)';
       }
     }
   } else if (isOccupied && activeClass) {
@@ -5706,7 +5747,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   if (isLabEntity) {
     lockStatus = (opStatus && opStatus.status === 'buka') ? 'buka' : 'tutup';
   } else {
-    lockStatus = isAcActive ? 'buka' : 'tutup';
+    lockStatus = (isAcActive || hasPendingTimerOff) ? 'buka' : 'tutup';
   }
 
   return { state, text, jamText, lockStatus, acStatus };
@@ -17255,8 +17296,13 @@ setInterval(async () => {
     const dataJadwal = await resJadwal.json();
     if (dataJadwal.status === 'success') {
       allJadwal = dataJadwal.data;
-      applyFilters();
-      if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+      // Segera sinkronkan status operasional lab & timer agar status terbaru tidak ter-overwrite data mentah
+      if (typeof syncRealtimeLabStatus === 'function') {
+        syncRealtimeLabStatus(true);
+      } else {
+        applyFilters();
+        if (typeof updateActiveLabPanel === 'function') updateActiveLabPanel();
+      }
     }
 
     // 2. Refresh Data Master (Ruangan)
