@@ -5626,11 +5626,54 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
                       (roomName || '').toLowerCase().includes('cisco') ||
                       (schedules || []).some(s => s.is_lab || (s.nama_ruangan && typeof isLab === 'function' && isLab(s.nama_ruangan)));
 
-  const isManuallyClosed = Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup');
+  // Evaluasi operasional laboratorium (buka/tutup):
+  let wasOpenedToday = false;
+  let latestOpenMin = -1;
+  let latestCloseMin = -1;
+  let hasExplicitClose = false;
 
-  // Apakah lab pernah dibuka hari ini oleh Aslab?
-  const wasEverOpened = (schedules || []).some(s => (s.status_lab || '').toLowerCase().trim() === 'buka') ||
-                        (opStatus && (opStatus.status === 'buka' || (opStatus.status === 'tutup' && opStatus.label === 'tutup' && (schedules || []).some(s => Boolean(s.status_lab_waktu)))));
+  for (const s of (schedules || [])) {
+    const st = (s.status_lab || '').toLowerCase().trim();
+    let actionMin = -1;
+    if (s.status_lab_waktu && s.status_lab_waktu.includes(':')) {
+      const parts = s.status_lab_waktu.split(':');
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(h) && !isNaN(m)) actionMin = h * 60 + m;
+    }
+
+    if (st === 'buka') {
+      wasOpenedToday = true;
+      if (actionMin >= latestOpenMin) latestOpenMin = Math.max(actionMin, 0);
+    } else if (st === 'tutup') {
+      const oleh = (s.status_lab_oleh || '').toLowerCase();
+      const isByHuman = oleh.includes('aslab') || oleh.includes('web') || oleh.includes('wa');
+      if (isByHuman || Boolean(s.status_lab_waktu)) {
+        hasExplicitClose = true;
+        if (actionMin >= latestCloseMin) latestCloseMin = Math.max(actionMin, 0);
+      }
+    }
+  }
+
+  if (opStatus && opStatus.status === 'buka') {
+    wasOpenedToday = true;
+  }
+
+  // Lab benar-benar telah ditutup oleh aslab HANYA jika:
+  // Lab memang pernah dibuka hari ini DAN ada konfirmasi penutupan yang terjadi setelah/sama dengan waktu buka terakhir
+  const isLabActuallyClosedByAslab = Boolean(
+    wasOpenedToday &&
+    hasExplicitClose &&
+    latestCloseMin >= latestOpenMin &&
+    latestCloseMin >= 0
+  );
+
+  // Jika lab dibuka hari ini tetapi aslab belum menutupnya:
+  const isLabStillOpenUnclosed = Boolean(wasOpenedToday && !isLabActuallyClosedByAslab);
+
+  const isManuallyClosed = isLabEntity 
+    ? isLabActuallyClosedByAslab 
+    : Boolean(opStatus && opStatus.status === 'tutup' && opStatus.label === 'tutup');
 
   let state = 'empty'; // empty (red), waiting (yellow), occupied (green), scheduled (blue), finished (purple)
   let text = 'Kosong';
@@ -5698,8 +5741,9 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
       state = 'finished';
       text = 'Selesai';
       if (isLabEntity) {
-        // Untuk lab yang tidak pernah dibuka hari ini oleh aslab, tetap tampil 'Selesai' saja tanpa '(Ditutup)'
-        jamText = wasEverOpened ? '(Ditutup)' : '';
+        // Tampil '(Ditutup)' HANYA jika lab memang pernah dibuka dan sudah benar-benar ditutup oleh aslab!
+        // Jika lab tidak pernah dibuka, ATAU jika lab dibuka tapi aslab belum menutupnya: tetap tampil 'Selesai' saja!
+        jamText = isLabActuallyClosedByAslab ? '(Ditutup)' : '';
       } else {
         // Untuk ruang kelas teori: tampil '(Ditutup)' hanya jika AC sudah padam
         jamText = (isAcActive || hasPendingTimerOff) ? '' : '(Ditutup)';
@@ -5718,7 +5762,7 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
         state = 'finished';
         text = 'Selesai';
         if (isLabEntity) {
-          jamText = wasEverOpened ? '(Ditutup)' : '';
+          jamText = isLabActuallyClosedByAslab ? '(Ditutup)' : '';
         } else {
           jamText = isAcActive ? '' : '(Ditutup)';
         }
@@ -5745,7 +5789,16 @@ function evaluateRoomCardStatus(schedules, isToday, activeDate, currentDayStr, c
   // Status gembok buka/tutup (lockStatus):
   let lockStatus = 'tutup';
   if (isLabEntity) {
-    lockStatus = (opStatus && opStatus.status === 'buka') ? 'buka' : 'tutup';
+    if (isLabStillOpenUnclosed) {
+      // Lab pernah dibuka hari ini dan belum pernah ditutup oleh aslab: gembok WAJIB tetap BUKA!
+      lockStatus = 'buka';
+    } else if (isLabActuallyClosedByAslab) {
+      // Lab sudah resmi ditutup oleh aslab: gembok TUTUP
+      lockStatus = 'tutup';
+    } else {
+      // Saat perkuliahan berlangsung / persiapan: ikuti opStatus
+      lockStatus = (opStatus && opStatus.status === 'buka') ? 'buka' : 'tutup';
+    }
   } else {
     lockStatus = (isAcActive || hasPendingTimerOff) ? 'buka' : 'tutup';
   }
@@ -11287,6 +11340,48 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       let currentStatus = opStatus.label;
       let statusOleh = opStatus.oleh;
       let statusWaktu = opStatus.waktu;
+
+      // Sinkronkan status operasional lab di modal jika kelas hari ini telah selesai
+      if (isLabEntity && schedules.length > 0 && isToday) {
+        let labOpened = false;
+        let labClosed = false;
+        let lastOpen = -1;
+        let lastClose = -1;
+        schedules.forEach(s => {
+          const st = (s.status_lab || '').toLowerCase().trim();
+          let m = -1;
+          if (s.status_lab_waktu && s.status_lab_waktu.includes(':')) {
+            const p = s.status_lab_waktu.split(':');
+            m = parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+          }
+          if (st === 'buka') {
+            labOpened = true;
+            if (m >= lastOpen) lastOpen = Math.max(m, 0);
+          } else if (st === 'tutup') {
+            const oleh = (s.status_lab_oleh || '').toLowerCase();
+            const isByHuman = oleh.includes('aslab') || oleh.includes('web') || oleh.includes('wa');
+            if (isByHuman || Boolean(s.status_lab_waktu)) {
+              labClosed = true;
+              if (m >= lastClose) lastClose = Math.max(m, 0);
+            }
+          }
+        });
+        const isActuallyClosed = Boolean(labOpened && labClosed && lastClose >= lastOpen && lastClose >= 0);
+        const isStillOpen = Boolean(labOpened && !isActuallyClosed);
+
+        const maxEndMin = Math.max(...schedules.map(s => s._endM || 0));
+        const allClassesEnded = (currentMinutes > maxEndMin);
+
+        if (allClassesEnded) {
+          if (isStillOpen) {
+            currentStatus = 'buka';
+          } else if (isActuallyClosed) {
+            currentStatus = 'tutup';
+          } else {
+            currentStatus = 'belum';
+          }
+        }
+      }
 
       const lockBadgeEl = document.getElementById('room-detail-lock-badge');
       if (lockBadgeEl) {
