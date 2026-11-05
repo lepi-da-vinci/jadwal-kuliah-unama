@@ -34,6 +34,7 @@ except ImportError:
 import logging
 import scraper
 import wa_notifier
+import performance_optimizer as perf_opt
 
 # Filter logging agar access log tidak dipenuhi spam polling /api/sync/pending
 class NoisyEndpointFilter(logging.Filter):
@@ -53,10 +54,16 @@ async def startup_event():
         pass
     if build_html:
         try:
-            build_html()
+            perf_opt.build_html_if_needed(BASE_DIR, build_html)
         except Exception as e:
             print(f"Auto-build HTML notice: {e}")
     scraper.init_db_schema()
+    try:
+        created_idx = perf_opt.ensure_performance_indexes()
+        if created_idx:
+            print(f"[Performance] Berhasil menambahkan composite index: {', '.join(created_idx)}")
+    except Exception as e_idx:
+        print(f"[Performance] Info ensure_performance_indexes: {e_idx}")
     try:
         wa_notifier.init_sent_notifications_on_startup()
     except Exception as e:
@@ -248,6 +255,10 @@ def admin_verify(token: str = Depends(verify_admin_token)):
 # ==================================================================
 
 def get_db():
+    conn = perf_opt.get_pooled_db()
+    if conn is not None:
+        return conn
+
     pwd = os.getenv("DB_PASSWORD", "")
     host = os.getenv("DB_HOST", "127.0.0.1")
     configured_port = int(os.getenv("DB_PORT", 3307))
@@ -280,6 +291,11 @@ def get_db():
                 continue
     if last_err:
         raise last_err
+
+@app.get("/api/system/performance")
+def get_system_performance():
+    """Mengembalikan metrik diagnostik performa database pool, in-memory cache, dan LRU normalizer"""
+    return perf_opt.get_performance_diagnostics()
 
 @app.get("/api/server-urls")
 def get_server_urls(refresh: bool = False):
@@ -667,6 +683,11 @@ def delete_semester(nama_semester: str, token: str = Depends(verify_admin_token)
 @app.get("/api/jadwal")
 def get_semua_jadwal(semester: str = None):
     """Mengembalikan daftar semua jadwal dengan filter semester aktif (atau spesifik)"""
+    cache_key = f"jadwal:{semester or 'ACTIVE'}"
+    cached_resp = perf_opt.api_cache.get(cache_key)
+    if cached_resp is not None:
+        return cached_resp
+
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -676,7 +697,7 @@ def get_semua_jadwal(semester: str = None):
             target_sem = scraper.get_active_semester(conn, cursor)
             
         # ─── AUTO-RECOVERY DENGAN JADWAL_PERMANENT (HANYA JIKA TABEL JADWAL KOSONG) ───
-        scraper.ensure_permanent_table_exists(cursor)
+        perf_opt.ensure_permanent_table_once(cursor, scraper.ensure_permanent_table_exists)
         cursor.execute("SELECT COUNT(*) as cnt FROM jadwal WHERE semester = %s", (target_sem,))
         cnt_active = cursor.fetchone()['cnt']
         cursor.execute("SELECT COUNT(*) as cnt FROM jadwal_permanent WHERE semester = %s", (target_sem,))
@@ -774,7 +795,7 @@ def get_semua_jadwal(semester: str = None):
                 item['sks'] = scraper.get_class_sks(item.get('nama_mk') or '', item.get('kelas'))
                 item['durasi_menit'] = scraper.get_class_duration(item.get('nama_mk') or '', item.get('kelas'))
                 
-        return {
+        resp_payload = {
             "status": "success", 
             "active_semester": target_sem,
             "total": len(hasil),
@@ -783,6 +804,8 @@ def get_semua_jadwal(semester: str = None):
             "missing_recovered": missing_count,
             "data": hasil
         }
+        perf_opt.api_cache.set(cache_key, resp_payload, ttl_seconds=12.0)
+        return resp_payload
     except mysql.connector.Error as err:
         return {"status": "error", "message": str(err)}
     finally:
@@ -2240,6 +2263,7 @@ async def sync_data(req: SyncRequest):
             # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
             success, count, msg = scraper.scrape_baak_direct(req.tanggal, None)
             if success:
+                perf_opt.invalidate_schedule_cache()
                 sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
                 pending_sync_queue.pop(tgl_key, None)
                 return {"status": "success", "message": msg, "count": count}
@@ -2406,6 +2430,7 @@ def sync_complete(req: SyncCompleteRequest):
         sem_to_use = req.semester or sync_status.get(tgl_key, {}).get("semester") or scraper.get_active_semester()
         target_tgl = tgl_key if tgl_key else None
         scraper.compare_and_finalize_sync(target_tgl, sem_to_use)
+        perf_opt.invalidate_schedule_cache()
         sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
         return {"status": "success", "message": f"Proses perbandingan dan finalisasi selesai ({sem_to_use}).", "count": prev_count, "semester": sem_to_use}
     except Exception as e:
@@ -2416,6 +2441,7 @@ def finalize_temp(admin: str = Depends(verify_admin_token)):
     """Memindahkan seluruh data yang ada di jadwal_temp ke tabel jadwal utama (memerlukan token Admin)"""
     try:
         scraper.compare_and_finalize_sync(None)
+        perf_opt.invalidate_schedule_cache()
         return {"status": "success", "message": "Seluruh data dari jadwal_temp berhasil dipindahkan ke tabel jadwal."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2423,15 +2449,21 @@ def finalize_temp(admin: str = Depends(verify_admin_token)):
 @app.get("/api/notifikasi-lab")
 def get_notifikasi_lab(tanggal: str, semester: str = None):
     """Ambil notifikasi ruangan (Labor & Ruang Kelas) untuk tanggal dan semester tertentu"""
+    cache_key = f"notifikasi_lab:{tanggal}:{semester or 'ACTIVE'}"
+    cached_resp = perf_opt.api_cache.get(cache_key)
+    if cached_resp is not None:
+        return cached_resp
+
     try:
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
         sem_active = semester or scraper.get_active_semester(conn, cursor)
-        # Hitung dan pastikan jeda ruangan untuk tanggal ini selalu sinkron & up-to-date
-        try:
-            scraper.calculate_and_save_gaps(conn, cursor, tanggal, sem_active)
-        except Exception as e_gap:
-            print(f"Error calculating gaps on fetch: {e_gap}")
+        # Hitung jeda ruangan dengan throttling (maks 1x per 120 detik untuk tanggal yang sama)
+        if perf_opt.should_recalculate_gaps(tanggal, sem_active, cooldown_seconds=120.0):
+            try:
+                scraper.calculate_and_save_gaps(conn, cursor, tanggal, sem_active)
+            except Exception as e_gap:
+                print(f"Error calculating gaps on fetch: {e_gap}")
 
         now_dt = datetime.datetime.now()
         is_today = (tanggal == now_dt.strftime('%Y-%m-%d'))
@@ -2503,7 +2535,9 @@ def get_notifikasi_lab(tanggal: str, semester: str = None):
             except Exception as e_del:
                 print(f"Error deleting obsolete notifikasi_lab rows: {e_del}")
 
-        return {"status": "success", "semester": sem_active, "data": cleaned_results}
+        resp_payload = {"status": "success", "semester": sem_active, "data": cleaned_results}
+        perf_opt.api_cache.set(cache_key, resp_payload, ttl_seconds=10.0)
+        return resp_payload
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
@@ -4082,6 +4116,7 @@ def update_status_lab(data: StatusLabUpdateInput):
                 print(f"[Error update sessions to buka]: {err_b}")
 
         if sukses:
+            perf_opt.invalidate_status_lab_cache(data.tanggal.strip())
             return {
                 "status": "success",
                 "message": f"Status lab berhasil diperbarui menjadi {data.status_lab}",
@@ -4181,6 +4216,7 @@ def update_timer_ac(data: TimerAcUpdateInput):
         err_msg = res_tuple[1] if (isinstance(res_tuple, (tuple, list)) and len(res_tuple) > 1) else None
 
         if sukses:
+            perf_opt.invalidate_status_lab_cache(data.tanggal.strip())
             return {
                 "status": "success",
                 "message": "Pengaturan timer AC berhasil disimpan",
@@ -4200,6 +4236,12 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
     try:
         if not tanggal:
             tanggal = datetime.date.today().strftime("%Y-%m-%d")
+
+        cache_key = f"status_lab:{tanggal}:{id_ruangan or 'ALL'}"
+        cached_resp = perf_opt.api_cache.get(cache_key)
+        if cached_resp is not None:
+            return cached_resp
+
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         wa_notifier.ensure_db_schema()
@@ -4252,7 +4294,9 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
             if r.get('tanggal'):
                 r['tanggal'] = str(r['tanggal'])[:10]
 
-        return {"status": "success", "tanggal": tanggal, "data": rows}
+        resp_payload = {"status": "success", "tanggal": tanggal, "data": rows}
+        perf_opt.api_cache.set(cache_key, resp_payload, ttl_seconds=2.5)
+        return resp_payload
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:
@@ -4294,7 +4338,7 @@ def get_file_path(relative_path: str) -> str:
 def serve_index():
     if build_html:
         try:
-            build_html()
+            perf_opt.build_html_if_needed(BASE_DIR, build_html)
         except Exception:
             pass
     if os.path.exists("index.html"):

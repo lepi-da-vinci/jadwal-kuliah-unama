@@ -33,13 +33,25 @@ function escapeHtml(str) {
 // 3. Ruang 3.1 dan 3.4 tidak pakai kata 'praktek', cukup 'R. 3.1' dan 'R. 3.4' di semua mode (desktop/HP), dan bukan lab.
 // 4. Gedung Pasca diganti menjadi 'S2' untuk teks yang ditampilkan agar lebih simpel.
 
+const _campusFormatCache = new Map();
+const _roomFormatCache = new Map();
+const _roomFormatHtmlCache = new Map();
+
 function formatCampusName(campus) {
   if (!campus) return 'Thehok';
-  let c = String(campus).trim();
+  const rawKey = String(campus);
+  const cached = _campusFormatCache.get(rawKey);
+  if (cached !== undefined) return cached;
+
+  let c = rawKey.trim();
   c = c.replace(/\bKampus\s+/gi, '').trim();
-  if (c.toLowerCase().includes('kobar')) return 'Kobar';
-  if (c.toLowerCase().includes('thehok')) return 'Thehok';
-  return c || 'Thehok';
+  let res = c || 'Thehok';
+  if (c.toLowerCase().includes('kobar')) res = 'Kobar';
+  else if (c.toLowerCase().includes('thehok')) res = 'Thehok';
+
+  if (_campusFormatCache.size > 500) _campusFormatCache.clear();
+  _campusFormatCache.set(rawKey, res);
+  return res;
 }
 window.formatCampusName = formatCampusName;
 
@@ -48,6 +60,10 @@ function formatRoomName(rawName, isMobile = null) {
   if (isMobile === null || isMobile === undefined) {
     isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   }
+  const cacheKey = `${rawName}__${isMobile ? 'M' : 'D'}`;
+  const cached = _roomFormatCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   let name = String(rawName).trim();
 
   // 1. Bersihkan kata 'Kampus' dari kurung atau teks: misal (Kampus Thehok) -> (Thehok)
@@ -77,16 +93,23 @@ function formatRoomName(rawName, isMobile = null) {
       .replace(/\bLaboratorium\b/gi, 'Labor');
   }
 
+  if (_roomFormatCache.size > 1000) _roomFormatCache.clear();
+  _roomFormatCache.set(cacheKey, name);
   return name;
 }
 window.formatRoomName = formatRoomName;
 
 function formatRoomNameHtml(rawName) {
   if (!rawName) return '';
+  const cached = _roomFormatHtmlCache.get(rawName);
+  if (cached !== undefined) return cached;
+
   const desk = formatRoomName(rawName, false);
   const mob = formatRoomName(rawName, true);
-  if (desk === mob) return escapeHtml(desk);
-  return `<span class="title-desktop">${escapeHtml(desk)}</span><span class="title-mobile">${escapeHtml(mob)}</span>`;
+  const res = (desk === mob) ? escapeHtml(desk) : `<span class="title-desktop">${escapeHtml(desk)}</span><span class="title-mobile">${escapeHtml(mob)}</span>`;
+  if (_roomFormatHtmlCache.size > 1000) _roomFormatHtmlCache.clear();
+  _roomFormatHtmlCache.set(rawName, res);
+  return res;
 }
 window.formatRoomNameHtml = formatRoomNameHtml;
 
@@ -2589,17 +2612,23 @@ function checkMidnightDateRollover() {
 // Cek pergantian hari 00:00 setiap 10 detik secara presisi
 setInterval(checkMidnightDateRollover, 10000);
 
+const _normRoomKeyCache = new Map();
 function normalizeRoomKey(name) {
   if (!name) return '';
+  const cached = _normRoomKeyCache.get(name);
+  if (cached !== undefined) return cached;
   let s = String(name).replace(/\(.*?\)/g, '').trim().toLowerCase();
   s = s.replace(/\b(laboratorium|labor|lab)\b/g, 'lab');
   s = s.replace(/\b(ruang|ruangan|r\.)\b/g, 'r');
-  return s.replace(/[^a-z0-9]/g, '');
+  const res = s.replace(/[^a-z0-9]/g, '');
+  if (_normRoomKeyCache.size > 1000) _normRoomKeyCache.clear();
+  _normRoomKeyCache.set(name, res);
+  return res;
 }
 
 function isSameRoomName(nameA, nameB) {
   if (!nameA || !nameB) return false;
-  if (nameA.trim().toLowerCase() === nameB.trim().toLowerCase()) return true;
+  if (nameA === nameB) return true;
   return normalizeRoomKey(nameA) === normalizeRoomKey(nameB);
 }
 window.normalizeRoomKey = normalizeRoomKey;
@@ -2831,20 +2860,27 @@ function getCleanRoom(str) {
 window.getCleanRoom = getCleanRoom;
 
 // Canonical Room Identifier untuk mencocokkan timer secara seragam tanpa terpengaruh variasi teks nama atau kampus
+const _canonRoomIdCache = new Map();
 function canonicalRoomId(name) {
   if (!name) return '';
+  const cached = _canonRoomIdCache.get(name);
+  if (cached !== undefined) return cached;
   let s = String(name).replace(/\(.*?\)/g, '').trim().toLowerCase();
   const isLab = /\b(laboratorium|labor|lab)\b/i.test(s);
   const numMatch = s.match(/\b([a-z]?\d+\.\d+)\b/i);
+  let res;
   if (numMatch) {
     const prefix = isLab ? 'lab_' : 'r_';
-    return prefix + numMatch[1].toLowerCase();
-  }
-  if (s.includes('cisco')) {
+    res = prefix + numMatch[1].toLowerCase();
+  } else if (s.includes('cisco')) {
     const cMatch = s.match(/\d+\.\d+/);
-    return 'cisco_' + (cMatch ? cMatch[0] : '');
+    res = 'cisco_' + (cMatch ? cMatch[0] : '');
+  } else {
+    res = s.replace(/[^a-z0-9]/g, '');
   }
-  return s.replace(/[^a-z0-9]/g, '');
+  if (_canonRoomIdCache.size > 1000) _canonRoomIdCache.clear();
+  _canonRoomIdCache.set(name, res);
+  return res;
 }
 window.canonicalRoomId = canonicalRoomId;
 
@@ -6230,16 +6266,18 @@ async function syncRealtimeLabStatus(force = false) {
       syncRoomAcTimersFromBackend(json.data, targetDate);
     }
     if (Array.isArray(allJadwal)) {
+      // Saring hanya jadwal pada targetDate terlebih dahulu (O(N) -> O(K))
+      const targetDayJadwal = allJadwal.filter(j => j.tanggal === targetDate);
       json.data.forEach(stat => {
         const statJam = (stat.jam || '').substring(0, 5);
         const statCamp = formatCampusName(stat.kampus);
-        allJadwal.forEach(j => {
+        targetDayJadwal.forEach(j => {
           const jJam = (j.jam || '').substring(0, 5);
           const jCamp = formatCampusName(j.kampus || getRoomCampus(j.nama_ruangan));
           const matchCamp = !statCamp || !jCamp || (jCamp === statCamp);
           const matchRoom = (stat.id_ruangan && j.id_ruangan && Number(stat.id_ruangan) === Number(j.id_ruangan)) ||
                             isSameRoomName(j.nama_ruangan, stat.nama_ruangan);
-          if (j.tanggal === stat.tanggal && matchRoom && matchCamp) {
+          if (matchRoom && matchCamp) {
             if (stat.status_lab === 'tutup') {
               if (jJam === statJam || !statJam) {
                 j.status_lab = 'tutup';
@@ -6258,17 +6296,18 @@ async function syncRealtimeLabStatus(force = false) {
       });
     }
 
-    if (typeof updateActiveLabPanel === 'function') {
-      updateActiveLabPanel();
-    }
     if (typeof renderStatusLab === 'function') {
       renderStatusLab();
     }
     if (typeof updateTvModeData === 'function') {
       updateTvModeData(false, targetDate);
     }
+    // applyFilters() sudah memanggil updateActiveLabPanel() di akhir eksekusinya,
+    // sehingga tidak perlu memanggil updateActiveLabPanel() dua kali berturut-turut.
     if (typeof applyFilters === 'function') {
       applyFilters();
+    } else if (typeof updateActiveLabPanel === 'function') {
+      updateActiveLabPanel();
     }
 
     const modalEl = document.getElementById('room-detail-modal');
@@ -7432,7 +7471,10 @@ function renderInfoMaseNotifications(showPopup = false) {
   }
 }
 
-async function fetchNotifikasiLab(tanggal, showPopup = false) {
+let _lastNotifFetchDate = '';
+let _lastNotifFetchTime = 0;
+
+async function fetchNotifikasiLab(tanggal, showPopup = false, force = false) {
   const notifList = document.getElementById('notifikasi-lab-list');
   if (!tanggal) {
     if (notifList) notifList.innerHTML = '<em>pilih tanggal tuk cek notif mas.</em>';
@@ -7440,9 +7482,16 @@ async function fetchNotifikasiLab(tanggal, showPopup = false) {
     renderInfoMaseNotifications(false);
     return;
   }
+  const nowMs = Date.now();
+  if (!force && !showPopup && tanggal === _lastNotifFetchDate && (nowMs - _lastNotifFetchTime) < 15000 && Array.isArray(latestNotifikasiLabData)) {
+    renderInfoMaseNotifications(false);
+    return;
+  }
+  _lastNotifFetchDate = tanggal;
+  _lastNotifFetchTime = nowMs;
   try {
     if (notifList && (!latestNotifikasiLabData || latestNotifikasiLabData.length === 0)) notifList.innerHTML = '<em>Memuat notifikasi...</em>';
-    const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}&_t=${Date.now()}`);
+    const response = await fetch(`${API_BASE_URL}/api/notifikasi-lab?tanggal=${tanggal}&_t=${nowMs}`);
     const data = await response.json();
 
     let notifData = (data.status === 'success' && data.data) ? data.data : [];

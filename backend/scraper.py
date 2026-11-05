@@ -27,7 +27,20 @@ from dotenv import load_dotenv
 
 load_dotenv(override=False)
 
+try:
+    import performance_optimizer as perf_opt
+except ImportError:
+    try:
+        from backend import performance_optimizer as perf_opt
+    except ImportError:
+        perf_opt = None
+
 def get_db():
+    if perf_opt is not None:
+        conn = perf_opt.get_pooled_db()
+        if conn is not None:
+            return conn
+
     is_docker = os.path.exists("/.dockerenv")
     pwd = os.getenv("DB_PASSWORD", "")
     host = os.getenv("DB_HOST", "db" if is_docker else "127.0.0.1")
