@@ -531,3 +531,4 @@ def get_performance_diagnostics() -> Dict[str, Any]:
         },
         "gap_calculation_throttled_keys": len(_gap_calc_timestamps),
     }
+

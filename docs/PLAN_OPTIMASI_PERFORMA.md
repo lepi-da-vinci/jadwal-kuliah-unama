@@ -147,3 +147,4 @@ Untuk memudahkan pemantauan kesehatan dan efisiensi sistem ke depannya, tersedia
   - Rasio *Cache Hit / Miss* dan jumlah entri aktif di `api_cache`.
   - Statistik ukuran cache `@lru_cache` normalisasi ruangan dan SKS/durasi.
   - Status *throttling* kalkulasi jeda ruangan.
+

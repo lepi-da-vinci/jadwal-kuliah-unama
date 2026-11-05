@@ -399,3 +399,4 @@ Pesan perubahan mendadak dikelompokkan berdasarkan urgensi operasional agar muda
   - Seluruh endpoint sensitif (pengaturan sistem, manajemen asisten, eksekusi sinkronisasi manual, backup/restore SQL, konfigurasi WA) dilindungi oleh token bertanda tangan `HMAC-SHA256` dengan masa berlaku (*expiration*) 24 jam.
 - **Kredensial Terenkripsi Lingkungan (`.env`)**:
   - Password admin (`ADMIN_PASSWORD`), kunci rahasia token (`AUTH_SECRET_KEY`), kredensial database, dan `GEMINI_API_KEY` dimuat dari variabel lingkungan.
+
