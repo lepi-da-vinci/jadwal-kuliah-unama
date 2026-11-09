@@ -4089,14 +4089,15 @@ def handle_incoming_message(sender, text, msg_id=None):
                         return f"Token salah mas. Sisa percobaan: {sisa}.\n\nKetik *minta token lagi* buat minta token baru, atau *daftar ulang* kalau mau ubah data."
 
         # Jika sender BELUM ada di registration_states:
-        # Syarat pendaftaran langsung: Chat diawali '!inpo', 'inpo', '!info', 'info', atau '!daftar'
+        # Nomor tak terdaftar / pengguna baru HANYA direspon jika menggunakan kata kunci '!inpo', '!info', 'inpo', 'info', '!daftar', atau 'daftar'
         is_secret_cmd = (
             text_clean in ["!inpo", "!info", "inpo", "info", "!daftar", "daftar"] or 
             text_clean.startswith("!inpo") or 
             text_clean.startswith("!info") or
             text_clean.startswith("inpo ") or
             text_clean.startswith("info ") or
-            text_clean.startswith("!daftar")
+            text_clean.startswith("!daftar ") or
+            text_clean.startswith("daftar ")
         )
         if is_secret_cmd:
             send_wa_typing(sender, 'composing')
@@ -4110,28 +4111,10 @@ def handle_incoming_message(sender, text, msg_id=None):
                 "_Ketik 1 atau 2 untuk melanjutkan._"
             )
 
-        # Fast-query untuk nomor ruangan spesifik meskipun nomor belum login/terdaftar (contoh: 'lab 3.4', '3.4', 'r 2.10', '1.8')
-        match_room_guest = re.search(r'\b(?:lab\s*|labor\s*|ruang\s*|r\.\s*|r\s*)?([bB]?\d+\.\d+)\b', text_clean)
-        if match_room_guest:
-            send_wa_typing(sender, 'composing')
-            room_q = match_room_guest.group(0)
-            target_date = extract_date_or_today(text_clean)
-            k_target = "Thehok" if ("thehok" in text_clean or "tehok" in text_clean) else ("Kobar" if "kobar" in text_clean else None)
-            res_jadwal = cek_jadwal_lab_tertentu(room_q, target_date, kampus=k_target)
-            return (
-                f"{res_jadwal}\n\n"
-                f"_Catatan: Ketik *!pantau* jika ingin melihat semua jadwal tanpa daftar atau *inpo* untuk mendaftar resmi aslab/asmot._"
-            )
-
-        # Untuk pesan sapaan atau chat lain dari nomor yang belum terdaftar: berikan panduan agar bot tidak bungkam
-        send_wa_typing(sender, 'composing')
-        log_chatbot("INFO", f"Memberikan petunjuk registrasi/login untuk nomor baru {sender}: '{text}'", "AUTH")
-        return (
-            "Halo mas! Nomor WhatsApp kamu belum terdaftar di sistem Jadwal UNAMA.\n\n"
-            "*1.* Ketik *inpo* untuk mendaftar sebagai Asisten Lab / Asmot.\n"
-            "*2.* Ketik *!pantau* atau *!admin* untuk langsung melihat menu jadwal tanpa mendaftar (bebas notifikasi lab).\n"
-            "*3.* Ketik *!taut <nomor_hp>* jika nomor kamu sudah didaftarkan admin tapi belum tersambung."
-        )
+        # Jika nomor belum terdaftar dan tidak menggunakan kata kunci !inpo / !info:
+        # Jangan direspon sama sekali (silent) agar bot tidak spam / merespons chat pribadi atau salam dari nomor asing
+        log_chatbot("DEBUG", f"Pesan dari nomor tak terdaftar {sender} diabaikan (tanpa kata kunci !inpo / !info): '{text}'", "AUTH")
+        return None
 
     # Jika TERDAFTAR
     if aslab.get('role') == 'asmot':
