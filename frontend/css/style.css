@@ -13231,6 +13231,84 @@ body.dark .ref-banner-icon {
   color: var(--text-muted);
 }
 
+/* 24-Hour Quick Minute Chips (Puluhan: 00, 10, 20, 30, 40, 50) */
+.timer-24h-minutes-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+}
+.timer-24h-min-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.timer-24h-min-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.btn-min-chip {
+  padding: 3px 8px;
+  font-size: 0.73rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.btn-min-chip:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+  background: rgba(6, 182, 212, 0.08);
+}
+.card-timer-on .btn-min-chip.active {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.3);
+}
+.card-timer-off .btn-min-chip:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+.card-timer-off .btn-min-chip.active {
+  background: #f59e0b;
+  color: #ffffff;
+  border-color: #f59e0b;
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);
+}
+body.dark .timer-24h-minutes-row {
+  background: rgba(15, 23, 42, 0.4);
+}
+body.dark .btn-min-chip {
+  background: #1e293b;
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+body.dark .card-timer-on .btn-min-chip.active {
+  background: #38bdf8;
+  color: #0f172a;
+  border-color: #38bdf8;
+}
+body.dark .card-timer-off .btn-min-chip.active {
+  background: #fbbf24;
+  color: #0f172a;
+  border-color: #fbbf24;
+}
+
 /* Correction Box */
 .timer-correction-box {
   display: flex;

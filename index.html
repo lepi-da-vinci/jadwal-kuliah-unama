@@ -4994,8 +4994,19 @@
             <div class="timer-input-row">
               <label for="timer-on-time" class="timer-input-label">Jam Hidup (24 Jam):</label>
               <div class="timer-input-wrap">
-                <input type="time" id="timer-on-time" class="timer-time-input" value="07:40" oninput="on24hInputChange('on')" onchange="on24hInputChange('on')">
+                <input type="time" id="timer-on-time" class="timer-time-input" value="07:40" step="600" oninput="on24hInputChange('on', false)" onchange="on24hInputChange('on', true)">
                 <span class="timer-tz">WIB</span>
+              </div>
+            </div>
+            <div class="timer-24h-minutes-row">
+              <span class="timer-24h-min-label">Menit Remote (Puluhan):</span>
+              <div class="timer-24h-min-chips" id="timer-on-min-chips">
+                <button type="button" class="btn-min-chip" data-min="00" onclick="select24hMinute('on', '00')">:00</button>
+                <button type="button" class="btn-min-chip" data-min="10" onclick="select24hMinute('on', '10')">:10</button>
+                <button type="button" class="btn-min-chip" data-min="20" onclick="select24hMinute('on', '20')">:20</button>
+                <button type="button" class="btn-min-chip" data-min="30" onclick="select24hMinute('on', '30')">:30</button>
+                <button type="button" class="btn-min-chip" data-min="40" onclick="select24hMinute('on', '40')">:40</button>
+                <button type="button" class="btn-min-chip" data-min="50" onclick="select24hMinute('on', '50')">:50</button>
               </div>
             </div>
           </div>
@@ -5117,8 +5128,19 @@
             <div class="timer-input-row">
               <label for="timer-off-time" class="timer-input-label">Jam Mati (24 Jam):</label>
               <div class="timer-input-wrap">
-                <input type="time" id="timer-off-time" class="timer-time-input" value="11:00" oninput="on24hInputChange('off')" onchange="on24hInputChange('off')">
+                <input type="time" id="timer-off-time" class="timer-time-input" value="11:00" step="600" oninput="on24hInputChange('off', false)" onchange="on24hInputChange('off', true)">
                 <span class="timer-tz">WIB</span>
+              </div>
+            </div>
+            <div class="timer-24h-minutes-row">
+              <span class="timer-24h-min-label">Menit Remote (Puluhan):</span>
+              <div class="timer-24h-min-chips" id="timer-off-min-chips">
+                <button type="button" class="btn-min-chip" data-min="00" onclick="select24hMinute('off', '00')">:00</button>
+                <button type="button" class="btn-min-chip" data-min="10" onclick="select24hMinute('off', '10')">:10</button>
+                <button type="button" class="btn-min-chip" data-min="20" onclick="select24hMinute('off', '20')">:20</button>
+                <button type="button" class="btn-min-chip" data-min="30" onclick="select24hMinute('off', '30')">:30</button>
+                <button type="button" class="btn-min-chip" data-min="40" onclick="select24hMinute('off', '40')">:40</button>
+                <button type="button" class="btn-min-chip" data-min="50" onclick="select24hMinute('off', '50')">:50</button>
               </div>
             </div>
           </div>
