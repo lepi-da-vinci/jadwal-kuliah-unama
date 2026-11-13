@@ -6380,6 +6380,8 @@ let _isSyncingLabStatus = false;
 
 async function syncRealtimeLabStatus(force = false) {
   if (_isSyncingLabStatus && !force) return;
+  // Optimasi P1-6: Hentikan polling background saat tab tidak aktif/minimized (hemat CPU & network)
+  if (document.hidden && !force && !window._isTvModeActive) return;
   _isSyncingLabStatus = true;
   try {
     const filterTanggal = document.getElementById('filter-tanggal');
@@ -14558,14 +14560,9 @@ filterTanggal.addEventListener('change', () => {
   handleSelectedDateChange(filterTanggal.value);
 });
 
-// 6. Auto-Sync setiap 10 menit
-setInterval(() => {
-  const currentDate = filterTanggal.value;
-  if (currentDate) {
-    // Menjalankan Auto-Sync untuk tanggal: currentDate
-    syncData(currentDate);
-  }
-}, 10 * 60 * 1000); // 10 menit dalam milidetik
+// 6. Auto-Sync berkala telah dipusatkan di server-side (wa_notifier_loop) tiap 15 menit
+// agar tidak membebani browser client dan mencegah perlombaan scraping antar-perangkat.
+// Tombol 'Sinkronkan Data' tetap tersedia untuk sinkronisasi manual instan jika diinginkan.
 
 // ─── Modal Logic & Animasi Tutup / Swipe-to-Dismiss Notifikasi ───
 const modal = document.getElementById('lab-modal');

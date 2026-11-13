@@ -4961,25 +4961,48 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
 
 async def wa_notifier_loop():
     print("WA Notifier Loop Started. (Automatic notifications & Server Link Monitor ENABLED - Timezone: Asia/Jakarta)")
+    last_auto_sync_ts = 0.0
     while True:
         try:
-            check_lab_schedules() # fitur ini DIAKTIFKAN kembali secara permanen.
+            # Optimasi P0-3: Jalankan pengecekan jadwal di worker thread agar tidak memblokir event loop FastAPI
+            await asyncio.to_thread(check_lab_schedules)
         except Exception as loop_err:
             print(f"[WA Notifier Error in loop] {loop_err}")
 
         try:
-            # Otomatis pantau perubahan jadwal & info mase tertarget (Aslab & Asmot)
-            check_and_notify_info_mase()
+            # Otomatis pantau perubahan jadwal & info mase tertarget (Aslab & Asmot) via worker thread
+            await asyncio.to_thread(check_and_notify_info_mase)
         except Exception as info_err:
             print(f"[Info Mase Error in loop] {info_err}")
 
         try:
-            # Otomatis pantau apakah link Cloudflare Tunnel / Server berganti (misal sehabis mati lampu)
-            check_and_broadcast_server_url_change()
+            # Otomatis pantau apakah link Cloudflare Tunnel / Server berganti via worker thread
+            await asyncio.to_thread(check_and_broadcast_server_url_change)
         except Exception as link_err:
             print(f"[Server Link Checker Error] {link_err}")
             
         now = get_wib_now()
+
+        # Optimasi P0-2: Auto-sync jadwal hari ini berkala dari server tiap 15 menit pada jam operasional (06:00 - 21:00 WIB)
+        # Menggantikan interval auto-sync client-side browser sehingga server tidak diserbu request scraping
+        if 6 <= now.hour <= 21:
+            if (time.time() - last_auto_sync_ts) >= 15 * 60:
+                last_auto_sync_ts = time.time()
+                try:
+                    today_str = now.strftime("%Y-%m-%d")
+                    success, count, msg = await asyncio.to_thread(scraper.scrape_baak_direct, today_str, None)
+                    if success:
+                        print(f"[Auto-Sync Server] Berhasil sinkronisasi jadwal otomatis ({count} data): {msg}")
+                        try:
+                            import performance_optimizer as perf_opt
+                            perf_opt.invalidate_schedule_cache()
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[Auto-Sync Server] Status sync berkala: {msg}")
+                except Exception as sync_err:
+                    print(f"[Auto-Sync Server Error] {sync_err}")
+
         # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak
         today_prefix = now.strftime("%Y-%m-%d")
         stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix) and not k.startswith("info_mase_")}

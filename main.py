@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import mysql.connector
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Union
@@ -70,10 +71,13 @@ async def startup_event():
         print(f"[Startup] Error init wa notifications: {e}")
     asyncio.create_task(wa_notifier.wa_notifier_loop())
 
-# ==================== SECURITY & CACHE HEADERS MIDDLEWARE (SEC-10) ====================
+# ==================== SECURITY, TIMING & CACHE HEADERS MIDDLEWARE (SEC-10) ====================
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    start_req_time = time.time()
     response: Response = await call_next(request)
+    duration_ms = (time.time() - start_req_time) * 1000.0
+    response.headers["X-Process-Time"] = f"{duration_ms:.2f}ms"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -81,12 +85,19 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     
     path = request.url.path
-    if path == "/" or path.endswith((".js", ".css", ".html")) or "sw.js" in path:
+    # Optimasi P0-5: Aset statis dengan versi hash/timestamp dapat di-cache browser secara aman (immutable)
+    has_version = ("v" in request.query_params or "v=" in str(request.url.query))
+    if has_version and path.endswith((".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff2")):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path == "/" or path.endswith((".html",)) or "sw.js" in path or path.endswith("manifest.json"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         
     return response
+
+# Kompresi GZip otomatis untuk respon berukuran > 1KB (menghemat transfer JS/CSS/JSON hingga ~75%)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # Mengizinkan Frontend mengakses API dengan batasan origin yang aman
 app.add_middleware(
@@ -2261,7 +2272,8 @@ async def sync_data(req: SyncRequest):
             last_sync_times[tgl_key] = start_time
             
             # 1. Coba Scraping Langsung via Backend (Sangat cepat & mandiri)
-            success, count, msg = scraper.scrape_baak_direct(req.tanggal, None)
+            # Optimasi P0-1: Eksekusi scraping BAAK di worker thread agar tidak memblokir event loop FastAPI
+            success, count, msg = await asyncio.to_thread(scraper.scrape_baak_direct, req.tanggal, None)
             if success:
                 perf_opt.invalidate_schedule_cache()
                 sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": count}
@@ -2292,7 +2304,8 @@ async def sync_data(req: SyncRequest):
                 return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({current.get('count', 0)} data)!", "count": current.get("count", 0)}
 
             # Jika ekstensi tidak menghasilkan data (terhalang 403 atau tidak terbuka)
-            scraper.record_scraping_log(
+            await asyncio.to_thread(
+                scraper.record_scraping_log,
                 "Chrome Extension (Browser)",
                 target_url,
                 tgl_key,
@@ -2804,8 +2817,8 @@ def get_chatbot_logs(lines: int = 150):
         return {"status": "error", "message": f"Gagal membaca file log: {e}"}
 
 @app.get("/api/cek_kosong")
-async def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
-    """Mendapatkan data lab kosong dengan algoritma gap jam"""
+def cek_kosong(kampus: str, tanggal: str, jenis: str = "Lab"):
+    """Mendapatkan data lab kosong dengan algoritma gap jam (dijalankan di worker thread)"""
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
