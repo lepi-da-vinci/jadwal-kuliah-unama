@@ -2413,13 +2413,13 @@ function getRoomCampus(roomName, defaultCampus = '') {
 }
 window.getRoomCampus = getRoomCampus;
 
-function isRoomKobar(roomName) {
-  return getRoomCampus(roomName).includes('Kobar');
+function isRoomKobar(roomName, defaultCampus = '') {
+  return getRoomCampus(roomName, defaultCampus).includes('Kobar');
 }
 window.isRoomKobar = isRoomKobar;
 
-function isRoomThehok(roomName) {
-  return getRoomCampus(roomName).includes('Thehok');
+function isRoomThehok(roomName, defaultCampus = '') {
+  return getRoomCampus(roomName, defaultCampus).includes('Thehok');
 }
 window.isRoomThehok = isRoomThehok;
 
@@ -6032,17 +6032,18 @@ function updateActiveLabPanel() {
 
   const getRoomKey = (roomName, campusName) => {
     const clean = getCleanRoom(roomName).toLowerCase();
-    const camp = formatCampusName(campusName || getRoomCampus(roomName)).toLowerCase();
+    const camp = formatCampusName(campusName || getRoomCampus(roomName, campusName)).toLowerCase();
     return `${clean}__${camp}`;
   };
 
-  const filterKey = filterRuangan !== 'semua' ? getRoomKey(filterRuangan) : null;
+  const filterKey = filterRuangan !== 'semua' ? getRoomKey(filterRuangan, kampusFilter !== 'semua' ? kampusFilter : '') : null;
   const filterClean = filterRuangan !== 'semua' ? getCleanRoom(filterRuangan).toLowerCase() : null;
 
   // 1. Group schedules by normalized room key
   allJadwal.forEach(item => {
     if (item.tanggal === activeDate && item.jam) {
-      const key = getRoomKey(item.nama_ruangan, item.kampus);
+      const itemCamp = formatCampusName(item.kampus) || getRoomCampus(item.nama_ruangan, item.kampus);
+      const key = getRoomKey(item.nama_ruangan, itemCamp);
       if (filterRuangan !== 'semua') {
         const itemClean = getCleanRoom(item.nama_ruangan).toLowerCase();
         if (key !== filterKey && itemClean !== filterClean && item.nama_ruangan !== filterRuangan) return;
@@ -6064,7 +6065,7 @@ function updateActiveLabPanel() {
         kelas: item.kelas || '',
         rawName: item.nama_ruangan,
         cleanName: getCleanRoom(item.nama_ruangan),
-        kampus: item.kampus || getRoomCampus(item.nama_ruangan),
+        kampus: itemCamp,
         status_lab: item.status_lab,
         status_lab_oleh: item.status_lab_oleh,
         status_lab_waktu: item.status_lab_waktu
@@ -6078,7 +6079,8 @@ function updateActiveLabPanel() {
   allRuanganData.forEach(r => {
     try {
       let rawName = r.nama_ruangan;
-      let kampus = getRoomCampus(rawName) || formatCampusName(r.kampus) || 'Thehok';
+      // Prioritaskan kampus dari master ruangan di database, fallback ke getRoomCampus dengan menyertakan hint kampus
+      let kampus = formatCampusName(r.kampus) || getRoomCampus(rawName, r.kampus) || 'Thehok';
       let cleanName = getCleanRoom(rawName);
       const roomKey = getRoomKey(rawName, kampus);
 
@@ -6116,7 +6118,7 @@ function updateActiveLabPanel() {
 
       let sample = schedules[0];
       let rawName = sample.rawName;
-      let kampus = getRoomCampus(rawName) || formatCampusName(sample.kampus) || 'Thehok';
+      let kampus = formatCampusName(sample.kampus) || getRoomCampus(rawName, sample.kampus) || 'Thehok';
       let isThehok = !kampus.includes('Kobar');
       let cleanName = getCleanRoom(rawName);
       let isRoomLab = isLab(cleanName);
@@ -6165,7 +6167,7 @@ function updateActiveLabPanel() {
           ? `<span class="notif-cat-badge labor"><span class="title-desktop">Labor</span><span class="title-mobile">Lab</span></span>`
           : `<span class="notif-cat-badge kelas">Kelas</span>`;
 
-        const roomCampus = formatCampusName(sample.kampus || getRoomCampus(room));
+        const roomCampus = formatCampusName(sample.kampus || getRoomCampus(room, sample.kampus));
         const isKobarRoom = roomCampus.includes('Kobar');
         const campusNote = isKobarRoom ? ' (Kobar - Tidak ada kelas malam)' : (lastClassEndTime >= 17 * 60 ? ' (Sesi Malam Thehok)' : '');
 
@@ -11362,7 +11364,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   };
 
   const cleanTargetRoom = getCleanRoom(roomName);
-  const targetCamp = formatCampusName(kampusStr || getRoomCampus(roomName));
+  const targetCamp = formatCampusName(kampusStr || getRoomCampus(roomName, kampusStr));
 
   let schedules = allJadwal.filter(item => {
     if (!item.nama_ruangan || !item.tanggal || !item.jam) return false;
@@ -11372,7 +11374,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
     if (itemClean !== cleanTargetRoom) return false;
 
     if (targetCamp) {
-      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+      const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan, item.kampus));
       if (itemCamp && itemCamp !== targetCamp) return false;
     }
     return true;
@@ -11385,7 +11387,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
       const itemClean = getCleanRoom(item.nama_ruangan);
       if (itemClean !== cleanTargetRoom) return false;
       if (targetCamp) {
-        const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan));
+        const itemCamp = formatCampusName(item.kampus || getRoomCampus(item.nama_ruangan, item.kampus));
         if (itemCamp && itemCamp !== targetCamp) return false;
       }
       return true;
@@ -11421,7 +11423,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
   }
 
   const titleEl = document.getElementById('room-detail-title');
-  const cleanCamp = formatCampusName(kampusStr || getRoomCampus(roomName));
+  const cleanCamp = formatCampusName(kampusStr || getRoomCampus(roomName, kampusStr));
   const roomCampus = getRoomCampus(roomName, kampusStr || '');
   const isKobarRoom = roomCampus.includes('Kobar');
   const campusLabel = cleanCamp || (isKobarRoom ? 'Kobar' : 'Thehok');
@@ -19332,7 +19334,7 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
 
   const getRoomKey = (roomName, campusName) => {
     const clean = getCleanRoom(roomName).toLowerCase();
-    const camp = formatCampusName(campusName || getRoomCampus(roomName)).toLowerCase();
+    const camp = formatCampusName(campusName || getRoomCampus(roomName, campusName)).toLowerCase();
     return `${clean}__${camp}`;
   };
 
@@ -19370,8 +19372,8 @@ function updateTvModeData(isInitial = false, forceTargetDate = null) {
     allRuanganData.forEach(r => {
       if (r.nama_ruangan) {
         const clean = getCleanRoom(r.nama_ruangan);
-        const camp = formatCampusName(r.kampus || getRoomCampus(r.nama_ruangan));
-        const key = getRoomKey(r.nama_ruangan, r.kampus);
+        const camp = formatCampusName(r.kampus || getRoomCampus(r.nama_ruangan, r.kampus));
+        const key = getRoomKey(r.nama_ruangan, camp);
         allUniqueRooms.set(key, {
           nama: clean,
           isLab: isLab(clean),
