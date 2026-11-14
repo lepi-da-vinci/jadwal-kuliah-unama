@@ -652,21 +652,61 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
             except Exception:
                 pass
             
-        # 2. Parsing Kolom DOSEN & MATAKULIAH
-        dosen_spans = cols[2].find_all('span', class_='font-weight-bold')
-        nama_dosen = ", ".join([span.text.strip() for span in dosen_spans])
-        
+        # 2. Parsing Kolom DOSEN & MATAKULIAH (Mendukung Tailwind modern BAAK, Bootstrap lama, dan Team Teaching)
         kode_mk, nama_mk, kelas = "", "", ""
+        dosen_list = []
+
         divs = cols[2].find_all('div', recursive=False)
-        if len(divs) >= 2:
-            course_text = divs[1].get_text(" ", strip=True)
-            if "::" in course_text:
-                kode_mk, nama_mk = [x.strip() for x in course_text.split("::", 1)]
+        if not divs:
+            divs = cols[2].find_all('div')
+
+        course_div = None
+        if divs:
+            # Cari div yang memuat '::' sebagai penanda spesifik mata kuliah & kelas
+            for d in divs:
+                d_text = re.sub(r'\s+', ' ', d.get_text(' ', strip=True))
+                if '::' in d_text:
+                    course_div = d
+                    break
+
+            if course_div:
+                # Semua div selain div mata kuliah adalah nama dosen (termasuk bila dosen > 1 / team teaching)
+                for d in divs:
+                    if d is course_div:
+                        continue
+                    d_text = re.sub(r'\s+', ' ', d.get_text(' ', strip=True))
+                    if d_text and d_text not in dosen_list:
+                        dosen_list.append(d_text)
+
+                c_text = re.sub(r'\s+', ' ', course_div.get_text(' ', strip=True))
+                kode_mk, nama_mk = [x.strip() for x in c_text.split('::', 1)]
                 kelas = kode_mk
             else:
-                nama_mk = course_text
-        elif len(divs) == 1:
-            nama_mk = divs[0].get_text(" ", strip=True)
+                # Fallback jika tidak ditemukan tanda '::'
+                if len(divs) >= 2:
+                    for d in divs[:-1]:
+                        d_text = re.sub(r'\s+', ' ', d.get_text(' ', strip=True))
+                        if d_text and d_text not in dosen_list:
+                            dosen_list.append(d_text)
+                    nama_mk = re.sub(r'\s+', ' ', divs[-1].get_text(' ', strip=True))
+                elif len(divs) == 1:
+                    nama_mk = re.sub(r'\s+', ' ', divs[0].get_text(' ', strip=True))
+
+        # Fallback multi-tag jika dosen_list masih belum terisi (format Bootstrap span.font-weight-bold / fw-bold / b / strong)
+        if not dosen_list:
+            dosen_els = cols[2].find_all(
+                ['span', 'b', 'strong', 'div', 'p'],
+                class_=lambda c: c and any(k in str(c) for k in ['font-weight-bold', 'fw-bold', 'font-semibold', 'text-slate-900', 'font-bold'])
+            )
+            if not dosen_els:
+                dosen_els = cols[2].find_all(['b', 'strong', 'span'])
+
+            for el in dosen_els:
+                t = re.sub(r'\s+', ' ', el.get_text(' ', strip=True))
+                if t and '::' not in t and t != nama_mk and t != kode_mk and t not in dosen_list:
+                    dosen_list.append(t)
+
+        nama_dosen = ", ".join(dosen_list).strip()
         
         # 3. Parsing Kolom RUANG (Kampus Kobar, Labor 1.9)
         ruang_raw = cols[3].text.strip()
@@ -1309,17 +1349,37 @@ def save_to_db(data, target_date=None, page="1", target_semester=None):
             cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s", (sem_default,))
             
         for item in data:
-            # Insert atau ignore dosen
-            if item.get('dosen'):
-                cursor.execute("SELECT id_dosen FROM dosen WHERE nama_dosen = %s", (item['dosen'],))
+            # Insert atau ignore dosen (dengan auto-healing jika data dosen hilang/kosong)
+            raw_dosen = (item.get('dosen') or '').strip()
+            if raw_dosen and raw_dosen != '-':
+                cursor.execute("SELECT id_dosen FROM dosen WHERE nama_dosen = %s", (raw_dosen,))
                 res = cursor.fetchone()
                 if not res:
-                    cursor.execute("INSERT INTO dosen (nama_dosen) VALUES (%s)", (item['dosen'],))
+                    cursor.execute("INSERT INTO dosen (nama_dosen) VALUES (%s)", (raw_dosen,))
                     id_dosen = cursor.lastrowid
                 else:
                     id_dosen = res[0]
             else:
                 id_dosen = None
+
+            # Fallback auto-healing dosen jika id_dosen kosong tetapi kelas tersedia
+            if id_dosen is None and item.get('kelas'):
+                sem_check = item.get('semester') or sem_default
+                cursor.execute("""
+                    SELECT id_dosen FROM jadwal 
+                    WHERE kelas = %s AND id_dosen IS NOT NULL AND (semester = %s OR %s IS NULL)
+                    LIMIT 1
+                """, (item['kelas'], sem_check, sem_check))
+                res_heal = cursor.fetchone()
+                if not res_heal:
+                    cursor.execute("""
+                        SELECT id_dosen FROM jadwal_permanent 
+                        WHERE kelas = %s AND id_dosen IS NOT NULL AND (semester = %s OR %s IS NULL)
+                        LIMIT 1
+                    """, (item['kelas'], sem_check, sem_check))
+                    res_heal = cursor.fetchone()
+                if res_heal:
+                    id_dosen = res_heal[0]
 
             # Insert atau ignore mata_kuliah
             if item.get('kode_mk'):
@@ -1895,6 +1955,33 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
                 FROM jadwal_temp WHERE tanggal = %s AND semester = %s
             """, (t_date, sem_final))
+            
+            # Auto-healing dosen: Jika ada baris dengan id_dosen NULL, pulihkan dari jadwal valid untuk kelas yang sama
+            try:
+                cursor.execute("""
+                    UPDATE jadwal j
+                    JOIN (
+                        SELECT kelas, MAX(id_dosen) AS id_dosen, semester
+                        FROM jadwal
+                        WHERE id_dosen IS NOT NULL
+                        GROUP BY kelas, semester
+                    ) valid ON j.kelas = valid.kelas AND j.semester = valid.semester
+                    SET j.id_dosen = valid.id_dosen
+                    WHERE j.id_dosen IS NULL AND j.semester = %s
+                """, (sem_final,))
+                cursor.execute("""
+                    UPDATE jadwal_permanent jp
+                    JOIN (
+                        SELECT kelas, MAX(id_dosen) AS id_dosen, semester
+                        FROM jadwal_permanent
+                        WHERE id_dosen IS NOT NULL
+                        GROUP BY kelas, semester
+                    ) valid ON jp.kelas = valid.kelas AND jp.semester = valid.semester
+                    SET jp.id_dosen = valid.id_dosen
+                    WHERE jp.id_dosen IS NULL AND jp.semester = %s
+                """, (sem_final,))
+            except Exception as e_heal:
+                print(f"[Auto-Heal Dosen Notice] {e_heal}")
             
             cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             calculate_and_save_gaps(conn, cursor, t_date, sem_final)
