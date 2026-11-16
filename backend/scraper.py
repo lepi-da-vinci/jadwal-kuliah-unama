@@ -724,8 +724,18 @@ def parse_html_content(html_content, fallback_tanggal=None, target_semester=None
         if 'b3.4' not in nama_ruangan.lower() and not any(p in (kampus + " " + nama_ruangan).lower() for p in ['pasca', 's2']):
             nama_ruangan = re.sub(r'\b(?:(?:R\.|Ruang|Ruangan)\s*)?(?:Praktek|Labor|Lab)?\s*(3\.[14])\b', r'Labor \1', nama_ruangan, flags=re.I)
             
-        # 4. Parsing Kolom STATUS (TM, OL, CC)
-        status_raw = cols[4].text.strip() if len(cols) > 4 else "OnSchedule (TM)"
+        # 4. Parsing Kolom STATUS (TM, OL, CC) - Abaikan catatan <sup>Updated By: ...</sup>
+        status_raw = "OnSchedule (TM)"
+        if len(cols) > 4:
+            status_span = cols[4].find('span')
+            if status_span and status_span.get_text(strip=True):
+                status_raw = status_span.get_text(" ", strip=True)
+            else:
+                status_parts = [
+                    str(s).strip() for s in cols[4].strings
+                    if s.parent and s.parent.name != 'sup' and str(s).strip()
+                ]
+                status_raw = " ".join(status_parts) if status_parts else cols[4].get_text(" ", strip=True)
         status_lower = status_raw.lower()
         if re.search(r'\b(?:cc|cancel|batal)\b', status_lower):
             status_jadwal = "Cancel"
@@ -2112,12 +2122,10 @@ def clear_scraping_engine_logs():
         print(f"[Scraper Log Clear Error] {e}")
         return False
 
-def _execute_http_engine(engine_key, url, timeout=12):
-    """
-    Eksekutor terisolasi untuk satu HTTP engine.
-    Mengembalikan dict: {success, status_code, html, error_msg, durasi_ms}
-    """
-    t0 = time.time()
+BAAK_JADWAL_URL = "https://baak.unama.ac.id/jadwal-kuliah1?search=1"
+BAAK_JADWAL_LEGACY_URL = "https://baak.unama.ac.id/jadwal-kuliah?search=1"
+
+def _build_baak_headers(referer=None):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -2127,27 +2135,78 @@ def _execute_http_engine(engine_key, url, timeout=12):
         'Sec-Ch-Ua-Platform': '"Windows"',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Site': 'same-origin' if referer else 'none',
         'Sec-Fetch-User': '?1',
         'Upgrade-Insecure-Requests': '1'
     }
+    if referer:
+        headers['Referer'] = referer
+    return headers
+
+def _create_http_session(engine_key):
+    """Membuat session HTTP persisten per engine agar cookie & koneksi tetap terjaga selama pagination."""
+    if engine_key == 'curl_cffi':
+        from curl_cffi import requests as cureq
+        try:
+            return cureq.Session(impersonate='chrome124')
+        except Exception:
+            return cureq.Session(impersonate='chrome120')
+    elif engine_key == 'cloudscraper':
+        import cloudscraper
+        return cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
+    elif engine_key == 'httpx':
+        import httpx
+        try:
+            return httpx.Client(http2=True, timeout=12, follow_redirects=True)
+        except Exception:
+            return httpx.Client(http2=False, timeout=12, follow_redirects=True)
+    elif engine_key == 'requests':
+        import requests
+        return requests.Session()
+    return None
+
+def _close_http_session(session):
+    if session is None:
+        return
+    try:
+        session.close()
+    except Exception:
+        pass
+
+def _execute_http_engine(engine_key, url, timeout=12, session=None, referer=None):
+    """
+    Eksekutor terisolasi untuk satu HTTP engine.
+    Mengembalikan tuple: (ok, status_code, html, error_msg, durasi_ms)
+    """
+    t0 = time.time()
+    headers = _build_baak_headers(referer=referer)
+    own_session = session is None
 
     try:
         if engine_key == 'curl_cffi':
-            from curl_cffi import requests as cureq
-            r = cureq.get(url, impersonate='chrome120', headers=headers, timeout=timeout)
+            if session is not None:
+                r = session.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            else:
+                from curl_cffi import requests as cureq
+                try:
+                    r = cureq.get(url, impersonate='chrome124', headers=headers, timeout=timeout, allow_redirects=True)
+                except Exception:
+                    r = cureq.get(url, impersonate='chrome120', headers=headers, timeout=timeout, allow_redirects=True)
             durasi = int((time.time() - t0) * 1000)
             return True, r.status_code, r.text, None, durasi
 
         elif engine_key == 'cloudscraper':
-            import cloudscraper
-            s = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
-            r = s.get(url, headers=headers, timeout=timeout)
+            s = session if session is not None else _create_http_session('cloudscraper')
+            r = s.get(url, headers=headers, timeout=timeout, allow_redirects=True)
             durasi = int((time.time() - t0) * 1000)
             return True, r.status_code, r.text, None, durasi
 
         elif engine_key == 'httpx':
             import httpx
+            if session is not None:
+                r = session.get(url, headers=headers, timeout=timeout)
+                durasi = int((time.time() - t0) * 1000)
+                return True, r.status_code, r.text, None, durasi
             try:
                 with httpx.Client(http2=True, timeout=timeout, follow_redirects=True) as client:
                     r = client.get(url, headers=headers)
@@ -2160,8 +2219,11 @@ def _execute_http_engine(engine_key, url, timeout=12):
                     return True, r.status_code, r.text, None, durasi
 
         elif engine_key == 'requests':
-            import requests
-            r = requests.get(url, headers=headers, timeout=timeout)
+            if session is not None:
+                r = session.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            else:
+                import requests
+                r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
             durasi = int((time.time() - t0) * 1000)
             return True, r.status_code, r.text, None, durasi
 
@@ -2171,6 +2233,30 @@ def _execute_http_engine(engine_key, url, timeout=12):
     except Exception as e:
         durasi = int((time.time() - t0) * 1000)
         return False, 0, "", str(e), durasi
+    finally:
+        if own_session and engine_key == 'cloudscraper' and 's' in locals():
+            _close_http_session(s)
+
+def _classify_baak_response(ok, code, html, err):
+    """Mengevaluasi status HTTP & isi halaman BAAK secara konsisten."""
+    if not ok:
+        return 'ERROR', f"Koneksi gagal: {err}"
+    html_lower = (html or "").lower()
+    if code == 200:
+        if "challenge-running" in html_lower or "just a moment" in html_lower or "cf-turnstile" in html_lower:
+            return 'CLOUDFLARE_CHALLENGE', 'Terdeteksi verifikasi Cloudflare Challenge / Turnstile.'
+        if "403 forbidden" in html_lower or "penolakan akses" in html_lower or ("tengine" in html_lower and "403" in html_lower):
+            return 'BLOCKED (403)', 'Penolakan akses (Tengine siakadv3 403 Forbidden).'
+        if "too many requests" in html_lower or "rate limit" in html_lower:
+            return 'BLOCKED (429)', 'Rate limit server BAAK terpicu (Too Many Requests).'
+        return 'SUCCESS', f'Berhasil terhubung ke server BAAK UNAMA ({len(html or "")} bytes).'
+    if code == 403:
+        if "tengine" in html_lower:
+            return 'BLOCKED (403)', 'Server BAAK UNAMA menolak akses (Tengine siakadv3 403 Forbidden).'
+        return 'BLOCKED (403)', 'HTTP 403 Forbidden: Akses ke BAAK UNAMA ditolak oleh sistem keamanan server.'
+    if code == 429:
+        return 'BLOCKED (429)', 'HTTP 429 Too Many Requests: Rate limit BAAK aktif sementara.'
+    return f'HTTP {code}', f'Server BAAK merespons dengan kode HTTP {code}.'
 
 def test_all_scraping_engines(target_date=None):
     """
@@ -2179,7 +2265,7 @@ def test_all_scraping_engines(target_date=None):
     """
     import concurrent.futures
 
-    base_url = "https://baak.unama.ac.id/jadwal-kuliah?search=1"
+    base_url = BAAK_JADWAL_URL
     if target_date:
         base_url += f"&tanggal={target_date}"
 
@@ -2192,30 +2278,8 @@ def test_all_scraping_engines(target_date=None):
 
     def _test_one(eng_tuple):
         eng_key, eng_name = eng_tuple
-        ok, code, html, err, durasi = _execute_http_engine(eng_key, base_url, timeout=5)
-
-        if not ok:
-            status = 'ERROR'
-            pesan = f"Koneksi gagal: {err}"
-        elif code == 200:
-            if "challenge-running" in html or "just a moment" in html.lower():
-                status = 'CLOUDFLARE_CHALLENGE'
-                pesan = 'Terdeteksi verifikasi Cloudflare Challenge / Turnstile.'
-            elif "403 Forbidden" in html or "penolakan akses" in html.lower():
-                status = 'BLOCKED (403)'
-                pesan = 'Penolakan akses (Tengine siakadv3 403 Forbidden).'
-            else:
-                status = 'SUCCESS'
-                pesan = f'Berhasil terhubung ke server BAAK UNAMA ({len(html)} bytes).'
-        elif code == 403:
-            status = 'BLOCKED (403)'
-            if "tengine" in html.lower():
-                pesan = 'Server BAAK UNAMA menolak akses (Tengine siakadv3 403 Forbidden).'
-            else:
-                pesan = 'HTTP 403 Forbidden: Akses ke BAAK UNAMA ditolak oleh sistem keamanan server.'
-        else:
-            status = f'HTTP {code}'
-            pesan = f'Server BAAK merespons dengan kode HTTP {code}.'
+        ok, code, html, err, durasi = _execute_http_engine(eng_key, base_url, timeout=12)
+        status, pesan = _classify_baak_response(ok, code, html, err)
 
         record_scraping_log(eng_name, base_url, target_date, code, status, pesan, durasi, 0)
         return {
@@ -2228,7 +2292,7 @@ def test_all_scraping_engines(target_date=None):
         }
 
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(_test_one, item) for item in engines_to_test]
         for f in concurrent.futures.as_completed(futures):
             try:
@@ -2248,9 +2312,11 @@ def scrape_baak_direct(target_date=None, target_semester=None):
     2. Mencoba cloudscraper (Bypass Cloudflare)
     3. Mencoba httpx (HTTP/2)
     4. Mencoba requests (Direct standard)
-    Setiap percobaan dicatat ke log_scraping_engine agar riwayat mana yang bisa dan mana yang gagal dapat dipantau.
+    Setiap percobaan menjaga session cookie antar-halaman dan dicatat ke log_scraping_engine.
     """
-    base_url = "https://baak.unama.ac.id/jadwal-kuliah?search=1"
+    from urllib.parse import urljoin, urlparse, parse_qs, urlencode, urlunparse
+
+    base_url = BAAK_JADWAL_URL
     if target_date:
         base_url += f"&tanggal={target_date}"
 
@@ -2263,47 +2329,42 @@ def scrape_baak_direct(target_date=None, target_semester=None):
     ]
 
     chosen_engine = None
+    chosen_session = None
     first_page_html = None
+    first_page_url = base_url
     engine_failure_reasons = []
 
     # Tahap 1: Temukan engine yang dapat menembus halaman pertama tanpa 403/Challenge
     for eng_key, eng_name in engines:
-        print(f"[Direct Scraper] Mencoba engine {eng_name} untuk halaman 1...")
-        ok, code, html, err, durasi = _execute_http_engine(eng_key, base_url, timeout=12)
+        print(f"[Direct Scraper] Mencoba engine {eng_name} untuk halaman 1 ({base_url})...")
+        session = None
+        try:
+            session = _create_http_session(eng_key)
+        except Exception as e_sess:
+            print(f"[Direct Scraper] Gagal membuat session {eng_name}: {e_sess}")
+            session = None
 
-        if not ok:
-            msg = f"Koneksi gagal ({err})"
-            record_scraping_log(eng_name, base_url, target_date, code, 'ERROR', msg, durasi, 0)
+        req_url = base_url
+        ok, code, html, err, durasi = _execute_http_engine(eng_key, req_url, timeout=12, session=session)
+        # Fallback ke URL lama jika endpoint /jadwal-kuliah1 mengembalikan 404
+        if ok and code == 404:
+            legacy_url = BAAK_JADWAL_LEGACY_URL + (f"&tanggal={target_date}" if target_date else "")
+            ok, code, html, err, durasi = _execute_http_engine(eng_key, legacy_url, timeout=12, session=session)
+            if ok and code == 200:
+                req_url = legacy_url
+
+        status, msg = _classify_baak_response(ok, code, html, err)
+        if status != 'SUCCESS':
+            _close_http_session(session)
+            record_scraping_log(eng_name, req_url, target_date, code, status, msg, durasi, 0)
             engine_failure_reasons.append(f"{eng_name}: {msg}")
             continue
 
-        if code == 403:
-            msg = "Server BAAK UNAMA menolak akses (Tengine siakadv3 403 Forbidden)."
-            record_scraping_log(eng_name, base_url, target_date, 403, 'BLOCKED (403)', msg, durasi, 0)
-            engine_failure_reasons.append(f"{eng_name}: 403 Forbidden (Penolakan Akses)")
-            continue
-
-        if code != 200:
-            msg = f"Merespons HTTP {code}"
-            record_scraping_log(eng_name, base_url, target_date, code, f'HTTP {code}', msg, durasi, 0)
-            engine_failure_reasons.append(f"{eng_name}: HTTP {code}")
-            continue
-
-        if "challenge-running" in html or "just a moment" in html.lower():
-            msg = "Terhalang Cloudflare Challenge."
-            record_scraping_log(eng_name, base_url, target_date, code, 'CLOUDFLARE_CHALLENGE', msg, durasi, 0)
-            engine_failure_reasons.append(f"{eng_name}: Cloudflare Challenge")
-            continue
-
-        if "403 Forbidden" in html or "penolakan akses" in html.lower():
-            msg = "Isi halaman menunjukkan penolakan akses (403 Forbidden)."
-            record_scraping_log(eng_name, base_url, target_date, 403, 'BLOCKED (403)', msg, durasi, 0)
-            engine_failure_reasons.append(f"{eng_name}: 403 Forbidden (Body)")
-            continue
-
-        # Jika lolos validasi, pilih engine ini
+        # Jika lolos validasi, pertahankan session ini untuk pagination
         chosen_engine = (eng_key, eng_name)
+        chosen_session = session
         first_page_html = html
+        first_page_url = req_url
         print(f"[Direct Scraper] Engine {eng_name} BERHASIL terhubung! Melanjutkan pagination...")
         break
 
@@ -2311,25 +2372,31 @@ def scrape_baak_direct(target_date=None, target_semester=None):
     if not chosen_engine:
         summary_err = "; ".join(engine_failure_reasons)
         print(f"[Direct Scraper] Seluruh engine backend gagal: {summary_err}")
-        return False, 0, f"Seluruh engine scraping backend terblokir kode 403 Forbidden dari server BAAK UNAMA. ({summary_err})"
+        return False, 0, f"Seluruh engine scraping backend terblokir atau gagal dari server BAAK UNAMA. ({summary_err})"
 
-    # Tahap 2: Lanjutkan pagination menggunakan chosen_engine
+    # Tahap 2: Lanjutkan pagination menggunakan chosen_engine + session persisten
     eng_key, eng_name = chosen_engine
     page = 1
     total_scraped = 0
     all_data = []
     sem_to_use = target_semester
+    semester_ensured = False
+    current_url = first_page_url
 
     try:
         while True:
             if page == 1:
                 html = first_page_html
             else:
-                url = f"{base_url}&page={page}"
-                print(f"[Direct Scraper] [{eng_name}] Mengambil halaman {page}: {url}")
-                ok, code, html, err, durasi = _execute_http_engine(eng_key, url, timeout=12)
-                if not ok or code != 200:
-                    print(f"[Direct Scraper] [{eng_name}] Halaman {page} berhenti dengan status {code}")
+                # Jeda sopan antar-halaman agar tidak memicu WAF rate-limit BAAK
+                time.sleep(0.35)
+                print(f"[Direct Scraper] [{eng_name}] Mengambil halaman {page}: {current_url}")
+                ok, code, html, err, durasi = _execute_http_engine(
+                    eng_key, current_url, timeout=12, session=chosen_session, referer=prev_url
+                )
+                status_pg, msg_pg = _classify_baak_response(ok, code, html, err)
+                if status_pg != 'SUCCESS':
+                    print(f"[Direct Scraper] [{eng_name}] Halaman {page} berhenti ({status_pg}: {msg_pg})")
                     break
 
             detected = detect_semester_from_html(html)
@@ -2337,7 +2404,10 @@ def scrape_baak_direct(target_date=None, target_semester=None):
                 sem_to_use = detected
             elif not sem_to_use:
                 sem_to_use = target_semester or get_active_semester()
-            ensure_semester_exists(sem_to_use)
+
+            if sem_to_use and not semester_ensured:
+                ensure_semester_exists(sem_to_use)
+                semester_ensured = True
 
             data = parse_html_content(html, target_date, sem_to_use)
             if not data:
@@ -2348,11 +2418,16 @@ def scrape_baak_direct(target_date=None, target_semester=None):
             save_to_db(data, target_date, str(page), sem_to_use)
             total_scraped += len(data)
 
-            # Cek tombol pagination
+            # Cek tombol pagination (mendukung Tailwind Laravel nav rel="next" maupun Bootstrap .pagination)
             soup = BeautifulSoup(html, 'html.parser')
-            next_btn = soup.find('a', rel='next') or soup.select_one('.pagination .next a') or soup.select_one('.page-item:last-child a')
+            next_btn = (
+                soup.find('a', rel='next')
+                or soup.select_one('nav[aria-label*="Pagination"] a[rel="next"]')
+                or soup.select_one('.pagination .next a')
+                or soup.select_one('.page-item:last-child a')
+            )
             if not next_btn:
-                all_links = soup.select('.pagination a, .page-link')
+                all_links = soup.select('nav a, .pagination a, .page-link')
                 for a in all_links:
                     txt = a.get_text(strip=True).lower()
                     if 'next' in txt or 'selanjutnya' in txt or txt == '>':
@@ -2361,6 +2436,16 @@ def scrape_baak_direct(target_date=None, target_semester=None):
 
             next_href = next_btn.get('href') if next_btn else None
             if next_href and next_href != '#' and not next_href.startswith('javascript:'):
+                prev_url = current_url
+                next_full = urljoin(current_url, next_href)
+                # Pastikan parameter search=1 dan tanggal tetap terjaga jika BAAK tidak menyertakannya
+                parsed = urlparse(next_full)
+                qs = parse_qs(parsed.query)
+                if 'search' not in qs:
+                    qs['search'] = ['1']
+                if target_date and 'tanggal' not in qs:
+                    qs['tanggal'] = [target_date]
+                current_url = urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
                 page += 1
                 if page > 50:
                     break
@@ -2371,19 +2456,21 @@ def scrape_baak_direct(target_date=None, target_semester=None):
             final_sem = sem_to_use or (all_data[0].get('semester') if all_data else None) or get_active_semester()
             compare_and_finalize_sync(target_date, final_sem)
             succ_msg = f"Berhasil sinkronisasi {total_scraped} jadwal ({final_sem}) dari BAAK via {eng_name}."
-            record_scraping_log(eng_name, base_url, target_date, 200, 'SUCCESS', succ_msg, 0, total_scraped)
+            record_scraping_log(eng_name, first_page_url, target_date, 200, 'SUCCESS', succ_msg, 0, total_scraped)
             print(f"[Direct Scraper] {succ_msg}")
             return True, total_scraped, succ_msg
         else:
             msg = f"Tidak ada data jadwal ditemukan di BAAK untuk tanggal {target_date}."
-            record_scraping_log(eng_name, base_url, target_date, 200, 'EMPTY', msg, 0, 0)
+            record_scraping_log(eng_name, first_page_url, target_date, 200, 'EMPTY', msg, 0, 0)
             return False, 0, msg
 
     except Exception as e:
         err_msg = f"Error saat pagination scraping: {e}"
-        record_scraping_log(eng_name, base_url, target_date, 0, 'ERROR', err_msg, 0, 0)
+        record_scraping_log(eng_name, first_page_url, target_date, 0, 'ERROR', err_msg, 0, 0)
         print(f"[Direct Scraper Error] {err_msg}")
         return False, 0, err_msg
+    finally:
+        _close_http_session(chosen_session)
 
 
 

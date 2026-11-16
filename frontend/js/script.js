@@ -6520,7 +6520,6 @@ async function syncData(tanggal) {
   }
 
   const tgl = tanggal || document.getElementById('filter-tanggal')?.value || '';
-  const targetUrl = `https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal=${tgl}&auto_close=1`;
 
   // Tampilkan indikator scraping pada tabel jika data untuk tanggal ini belum ada di memori
   const existingForDate = allJadwal.filter(j => j.tanggal === tgl);
@@ -6533,9 +6532,7 @@ async function syncData(tanggal) {
     </td></tr>`;
   }
 
-  // Kirim pesan ke background Chrome Extension via bridge (tab dibuka di background jika ekstensi ada di browser ini)
-  window.postMessage({ type: "START_UNAMA_SYNC", url: targetUrl }, "*");
-
+  // Biarkan backend (multi-engine direct scraper) mencoba dulu; Chrome Extension hanya dijalankan otomatis lewat antrean fallback /api/sync/pending bila backend gagal (mencegah tabrakan WAF/403).
   try {
     const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: 'POST',

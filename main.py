@@ -2283,7 +2283,7 @@ async def sync_data(req: SyncRequest):
             # 2. Fallback: Ekstensi Chrome di PC
             print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
             sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
-            target_url = f"https://baak.unama.ac.id/jadwal-kuliah?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah?search=1&auto_close=1"
+            target_url = f"https://baak.unama.ac.id/jadwal-kuliah1?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah1?search=1&auto_close=1"
             
             pending_sync_queue[tgl_key] = {
                 "tanggal": tgl_key,
@@ -2291,14 +2291,25 @@ async def sync_data(req: SyncRequest):
                 "time": start_time
             }
             
-            # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai
+            # Tunggu Ekstensi Chrome menarik HTML dan mengirim sinyal selesai atau blocked
             for _ in range(40):
                 await asyncio.sleep(0.8)
                 current = sync_status.get(tgl_key, {})
-                if current.get("status") == "done" and current.get("time", 0) >= (start_time - 1.0):
+                st_cur = current.get("status")
+                if st_cur == "done" and current.get("time", 0) >= (start_time - 1.0):
+                    pending_sync_queue.pop(tgl_key, None)
                     count_got = current.get("count", 0)
                     return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({count_got} jadwal)!", "count": count_got}
+                if st_cur == "blocked_403" and current.get("time", 0) >= (start_time - 1.0):
+                    pending_sync_queue.pop(tgl_key, None)
+                    return {
+                        "status": "warning",
+                        "message": current.get("message") or "Browser ekstensi ditolak oleh BAAK UNAMA (HTTP 403 / Rate Limit). Data jadwal lokal tetap aman.",
+                        "count": 0,
+                        "blocked_403": True
+                    }
 
+            pending_sync_queue.pop(tgl_key, None)
             current = sync_status.get(tgl_key, {})
             if current.get("status") == "done" and current.get("count", 0) > 0:
                 return {"status": "success", "message": f"Berhasil sinkronisasi via Ekstensi Chrome ({current.get('count', 0)} data)!", "count": current.get("count", 0)}
@@ -2311,7 +2322,7 @@ async def sync_data(req: SyncRequest):
                 tgl_key,
                 403,
                 "BLOCKED (403)",
-                "Ekstensi di browser tidak berhasil menarik data baru (terindikasi penolakan akses 403 Forbidden atau tab tertutup).",
+                "Ekstensi di browser tidak berhasil menarik data baru (terindikasi penolakan akses 403 Forbidden, browser belum terbuka, atau tab tertutup).",
                 int((time.time() - start_time) * 1000),
                 0
             )
@@ -2401,6 +2412,15 @@ def report_scraper_log(req: ScraperLogReportRequest):
             durasi_ms=req.durasi_ms or 0,
             jumlah_data=req.jumlah_data or 0
         )
+        st_upper = (req.status or "").upper()
+        if "EXTENSION" in (req.engine or "").upper() and any(k in st_upper for k in ["403", "BLOCKED", "429", "CHALLENGE"]):
+            tgl_key = (req.target_tanggal or "").strip()
+            sync_status[tgl_key] = {
+                "status": "blocked_403",
+                "time": time.time(),
+                "count": 0,
+                "message": req.pesan or "Browser ekstensi ditolak akses oleh BAAK UNAMA."
+            }
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -2422,8 +2442,8 @@ def sync_html_data(req: SyncHtmlRequest):
         sem_to_use = detected or req.semester or scraper.get_active_semester()
         data = scraper.parse_html_content(req.html, req.tanggal, sem_to_use)
         scraper.save_to_db(data, req.tanggal, req.page, sem_to_use)
-        tgl_key = req.tanggal or ""
-        prev_count = sync_status.get(tgl_key, {}).get("count", 0)
+        tgl_key = (req.tanggal or "").strip()
+        prev_count = 0 if str(req.page) == "1" else sync_status.get(tgl_key, {}).get("count", 0)
         sync_status[tgl_key] = {"status": "in_progress", "time": time.time(), "count": prev_count + len(data), "semester": sem_to_use}
         return {"status": "success", "message": f"Berhasil sinkronisasi {len(data)} jadwal dari ekstensi ({sem_to_use}).", "count": len(data), "semester": sem_to_use}
     except Exception as e:
@@ -2445,6 +2465,17 @@ def sync_complete(req: SyncCompleteRequest):
         scraper.compare_and_finalize_sync(target_tgl, sem_to_use)
         perf_opt.invalidate_schedule_cache()
         sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
+        target_url = f"https://baak.unama.ac.id/jadwal-kuliah1?search=1&tanggal={tgl_key}" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah1?search=1"
+        scraper.record_scraping_log(
+            "Chrome Extension (Browser)",
+            target_url,
+            tgl_key,
+            200,
+            "SUCCESS",
+            f"Berhasil sinkronisasi {prev_count} jadwal ({sem_to_use}) via Chrome Extension.",
+            0,
+            prev_count
+        )
         return {"status": "success", "message": f"Proses perbandingan dan finalisasi selesai ({sem_to_use}).", "count": prev_count, "semester": sem_to_use}
     except Exception as e:
         return {"status": "error", "message": str(e)}

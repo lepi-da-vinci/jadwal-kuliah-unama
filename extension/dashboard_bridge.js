@@ -85,64 +85,19 @@
         announceReady();
         setTimeout(announceReady, 1000);
 
-        // Polling tugas sinkronisasi remote (misal jika dipicu dari HP aslab lain)
-        let isBridgePollingBusy = false;
-
-        async function bridgeCheckPendingSync() {
-            // Hemat resource: hanya polling jika tab sedang aktif (visible)
+        // Wake-up ping ringan untuk Service Worker MV3 saat dashboard aktif (tanpa duplikasi polling /api/sync/pending)
+        function wakeExtensionWorker() {
             if (document.visibilityState !== "visible") return;
-            if (isBridgePollingBusy) return;
-            if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) return;
-
-            const baseOrigins = [window.location.origin];
-            if (window.location.origin !== "http://127.0.0.1:8000") {
-                baseOrigins.push("http://127.0.0.1:8000");
-            }
-
-            for (const origin of baseOrigins) {
-                try {
-                    const res = await fetch(`${origin}/api/sync/pending`);
-                    if (!res.ok) continue;
-                    const data = await res.json();
-                    if (data && data.status === "success" && data.task && data.task.url) {
-                        isBridgePollingBusy = true;
-                        const task = data.task;
-                        console.log("[UNAMA Extension Bridge] Menerima instruksi sinkronisasi dari HP/remote:", task);
-
-                        // Hapus dari antrian agar tidak membuka tab ganda
-                        await fetch(`${origin}/api/sync/pending/clear`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ tanggal: task.tanggal })
-                        }).catch(() => {});
-
-                        // Buka background tab untuk scraping BAAK
-                        try {
-                            if (chrome.runtime && chrome.runtime.id) {
-                                chrome.runtime.sendMessage({
-                                    action: "openBackgroundTab",
-                                    url: task.url
-                                }, () => {
-                                    if (chrome.runtime && chrome.runtime.lastError) {}
-                                });
-                            }
-                        } catch (err) {
-                            console.warn("[UNAMA Extension Bridge] Konteks ekstensi terputus, harap refresh halaman ini.", err);
-                        }
-
-                        setTimeout(() => {
-                            isBridgePollingBusy = false;
-                        }, 4000);
-                        break;
-                    }
-                } catch (err) {
-                    // Server offline / istirahat
-                }
-            }
+            if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) return;
+            try {
+                chrome.runtime.sendMessage({ action: "checkPendingNow" }, () => {
+                    if (chrome.runtime && chrome.runtime.lastError) {}
+                });
+            } catch (err) {}
         }
 
-        // Jalankan polling setiap 5 detik (tertib, tidak spam)
-        setInterval(bridgeCheckPendingSync, 5000);
+        // Jalankan wake-up setiap 4 detik saat tab dashboard terlihat
+        setInterval(wakeExtensionWorker, 4000);
     }
 
     if (document.readyState === "loading") {

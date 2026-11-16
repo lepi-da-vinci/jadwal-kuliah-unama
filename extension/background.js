@@ -6,7 +6,7 @@ const recentOpenedUrls = new Map();
 function shouldOpenTab(url) {
     const now = Date.now();
     const lastOpened = recentOpenedUrls.get(url) || 0;
-    if (now - lastOpened < 5000) {
+    if (now - lastOpened < 8000) {
         console.log("[Extension Background] Mengabaikan pembukaan tab duplikat untuk URL:", url);
         return false;
     }
@@ -32,6 +32,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         } else {
             sendResponse({ status: "skipped_duplicate" });
         }
+    } else if (request.action === "checkPendingNow") {
+        checkPendingSync();
+        sendResponse({ status: "checked" });
     }
     return true;
 });
@@ -53,7 +56,7 @@ async function getApiServerOrigins() {
     return origins;
 }
 
-// Polling tugas sinkronisasi remote dari server (misal jika dipicu dari HP pengguna lain)
+// Polling tugas sinkronisasi fallback / remote dari server (hanya dijalankan jika backend direct scraper butuh bantuan browser)
 let isPollingBusy = false;
 
 async function checkPendingSync() {
@@ -68,7 +71,7 @@ async function checkPendingSync() {
                 if (data && data.status === "success" && data.task && data.task.url) {
                     isPollingBusy = true;
                     const task = data.task;
-                    console.log("[Extension Background] Menerima instruksi sinkronisasi dari HP:", task);
+                    console.log("[Extension Background] Menjalankan fallback sinkronisasi BAAK:", task);
 
                     // Hapus dari antrian agar tidak membuka tab duplikat
                     await fetch(`${origin}/api/sync/pending/clear`, {
@@ -85,10 +88,10 @@ async function checkPendingSync() {
                         });
                     }
 
-                    // Beri jeda 4 detik sebelum memproses task baru
+                    // Beri jeda sebelum memproses task baru
                     setTimeout(() => {
                         isPollingBusy = false;
-                    }, 4000);
+                    }, 5000);
                     break;
                 }
             } catch (err) {
@@ -100,5 +103,17 @@ async function checkPendingSync() {
     }
 }
 
-// Jalankan polling background setiap 5 detik (tertib, hemat resource)
-setInterval(checkPendingSync, 5000);
+// Alarm MV3 agar service worker tetap bangun berkala walau tab dashboard tidak aktif
+try {
+    if (chrome.alarms) {
+        chrome.alarms.create("unamaPendingSyncAlarm", { periodInMinutes: 1 });
+        chrome.alarms.onAlarm.addListener((alarm) => {
+            if (alarm && alarm.name === "unamaPendingSyncAlarm") {
+                checkPendingSync();
+            }
+        });
+    }
+} catch (e) {}
+
+// Jalankan polling background saat service worker aktif
+setInterval(checkPendingSync, 3500);
