@@ -12,7 +12,15 @@
       </div>
       <h2>Otorisasi Admin</h2>
       <div class="modal-body" style="text-align: center;">
-        <p id="password-message" style="margin-bottom: 15px;">Masukkan password Admin untuk melanjutkan:</p>
+        <div id="admin-role-select-wrap" style="margin-bottom: 12px; text-align: left;">
+          <label for="admin-username-select" style="display: block; font-size: 0.82em; font-weight: 700; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em;">Pilih Level Akun Admin:</label>
+          <select id="admin-username-select"
+            style="width: 100%; padding: 10px 12px; font-size: 0.92em; font-weight: 600; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; cursor: pointer;">
+            <option value="admin">Super Admin (admin) - Akses Penuh &amp; Database</option>
+            <option value="koordinator">Koordinator (koordinator) - Operasional Lab, Jadwal &amp; Scraper</option>
+          </select>
+        </div>
+        <p id="password-message" style="margin-bottom: 12px;">Masukkan password Admin untuk melanjutkan:</p>
         <input type="password" id="admin-password-input"
           style="width: 100%; padding: 12px; text-align: center; font-size: 1.2em; letter-spacing: 2px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="••••••••">

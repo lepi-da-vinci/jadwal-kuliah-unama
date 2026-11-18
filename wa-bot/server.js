@@ -14,6 +14,9 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = 3000;
 const BOT_SECRET = process.env.WA_BOT_SECRET_KEY || 'unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a';
 let sock;
+let latestQrString = null;
+let latestQrTime = null;
+let lastConnectionState = 'connecting';
 
 // Inisialisasi direktori log terpadu untuk chatbot
 function getLogFilePath() {
@@ -69,22 +72,29 @@ async function connectToWhatsApp () {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr) {
+            latestQrString = qr;
+            latestQrTime = Date.now();
+            lastConnectionState = 'qr_pending';
             console.log('\nScan QR Code ini dengan WhatsApp Anda:');
             qrcode.generate(qr, { small: true });
-            logChatbot('WARN', 'QR Code WhatsApp terdeteksi. Silakan scan QR code dengan WhatsApp di HP Anda untuk login.', 'GATEWAY');
+            logChatbot('WARN', 'QR Code WhatsApp terdeteksi. Silakan scan QR code melalui Dashboard Admin atau terminal.', 'GATEWAY');
         }
         
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             const errDetail = lastDisconnect.error ? lastDisconnect.error.toString() : 'Unknown';
+            lastConnectionState = shouldReconnect ? 'reconnecting' : 'logged_out';
             logChatbot('WARN', `Koneksi WhatsApp terputus. Mencoba reconnect: ${shouldReconnect}. Error: ${errDetail}`, 'GATEWAY');
             
             if (shouldReconnect) {
                 setTimeout(connectToWhatsApp, 2000); // Wait 2s before reconnecting
             } else {
-                logChatbot('ERROR', 'Sesi WhatsApp telah logout. Silakan hapus folder "baileys_auth_info" dan scan ulang QR code.', 'GATEWAY');
+                logChatbot('ERROR', 'Sesi WhatsApp telah logout. Admin dapat mereset & scan ulang QR melalui Dashboard Admin.', 'GATEWAY');
             }
         } else if (connection === 'open') {
+            latestQrString = null;
+            latestQrTime = null;
+            lastConnectionState = 'ready';
             const userPhone = sock?.user?.id || 'Unknown';
             logChatbot('SUCCESS', `WhatsApp Client is READY! Berhasil login sebagai: ${userPhone}`, 'GATEWAY');
         }
@@ -269,14 +279,42 @@ app.post('/send', async (req, res) => {
     }
 });
 
-// Endpoint status kesehatan gateway WhatsApp
+// Endpoint status kesehatan gateway WhatsApp & QR Code login untuk Dashboard Admin
 app.get('/status', (req, res) => {
     const isReady = !!(sock && sock.user);
     res.json({
         status: 'success',
         ready: isReady,
-        user: sock?.user || null
+        state: isReady ? 'ready' : lastConnectionState,
+        user: sock?.user || null,
+        qr: isReady ? null : latestQrString,
+        qr_updated_at: latestQrTime
     });
+});
+
+// Endpoint reconnect / reset sesi QR dari Dashboard Admin
+app.post('/reconnect', async (req, res) => {
+    const reqSecret = req.headers['x-bot-secret'] || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (!reqSecret || reqSecret !== BOT_SECRET) {
+        return res.status(401).json({ status: 'error', message: 'Akses ditolak: Bot secret token tidak valid.' });
+    }
+    const { reset_session } = req.body || {};
+    try {
+        if (reset_session) {
+            const authDir = path.join(__dirname, 'baileys_auth_info');
+            if (fs.existsSync(authDir)) {
+                fs.rmSync(authDir, { recursive: true, force: true });
+            }
+            logChatbot('WARN', 'Sesi baileys_auth_info di-reset oleh Admin untuk generate QR baru.', 'GATEWAY');
+        }
+        try {
+            if (sock && sock.end) sock.end();
+        } catch (e) {}
+        setTimeout(connectToWhatsApp, 800);
+        res.json({ status: 'success', message: reset_session ? 'Sesi WA di-reset, QR baru sedang disiapkan...' : 'Memulai ulang koneksi WhatsApp...' });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.toString() });
+    }
 });
 
 app.listen(PORT, () => {

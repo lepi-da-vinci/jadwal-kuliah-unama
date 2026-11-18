@@ -4068,8 +4068,18 @@
       <!-- Kategori 3: Master Data Admin -->
       <div class="admin-only"
         style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
-        Kelola Master Data & Absensi
+        Pusat Kendali Admin &amp; Master Data
       </div>
+      <button class="btn btn-secondary admin-only" id="btn-show-admin-control-center" onclick="window.openAdminControlCenter()"
+        style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid #8b5cf6; color: var(--text); background: linear-gradient(135deg, rgba(139, 92, 246, 0.14), rgba(99, 102, 241, 0.08)); align-items: center; justify-content: flex-start; gap: 12px; cursor: pointer; border-radius: 12px;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: #8b5cf6; flex-shrink: 0;">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <div style="text-align: left;">
+          <div style="font-weight: 700; color: var(--text);">Pusat Kendali Admin (Control Center)</div>
+          <div style="font-size: 0.78em; color: var(--text-muted);">Status WA Bot, Jadwal Manual (Lock), Auto-Backup SQL &amp; Audit Log</div>
+        </div>
+      </button>
       <button class="btn btn-secondary admin-only" id="btn-show-absensi-config-menu" onclick="window.openAbsensiConfigDirectly()"
         style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid var(--primary); color: var(--text); background: rgba(99, 102, 241, 0.08); align-items: center; justify-content: flex-start; gap: 12px; cursor: pointer; border-radius: 12px;">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); flex-shrink: 0;">
@@ -4853,6 +4863,187 @@
         </button>
       </div>
     </div>
+
+    <!-- ==================== TAMPILAN PUSAT KENDALI ADMIN (CONTROL CENTER) ==================== -->
+    <div id="wa-modal-admin-center" class="modal-body" style="display: none; flex-direction: column; gap: 14px; text-align: left;">
+      <!-- Info Role Aktif -->
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 10px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.25);">
+        <div>
+          <div style="font-size: 0.76rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Sesi Otorisasi Aktif</div>
+          <div id="admin-center-user-info" style="font-size: 0.9rem; font-weight: 700; color: var(--text);">Admin (SUPER_ADMIN)</div>
+        </div>
+        <button type="button" onclick="window.loadAdminOverviewData()"
+          style="padding: 6px 12px; font-size: 0.78rem; font-weight: 600; border-radius: 8px; border: 1px solid var(--primary); background: rgba(99, 102, 241, 0.1); color: var(--primary); cursor: pointer;">
+          Refresh Data
+        </button>
+      </div>
+
+      <!-- Navigasi Sub-Tab Control Center -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: var(--bg-elevated); padding: 5px; border-radius: 10px; border: 1px solid var(--border);">
+        <button type="button" id="tab-btn-admin-status" onclick="window.switchAdminCenterSubTab('status')"
+          style="padding: 8px 6px; border-radius: 7px; border: none; background: var(--primary); color: #fff; font-weight: 700; font-size: 0.76rem; cursor: pointer;">
+          WA &amp; Otomasi
+        </button>
+        <button type="button" id="tab-btn-admin-jadwal" onclick="window.switchAdminCenterSubTab('jadwal')"
+          style="padding: 8px 6px; border-radius: 7px; border: none; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 0.76rem; cursor: pointer;">
+          Jadwal &amp; Lock
+        </button>
+        <button type="button" id="tab-btn-admin-backups" onclick="window.switchAdminCenterSubTab('backups')"
+          style="padding: 8px 6px; border-radius: 7px; border: none; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 0.76rem; cursor: pointer;">
+          Auto-Backup
+        </button>
+        <button type="button" id="tab-btn-admin-security" onclick="window.switchAdminCenterSubTab('security')"
+          style="padding: 8px 6px; border-radius: 7px; border: none; background: transparent; color: var(--text-muted); font-weight: 600; font-size: 0.76rem; cursor: pointer;">
+          Akun &amp; Audit
+        </button>
+      </div>
+
+      <!-- SUB-TAB 1: STATUS WA GATEWAY & ANTREAN NOTIFIKASI PAGI -->
+      <div id="admin-subview-status" style="display: flex; flex-direction: column; gap: 12px;">
+        <!-- Kartu Status WhatsApp Gateway -->
+        <div style="border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; font-size: 0.88rem; color: var(--text);">Status Gateway WhatsApp Bot</span>
+            <span id="admin-wa-state-badge" style="font-size: 0.75rem; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: rgba(148,163,184,0.15); color: var(--text-muted);">Memeriksa...</span>
+          </div>
+          <div id="admin-wa-detail-text" style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+            Memuat status koneksi ke mesin Baileys WhatsApp...
+          </div>
+          <div id="admin-wa-qr-container" style="display: none; flex-direction: column; align-items: center; gap: 8px; padding: 12px; border-radius: 8px; background: #ffffff; border: 1px dashed var(--border);">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #1e293b;">Scan QR Code WhatsApp dari HP Bot:</div>
+            <img id="admin-wa-qr-img" alt="QR WhatsApp" style="width: 210px; height: 210px; object-fit: contain;" />
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary" onclick="window.reconnectWaGatewayAction(false)"
+              style="padding: 7px 12px; font-size: 0.78rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+              Reconnect WA
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="window.reconnectWaGatewayAction(true)"
+              style="padding: 7px 12px; font-size: 0.78rem; font-weight: 600; border-radius: 8px; color: #ef4444; border-color: rgba(239,68,68,0.35); cursor: pointer;">
+              Reset Sesi &amp; Buat QR Baru
+            </button>
+          </div>
+        </div>
+
+        <!-- Kartu Antrean Notifikasi Pagi (07:00 WIB) -->
+        <div style="border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg-card); display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; font-size: 0.88rem; color: var(--text);">Antrean Notifikasi Pagi (07:00 WIB)</span>
+            <span id="admin-morning-queue-badge" style="font-size: 0.75rem; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: rgba(99, 102, 241, 0.14); color: var(--primary);">0 Antrean</span>
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">
+            Perubahan jadwal hasil Full Scrape tengah malam (00:00 WIB) ditahan di antrean dan otomatis dikirim pukul 07:00 WIB. Anda dapat mengirim paksa sekarang jika diperlukan.
+          </div>
+          <div>
+            <button type="button" class="btn btn-primary" onclick="window.flushMorningAlertsAction()"
+              style="padding: 7px 14px; font-size: 0.78rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+              Kirim Paksa Antrean Pagi Sekarang
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-TAB 2: JADWAL MANUAL & LOCK OVERRIDE -->
+      <div id="admin-subview-jadwal" style="display: none; flex-direction: column; gap: 12px;">
+        <div style="border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg-card); display: flex; flex-direction: column; gap: 8px;">
+          <div style="font-weight: 700; font-size: 0.88rem; color: var(--text);">Tambah Jadwal Manual / Kelas Pengganti (Lock Override)</div>
+          <div style="font-size: 0.77rem; color: var(--text-muted);">
+            Jadwal yang dikunci (<b>is_locked = 1</b>) tidak akan dihapus atau ditimpa saat sistem melakukan auto-sync ke BAAK.
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <input type="date" id="adm-jadwal-tanggal" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+            <input type="text" id="adm-jadwal-jam" placeholder="Jam (cth: 08:00)" value="08:00" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 110px; gap: 8px;">
+            <input type="text" id="adm-jadwal-mk" placeholder="Nama Mata Kuliah" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+            <input type="text" id="adm-jadwal-kelas" placeholder="Kelas (04PT5)" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <input type="text" id="adm-jadwal-dosen" placeholder="Nama Dosen" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+            <input type="text" id="adm-jadwal-ruangan" placeholder="Ruangan (cth: Labor 1.6 / R. 2.10)" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+            <select id="adm-jadwal-kampus" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+              <option value="Thehok">Thehok</option>
+              <option value="Kobar">Kobar</option>
+            </select>
+            <select id="adm-jadwal-metode" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+              <option value="TM">Tatap Muka (TM)</option>
+              <option value="OL">Online (OL)</option>
+              <option value="CC">Cancel (CC)</option>
+            </select>
+            <input type="text" id="adm-jadwal-status" placeholder="Status" value="Kelas Tambahan" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+          </div>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600; color: var(--text); cursor: pointer;">
+            <input type="checkbox" id="adm-jadwal-locked" checked>
+            <span>Kunci jadwal ini agar tidak tertimpa sinkronisasi BAAK (Lock Override)</span>
+          </label>
+          <button type="button" class="btn btn-primary" onclick="window.submitManualScheduleAction()"
+            style="padding: 9px 14px; font-size: 0.82rem; font-weight: 700; border-radius: 8px; cursor: pointer;">
+            Simpan Jadwal Manual
+          </button>
+        </div>
+
+        <div style="font-weight: 700; font-size: 0.84rem; color: var(--text);" id="adm-locked-schedules-title">
+          Daftar Jadwal yang Dikunci (0)
+        </div>
+        <div id="adm-locked-schedules-list" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 14px;">Belum ada jadwal yang dikunci.</div>
+        </div>
+      </div>
+
+      <!-- SUB-TAB 3: AUTO-BACKUP SQL HARIAN -->
+      <div id="admin-subview-backups" style="display: none; flex-direction: column; gap: 12px;">
+        <div style="border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg-card); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <div style="font-weight: 700; font-size: 0.88rem; color: var(--text);">Snapshot Auto-Backup Database (.SQL)</div>
+            <div style="font-size: 0.77rem; color: var(--text-muted);">Sistem menyimpan 7 snapshot harian terakhir secara otomatis setiap malam.</div>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="window.runAutoBackupNowAction()"
+            style="padding: 8px 14px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+            Buat Snapshot Sekarang
+          </button>
+        </div>
+        <div id="adm-backups-list-container" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 18px;">Memuat daftar file backup...</div>
+        </div>
+      </div>
+
+      <!-- SUB-TAB 4: AKUN ADMIN & AUDIT LOG -->
+      <div id="admin-subview-security" style="display: none; flex-direction: column; gap: 12px;">
+        <div id="adm-password-form-box" style="border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg-card); display: flex; flex-direction: column; gap: 8px;">
+          <div style="font-weight: 700; font-size: 0.88rem; color: var(--text);">Manajemen Password Akun (Khusus Super Admin)</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <select id="adm-target-username" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+              <option value="admin">Super Admin (admin)</option>
+              <option value="koordinator">Koordinator (koordinator)</option>
+            </select>
+            <input type="password" id="adm-current-master-pwd" placeholder="Password Master Saat Ini (Wajib)" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <input type="password" id="adm-new-password" placeholder="Password Akun Baru (Opsional)" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+            <input type="password" id="adm-new-master-pwd" placeholder="Password Master Baru (Opsional)" style="padding: 8px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 0.82rem;">
+          </div>
+          <button type="button" class="btn btn-primary" onclick="window.updateAdminAccountAction()"
+            style="padding: 8px 14px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+            Simpan Perubahan Kredensial
+          </button>
+        </div>
+
+        <div style="font-weight: 700; font-size: 0.84rem; color: var(--text);">Riwayat Audit Log Aktivitas Admin</div>
+        <div id="adm-audit-logs-container" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 16px;">Memuat riwayat audit...</div>
+        </div>
+      </div>
+
+      <!-- Tombol Kembali -->
+      <div style="margin-top: 4px;">
+        <button type="button" class="modal-btn" onclick="window.closeAdminControlCenterToMenu()"
+          style="background: var(--text-muted); padding: 10px; width: 100%; min-height: 44px; font-weight: 600;">
+          Kembali ke Menu Setting
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5305,7 +5496,83 @@
 
     <!-- Modal Body -->
     <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 120px); overflow-y: auto; padding-right: 2px;">
-      
+
+      <!-- Panel Sumber & Link Scraper Dinamis + Fallback Raw HTML -->
+      <div style="border: 1.5px solid rgba(99, 102, 241, 0.28); border-radius: 12px; padding: 14px; background: var(--bg-elevated, rgba(99, 102, 241, 0.04)); display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            <span style="font-weight: 700; font-size: 0.9rem; color: var(--text);">Sumber &amp; Tempat Paste Link Scraper BAAK</span>
+          </div>
+          <span id="scraper-config-meta-badge" style="font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 6px; background: rgba(16, 185, 129, 0.14); color: #10b981;">
+            Auto-Sync: 00:00 WIB | Notif WA: 07:00 WIB
+          </span>
+        </div>
+
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.45;">
+          URL Utama Aktif: <code id="scraper-current-primary-url" style="font-family: monospace; font-weight: 600; color: var(--primary); background: var(--bg-card, #fff); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); word-break: break-all;">https://baak.unama.ac.id/jadwal-kuliah1</code>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <input type="text" id="scraper-custom-url-input"
+            placeholder="Paste link jadwal BAAK di sini (contoh: https://baak.unama.ac.id/jadwal-kuliah1?search=1&tanggal=2026-11-18)"
+            style="width: 100%; padding: 9px 12px; font-size: 0.84rem; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-card, #fff); color: var(--text); outline: none; box-sizing: border-box;">
+
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+            <button type="button" class="btn btn-secondary" id="btn-validate-scraper-url" onclick="validateCustomScraperUrlAction()"
+              style="padding: 7px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <span>Uji &amp; Preview Link</span>
+            </button>
+
+            <button type="button" class="btn btn-primary" id="btn-save-scraper-url" onclick="saveCustomScraperUrlAction()"
+              style="padding: 7px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              <span>Simpan sebagai Link Utama</span>
+            </button>
+
+            <button type="button" class="btn btn-secondary" id="btn-run-custom-url-day" onclick="runCustomScraperUrlAction(false)"
+              style="padding: 7px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <span>Scrape Tanggal Terpilih</span>
+            </button>
+
+            <button type="button" class="btn btn-secondary" id="btn-run-custom-url-full" onclick="runCustomScraperUrlAction(true)"
+              style="padding: 7px 12px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; border-color: #8b5cf6; color: #8b5cf6; background: rgba(139, 92, 246, 0.08); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              <span>Full Scrape dari Link Ini</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hasil Validasi & Dry-Run Preview -->
+        <div id="scraper-url-preview-box" style="display: none; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-card, #fff); font-size: 0.8rem;"></div>
+
+        <!-- Mode Darurat: Paste Raw HTML -->
+        <details id="scraper-raw-html-details" style="border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 2px;">
+          <summary style="cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); user-select: none;">
+            Mode Darurat (Offline / Blokir IP): Paste Raw HTML Tabel BAAK
+          </summary>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 0.77rem; color: var(--text-muted); line-height: 1.4;">
+              Jika jaringan server diblokir penuh oleh WAF BAAK, buka halaman jadwal BAAK di browser Anda, tekan <b>Ctrl+U (View Page Source)</b>, salin seluruh HTML, dan tempelkan di bawah ini:
+            </div>
+            <textarea id="scraper-raw-html-input" rows="4"
+              placeholder="Paste kode sumber HTML halaman jadwal BAAK (&lt;table&gt;...&lt;/table&gt;) di sini..."
+              style="width: 100%; padding: 8px 10px; font-family: monospace; font-size: 0.78rem; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-card, #fff); color: var(--text); resize: vertical; box-sizing: border-box;"></textarea>
+            <div style="display: flex; justify-content: flex-end;">
+              <button type="button" class="btn btn-primary" id="btn-submit-raw-html" onclick="submitRawHtmlScrapeAction()"
+                style="padding: 7px 14px; font-size: 0.8rem; font-weight: 600; border-radius: 8px; cursor: pointer;">
+                Proses &amp; Simpan Jadwal dari HTML
+              </button>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- Toolbar Tombol Aksi -->
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -5376,7 +5643,15 @@
       </div>
       <h2>Otorisasi Admin</h2>
       <div class="modal-body" style="text-align: center;">
-        <p id="password-message" style="margin-bottom: 15px;">Masukkan password Admin untuk melanjutkan:</p>
+        <div id="admin-role-select-wrap" style="margin-bottom: 12px; text-align: left;">
+          <label for="admin-username-select" style="display: block; font-size: 0.82em; font-weight: 700; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em;">Pilih Level Akun Admin:</label>
+          <select id="admin-username-select"
+            style="width: 100%; padding: 10px 12px; font-size: 0.92em; font-weight: 600; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none; cursor: pointer;">
+            <option value="admin">Super Admin (admin) - Akses Penuh &amp; Database</option>
+            <option value="koordinator">Koordinator (koordinator) - Operasional Lab, Jadwal &amp; Scraper</option>
+          </select>
+        </div>
+        <p id="password-message" style="margin-bottom: 12px;">Masukkan password Admin untuk melanjutkan:</p>
         <input type="password" id="admin-password-input"
           style="width: 100%; padding: 12px; text-align: center; font-size: 1.2em; letter-spacing: 2px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg-card); color: var(--text); outline: none;"
           placeholder="••••••••">

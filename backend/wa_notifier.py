@@ -4530,19 +4530,21 @@ def check_and_notify_info_mase():
             try: conn.close()
             except: pass
 
-def flush_pending_morning_alerts():
+def flush_pending_morning_alerts(force_now: bool = False):
     """
     Mengirimkan notifikasi perubahan jadwal yang tertunda saat jam tenang malam/dini hari (00:00 - 06:59 WIB),
     termasuk hasil scraper total jam 12 malam untuk perubahan hari ini maupun tanggal-tanggal ke depan.
-    Hanya mengirim mulai jam 07:00 pagi WIB dan TIDAK mengirim notifikasi perubahan/pindah ruangan.
+    Hanya mengirim mulai jam 07:00 pagi WIB (kecuali force_now=True oleh Admin) dan TIDAK mengirim notifikasi pindah ruangan.
     """
     now = get_wib_now()
-    if now.hour < 7:
-        return
+    if now.hour < 7 and not force_now:
+        return {"sent_recipients": 0, "total_items": 0}
 
     today_date = now.date()
     tomorrow_date = today_date + timedelta(days=1)
     today_str = today_date.strftime("%Y-%m-%d")
+    sent_recipients = 0
+    total_items = 0
 
     try:
         conn = scraper.get_db()
@@ -4561,8 +4563,9 @@ def flush_pending_morning_alerts():
         """, (today_str,))
         rows = cursor.fetchall()
         if not rows:
-            return
+            return {"sent_recipients": 0, "total_items": 0}
 
+        total_items = len(rows)
         by_recipient = collections.defaultdict(list)
         for row in rows:
             by_recipient[row['no_wa_tujuan']].append(row)
@@ -4634,6 +4637,7 @@ def flush_pending_morning_alerts():
                 )
                 conn.commit()
             if is_sent:
+                sent_recipients += 1
                 log_chatbot("SUCCESS", f"Morning alert ({len(items)} perubahan) terkirim ke {no_wa}", "MORNING-ALERT")
                 time.sleep(1.5)
 
@@ -4646,6 +4650,7 @@ def flush_pending_morning_alerts():
         if 'conn' in locals() and conn and conn.is_connected():
             try: conn.close()
             except: pass
+    return {"sent_recipients": sent_recipients, "total_items": total_items}
 
 def check_lab_schedules():
     now = get_wib_now()
@@ -5119,11 +5124,147 @@ def _write_last_full_sync_date(date_str: str):
     except Exception:
         pass
 
+def get_backups_dir():
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    b_dir = os.path.join(base_dir, "backups")
+    os.makedirs(b_dir, exist_ok=True)
+    return b_dir
+
+def list_auto_backups():
+    """Mengembalikan daftar file backup SQL otomatis yang tersimpan di server."""
+    b_dir = get_backups_dir()
+    files = []
+    try:
+        for fn in os.listdir(b_dir):
+            if fn.endswith(".sql"):
+                full_p = os.path.join(b_dir, fn)
+                st = os.stat(full_p)
+                dt_str = datetime.datetime.fromtimestamp(st.st_mtime, tz=WIB).strftime("%Y-%m-%d %H:%M:%S")
+                files.append({
+                    "filename": fn,
+                    "size_bytes": st.st_size,
+                    "size_kb": round(st.st_size / 1024, 1),
+                    "created_at": dt_str,
+                    "mtime": st.st_mtime
+                })
+        files.sort(key=lambda x: x["mtime"], reverse=True)
+    except Exception as e:
+        print(f"[Auto-Backup List Error] {e}")
+    return files
+
+def run_daily_auto_backup(force_now: bool = False) -> dict:
+    """
+    Membuat snapshot backup SQL otomatis ke folder backups/auto_backup_YYYY-MM-DD.sql
+    dan menghapus file backup otomatis yang berusia > 7 hari (retensi otomatis).
+    """
+    now = get_wib_now()
+    today_str = now.strftime("%Y-%m-%d")
+    b_dir = get_backups_dir()
+    suffix = now.strftime("%H%M%S") if force_now else "daily"
+    filename = f"auto_backup_{today_str}_{suffix}.sql" if force_now else f"auto_backup_{today_str}.sql"
+    filepath = os.path.join(b_dir, filename)
+
+    if not force_now and os.path.exists(filepath) and os.path.getsize(filepath) > 500:
+        return {"status": "skipped", "filename": filename, "message": "Backup harian hari ini sudah ada."}
+
+    tables_to_dump = [
+        "semester", "ruangan", "dosen", "mata_kuliah", "asisten_lab",
+        "jadwal", "jadwal_permanent", "absensi_aslab", "status_operasional_lab", "konfigurasi_sistem"
+    ]
+    conn = None
+    cursor = None
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        sql_lines = [
+            f"-- AUTO BACKUP JADWAL KULIAH UNAMA ({now.strftime('%Y-%m-%d %H:%M:%S')} WIB)\n",
+            "SET FOREIGN_KEY_CHECKS = 0;\n",
+            "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n",
+            "SET time_zone = \"+07:00\";\n\n"
+        ]
+        total_rows = 0
+        for tbl in tables_to_dump:
+            try:
+                cursor.execute(f"SHOW TABLES LIKE %s", (tbl,))
+                if not cursor.fetchone():
+                    continue
+                cursor.execute(f"SELECT * FROM `{tbl}`")
+                rows = cursor.fetchall()
+                if not rows:
+                    continue
+                cols = [desc[0] for desc in cursor.description]
+                col_names = ", ".join([f"`{c}`" for c in cols])
+                sql_lines.append(f"-- Data tabel `{tbl}` ({len(rows)} baris)\n")
+                for r in rows:
+                    vals = []
+                    for v in r:
+                        if v is None:
+                            vals.append("NULL")
+                        elif isinstance(v, (int, float)):
+                            vals.append(str(v))
+                        else:
+                            s_val = str(v).replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r")
+                            vals.append(f"'{s_val}'")
+                    sql_lines.append(f"REPLACE INTO `{tbl}` ({col_names}) VALUES ({', '.join(vals)});\n")
+                sql_lines.append("\n")
+                total_rows += len(rows)
+            except Exception:
+                continue
+        sql_lines.append("SET FOREIGN_KEY_CHECKS = 1;\n")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.writelines(sql_lines)
+
+        # Retensi otomatis: simpan maksimal 7 file auto_backup harian terakhir
+        all_backups = [fn for fn in os.listdir(b_dir) if fn.startswith("auto_backup_") and fn.endswith(".sql")]
+        all_backups.sort(key=lambda fn: os.path.getmtime(os.path.join(b_dir, fn)), reverse=True)
+        for old_fn in all_backups[7:]:
+            try:
+                os.remove(os.path.join(b_dir, old_fn))
+            except Exception:
+                pass
+
+        return {"status": "success", "filename": filename, "total_rows": total_rows, "message": f"Backup otomatis tersimpan ({filename}, {total_rows} baris)."}
+    except Exception as e:
+        return {"status": "error", "filename": filename, "message": str(e)}
+    finally:
+        if cursor:
+            try: cursor.close()
+            except: pass
+        if conn and conn.is_connected():
+            try: conn.close()
+            except: pass
+
+def prune_old_logs_and_history():
+    """Memangkas ukuran file chatbot.log (> 5 MB) dan menghapus log database > 30 hari secara otomatis."""
+    try:
+        log_path = get_chatbot_log_path()
+        if os.path.exists(log_path) and os.path.getsize(log_path) > 5 * 1024 * 1024:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.writelines(lines[-2000:])
+    except Exception:
+        pass
+
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM log_scraping_engine WHERE timestamp < NOW() - INTERVAL 30 DAY")
+        cursor.execute("DELETE FROM log_sent_notifications WHERE sent_at < NOW() - INTERVAL 7 DAY")
+        cursor.execute("DELETE FROM log_audit_admin WHERE waktu < NOW() - INTERVAL 60 DAY")
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
 async def wa_notifier_loop():
-    print("WA Notifier Loop Started. (Automatic notifications, Midnight Full Scrape & Morning Alert Scheduler ENABLED - Timezone: Asia/Jakarta)")
+    print("WA Notifier Loop Started. (Automatic notifications, Midnight Full Scrape, Auto-Backup & Morning Alert Scheduler ENABLED - Timezone: Asia/Jakarta)")
     last_auto_sync_ts = 0.0
     last_full_sync_attempt_ts = 0.0
     last_full_sync_date = _read_last_full_sync_date()
+    last_maintenance_date = ""
 
     while True:
         try:
@@ -5152,11 +5293,18 @@ async def wa_notifier_loop():
             
         now = get_wib_now()
         today_str = now.strftime("%Y-%m-%d")
+        cfg = scraper.get_scraper_config()
+        auto_midnight_enabled = str(cfg.get("scraper_auto_midnight", "1")) != "0"
+        auto_backup_enabled = str(cfg.get("auto_backup_daily", "1")) != "0"
+        try:
+            sync_interval_sec = max(5, int(cfg.get("scraper_sync_interval_min", 15))) * 60
+        except Exception:
+            sync_interval_sec = 15 * 60
 
         # 1. FULL SCRAPE TOTAL JAM 12 MALAM (00:00 - 05:59 WIB):
         # Tarik seluruh halaman jadwal dari awal hingga akhir untuk mendeteksi perubahan hari ini maupun hari-hari mendatang.
         # Notifikasi perubahan tidak dikirim tengah malam, melainkan ditahan hingga jam 07:00 pagi WIB.
-        if 0 <= now.hour < 6 and last_full_sync_date != today_str:
+        if auto_midnight_enabled and 0 <= now.hour < 6 and last_full_sync_date != today_str:
             if (time.time() - last_full_sync_attempt_ts) >= 30 * 60:
                 last_full_sync_attempt_ts = time.time()
                 print(f"[Midnight Full Scrape] Memulai scraper total seluruh jadwal semester dari BAAK ({today_str} {now.strftime('%H:%M')} WIB)...")
@@ -5176,9 +5324,20 @@ async def wa_notifier_loop():
                 except Exception as full_err:
                     print(f"[Midnight Full Scrape Error] {full_err}")
 
-        # 2. Optimasi P0-2: Auto-sync jadwal hari ini berkala dari server tiap 15 menit pada jam operasional (06:00 - 21:00 WIB)
+        # 1b. Pemeliharaan Mandiri Harian (Auto-Backup SQL 7 hari + Prune Log Lama)
+        if 0 <= now.hour < 6 and last_maintenance_date != today_str:
+            last_maintenance_date = today_str
+            try:
+                if auto_backup_enabled:
+                    b_res = await asyncio.to_thread(run_daily_auto_backup, False)
+                    print(f"[Auto-Backup] {b_res.get('message')}")
+                await asyncio.to_thread(prune_old_logs_and_history)
+            except Exception as maint_err:
+                print(f"[Daily Maintenance Error] {maint_err}")
+
+        # 2. Optimasi P0-2: Auto-sync jadwal hari ini berkala dari server pada jam operasional (06:00 - 21:00 WIB)
         if 6 <= now.hour <= 21:
-            if (time.time() - last_auto_sync_ts) >= 15 * 60:
+            if (time.time() - last_auto_sync_ts) >= sync_interval_sec:
                 last_auto_sync_ts = time.time()
                 try:
                     success, count, msg = await asyncio.to_thread(scraper.scrape_baak_direct, today_str, None)

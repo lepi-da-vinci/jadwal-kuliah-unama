@@ -35,7 +35,11 @@ except ImportError:
     except ImportError:
         perf_opt = None
 
+_last_working_db_port = None
+_last_working_db_pwd = None
+
 def get_db():
+    global _last_working_db_port, _last_working_db_pwd
     if perf_opt is not None:
         conn = perf_opt.get_pooled_db()
         if conn is not None:
@@ -52,8 +56,24 @@ def get_db():
     user = os.getenv("DB_USER", "root")
     db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
 
-    ports_to_try = [configured_port]
-    for p in ([3306, 3307] if is_docker else [3307, 3306]):
+    if _last_working_db_port is not None and _last_working_db_pwd is not None:
+        try:
+            return mysql.connector.connect(
+                host=host,
+                port=_last_working_db_port,
+                user=user,
+                password=_last_working_db_pwd,
+                database=db_name,
+                connection_timeout=2
+            )
+        except mysql.connector.Error:
+            _last_working_db_port = None
+            _last_working_db_pwd = None
+
+    ports_to_try = []
+    if _last_working_db_port:
+        ports_to_try.append(_last_working_db_port)
+    for p in ([3306, 3307] if is_docker else [3306, configured_port, 3307]):
         if p not in ports_to_try:
             ports_to_try.append(p)
 
@@ -66,13 +86,17 @@ def get_db():
     for p in ports_to_try:
         for p_word in passwords_to_try:
             try:
-                return mysql.connector.connect(
+                conn = mysql.connector.connect(
                     host=host,
                     port=p,
                     user=user,
                     password=p_word,
-                    database=db_name
+                    database=db_name,
+                    connection_timeout=2
                 )
+                _last_working_db_port = p
+                _last_working_db_pwd = p_word
+                return conn
             except mysql.connector.Error as err:
                 last_err = err
                 continue
@@ -502,6 +526,76 @@ def init_db_schema():
                 print("[Database] Initial seeding jadwal_permanent dari tabel jadwal selesai!")
         except Exception as e_seed:
             print(f"[Database] Info seeding permanent: {e_seed}")
+        # ─────────────────────────────────────────────────────────────
+
+        # ─── TABEL KONFIGURASI SISTEM DINAMIS, TRUE ADMIN, & AUDIT LOG ───
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS konfigurasi_sistem (
+                kunci VARCHAR(100) PRIMARY KEY,
+                nilai TEXT NOT NULL,
+                keterangan VARCHAR(255) NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        default_configs = [
+            ("scraper_primary_url", "https://baak.unama.ac.id/jadwal-kuliah1?search=1", "URL utama scraper BAAK UNAMA"),
+            ("scraper_fallback_urls", "https://baak.unama.ac.id/jadwal-kuliah?search=1", "URL cadangan scraper BAAK (dipisahkan koma)"),
+            ("scraper_auto_midnight", "1", "Aktifkan full scrape otomatis jam 12 malam (1=Aktif, 0=Nonaktif)"),
+            ("scraper_sync_interval_min", "15", "Interval auto-sync jadwal hari ini pada jam operasional (menit)"),
+            ("scraper_max_pages_full", "300", "Batas maksimum halaman saat full scrape seluruh semester"),
+            ("auto_backup_daily", "1", "Aktifkan auto-backup SQL harian dengan retensi 7 hari (1=Aktif, 0=Nonaktif)")
+        ]
+        cursor.executemany(
+            "INSERT IGNORE INTO konfigurasi_sistem (kunci, nilai, keterangan) VALUES (%s, %s, %s)",
+            default_configs
+        )
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS admin_users (
+                id_admin INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(60) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                master_hash VARCHAR(255) NULL,
+                role ENUM('SUPER_ADMIN', 'KOORDINATOR') DEFAULT 'SUPER_ADMIN',
+                nama_lengkap VARCHAR(100) DEFAULT 'Administrator',
+                last_login TIMESTAMP NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        cursor.execute("SELECT COUNT(*) FROM admin_users")
+        if cursor.fetchone()[0] == 0:
+            env_admin_pass = os.getenv("ADMIN_PASSWORD", "unama123").strip()
+            env_master_pass = os.getenv("MASTER_PASSWORD", "makannasipadangdepangang!").strip()
+            p_hash = hashlib.sha256(("unama_salt_v1:" + env_admin_pass).encode("utf-8")).hexdigest()
+            m_hash = hashlib.sha256(("unama_master_v1:" + env_master_pass).encode("utf-8")).hexdigest()
+            cursor.execute(
+                "INSERT IGNORE INTO admin_users (username, password_hash, master_hash, role, nama_lengkap) VALUES (%s, %s, %s, %s, %s)",
+                ("admin", p_hash, m_hash, "SUPER_ADMIN", "Super Administrator")
+            )
+            cursor.execute(
+                "INSERT IGNORE INTO admin_users (username, password_hash, master_hash, role, nama_lengkap) VALUES (%s, %s, %s, %s, %s)",
+                ("koordinator", p_hash, None, "KOORDINATOR", "Koordinator Aslab & Asmot")
+            )
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS log_audit_admin (
+                id_audit INT AUTO_INCREMENT PRIMARY KEY,
+                waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                username VARCHAR(60) NOT NULL,
+                role VARCHAR(30) DEFAULT 'SUPER_ADMIN',
+                aksi VARCHAR(120) NOT NULL,
+                detail TEXT NULL,
+                ip_address VARCHAR(60) NULL,
+                INDEX idx_waktu (waktu)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        # Pastikan kolom is_locked tersedia di tabel jadwal untuk fitur Lock Override Admin
+        cursor.execute("SHOW COLUMNS FROM jadwal LIKE 'is_locked'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE jadwal ADD COLUMN is_locked TINYINT(1) DEFAULT 0")
         # ─────────────────────────────────────────────────────────────
 
         conn.commit()
@@ -1970,8 +2064,30 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
                 dispatch_schedule_change_alerts(conn, cursor, detected_events)
 
             # 4. Finalisasi Pindah Data untuk 1 tanggal (HANYA dieksekusi jika data baru valid dan ada)
-            # Selaraskan tabel jadwal utama dengan data BAAK terkini
-            cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
+            # Pertahankan jadwal yang dikunci manual oleh Admin (is_locked = 1) agar tidak tertimpa sinkronisasi BAAK
+            locked_keys = set()
+            try:
+                cursor.execute("""
+                    SELECT jam, kelas FROM jadwal
+                    WHERE tanggal = %s AND semester = %s AND is_locked = 1
+                """, (t_date, sem_final))
+                for l_jam, l_kelas in cursor.fetchall():
+                    locked_keys.add((str(l_jam), (l_kelas or '').strip().upper()))
+            except Exception:
+                pass
+
+            for l_jam_str, l_kelas_up in locked_keys:
+                if l_kelas_up:
+                    cursor.execute(
+                        "DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s AND jam = %s AND UPPER(TRIM(kelas)) = %s",
+                        (t_date, sem_final, l_jam_str, l_kelas_up)
+                    )
+
+            try:
+                cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s AND (is_locked = 0 OR is_locked IS NULL)", (t_date, sem_final))
+            except Exception:
+                cursor.execute("DELETE FROM jadwal WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
+
             cursor.execute("""
                 INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
                 SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
@@ -2145,6 +2261,137 @@ def clear_scraping_engine_logs():
 BAAK_JADWAL_URL = "https://baak.unama.ac.id/jadwal-kuliah1?search=1"
 BAAK_JADWAL_LEGACY_URL = "https://baak.unama.ac.id/jadwal-kuliah?search=1"
 
+_scraper_config_cache = {"data": None, "ts": 0.0}
+
+def normalize_baak_scraper_url(raw_url: str) -> str:
+    """
+    Menormalisasi URL BAAK yang di-paste pengguna (memastikan skema https,
+    menghapus parameter sementara seperti page/tanggal/auto_close, dan memastikan search=1).
+    """
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    u = (raw_url or "").strip()
+    if not u:
+        return BAAK_JADWAL_URL
+    if not u.startswith(("http://", "https://")):
+        u = "https://" + u
+
+    parsed = urlparse(u)
+    path = parsed.path or "/jadwal-kuliah1"
+    if path == "/":
+        path = "/jadwal-kuliah1"
+    qs = parse_qs(parsed.query, keep_blank_values=False)
+    for k in ["page", "tanggal", "auto_close"]:
+        qs.pop(k, None)
+    qs["search"] = ["1"]
+    clean_query = urlencode(qs, doseq=True)
+    return urlunparse((parsed.scheme or "https", parsed.netloc, path, "", clean_query, ""))
+
+def get_scraper_config(force_refresh: bool = False) -> dict:
+    """Mengambil konfigurasi URL scraper dinamis dari database dengan cache ringan 5 detik."""
+    now = time.time()
+    if not force_refresh and _scraper_config_cache["data"] and (now - _scraper_config_cache["ts"] < 5.0):
+        return dict(_scraper_config_cache["data"])
+
+    cfg = {
+        "scraper_primary_url": BAAK_JADWAL_URL,
+        "scraper_fallback_urls": BAAK_JADWAL_LEGACY_URL,
+        "scraper_auto_midnight": "1",
+        "scraper_sync_interval_min": "15",
+        "scraper_max_pages_full": "300",
+        "auto_backup_daily": "1"
+    }
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT kunci, nilai FROM konfigurasi_sistem")
+        for row in cursor.fetchall():
+            k = row.get("kunci")
+            v = row.get("nilai")
+            if k and v is not None:
+                cfg[k] = str(v).strip()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+    _scraper_config_cache["data"] = cfg
+    _scraper_config_cache["ts"] = now
+    return dict(cfg)
+
+def update_scraper_config(updates: dict) -> dict:
+    """Menyimpan pembaruan konfigurasi scraper/sistem ke database konfigurasi_sistem."""
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        for k, v in updates.items():
+            val_str = str(v).strip()
+            if k == "scraper_primary_url" and val_str:
+                val_str = normalize_baak_scraper_url(val_str)
+            cursor.execute(
+                """
+                INSERT INTO konfigurasi_sistem (kunci, nilai)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE nilai = VALUES(nilai), updated_at = CURRENT_TIMESTAMP
+                """,
+                (k, val_str)
+            )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+    return get_scraper_config(force_refresh=True)
+
+def record_admin_audit(username: str, role: str, aksi: str, detail: str = "", ip_address: str = "127.0.0.1"):
+    """Mencatat jejak aktivitas Admin ke tabel log_audit_admin."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO log_audit_admin (username, role, aksi, detail, ip_address)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                str(username or "admin")[:60],
+                str(role or "SUPER_ADMIN")[:30],
+                str(aksi or "ACTION")[:120],
+                str(detail or ""),
+                str(ip_address or "127.0.0.1")[:60]
+            )
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[Audit Log Error] {e}")
+
+def get_admin_audit_logs(limit: int = 80) -> list:
+    """Mengambil riwayat aktivitas Admin terbaru."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        safe_limit = max(1, min(int(limit or 80), 300))
+        cursor.execute(
+            f"""
+            SELECT id_audit, waktu, username, role, aksi, detail, ip_address
+            FROM log_audit_admin
+            ORDER BY id_audit DESC
+            LIMIT {safe_limit}
+            """
+        )
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get("waktu") and hasattr(r["waktu"], "strftime"):
+                r["waktu"] = r["waktu"].strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                r["waktu"] = str(r.get("waktu") or "-")
+        cursor.close()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"[Audit Log Read Error] {e}")
+        return []
+
 def _build_baak_headers(referer=None):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -2278,14 +2525,77 @@ def _classify_baak_response(ok, code, html, err):
         return 'BLOCKED (429)', 'HTTP 429 Too Many Requests: Rate limit BAAK aktif sementara.'
     return f'HTTP {code}', f'Server BAAK merespons dengan kode HTTP {code}.'
 
-def test_all_scraping_engines(target_date=None):
+def validate_custom_scraper_url(custom_url: str, target_date: str = None) -> dict:
+    """
+    Menguji dan memvalidasi URL BAAK kustom (dry-run tanpa mengubah database).
+    Mengembalikan preview hasil ekstraksi tabel untuk ditampilkan di UI Admin.
+    """
+    normalized = normalize_baak_scraper_url(custom_url)
+    test_url = normalized
+    if target_date:
+        test_url += f"&tanggal={target_date}"
+
+    engines = [
+        ('curl_cffi', 'curl_cffi (Chrome TLS)'),
+        ('cloudscraper', 'cloudscraper (Cloudflare Bypass)'),
+        ('httpx', 'httpx (HTTP/2)'),
+        ('requests', 'requests (Direct HTTP)')
+    ]
+
+    last_status = "ERROR"
+    last_msg = "Tidak dapat terhubung ke URL."
+    last_code = 0
+
+    for eng_key, eng_name in engines:
+        ok, code, html, err, durasi = _execute_http_engine(eng_key, test_url, timeout=10)
+        st, msg = _classify_baak_response(ok, code, html, err)
+        last_status, last_msg, last_code = st, msg, code
+        if st == "SUCCESS":
+            detected_sem = detect_semester_from_html(html) or get_active_semester()
+            rows = parse_html_content(html, target_date, detected_sem)
+            return {
+                "status": "success",
+                "valid": len(rows) > 0,
+                "raw_url": custom_url,
+                "normalized_url": normalized,
+                "tested_url": test_url,
+                "engine_used": eng_name,
+                "http_status": code,
+                "durasi_ms": durasi,
+                "detected_semester": detected_sem,
+                "row_count": len(rows),
+                "sample_rows": rows[:5],
+                "message": (
+                    f"Link valid! Berhasil membaca {len(rows)} baris jadwal pada halaman 1 ({detected_sem}) via {eng_name}."
+                    if rows else
+                    f"Halaman berhasil dibuka ({code} OK via {eng_name}), tetapi ditemukan 0 baris tabel jadwal pada filter ini."
+                )
+            }
+
+    return {
+        "status": "error",
+        "valid": False,
+        "raw_url": custom_url,
+        "normalized_url": normalized,
+        "tested_url": test_url,
+        "engine_used": "-",
+        "http_status": last_code,
+        "durasi_ms": 0,
+        "detected_semester": None,
+        "row_count": 0,
+        "sample_rows": [],
+        "message": f"Gagal memvalidasi URL ({last_status}): {last_msg}"
+    }
+
+def test_all_scraping_engines(target_date=None, custom_url=None):
     """
     Menjalankan pengujian (probe test) serentak PARALEL ke semua engine backend
     menggunakan ThreadPoolExecutor (selesai dalam hitungan detik).
     """
     import concurrent.futures
 
-    base_url = BAAK_JADWAL_URL
+    cfg = get_scraper_config()
+    base_url = normalize_baak_scraper_url(custom_url) if custom_url else cfg.get("scraper_primary_url", BAAK_JADWAL_URL)
     if target_date:
         base_url += f"&tanggal={target_date}"
 
@@ -2325,20 +2635,32 @@ def test_all_scraping_engines(target_date=None):
     results.sort(key=lambda x: order.get(x["engine"], 99))
     return results
 
-def scrape_baak_direct(target_date=None, target_semester=None):
+def scrape_baak_direct(target_date=None, target_semester=None, custom_url=None):
     """
     Melakukan scraping data langsung dari BAAK UNAMA dengan Smart Multi-Engine Fallback:
     1. Mencoba curl_cffi (Chrome TLS impersonation)
     2. Mencoba cloudscraper (Bypass Cloudflare)
     3. Mencoba httpx (HTTP/2)
     4. Mencoba requests (Direct standard)
-    Setiap percobaan menjaga session cookie antar-halaman dan dicatat ke log_scraping_engine.
+    Menggunakan URL dinamis dari konfigurasi_sistem (atau custom_url jika diberikan).
     """
     from urllib.parse import urljoin, urlparse, parse_qs, urlencode, urlunparse
 
-    base_url = BAAK_JADWAL_URL
+    cfg = get_scraper_config()
+    primary_cfg_url = normalize_baak_scraper_url(custom_url) if custom_url else cfg.get("scraper_primary_url", BAAK_JADWAL_URL)
+    fallback_raw = cfg.get("scraper_fallback_urls", BAAK_JADWAL_LEGACY_URL)
+    fallback_list = [normalize_baak_scraper_url(u) for u in fallback_raw.split(",") if u.strip()]
+    if BAAK_JADWAL_LEGACY_URL not in fallback_list:
+        fallback_list.append(BAAK_JADWAL_LEGACY_URL)
+
+    base_url = primary_cfg_url
     if target_date:
         base_url += f"&tanggal={target_date}"
+
+    try:
+        cfg_max_pages = max(10, int(cfg.get("scraper_max_pages_full", 300)))
+    except Exception:
+        cfg_max_pages = 300
 
     # Daftar engine yang akan dicoba berurutan
     engines = [
@@ -2366,12 +2688,15 @@ def scrape_baak_direct(target_date=None, target_semester=None):
 
         req_url = base_url
         ok, code, html, err, durasi = _execute_http_engine(eng_key, req_url, timeout=12, session=session)
-        # Fallback ke URL lama jika endpoint /jadwal-kuliah1 mengembalikan 404
+        # Fallback ke daftar URL cadangan jika endpoint utama mengembalikan 404
         if ok and code == 404:
-            legacy_url = BAAK_JADWAL_LEGACY_URL + (f"&tanggal={target_date}" if target_date else "")
-            ok, code, html, err, durasi = _execute_http_engine(eng_key, legacy_url, timeout=12, session=session)
-            if ok and code == 200:
-                req_url = legacy_url
+            for fb_base in fallback_list:
+                fb_url = fb_base + (f"&tanggal={target_date}" if target_date else "")
+                ok_fb, code_fb, html_fb, err_fb, dur_fb = _execute_http_engine(eng_key, fb_url, timeout=12, session=session)
+                if ok_fb and code_fb == 200:
+                    ok, code, html, err, durasi = ok_fb, code_fb, html_fb, err_fb, dur_fb
+                    req_url = fb_url
+                    break
 
         status, msg = _classify_baak_response(ok, code, html, err)
         if status != 'SUCCESS':
@@ -2402,7 +2727,7 @@ def scrape_baak_direct(target_date=None, target_semester=None):
     sem_to_use = target_semester
     semester_ensured = False
     current_url = first_page_url
-    max_pages = 300 if not target_date else 50
+    max_pages = cfg_max_pages if not target_date else 50
     log_tgl_label = target_date or "ALL"
 
     try:

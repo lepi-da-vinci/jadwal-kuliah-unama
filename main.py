@@ -122,42 +122,54 @@ admin_tokens = {}  # token -> expiry_timestamp
 login_failed_attempts = {}  # ip -> [timestamp, timestamp, ...]
 
 class LoginRequest(BaseModel):
+    username: str | None = "admin"
     password: str
     master_password: str | None = None
 
 def get_admin_secret() -> str:
     return os.getenv("ADMIN_SECRET_KEY", "e83a9f14d8b2413a967c52684b39174fb80f2d91ac6e4f3a7c8b0e12d4a5b6c7")
 
-def create_admin_token() -> str:
+def create_admin_token(username: str = "admin", role: str = "SUPER_ADMIN") -> str:
     secret = get_admin_secret()
     expiry = int(time.time() + 43200)  # 12 jam
-    sig = hmac.new(secret.encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
-    token = f"{expiry}.{sig}"
+    clean_user = (username or "admin").strip().lower()
+    clean_role = (role or "SUPER_ADMIN").strip().upper()
+    payload = f"{expiry}.{clean_user}.{clean_role}"
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    token = f"{payload}.{sig}"
     admin_tokens[token] = expiry
     return token
 
-def is_valid_admin_token(token: str) -> bool:
+def parse_admin_token_info(token: str) -> dict:
     if not token:
-        return False
+        return {"valid": False, "username": "", "role": "", "expiry": 0}
     now = time.time()
-    # 1. Cek in-memory store
-    if token in admin_tokens and admin_tokens[token] >= now:
-        return True
-    # 2. Cek validasi kriptografi HMAC (bertahan saat server restart)
     try:
-        if "." in token:
-            parts = token.split(".", 1)
-            expiry_str, sig = parts[0], parts[1]
+        parts = token.split(".")
+        secret = get_admin_secret()
+        if len(parts) == 4:
+            expiry_str, user_str, role_str, sig = parts
             expiry = int(expiry_str)
             if expiry >= now:
-                secret = get_admin_secret()
+                payload = f"{expiry_str}.{user_str}.{role_str}"
+                expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(sig, expected_sig):
+                    admin_tokens[token] = expiry
+                    return {"valid": True, "username": user_str, "role": role_str, "expiry": expiry}
+        elif len(parts) == 2:
+            expiry_str, sig = parts
+            expiry = int(expiry_str)
+            if expiry >= now:
                 expected_sig = hmac.new(secret.encode(), expiry_str.encode(), hashlib.sha256).hexdigest()
                 if hmac.compare_digest(sig, expected_sig):
-                    admin_tokens[token] = expiry  # Re-cache di memory
-                    return True
+                    admin_tokens[token] = expiry
+                    return {"valid": True, "username": "admin", "role": "SUPER_ADMIN", "expiry": expiry}
     except Exception:
         pass
-    return False
+    return {"valid": False, "username": "", "role": "", "expiry": 0}
+
+def is_valid_admin_token(token: str) -> bool:
+    return parse_admin_token_info(token)["valid"]
 
 def verify_admin_token(authorization: str = Header(None)) -> str:
     """Memvalidasi Bearer Token Admin untuk endpoint mutasi data sensitif"""
@@ -193,115 +205,141 @@ def is_admin_authenticated(authorization: str = Header(None)) -> bool:
     token = authorization.split(" ", 1)[1].strip()
     return is_valid_admin_token(token)
 
+def _hash_admin_pwd(raw_pwd: str) -> str:
+    return hashlib.sha256(("unama_salt_v1:" + (raw_pwd or "").strip()).encode("utf-8")).hexdigest()
+
+def _hash_master_pwd(raw_pwd: str) -> str:
+    return hashlib.sha256(("unama_master_v1:" + (raw_pwd or "").strip()).encode("utf-8")).hexdigest()
+
 @app.post("/api/auth/login")
 def admin_login(req: LoginRequest, request: Request):
-    """Verifikasi password Admin & Master dengan Rate Limiting anti brute-force"""
+    """Verifikasi akun Admin (SUPER_ADMIN / KOORDINATOR) & Master Password dengan Rate Limiting anti brute-force"""
     client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
-        
+
     now = time.time()
-    # Bersihkan percobaan yang lebih lama dari 5 menit (300 detik)
     attempts = [t for t in login_failed_attempts.get(client_ip, []) if now - t < 300]
     login_failed_attempts[client_ip] = attempts
-    
-    # Blokir jika sudah 5 kali gagal dalam 5 menit
+
     if len(attempts) >= 5:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Terlalu banyak percobaan login gagal. Akses login dikunci sementara selama 5 menit untuk keamanan."
         )
 
-    expected_admin_pass = os.getenv("ADMIN_PASSWORD", "unama123")
-    expected_master_pass = os.getenv("MASTER_PASSWORD", "makannasipadangdepangang!")
-    
-    # 1. Validasi Password Admin
-    if not hmac.compare_digest(req.password.strip(), expected_admin_pass.strip()):
+    username_in = (req.username or "admin").strip().lower()
+    raw_pass = (req.password or "").strip()
+    raw_master = req.master_password.strip() if req.master_password is not None else None
+
+    expected_admin_pass = os.getenv("ADMIN_PASSWORD", "unama123").strip()
+    expected_master_pass = os.getenv("MASTER_PASSWORD", "makannasipadangdepangang!").strip()
+
+    db_user = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id_admin, username, password_hash, master_hash, role, nama_lengkap FROM admin_users WHERE LOWER(username) = %s LIMIT 1", (username_in,))
+        db_user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+    except Exception:
+        db_user = None
+
+    role = db_user["role"] if db_user else ("KOORDINATOR" if username_in == "koordinator" else "SUPER_ADMIN")
+    nama_lengkap = db_user["nama_lengkap"] if db_user else ("Koordinator" if role == "KOORDINATOR" else "Super Administrator")
+
+    # 1. Validasi Password Utama (cocokkan dengan tabel admin_users atau fallback .env)
+    input_p_hash = _hash_admin_pwd(raw_pass)
+    pwd_valid = False
+    if db_user and hmac.compare_digest(input_p_hash, db_user["password_hash"]):
+        pwd_valid = True
+    elif hmac.compare_digest(raw_pass, expected_admin_pass):
+        pwd_valid = True
+
+    if not pwd_valid:
         attempts.append(now)
         login_failed_attempts[client_ip] = attempts
+        scraper.record_admin_audit(username_in, role, "LOGIN_FAILED", f"Password Admin salah ({len(attempts)}/5)", client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Password Admin salah! (Percobaan gagal {len(attempts)}/5)"
         )
-    
-    # 2. Validasi Password Master jika disertakan
-    if req.master_password is not None:
-        if not hmac.compare_digest(req.master_password.strip(), expected_master_pass.strip()):
-            attempts.append(now)
-            login_failed_attempts[client_ip] = attempts
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Password Master salah! (Percobaan gagal {len(attempts)}/5)"
-            )
-    else:
-        # Mengindikasikan langkah 2 (Master Password) diperlukan
-        return {"status": "need_master", "message": "Memerlukan otorisasi Password Master."}
-    
-    # Sukses -> Reset failed attempts untuk IP ini
+
+    # 2. Validasi Password Master (wajib untuk SUPER_ADMIN jika tidak memiliki bypass, opsional untuk KOORDINATOR)
+    if role == "SUPER_ADMIN":
+        if raw_master is not None:
+            input_m_hash = _hash_master_pwd(raw_master)
+            master_valid = False
+            if db_user and db_user.get("master_hash") and hmac.compare_digest(input_m_hash, db_user["master_hash"]):
+                master_valid = True
+            elif hmac.compare_digest(raw_master, expected_master_pass):
+                master_valid = True
+
+            if not master_valid:
+                attempts.append(now)
+                login_failed_attempts[client_ip] = attempts
+                scraper.record_admin_audit(username_in, role, "LOGIN_FAILED", f"Password Master salah ({len(attempts)}/5)", client_ip)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Password Master salah! (Percobaan gagal {len(attempts)}/5)"
+                )
+        else:
+            return {"status": "need_master", "message": "Memerlukan otorisasi Password Master."}
+
+    # Sukses -> Reset failed attempts & update last_login
     login_failed_attempts.pop(client_ip, None)
-    
-    # 3. Terbitkan Secure HMAC-signed Token
-    token = create_admin_token()
-    
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE admin_users SET last_login = CURRENT_TIMESTAMP WHERE LOWER(username) = %s", (username_in,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+    token = create_admin_token(username_in, role)
+    scraper.record_admin_audit(username_in, role, "LOGIN_SUCCESS", f"Login berhasil sebagai {role}", client_ip)
+
     return {
         "status": "success",
-        "message": "Autentikasi Admin berhasil!",
+        "message": f"Autentikasi {nama_lengkap} ({role}) berhasil!",
         "token": token,
+        "username": username_in,
+        "role": role,
+        "nama_lengkap": nama_lengkap,
         "expires_in": 43200
     }
 
 @app.post("/api/auth/logout")
-def admin_logout(authorization: str = Header(None)):
+def admin_logout(request: Request, authorization: str = Header(None)):
     """Menghapus token admin saat logout"""
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1].strip()
+        info = parse_admin_token_info(token)
         admin_tokens.pop(token, None)
+        if info["valid"]:
+            client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+            scraper.record_admin_audit(info["username"], info["role"], "LOGOUT", "Logout sesi admin", client_ip)
     return {"status": "success", "message": "Logout admin berhasil."}
 
 @app.get("/api/auth/verify")
 def admin_verify(token: str = Depends(verify_admin_token)):
-    """Memeriksa keabsahan token admin saat ini"""
-    return {"status": "success", "message": "Token admin valid."}
+    """Memeriksa keabsahan token admin saat ini beserta role & sisa waktu"""
+    info = parse_admin_token_info(token)
+    return {
+        "status": "success",
+        "message": "Token admin valid.",
+        "username": info["username"],
+        "role": info["role"],
+        "expires_in": max(0, info["expiry"] - int(time.time()))
+    }
 
 # ==================================================================
 
 def get_db():
-    conn = perf_opt.get_pooled_db()
-    if conn is not None:
-        return conn
-
-    pwd = os.getenv("DB_PASSWORD", "")
-    host = os.getenv("DB_HOST", "127.0.0.1")
-    configured_port = int(os.getenv("DB_PORT", 3307))
-    user = os.getenv("DB_USER", "root")
-    db_name = os.getenv("DB_NAME", "db_jadwal_kuliah")
-
-    ports_to_try = [configured_port]
-    for p in [3307, 3306]:
-        if p not in ports_to_try:
-            ports_to_try.append(p)
-
-    passwords_to_try = [pwd]
-    for p_word in ["", "123456", "root"]:
-        if p_word not in passwords_to_try:
-            passwords_to_try.append(p_word)
-
-    last_err = None
-    for p in ports_to_try:
-        for p_word in passwords_to_try:
-            try:
-                return mysql.connector.connect(
-                    host=host,
-                    port=p,
-                    user=user,
-                    password=p_word,
-                    database=db_name
-                )
-            except mysql.connector.Error as err:
-                last_err = err
-                continue
-    if last_err:
-        raise last_err
+    return scraper.get_db()
 
 @app.get("/api/system/performance")
 def get_system_performance():
@@ -757,6 +795,7 @@ def get_semua_jadwal(semester: str = None):
                 j.status_jadwal, 
                 j.metode_pembelajaran,
                 j.semester,
+                COALESCE(j.is_locked, 0) AS is_locked,
                 sol.status_lab,
                 sol.diubah_oleh AS status_lab_oleh,
                 sol.waktu_aksi AS status_lab_waktu
@@ -2280,10 +2319,12 @@ async def sync_data(req: SyncRequest):
                 pending_sync_queue.pop(tgl_key, None)
                 return {"status": "success", "message": msg, "count": count}
             
-            # 2. Fallback: Ekstensi Chrome di PC
+            # 2. Fallback: Ekstensi Chrome di PC (menggunakan URL dinamis dari konfigurasi_sistem)
             print(f"[Sync] Direct scraping tidak berhasil ({msg}), beralih ke antrean Chrome Extension...")
             sync_status[tgl_key] = {"status": "pending", "time": start_time, "count": 0}
-            target_url = f"https://baak.unama.ac.id/jadwal-kuliah1?search=1&tanggal={tgl_key}&auto_close=1" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah1?search=1&auto_close=1"
+            cfg_sync = scraper.get_scraper_config()
+            primary_base = cfg_sync.get("scraper_primary_url", "https://baak.unama.ac.id/jadwal-kuliah1?search=1")
+            target_url = f"{primary_base}&tanggal={tgl_key}&auto_close=1" if tgl_key else f"{primary_base}&auto_close=1"
             
             pending_sync_queue[tgl_key] = {
                 "tanggal": tgl_key,
@@ -2371,17 +2412,142 @@ def clear_pending_sync(req: ClearPendingRequest = None):
 
 @app.get("/api/scraper/logs")
 def get_scraper_logs(limit: int = 50):
-    """Mengambil riwayat log percobaan setiap scraping engine dan ringkasan status terkini."""
+    """Mengambil riwayat log percobaan setiap scraping engine, ringkasan status, dan konfigurasi URL aktif."""
     try:
         logs = scraper.get_scraping_engine_logs(limit)
         summary = scraper.get_scraping_engine_summary()
+        config = scraper.get_scraper_config()
         return {
             "status": "success",
             "logs": logs,
-            "summary": summary
+            "summary": summary,
+            "config": config
         }
     except Exception as e:
-        return {"status": "error", "message": str(e), "logs": [], "summary": {}}
+        return {"status": "error", "message": str(e), "logs": [], "summary": {}, "config": {}}
+
+@app.get("/api/scraper/config")
+def get_scraper_config_endpoint():
+    """Mengambil konfigurasi URL scraper BAAK dan pengaturan sinkronisasi otomatis."""
+    return {"status": "success", "config": scraper.get_scraper_config()}
+
+class ScraperUrlValidateRequest(BaseModel):
+    url: str
+    tanggal: str | None = None
+
+class ScraperConfigUpdateRequest(BaseModel):
+    scraper_primary_url: str | None = None
+    scraper_fallback_urls: str | None = None
+    scraper_auto_midnight: str | None = None
+    scraper_sync_interval_min: str | None = None
+    scraper_max_pages_full: str | None = None
+    auto_backup_daily: str | None = None
+
+class ScraperCustomRunRequest(BaseModel):
+    url: str | None = None
+    tanggal: str | None = None
+    semester: str | None = None
+    full_scrape: bool = False
+    full_sync: bool = False
+    save_as_primary: bool = False
+
+class RawHtmlParseRequest(BaseModel):
+    html: str
+    tanggal: str | None = None
+    semester: str | None = None
+    full_sync: bool = False
+
+@app.post("/api/admin/scraper/validate-url")
+async def validate_scraper_url_endpoint(req: ScraperUrlValidateRequest):
+    """Menguji dan menampilkan preview hasil parsing dari link BAAK yang di-paste (dry-run tanpa mengubah DB)."""
+    try:
+        res = await asyncio.to_thread(scraper.validate_custom_scraper_url, req.url, req.tanggal)
+        return res
+    except Exception as e:
+        return {"status": "error", "valid": False, "message": str(e)}
+
+@app.post("/api/admin/scraper/config")
+def update_scraper_config_endpoint(req: ScraperConfigUpdateRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Menyimpan link scraper baru & parameter otomatisasi ke database (memerlukan login Admin)."""
+    try:
+        updates = {}
+        if req.scraper_primary_url is not None and req.scraper_primary_url.strip():
+            updates["scraper_primary_url"] = req.scraper_primary_url.strip()
+        if req.scraper_fallback_urls is not None:
+            updates["scraper_fallback_urls"] = req.scraper_fallback_urls.strip()
+        if req.scraper_auto_midnight is not None:
+            updates["scraper_auto_midnight"] = str(req.scraper_auto_midnight).strip()
+        if req.scraper_sync_interval_min is not None:
+            updates["scraper_sync_interval_min"] = str(req.scraper_sync_interval_min).strip()
+        if req.scraper_max_pages_full is not None:
+            updates["scraper_max_pages_full"] = str(req.scraper_max_pages_full).strip()
+        if req.auto_backup_daily is not None:
+            updates["auto_backup_daily"] = str(req.auto_backup_daily).strip()
+
+        new_cfg = scraper.update_scraper_config(updates)
+        info = parse_admin_token_info(token)
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        scraper.record_admin_audit(
+            info["username"], info["role"], "UPDATE_SCRAPER_CONFIG",
+            f"Update konfigurasi scraper: {new_cfg.get('scraper_primary_url')}", client_ip
+        )
+        return {"status": "success", "message": "Konfigurasi link & parameter scraper berhasil disimpan!", "config": new_cfg}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/admin/scraper/run-custom")
+async def run_custom_scraper_endpoint(req: ScraperCustomRunRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Menjalankan penarikan jadwal langsung dari URL yang di-paste (single date atau Full Scrape)."""
+    try:
+        is_full = bool(req.full_scrape or req.full_sync)
+        target_tgl = None if is_full else (req.tanggal or None)
+        if req.save_as_primary and req.url and req.url.strip():
+            scraper.update_scraper_config({"scraper_primary_url": req.url.strip()})
+        ok, count, msg = await asyncio.to_thread(scraper.scrape_baak_direct, target_tgl, req.semester, req.url)
+        if ok:
+            perf_opt.invalidate_schedule_cache()
+        info = parse_admin_token_info(token)
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        scraper.record_admin_audit(
+            info["username"], info["role"], "RUN_CUSTOM_SCRAPE",
+            f"URL={req.url or 'DEFAULT'}, Tanggal={target_tgl or 'ALL'}, Hasil={count} baris ({'OK' if ok else 'FAIL'})", client_ip
+        )
+        return {"status": "success" if ok else "warning", "count": count, "message": msg}
+    except Exception as e:
+        return {"status": "error", "count": 0, "message": str(e)}
+
+@app.post("/api/admin/scraper/parse-raw-html")
+async def parse_raw_html_endpoint(req: RawHtmlParseRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Memproses dan menyimpan jadwal langsung dari kode Raw HTML yang di-paste oleh Admin (mode darurat)."""
+    try:
+        raw_html = (req.html or "").strip()
+        if len(raw_html) < 50:
+            return {"status": "error", "message": "Kode HTML terlalu pendek atau kosong."}
+
+        detected = scraper.detect_semester_from_html(raw_html)
+        sem_to_use = detected or req.semester or scraper.get_active_semester()
+        data = await asyncio.to_thread(scraper.parse_html_content, raw_html, req.tanggal, sem_to_use)
+        if not data:
+            return {"status": "warning", "count": 0, "message": "Tidak ditemukan baris tabel jadwal yang valid di dalam HTML tersebut."}
+
+        await asyncio.to_thread(scraper.save_to_db, data, req.tanggal, "1", sem_to_use)
+        await asyncio.to_thread(scraper.compare_and_finalize_sync, req.tanggal, sem_to_use)
+        perf_opt.invalidate_schedule_cache()
+
+        info = parse_admin_token_info(token)
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        scraper.record_admin_audit(
+            info["username"], info["role"], "INJECT_RAW_HTML",
+            f"Injeksi Raw HTML: {len(data)} jadwal ({sem_to_use})", client_ip
+        )
+        return {
+            "status": "success",
+            "count": len(data),
+            "semester": sem_to_use,
+            "message": f"Berhasil memproses dan menyimpan {len(data)} jadwal ({sem_to_use}) dari Raw HTML!"
+        }
+    except Exception as e:
+        return {"status": "error", "count": 0, "message": str(e)}
 
 @app.post("/api/scraper/test")
 async def test_scraper_engines(req: SyncRequest = None):
@@ -2465,7 +2631,9 @@ def sync_complete(req: SyncCompleteRequest):
         scraper.compare_and_finalize_sync(target_tgl, sem_to_use)
         perf_opt.invalidate_schedule_cache()
         sync_status[tgl_key] = {"status": "done", "time": time.time(), "count": prev_count, "semester": sem_to_use}
-        target_url = f"https://baak.unama.ac.id/jadwal-kuliah1?search=1&tanggal={tgl_key}" if tgl_key else "https://baak.unama.ac.id/jadwal-kuliah1?search=1"
+        cfg_sync = scraper.get_scraper_config()
+        primary_base = cfg_sync.get("scraper_primary_url", "https://baak.unama.ac.id/jadwal-kuliah1?search=1")
+        target_url = f"{primary_base}&tanggal={tgl_key}" if tgl_key else primary_base
         scraper.record_scraping_log(
             "Chrome Extension (Browser)",
             target_url,
@@ -2489,6 +2657,396 @@ def finalize_temp(admin: str = Depends(verify_admin_token)):
         return {"status": "success", "message": "Seluruh data dari jadwal_temp berhasil dipindahkan ke tabel jadwal."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# ==================== TRUE ADMIN CONTROL CENTER, OVERRIDE JADWAL, WA QR & AUTO-BACKUP ====================
+
+class AdminAccountUpdateRequest(BaseModel):
+    target_username: str = "admin"
+    current_master_password: str | None = None
+    new_password: str | None = None
+    new_master_password: str | None = None
+    nama_lengkap: str | None = None
+
+class AdminJadwalManualRequest(BaseModel):
+    tanggal: str
+    jam: str
+    nama_mk: str
+    kelas: str = ""
+    nama_dosen: str | None = "-"
+    id_ruangan: int | None = None
+    nama_ruangan: str | None = None
+    kampus: str | None = "Thehok"
+    metode_pembelajaran: str = "TM"
+    status_jadwal: str = "OnSchedule"
+    semester: str | None = None
+    is_locked: int | bool = 1
+
+class WaReconnectRequest(BaseModel):
+    reset_session: bool = False
+
+@app.get("/api/admin/overview")
+def get_admin_overview(token: str = Depends(verify_admin_token)):
+    """Mengambil ringkasan lengkap Pusat Kendali Admin (Konfigurasi Scraper, Status WA & QR, Antrean Notif Pagi, Jadwal Terkunci, Auto-Backup, Audit Log)."""
+    info = parse_admin_token_info(token)
+    cfg = scraper.get_scraper_config()
+
+    # 1. Cek status gateway WhatsApp & QR Code
+    wa_status = {"ready": False, "connected": False, "state": "offline", "user": None, "qr": None, "queue_length": 0}
+    wa_base = os.getenv("WA_BOT_URL", "http://127.0.0.1:3000/send").replace("/send", "")
+    for candidate_base in [wa_base, "http://127.0.0.1:3000", "http://wa-bot:3000"]:
+        try:
+            r = requests.get(f"{candidate_base}/status", timeout=2)
+            if r.status_code == 200:
+                wa_status = r.json()
+                wa_status["connected"] = bool(wa_status.get("ready") or wa_status.get("connected"))
+                break
+        except Exception:
+            continue
+
+    pending_alerts = []
+    locked_schedules = []
+    admin_accounts = []
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT l.id_log, l.tanggal_kuliah, l.jam, l.nama_mk, l.kelas, l.tipe_perubahan, l.no_wa_tujuan, r.nama_ruangan, r.kampus
+            FROM log_notifikasi_perubahan l
+            LEFT JOIN ruangan r ON l.id_ruangan = r.id_ruangan
+            WHERE l.status_kirim = 'PENDING' AND l.tipe_perubahan NOT IN ('PINDAH_MASUK', 'PINDAH_KELUAR')
+            ORDER BY l.tanggal_kuliah ASC, l.jam ASC
+            LIMIT 50
+        """)
+        for row in cursor.fetchall():
+            row["tanggal_kuliah"] = str(row["tanggal_kuliah"])
+            row["jam"] = str(row["jam"])[:5]
+            pending_alerts.append(row)
+
+        cursor.execute("""
+            SELECT j.id_jadwal AS id, j.id_jadwal, j.tanggal, j.hari, j.jam, j.nama_mk, j.kelas, j.metode_pembelajaran, j.semester,
+                   d.nama_dosen, r.nama_ruangan, r.kampus
+            FROM jadwal j
+            LEFT JOIN dosen d ON j.id_dosen = d.id_dosen
+            LEFT JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE j.is_locked = 1
+            ORDER BY j.tanggal DESC, j.jam ASC
+            LIMIT 50
+        """)
+        for row in cursor.fetchall():
+            row["tanggal"] = str(row["tanggal"])
+            row["jam"] = str(row["jam"])[:5]
+            locked_schedules.append(row)
+
+        cursor.execute("SELECT id_admin, username, role, nama_lengkap, last_login FROM admin_users ORDER BY id_admin ASC")
+        for row in cursor.fetchall():
+            row["last_login"] = row["last_login"].strftime("%Y-%m-%d %H:%M:%S") if row.get("last_login") and hasattr(row["last_login"], "strftime") else str(row.get("last_login") or "Belum pernah")
+            admin_accounts.append(row)
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[Admin Overview DB Notice] {e}")
+
+    backups_list = wa_notifier.list_auto_backups()
+    raw_audits = scraper.get_admin_audit_logs(limit=40)
+    for a in raw_audits:
+        if "waktu" not in a and "created_at" in a:
+            a["waktu"] = a["created_at"]
+        if "aksi" not in a and "action" in a:
+            a["aksi"] = a["action"]
+
+    return {
+        "status": "success",
+        "admin": info,
+        "current_admin": info,
+        "scraper_config": cfg,
+        "wa_gateway": wa_status,
+        "wa_bot": wa_status,
+        "pending_morning_alerts_count": len(pending_alerts),
+        "pending_morning_alerts": pending_alerts,
+        "locked_schedules": locked_schedules,
+        "backups": backups_list,
+        "auto_backups": backups_list,
+        "audit_logs": raw_audits,
+        "admin_accounts": admin_accounts
+    }
+
+@app.post("/api/admin/account/update")
+def update_admin_account(req: AdminAccountUpdateRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Mengubah password Admin, Master Password, atau akun Koordinator (khusus SUPER_ADMIN)."""
+    info = parse_admin_token_info(token)
+    if info["role"] != "SUPER_ADMIN":
+        raise HTTPException(status_code=403, detail="Hanya SUPER_ADMIN yang dapat mengubah kredensial akun.")
+
+    target_user = (req.target_username or "admin").strip().lower()
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        if req.new_password and len(req.new_password.strip()) >= 4:
+            p_hash = _hash_admin_pwd(req.new_password.strip())
+            cursor.execute("UPDATE admin_users SET password_hash = %s WHERE LOWER(username) = %s", (p_hash, target_user))
+        if req.new_master_password and len(req.new_master_password.strip()) >= 4 and target_user == "admin":
+            m_hash = _hash_master_pwd(req.new_master_password.strip())
+            cursor.execute("UPDATE admin_users SET master_hash = %s WHERE LOWER(username) = %s", (m_hash, target_user))
+        if req.nama_lengkap and req.nama_lengkap.strip():
+            cursor.execute("UPDATE admin_users SET nama_lengkap = %s WHERE LOWER(username) = %s", (req.nama_lengkap.strip(), target_user))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+    scraper.record_admin_audit(info["username"], info["role"], "UPDATE_ADMIN_ACCOUNT", f"Memperbarui kredensial akun '{target_user}'", client_ip)
+    return {"status": "success", "message": f"Kredensial akun '{target_user}' berhasil diperbarui!"}
+
+@app.post("/api/admin/wa/reconnect")
+def reconnect_wa_gateway(req: WaReconnectRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Memulai ulang koneksi WhatsApp Bot atau mereset sesi untuk memunculkan QR Code baru di Dashboard Admin."""
+    info = parse_admin_token_info(token)
+    bot_secret = os.getenv("WA_BOT_SECRET_KEY", "unama_wa_secret_7f8e9d0a1b2c3d4e5f6a8b9c0d1e2f3a")
+    wa_base = os.getenv("WA_BOT_URL", "http://127.0.0.1:3000/send").replace("/send", "")
+    for candidate_base in [wa_base, "http://127.0.0.1:3000", "http://wa-bot:3000"]:
+        try:
+            r = requests.post(
+                f"{candidate_base}/reconnect",
+                headers={"x-bot-secret": bot_secret, "Content-Type": "application/json"},
+                json={"reset_session": req.reset_session},
+                timeout=4
+            )
+            if r.status_code == 200:
+                client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+                scraper.record_admin_audit(
+                    info["username"], info["role"], "WA_RECONNECT",
+                    f"Reset session={req.reset_session}", client_ip
+                )
+                return r.json()
+        except Exception:
+            continue
+    return {"status": "error", "message": "Tidak dapat menghubungi layanan wa-bot (port 3000)."}
+
+@app.post("/api/admin/wa/flush-morning")
+async def flush_morning_alerts_now(request: Request, token: str = Depends(verify_admin_token)):
+    """Mengirimkan paksa seluruh antrean notifikasi perubahan jadwal pagi sekarang juga."""
+    info = parse_admin_token_info(token)
+    res = await asyncio.to_thread(wa_notifier.flush_pending_morning_alerts, True)
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+    scraper.record_admin_audit(
+        info["username"], info["role"], "FLUSH_MORNING_ALERTS",
+        f"Terkirim ke {res.get('sent_recipients', 0)} penerima ({res.get('total_items', 0)} item)", client_ip
+    )
+    return {
+        "status": "success",
+        "message": f"Antrean notifikasi dikirim ke {res.get('sent_recipients', 0)} penerima ({res.get('total_items', 0)} perubahan).",
+        "result": res
+    }
+
+@app.post("/api/admin/backups/run-now")
+async def trigger_auto_backup_now(request: Request, token: str = Depends(verify_admin_token)):
+    """Membuat snapshot backup SQL otomatis sekarang juga di folder backups/ server."""
+    info = parse_admin_token_info(token)
+    res = await asyncio.to_thread(wa_notifier.run_daily_auto_backup, True)
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+    scraper.record_admin_audit(info["username"], info["role"], "RUN_AUTO_BACKUP", res.get("message", ""), client_ip)
+    return {
+        "status": res.get("status", "success"),
+        "message": res.get("message", ""),
+        "filename": res.get("filename", ""),
+        "size_kb": res.get("size_kb", 0),
+        "backups": wa_notifier.list_auto_backups()
+    }
+
+@app.get("/api/admin/backups/download/{filename}")
+def download_auto_backup_file(filename: str, token: str = Depends(verify_admin_token)):
+    """Mengunduh file backup SQL otomatis dari folder backups/ server."""
+    info = parse_admin_token_info(token)
+    if info["role"] != "SUPER_ADMIN":
+        raise HTTPException(status_code=403, detail="Hanya SUPER_ADMIN yang dapat mengunduh snapshot database.")
+    safe_fn = os.path.basename(filename)
+    if not safe_fn.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Nama file backup tidak valid.")
+    full_p = os.path.join(wa_notifier.get_backups_dir(), safe_fn)
+    if not os.path.exists(full_p):
+        raise HTTPException(status_code=404, detail="File backup tidak ditemukan.")
+    with open(full_p, "r", encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    return Response(
+        content=content,
+        media_type="application/sql",
+        headers={"Content-Disposition": f'attachment; filename="{safe_fn}"'}
+    )
+
+@app.post("/api/admin/jadwal/add")
+def admin_add_manual_schedule(req: AdminJadwalManualRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Menambahkan jadwal perkuliahan manual oleh Admin (dilengkapi kunci Lock Override agar tidak tertimpa BAAK)."""
+    info = parse_admin_token_info(token)
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        sem = (req.semester or "").strip() or scraper.get_active_semester(conn, cursor)
+        scraper.ensure_semester_exists(sem, conn=conn, cursor=cursor)
+
+        hari_map = {0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jumat", 5: "Sabtu", 6: "Minggu"}
+        dt = datetime.datetime.strptime(req.tanggal.strip(), "%Y-%m-%d")
+        hari_str = hari_map.get(dt.weekday(), "Senin")
+
+        target_id_ruangan = req.id_ruangan
+        if not target_id_ruangan and req.nama_ruangan:
+            r_name = req.nama_ruangan.strip()
+            r_camp = (req.kampus or "Thehok").strip()
+            cursor.execute("SELECT id_ruangan FROM ruangan WHERE LOWER(nama_ruangan) = LOWER(%s) LIMIT 1", (r_name,))
+            r_row = cursor.fetchone()
+            if r_row:
+                target_id_ruangan = r_row[0]
+            else:
+                cursor.execute("INSERT INTO ruangan (nama_ruangan, kampus) VALUES (%s, %s)", (r_name, r_camp))
+                target_id_ruangan = cursor.lastrowid
+
+        id_dosen = None
+        raw_dosen = (req.nama_dosen or "").strip()
+        if raw_dosen and raw_dosen != "-":
+            cursor.execute("SELECT id_dosen FROM dosen WHERE nama_dosen = %s LIMIT 1", (raw_dosen,))
+            d_row = cursor.fetchone()
+            if d_row:
+                id_dosen = d_row[0]
+            else:
+                cursor.execute("INSERT INTO dosen (nama_dosen) VALUES (%s)", (raw_dosen,))
+                id_dosen = cursor.lastrowid
+
+        kode_mk = (req.kelas or "").strip() or "MANUAL"
+        if kode_mk:
+            cursor.execute("INSERT IGNORE INTO mata_kuliah (kode_mk, nama_mk) VALUES (%s, %s)", (kode_mk, req.nama_mk.strip()))
+
+        metode = req.metode_pembelajaran.strip().upper()
+        if metode not in ("TM", "OL", "CC"):
+            metode = "TM"
+        status_j = (req.status_jadwal or "").strip() or ("Cancel" if metode == "CC" else ("Online" if metode == "OL" else "OnSchedule"))
+
+        cursor.execute(
+            """
+            INSERT INTO jadwal (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester, is_locked)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (req.tanggal.strip(), hari_str, req.jam.strip(), id_dosen, kode_mk, req.nama_mk.strip(), (req.kelas or "").strip(), target_id_ruangan, status_j, metode, sem, int(bool(req.is_locked)))
+        )
+        new_id = cursor.lastrowid
+        conn.commit()
+        perf_opt.invalidate_schedule_cache()
+
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        scraper.record_admin_audit(
+            info["username"], info["role"], "ADD_MANUAL_JADWAL",
+            f"{req.tanggal} {req.jam} - {req.nama_mk} ({req.kelas}) [Lock={req.is_locked}]", client_ip
+        )
+        return {"status": "success", "id_jadwal": new_id, "message": "Jadwal manual berhasil ditambahkan dan dikunci!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/admin/jadwal/{id_jadwal}")
+def admin_edit_schedule(id_jadwal: int, req: AdminJadwalManualRequest, request: Request, token: str = Depends(verify_admin_token)):
+    """Mengedit sesi jadwal oleh Admin dan mengaktifkan Lock Override agar tahan terhadap sinkronisasi otomatis."""
+    info = parse_admin_token_info(token)
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        hari_map = {0: "Senin", 1: "Selasa", 2: "Rabu", 3: "Kamis", 4: "Jumat", 5: "Sabtu", 6: "Minggu"}
+        dt = datetime.datetime.strptime(req.tanggal.strip(), "%Y-%m-%d")
+        hari_str = hari_map.get(dt.weekday(), "Senin")
+
+        id_dosen = None
+        raw_dosen = (req.nama_dosen or "").strip()
+        if raw_dosen and raw_dosen != "-":
+            cursor.execute("SELECT id_dosen FROM dosen WHERE nama_dosen = %s LIMIT 1", (raw_dosen,))
+            d_row = cursor.fetchone()
+            if d_row:
+                id_dosen = d_row[0]
+            else:
+                cursor.execute("INSERT INTO dosen (nama_dosen) VALUES (%s)", (raw_dosen,))
+                id_dosen = cursor.lastrowid
+
+        metode = req.metode_pembelajaran.strip().upper()
+        if metode not in ("TM", "OL", "CC"):
+            metode = "TM"
+        status_j = "Cancel" if metode == "CC" else ("Online" if metode == "OL" else "OnSchedule")
+
+        cursor.execute(
+            """
+            UPDATE jadwal
+            SET tanggal = %s, hari = %s, jam = %s, id_dosen = %s, kode_mk = %s, nama_mk = %s,
+                kelas = %s, id_ruangan = %s, status_jadwal = %s, metode_pembelajaran = %s, is_locked = %s
+            WHERE id_jadwal = %s
+            """,
+            (req.tanggal.strip(), hari_str, req.jam.strip(), id_dosen, req.kelas.strip(), req.nama_mk.strip(),
+             req.kelas.strip(), req.id_ruangan, status_j, metode, int(bool(req.is_locked)), id_jadwal)
+        )
+        conn.commit()
+        perf_opt.invalidate_schedule_cache()
+
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        scraper.record_admin_audit(
+            info["username"], info["role"], "EDIT_JADWAL",
+            f"ID #{id_jadwal}: {req.nama_mk} ({req.kelas}) -> {metode} [Lock={req.is_locked}]", client_ip
+        )
+        return {"status": "success", "message": "Perubahan jadwal berhasil disimpan!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/admin/jadwal/{id_jadwal}/toggle-lock")
+def admin_toggle_schedule_lock(id_jadwal: int, request: Request, token: str = Depends(verify_admin_token)):
+    """Mengunci atau membuka kunci (Lock Override) pada satu sesi jadwal."""
+    info = parse_admin_token_info(token)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id_jadwal, nama_mk, kelas, COALESCE(is_locked, 0) AS is_locked FROM jadwal WHERE id_jadwal = %s LIMIT 1", (id_jadwal,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Jadwal tidak ditemukan.")
+        new_lock = 0 if int(row["is_locked"]) == 1 else 1
+        cursor.execute("UPDATE jadwal SET is_locked = %s WHERE id_jadwal = %s", (new_lock, id_jadwal))
+        conn.commit()
+        perf_opt.invalidate_schedule_cache()
+
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        scraper.record_admin_audit(
+            info["username"], info["role"], "TOGGLE_LOCK_JADWAL",
+            f"ID #{id_jadwal} ({row['nama_mk']} - {row['kelas']}) -> is_locked={new_lock}", client_ip
+        )
+        return {
+            "status": "success",
+            "id_jadwal": id_jadwal,
+            "is_locked": new_lock,
+            "message": "Jadwal dikunci (tidak akan tertimpa auto-sync BAAK)." if new_lock else "Kunci jadwal dibuka (mengikuti sinkronisasi BAAK)."
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/admin/jadwal/{id_jadwal}")
+def admin_delete_single_schedule(id_jadwal: int, request: Request, token: str = Depends(verify_admin_token)):
+    """Menghapus satu sesi jadwal spesifik oleh Admin."""
+    info = parse_admin_token_info(token)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT nama_mk, kelas, tanggal, jam FROM jadwal WHERE id_jadwal = %s LIMIT 1", (id_jadwal,))
+        row = cursor.fetchone()
+        cursor.execute("DELETE FROM jadwal WHERE id_jadwal = %s", (id_jadwal,))
+        conn.commit()
+        perf_opt.invalidate_schedule_cache()
+
+        client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "127.0.0.1")
+        detail_str = f"ID #{id_jadwal} ({row['nama_mk']} {row['kelas']} {row['tanggal']})" if row else f"ID #{id_jadwal}"
+        scraper.record_admin_audit(info["username"], info["role"], "DELETE_SINGLE_JADWAL", detail_str, client_ip)
+        return {"status": "success", "message": "Sesi jadwal berhasil dihapus."}
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.get("/api/notifikasi-lab")
 def get_notifikasi_lab(tanggal: str, semester: str = None):
@@ -4349,13 +4907,21 @@ def get_all_status_lab(tanggal: str = None, id_ruangan: int = None):
             conn.close()
 
 @app.delete("/api/absensi/{id_absensi}")
-def delete_absensi(id_absensi: int):
-    """Menghapus data absensi berdasarkan ID"""
+def delete_absensi(id_absensi: int, admin: str = Depends(verify_admin_token)):
+    """Menghapus data absensi berdasarkan ID (Khusus Admin)"""
     try:
+        info = parse_admin_token_info(admin)
         conn = scraper.get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM absensi_aslab WHERE id_absensi = %s", (id_absensi,))
         conn.commit()
+        scraper.record_admin_audit(
+            username=info["username"],
+            role=info["role"],
+            action="DELETE_ABSENSI",
+            target=f"id_absensi={id_absensi}",
+            detail=f"Menghapus catatan absensi #{id_absensi}"
+        )
         return {"status": "success", "message": f"Absensi #{id_absensi} berhasil dihapus"}
     except Exception as e:
         return {"status": "error", "message": str(e)}

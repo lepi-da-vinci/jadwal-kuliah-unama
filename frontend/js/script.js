@@ -7678,14 +7678,18 @@ async function fetchNotifikasiLab(tanggal, showPopup = false, force = false) {
 
 
 // Helper custom password prompt
-function promptPassword(message) {
+function promptPassword(message, showRoleSelect = false) {
   return new Promise((resolve) => {
     const modal = document.getElementById('password-modal');
     const input = document.getElementById('admin-password-input');
     const msg = document.getElementById('password-message');
+    const roleWrap = document.getElementById('admin-role-select-wrap');
     const submitBtn = document.getElementById('password-submit-btn');
     const cancelBtn = document.getElementById('password-cancel-btn');
 
+    if (roleWrap) {
+      roleWrap.style.display = showRoleSelect ? 'block' : 'none';
+    }
     msg.textContent = message;
     input.value = '';
     modal.classList.add('open');
@@ -7819,18 +7823,36 @@ window.SVG_WA_ICONS = {
 };
 let globalAslabData = [];
 let isAslabAdmin = false;
+let currentAdminUser = sessionStorage.getItem('admin_username') || 'admin';
+let currentAdminRole = sessionStorage.getItem('admin_role') || 'SUPER_ADMIN';
 let isTestingPopupNotif = false;
 
 function getAdminToken() {
   return sessionStorage.getItem('admin_token') || '';
 }
 
-function setAdminToken(token) {
+function getAdminRole() {
+  return sessionStorage.getItem('admin_role') || currentAdminRole || 'SUPER_ADMIN';
+}
+
+function setAdminToken(token, info = null) {
   if (token) {
     sessionStorage.setItem('admin_token', token);
+    if (info && info.username) {
+      currentAdminUser = info.username;
+      sessionStorage.setItem('admin_username', info.username);
+    }
+    if (info && info.role) {
+      currentAdminRole = info.role;
+      sessionStorage.setItem('admin_role', info.role);
+    }
     isAslabAdmin = true;
   } else {
     sessionStorage.removeItem('admin_token');
+    sessionStorage.removeItem('admin_username');
+    sessionStorage.removeItem('admin_role');
+    currentAdminUser = 'admin';
+    currentAdminRole = 'SUPER_ADMIN';
     isAslabAdmin = false;
   }
 }
@@ -8167,21 +8189,24 @@ function getAdminHeaders(customHeaders = {}) {
 }
 
 async function requestAdminLogin() {
-  const pass = await promptPassword("Masukkan password Admin untuk otentikasi Admin:");
+  const pass = await promptPassword("Masukkan password akun untuk otentikasi Admin:", true);
   if (pass === null) return null; // Dibatalkan
 
-  const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:");
+  const userSelect = document.getElementById('admin-username-select');
+  const selectedUsername = userSelect ? (userSelect.value || 'admin') : 'admin';
+
+  const pass2 = await promptPassword("Otorisasi Lanjutan: Masukkan password Master:", false);
   if (pass2 === null) return null; // Dibatalkan
 
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pass, master_password: pass2 })
+      body: JSON.stringify({ username: selectedUsername, password: pass, master_password: pass2 })
     });
     const data = await res.json();
     if (res.ok && data.status === 'success' && data.token) {
-      setAdminToken(data.token);
+      setAdminToken(data.token, { username: data.username || selectedUsername, role: data.role || 'SUPER_ADMIN' });
       return data.token;
     } else {
       await showModernAlert({
@@ -8437,11 +8462,20 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
 
     const updateAdminUI = () => {
       if (isAslabAdmin) {
-        adminToggle.innerText = 'Admin: ON';
+        const activeRole = getAdminRole();
+        const roleShort = activeRole === 'KOORDINATOR' ? 'KOORDINATOR' : 'SUPER ADMIN';
+        adminToggle.innerText = `Admin: ON (${roleShort})`;
         adminToggle.style.color = '#fff';
         adminToggle.style.background = 'var(--primary)';
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
         document.querySelectorAll('.admin-only-col').forEach(el => el.style.display = 'table-cell');
+        // Khusus SUPER_ADMIN untuk fitur destruktif pembersihan DB dan backup penuh manual
+        const clearBtn = document.getElementById('clear-db-btn');
+        const backupBtn = document.getElementById('backup-db-btn');
+        if (activeRole === 'KOORDINATOR') {
+          if (clearBtn) clearBtn.style.display = 'none';
+          if (backupBtn) backupBtn.style.display = 'none';
+        }
         if (typeof fetchPermanentComparison === 'function') {
           fetchPermanentComparison();
         }
@@ -8507,6 +8541,7 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
       if (document.getElementById('wa-modal-semester')) document.getElementById('wa-modal-semester').style.display = 'none';
       if (document.getElementById('wa-modal-absensi')) document.getElementById('wa-modal-absensi').style.display = 'none';
       if (document.getElementById('wa-modal-absensi-config')) document.getElementById('wa-modal-absensi-config').style.display = 'none';
+      if (document.getElementById('wa-modal-admin-center')) document.getElementById('wa-modal-admin-center').style.display = 'none';
       modalTitle.innerText = "Setting";
       modalIcon.innerHTML = SVG_WA_ICONS.aslab;
       adminToggle.style.display = 'block';
@@ -10406,13 +10441,20 @@ window.saveEditAbsensi = async function (id) {
 window.deleteAbsensiRecord = async function (id) {
   if (!id) return;
   if (!confirm(`Yakin ingin menghapus catatan absensi #${id}?`)) return;
+  if (typeof getAdminToken === 'function' && !getAdminToken()) {
+    const tok = await requestAdminLogin();
+    if (!tok) return;
+  }
   try {
-    const res = await fetch(`${API_BASE_URL}/api/absensi/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE_URL}/api/absensi/${id}`, {
+      method: 'DELETE',
+      headers: getAdminHeaders()
+    });
     const json = await res.json();
     if (res.ok && json.status === 'success') {
       window.loadAbsensiHistoryList();
     } else {
-      alert("Gagal menghapus: " + (json.message || "Terjadi kesalahan"));
+      alert("Gagal menghapus: " + (json.detail || json.message || "Terjadi kesalahan"));
     }
   } catch (e) {
     alert("Terjadi kesalahan jaringan saat menghapus.");
@@ -10489,7 +10531,7 @@ window.openAbsensiConfigDirectly = function () {
   const views = [
     'wa-modal-menu', 'wa-modal-absensi', 'wa-modal-absensi-config', 'wa-modal-test',
     'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan',
-    'wa-modal-add-ruangan', 'wa-modal-semester'
+    'wa-modal-add-ruangan', 'wa-modal-semester', 'wa-modal-admin-center'
   ];
   views.forEach(id => {
     const el = document.getElementById(id);
@@ -12075,6 +12117,28 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
         </div>
       ` : '';
 
+      const isLockedSchedule = Boolean(Number(s.is_locked || 0) === 1);
+      const lockedBadgeHtml = isLockedSchedule ? `
+        <span class="badge" style="padding: 3px 9px; border-radius: var(--radius-full); background: rgba(245, 158, 11, 0.16); color: #d97706; font-weight: 700; font-size: 0.76em; border: 1px solid rgba(245, 158, 11, 0.35);" title="Jadwal ini dikunci manual oleh Admin dan tidak akan tertimpa auto-sync BAAK">
+          Dikunci Admin
+        </span>
+      ` : '';
+
+      const adminCardControlsHtml = (isAslabAdmin && s.id) ? `
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary"
+            onclick="event.stopPropagation(); window.toggleScheduleLockAction(${Number(s.id)}, ${isLockedSchedule ? 'false' : 'true'})"
+            style="padding: 5px 10px; font-size: 0.76rem; font-weight: 600; border-radius: 6px; cursor: pointer; border-color: ${isLockedSchedule ? '#f59e0b' : 'var(--border)'}; color: ${isLockedSchedule ? '#d97706' : 'var(--text)'};">
+            ${isLockedSchedule ? 'Buka Kunci Auto-Sync' : 'Kunci Jadwal (Anti-Timpa)'}
+          </button>
+          <button type="button" class="btn btn-secondary"
+            onclick="event.stopPropagation(); window.deleteSingleScheduleAction(${Number(s.id)}, '${escapeHtml((s.nama_mk || '') + ' (' + (s.jam || '') + ')')}')"
+            style="padding: 5px 10px; font-size: 0.76rem; font-weight: 600; border-radius: 6px; cursor: pointer; color: #ef4444; border-color: rgba(239, 68, 68, 0.35);">
+            Hapus Sesi
+          </button>
+        </div>
+      ` : '';
+
       return `
         ${gapBoxHtml}
         <div class="room-detail-card ${cardStatusClass}">
@@ -12085,6 +12149,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
               <span class="room-card-duration-chip">${durationMins} Menit</span>
             </div>
             <div class="room-card-badges-right">
+              ${lockedBadgeHtml}
               ${liveBadgeHtml}
               ${jenisBadgeHtml}
               ${nightBadge}
@@ -12119,6 +12184,7 @@ window.showRoomDetail = function (roomName, kampusStr, customDate = null) {
 
           ${absenBtnHtml}
           ${aslabRowHtml}
+          ${adminCardControlsHtml}
         </div>
       `;
     }).join('');
@@ -22890,10 +22956,26 @@ async function fetchScraperLogs() {
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/scraper/logs?limit=100`);
+    const res = await fetch(`${API_BASE_URL}/api/scraper/logs?limit=100&_t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.status === 'success') {
+      if (data.config) {
+        const primaryEl = document.getElementById('scraper-current-primary-url');
+        const inputEl = document.getElementById('scraper-custom-url-input');
+        const metaBadge = document.getElementById('scraper-config-meta-badge');
+        if (primaryEl && data.config.scraper_primary_url) {
+          primaryEl.textContent = data.config.scraper_primary_url;
+        }
+        if (inputEl && !inputEl.value && data.config.scraper_primary_url) {
+          inputEl.value = data.config.scraper_primary_url;
+        }
+        if (metaBadge) {
+          const syncH = data.config.auto_sync_midnight_hour || '00:00';
+          const alertH = data.config.morning_alert_hour || '07:00';
+          metaBadge.textContent = `Auto-Sync: ${syncH} WIB | Notif WA: ${alertH} WIB`;
+        }
+      }
       renderScraperLogsTable(data.logs || []);
     } else {
       if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px;">Gagal memuat log: ${data.message || 'Error server'}</td></tr>`;
@@ -23079,3 +23161,662 @@ window.fetchScraperLogs = fetchScraperLogs;
 window.runScraperEngineTest = runScraperEngineTest;
 window.clearScraperLogsAction = clearScraperLogsAction;
 window.showScraper403Notification = showScraper403Notification;
+
+// ══════════════════════════════════════════════════════════════════
+// MODUL DYNAMIC SCRAPER URL, RAW HTML PARSER & ADMIN CONTROL CENTER
+// ══════════════════════════════════════════════════════════════════
+
+async function ensureAdminSessionOrPrompt() {
+  if (typeof getAdminToken === 'function' && getAdminToken()) {
+    return getAdminToken();
+  }
+  const tok = await requestAdminLogin();
+  return tok;
+}
+
+window.validateCustomScraperUrlAction = async function () {
+  const input = document.getElementById('scraper-custom-url-input');
+  const previewBox = document.getElementById('scraper-url-preview-box');
+  const btn = document.getElementById('btn-validate-scraper-url');
+  const rawUrl = input ? input.value.trim() : '';
+
+  if (!rawUrl) {
+    alert('Silakan paste URL jadwal BAAK terlebih dahulu.');
+    return;
+  }
+
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
+  if (btn) btn.disabled = true;
+  if (previewBox) {
+    previewBox.style.display = 'block';
+    previewBox.innerHTML = `<span style="color: var(--text-muted);">Sedang menguji koneksi dan memeriksa struktur tabel HTML pada URL...</span>`;
+  }
+
+  try {
+    const tgl = document.getElementById('filter-tanggal')?.value || '';
+    const res = await fetch(`${API_BASE_URL}/api/admin/scraper/validate-url`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ url: rawUrl, tanggal: tgl || null })
+    });
+    const data = await res.json();
+    if (!previewBox) return;
+
+    const isOk = Boolean(data.valid && data.has_table);
+    const statusColor = isOk ? '#10b981' : '#ef4444';
+    let sampleHtml = '';
+    if (Array.isArray(data.sample) && data.sample.length > 0) {
+      sampleHtml = `
+        <div style="margin-top: 8px; overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem;">
+            <thead>
+              <tr style="background: var(--bg-elevated); text-align: left;">
+                <th style="padding: 4px 6px;">Tanggal</th>
+                <th style="padding: 4px 6px;">Jam</th>
+                <th style="padding: 4px 6px;">Mata Kuliah</th>
+                <th style="padding: 4px 6px;">Kelas</th>
+                <th style="padding: 4px 6px;">Dosen</th>
+                <th style="padding: 4px 6px;">Ruangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.sample.map(s => `
+                <tr style="border-top: 1px solid var(--border);">
+                  <td style="padding: 4px 6px;">${escapeHtml(s.tanggal || '-')}</td>
+                  <td style="padding: 4px 6px;">${escapeHtml(s.jam || '-')}</td>
+                  <td style="padding: 4px 6px; font-weight: 600;">${escapeHtml(s.nama_mk || '-')}</td>
+                  <td style="padding: 4px 6px;">${escapeHtml(s.kelas || '-')}</td>
+                  <td style="padding: 4px 6px;">${escapeHtml(s.nama_dosen || '-')}</td>
+                  <td style="padding: 4px 6px;">${escapeHtml(s.ruangan || '-')} (${escapeHtml(s.kampus || '-')})</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    previewBox.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span style="font-weight: 700; color: ${statusColor};">${escapeHtml(data.message || data.detail || 'Selesai diuji')}</span>
+        <span style="font-family: monospace; font-size: 0.75rem; color: var(--text-muted);">Engine: ${escapeHtml(data.engine || '-')} | HTTP: ${data.http_status || '-'} | Baris: ${data.row_count || 0}</span>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+        Normalized URL: <code>${escapeHtml(data.normalized_url || rawUrl)}</code>
+      </div>
+      ${sampleHtml}
+    `;
+  } catch (err) {
+    if (previewBox) {
+      previewBox.innerHTML = `<span style="color: #ef4444;">Gagal memvalidasi URL: ${escapeHtml(err.message)}</span>`;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+window.saveCustomScraperUrlAction = async function () {
+  const input = document.getElementById('scraper-custom-url-input');
+  const rawUrl = input ? input.value.trim() : '';
+  if (!rawUrl) {
+    alert('Silakan masukkan URL utama BAAK yang ingin disimpan.');
+    return;
+  }
+
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
+  const btn = document.getElementById('btn-save-scraper-url');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/scraper/config`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ scraper_primary_url: rawUrl })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      const primaryEl = document.getElementById('scraper-current-primary-url');
+      if (primaryEl && data.config && data.config.scraper_primary_url) {
+        primaryEl.textContent = data.config.scraper_primary_url;
+      }
+      if (input && data.config && data.config.scraper_primary_url) {
+        input.value = data.config.scraper_primary_url;
+      }
+      alert(data.message || 'URL utama scraper berhasil diperbarui.');
+      await fetchScraperLogs();
+    } else {
+      alert(data.detail || data.message || 'Gagal menyimpan konfigurasi URL scraper.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+window.runCustomScraperUrlAction = async function (fullSync = false) {
+  const input = document.getElementById('scraper-custom-url-input');
+  const primaryEl = document.getElementById('scraper-current-primary-url');
+  const customUrl = (input && input.value.trim()) ? input.value.trim() : (primaryEl ? primaryEl.textContent.trim() : '');
+
+  if (!customUrl) {
+    alert('URL target tidak boleh kosong.');
+    return;
+  }
+
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
+  const tgl = document.getElementById('filter-tanggal')?.value || '';
+  const confirmMsg = fullSync
+    ? `Jalankan Full Scrape Total (seluruh halaman) dari link:\n${customUrl}?`
+    : `Jalankan Scrape untuk tanggal ${tgl || 'hari ini'} dari link:\n${customUrl}?`;
+  if (!confirm(confirmMsg)) return;
+
+  const btnDay = document.getElementById('btn-run-custom-url-day');
+  const btnFull = document.getElementById('btn-run-custom-url-full');
+  if (btnDay) btnDay.disabled = true;
+  if (btnFull) btnFull.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/scraper/run-custom`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        url: customUrl,
+        tanggal: fullSync ? null : (tgl || null),
+        full_sync: Boolean(fullSync),
+        save_as_primary: false
+      })
+    });
+    const data = await res.json();
+    await fetchScraperLogs();
+    if (res.ok && data.status === 'success') {
+      await fetchAllJadwal();
+      alert(data.message || 'Sinkronisasi dari link kustom berhasil.');
+    } else {
+      alert(data.detail || data.message || 'Gagal menarik jadwal dari link tersebut.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  } finally {
+    if (btnDay) btnDay.disabled = false;
+    if (btnFull) btnFull.disabled = false;
+  }
+};
+
+window.submitRawHtmlScrapeAction = async function () {
+  const textarea = document.getElementById('scraper-raw-html-input');
+  const rawHtml = textarea ? textarea.value.trim() : '';
+  if (!rawHtml || rawHtml.length < 50) {
+    alert('Silakan paste kode sumber HTML halaman jadwal BAAK terlebih dahulu.');
+    return;
+  }
+
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
+  const btn = document.getElementById('btn-submit-raw-html');
+  if (btn) btn.disabled = true;
+
+  try {
+    const tgl = document.getElementById('filter-tanggal')?.value || '';
+    const res = await fetch(`${API_BASE_URL}/api/admin/scraper/parse-raw-html`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        html: rawHtml,
+        tanggal: tgl || null,
+        full_sync: false
+      })
+    });
+    const data = await res.json();
+    await fetchScraperLogs();
+    if (res.ok && data.status === 'success') {
+      if (textarea) textarea.value = '';
+      await fetchAllJadwal();
+      alert(data.message || 'Jadwal dari Raw HTML berhasil diproses dan disimpan.');
+    } else {
+      alert(data.detail || data.message || 'Gagal memproses Raw HTML.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+// ==================== PUSAT KENDALI ADMIN (CONTROL CENTER) ====================
+window.openAdminControlCenter = async function () {
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
+  const views = [
+    'wa-modal-menu', 'wa-modal-absensi', 'wa-modal-absensi-config', 'wa-modal-test',
+    'wa-modal-data', 'wa-modal-add', 'wa-modal-qr', 'wa-modal-data-ruangan',
+    'wa-modal-add-ruangan', 'wa-modal-semester', 'wa-modal-admin-center'
+  ];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const centerView = document.getElementById('wa-modal-admin-center');
+  if (centerView) centerView.style.display = 'flex';
+
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) modalTitle.innerText = 'Pusat Kendali Admin';
+
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  if (adminToggle) adminToggle.style.display = 'none';
+
+  const dateInput = document.getElementById('adm-jadwal-tanggal');
+  const activeTgl = document.getElementById('filter-tanggal')?.value || '';
+  if (dateInput && !dateInput.value && activeTgl) {
+    dateInput.value = activeTgl;
+  }
+
+  window.switchAdminCenterSubTab('status');
+  await window.loadAdminOverviewData();
+};
+
+window.closeAdminControlCenterToMenu = function () {
+  const centerView = document.getElementById('wa-modal-admin-center');
+  const menuView = document.getElementById('wa-modal-menu');
+  if (centerView) centerView.style.display = 'none';
+  if (menuView) menuView.style.display = 'flex';
+
+  const modalTitle = document.getElementById('wa-modal-title');
+  if (modalTitle) modalTitle.innerText = 'Setting';
+
+  const adminToggle = document.getElementById('admin-mode-toggle');
+  if (adminToggle) adminToggle.style.display = 'block';
+};
+
+window.switchAdminCenterSubTab = function (tab) {
+  const tabs = ['status', 'jadwal', 'backups', 'security'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tab-btn-admin-${t}`);
+    const view = document.getElementById(`admin-subview-${t}`);
+    const isActive = (t === tab);
+    if (btn) {
+      btn.style.background = isActive ? 'var(--primary)' : 'transparent';
+      btn.style.color = isActive ? '#fff' : 'var(--text-muted)';
+      btn.style.fontWeight = isActive ? '700' : '600';
+    }
+    if (view) {
+      view.style.display = isActive ? 'flex' : 'none';
+    }
+  });
+};
+
+window.loadAdminOverviewData = async function () {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/overview?_t=${Date.now()}`, {
+      headers: getAdminHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') return;
+
+    // 1. Info User & Role
+    const userInfoEl = document.getElementById('admin-center-user-info');
+    if (userInfoEl && data.admin) {
+      userInfoEl.textContent = `${data.admin.username} (${data.admin.role})`;
+    }
+    const pwdFormBox = document.getElementById('adm-password-form-box');
+    if (pwdFormBox && data.admin) {
+      pwdFormBox.style.display = (data.admin.role === 'SUPER_ADMIN') ? 'flex' : 'none';
+    }
+
+    // 2. Status WhatsApp Gateway
+    const waBadge = document.getElementById('admin-wa-state-badge');
+    const waDetail = document.getElementById('admin-wa-detail-text');
+    const qrContainer = document.getElementById('admin-wa-qr-container');
+    const qrImg = document.getElementById('admin-wa-qr-img');
+    const wa = data.wa_gateway || {};
+
+    if (waBadge) {
+      if (wa.connected) {
+        waBadge.textContent = 'TERHUBUNG (ONLINE)';
+        waBadge.style.background = 'rgba(16, 185, 129, 0.16)';
+        waBadge.style.color = '#10b981';
+      } else if (wa.state === 'qr_ready' || wa.qr) {
+        waBadge.textContent = 'MENUNGGU SCAN QR';
+        waBadge.style.background = 'rgba(245, 158, 11, 0.16)';
+        waBadge.style.color = '#d97706';
+      } else {
+        waBadge.textContent = `TERPUTUS (${(wa.state || 'OFFLINE').toUpperCase()})`;
+        waBadge.style.background = 'rgba(239, 68, 68, 0.16)';
+        waBadge.style.color = '#ef4444';
+      }
+    }
+
+    if (waDetail) {
+      waDetail.textContent = wa.connected
+        ? `Mesin WhatsApp Bot aktif dan siap mengirim pesan. Antrean pengiriman saat ini: ${wa.queue_length || 0} pesan.`
+        : `WhatsApp Bot belum terhubung (Status: ${wa.state || 'disconnected'}). Silakan scan QR di bawah atau klik Reconnect WA.`;
+    }
+
+    if (qrContainer && qrImg) {
+      if (!wa.connected && wa.qr) {
+        qrContainer.style.display = 'flex';
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(wa.qr)}`;
+      } else {
+        qrContainer.style.display = 'none';
+      }
+    }
+
+    // 3. Antrean Notifikasi Pagi (07:00 WIB)
+    const morningBadge = document.getElementById('admin-morning-queue-badge');
+    if (morningBadge) {
+      const cnt = Number(data.pending_morning_alerts_count || 0);
+      morningBadge.textContent = `${cnt} Item Antrean`;
+    }
+
+    // 4. Daftar Jadwal yang Dikunci (is_locked = 1)
+    const lockedTitle = document.getElementById('adm-locked-schedules-title');
+    const lockedList = document.getElementById('adm-locked-schedules-list');
+    const lockedItems = data.locked_schedules || [];
+    if (lockedTitle) {
+      lockedTitle.textContent = `Daftar Jadwal yang Dikunci (${lockedItems.length})`;
+    }
+    if (lockedList) {
+      if (lockedItems.length === 0) {
+        lockedList.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 14px;">Belum ada jadwal yang dikunci manual.</div>`;
+      } else {
+        lockedList.innerHTML = lockedItems.map(item => `
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); font-size: 0.78rem;">
+            <div>
+              <div style="font-weight: 700; color: var(--text);">${escapeHtml(item.nama_mk || '-')} (${escapeHtml(item.kelas || '-')})</div>
+              <div style="color: var(--text-muted);">${escapeHtml(item.tanggal || '-')} | ${escapeHtml(item.jam || '-')} | ${escapeHtml(item.nama_ruangan || '-')} (${escapeHtml(item.kampus || '-')})</div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-shrink: 0;">
+              <button type="button" onclick="window.toggleScheduleLockAction(${Number(item.id)}, false)"
+                style="padding: 4px 8px; font-size: 0.74rem; border-radius: 6px; border: 1px solid #f59e0b; background: rgba(245,158,11,0.1); color: #d97706; cursor: pointer; font-weight: 600;">
+                Buka Kunci
+              </button>
+              <button type="button" onclick="window.deleteSingleScheduleAction(${Number(item.id)}, '${escapeHtml(item.nama_mk || '')}')"
+                style="padding: 4px 8px; font-size: 0.74rem; border-radius: 6px; border: 1px solid rgba(239,68,68,0.4); background: rgba(239,68,68,0.1); color: #ef4444; cursor: pointer; font-weight: 600;">
+                Hapus
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // 5. Daftar Auto-Backup SQL
+    const backupsContainer = document.getElementById('adm-backups-list-container');
+    const backups = data.backups || [];
+    if (backupsContainer) {
+      if (backups.length === 0) {
+        backupsContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 16px;">Belum ada snapshot auto-backup tersimpan. Klik "Buat Snapshot Sekarang".</div>`;
+      } else {
+        backupsContainer.innerHTML = backups.map(b => `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); font-size: 0.8rem;">
+            <div>
+              <div style="font-weight: 700; font-family: monospace; color: var(--text);">${escapeHtml(b.filename)}</div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">${escapeHtml(b.created_at)} | Ukuran: ${b.size_kb} KB</div>
+            </div>
+            <button type="button" onclick="window.downloadAutoBackupAction('${escapeHtml(b.filename)}')"
+              style="padding: 5px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 6px; border: 1px solid #10b981; background: rgba(16,185,129,0.1); color: #10b981; cursor: pointer;">
+              Unduh .SQL
+            </button>
+          </div>
+        `).join('');
+      }
+    }
+
+    // 6. Riwayat Audit Log Admin
+    const auditContainer = document.getElementById('adm-audit-logs-container');
+    const audits = data.audit_logs || [];
+    if (auditContainer) {
+      if (audits.length === 0) {
+        auditContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 14px;">Belum ada riwayat aktivitas admin.</div>`;
+      } else {
+        auditContainer.innerHTML = `
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+            <thead>
+              <tr style="background: var(--bg-elevated); border-bottom: 1px solid var(--border); color: var(--text-muted);">
+                <th style="padding: 6px 8px;">Waktu</th>
+                <th style="padding: 6px 8px;">Akun</th>
+                <th style="padding: 6px 8px;">Aksi</th>
+                <th style="padding: 6px 8px;">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${audits.map(a => `
+                <tr style="border-bottom: 1px solid var(--border);">
+                  <td style="padding: 6px 8px; font-family: monospace; white-space: nowrap; color: var(--text-muted);">${escapeHtml(a.waktu || '-')}</td>
+                  <td style="padding: 6px 8px; font-weight: 600;">${escapeHtml(a.username || '-')} <span style="font-size:0.68rem; color:var(--primary);">(${escapeHtml(a.role || '')})</span></td>
+                  <td style="padding: 6px 8px; font-weight: 700;">${escapeHtml(a.aksi || '-')}</td>
+                  <td style="padding: 6px 8px; color: var(--text-muted);">${escapeHtml(a.detail || a.target || '-')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error('Gagal memuat overview admin:', err);
+  }
+};
+
+window.reconnectWaGatewayAction = async function (resetSession = false) {
+  const msg = resetSession
+    ? 'Reset sesi kredensial WhatsApp Bot dan buat QR Code baru?'
+    : 'Picu reconnect koneksi WhatsApp Gateway sekarang?';
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/wa/reconnect`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ reset_session: Boolean(resetSession) })
+    });
+    const data = await res.json();
+    alert(data.message || data.detail || 'Perintah reconnect dikirim.');
+    setTimeout(() => window.loadAdminOverviewData(), 1500);
+  } catch (err) {
+    alert('Gagal menghubungi server: ' + err.message);
+  }
+};
+
+window.flushMorningAlertsAction = async function () {
+  if (!confirm('Kirim paksa seluruh antrean notifikasi perubahan jadwal pagi (07:00 WIB) sekarang juga?')) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/wa/flush-morning`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' })
+    });
+    const data = await res.json();
+    alert(data.message || data.detail || 'Antrean diproses.');
+    await window.loadAdminOverviewData();
+  } catch (err) {
+    alert('Gagal memproses antrean: ' + err.message);
+  }
+};
+
+window.submitManualScheduleAction = async function () {
+  const tanggal = document.getElementById('adm-jadwal-tanggal')?.value || '';
+  const jam = document.getElementById('adm-jadwal-jam')?.value.trim() || '';
+  const nama_mk = document.getElementById('adm-jadwal-mk')?.value.trim() || '';
+  const kelas = document.getElementById('adm-jadwal-kelas')?.value.trim() || '';
+  const nama_dosen = document.getElementById('adm-jadwal-dosen')?.value.trim() || '-';
+  const nama_ruangan = document.getElementById('adm-jadwal-ruangan')?.value.trim() || '';
+  const kampus = document.getElementById('adm-jadwal-kampus')?.value || 'Thehok';
+  const metode_pembelajaran = document.getElementById('adm-jadwal-metode')?.value || 'TM';
+  const status_jadwal = document.getElementById('adm-jadwal-status')?.value.trim() || 'Kelas Tambahan';
+  const is_locked = Boolean(document.getElementById('adm-jadwal-locked')?.checked);
+
+  if (!tanggal || !jam || !nama_mk || !nama_ruangan) {
+    alert('Tanggal, Jam, Nama Mata Kuliah, dan Ruangan wajib diisi.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/jadwal/add`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        tanggal, jam, nama_mk, kelas, nama_dosen, nama_ruangan, kampus,
+        metode_pembelajaran, status_jadwal, is_locked
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(data.message || 'Jadwal manual berhasil disimpan.');
+      await fetchAllJadwal();
+      await window.loadAdminOverviewData();
+    } else {
+      alert(data.detail || data.message || 'Gagal menambah jadwal manual.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  }
+};
+
+window.toggleScheduleLockAction = async function (idJadwal, newLockedState) {
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/jadwal/${idJadwal}/toggle-lock`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ is_locked: Boolean(newLockedState) })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      await fetchAllJadwal();
+      if (document.getElementById('wa-modal-admin-center')?.style.display === 'flex') {
+        await window.loadAdminOverviewData();
+      }
+      if (document.getElementById('room-detail-modal')?.classList.contains('open') && window._currentDetailRoom) {
+        const { roomName, kampusStr, activeDate } = window._currentDetailRoom;
+        window.showRoomDetail(roomName, kampusStr, activeDate);
+      }
+    } else {
+      alert(data.detail || data.message || 'Gagal mengubah status kunci jadwal.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  }
+};
+
+window.deleteSingleScheduleAction = async function (idJadwal, labelInfo = '') {
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+  if (!confirm(`Hapus sesi jadwal ${labelInfo ? '"' + labelInfo + '"' : '#' + idJadwal}?`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/jadwal/${idJadwal}`, {
+      method: 'DELETE',
+      headers: getAdminHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      await fetchAllJadwal();
+      if (document.getElementById('wa-modal-admin-center')?.style.display === 'flex') {
+        await window.loadAdminOverviewData();
+      }
+      if (document.getElementById('room-detail-modal')?.classList.contains('open') && window._currentDetailRoom) {
+        const { roomName, kampusStr, activeDate } = window._currentDetailRoom;
+        window.showRoomDetail(roomName, kampusStr, activeDate);
+      }
+    } else {
+      alert(data.detail || data.message || 'Gagal menghapus jadwal.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  }
+};
+
+window.runAutoBackupNowAction = async function () {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/backups/run-now`, {
+      method: 'POST',
+      headers: getAdminHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(`Snapshot berhasil dibuat: ${data.filename} (${data.size_kb} KB)`);
+      await window.loadAdminOverviewData();
+    } else {
+      alert(data.detail || data.message || 'Gagal membuat snapshot backup.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  }
+};
+
+window.downloadAutoBackupAction = async function (filename) {
+  if (!filename) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/backups/download/${encodeURIComponent(filename)}`, {
+      headers: getAdminHeaders()
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      alert(errJson.detail || errJson.message || 'Gagal mengunduh file backup (Khusus Super Admin).');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Gagal mengunduh backup: ' + err.message);
+  }
+};
+
+window.updateAdminAccountAction = async function () {
+  const target_username = document.getElementById('adm-target-username')?.value || 'admin';
+  const current_master_password = document.getElementById('adm-current-master-pwd')?.value || '';
+  const new_password = document.getElementById('adm-new-password')?.value || '';
+  const new_master_password = document.getElementById('adm-new-master-pwd')?.value || '';
+
+  if (!current_master_password) {
+    alert('Masukkan Password Master saat ini untuk verifikasi perubahan.');
+    return;
+  }
+  if (!new_password && !new_master_password) {
+    alert('Isi minimal salah satu: Password Akun Baru atau Password Master Baru.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/account/update`, {
+      method: 'POST',
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        target_username,
+        current_master_password,
+        new_password: new_password || null,
+        new_master_password: new_master_password || null
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      if (document.getElementById('adm-current-master-pwd')) document.getElementById('adm-current-master-pwd').value = '';
+      if (document.getElementById('adm-new-password')) document.getElementById('adm-new-password').value = '';
+      if (document.getElementById('adm-new-master-pwd')) document.getElementById('adm-new-master-pwd').value = '';
+      alert(data.message || 'Kredensial akun berhasil diperbarui.');
+      await window.loadAdminOverviewData();
+    } else {
+      alert(data.detail || data.message || 'Gagal memperbarui kredensial.');
+    }
+  } catch (err) {
+    alert('Kesalahan jaringan: ' + err.message);
+  }
+};
