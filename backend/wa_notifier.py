@@ -139,25 +139,27 @@ def init_sent_notifications_on_startup():
         for row in cursor.fetchall():
             sent_notifications.add(row['notif_key'])
 
-        # 2. Tangkal kirim ulang Info Mase: tandai SEMUA notifikasi_lab yang sudah ada sebelum restart sebagai SEEN
-        cursor.execute("SELECT id FROM notifikasi_lab WHERE tanggal = CURDATE()")
-        existing_nl_ids = [row['id'] for row in cursor.fetchall()]
+        # 2. Tangkal kirim ulang Info Mase saat restart siang hari (>= 07:00 WIB).
+        # Pada jam 00:00 - 06:59 WIB, JANGAN tandai sebagai SEEN karena notif pagi baru dikirim jam 07:00 WIB.
+        if get_wib_now().hour >= 7:
+            cursor.execute("SELECT id FROM notifikasi_lab WHERE tanggal = CURDATE()")
+            existing_nl_ids = [row['id'] for row in cursor.fetchall()]
 
-        if existing_nl_ids:
-            cursor.execute("SELECT id_ruangan FROM ruangan")
-            all_r_ids = [r['id_ruangan'] for r in cursor.fetchall()]
-            
-            cursor.execute("SELECT no_wa, wa_lid FROM asisten_lab WHERE (no_wa IS NOT NULL AND no_wa != '') OR (wa_lid IS NOT NULL AND wa_lid != '')")
-            all_targets = [u['wa_lid'] or u['no_wa'] for u in cursor.fetchall()]
+            if existing_nl_ids:
+                cursor.execute("SELECT id_ruangan FROM ruangan")
+                all_r_ids = [r['id_ruangan'] for r in cursor.fetchall()]
+                
+                cursor.execute("SELECT no_wa, wa_lid FROM asisten_lab WHERE (no_wa IS NOT NULL AND no_wa != '') OR (wa_lid IS NOT NULL AND wa_lid != '')")
+                all_targets = [u['wa_lid'] or u['no_wa'] for u in cursor.fetchall()]
 
-            for nl_id in existing_nl_ids:
-                for rid in all_r_ids:
-                    for t_wa in all_targets:
-                        k = f"info_mase_nl_{nl_id}_{rid}_{t_wa}"
-                        sent_notifications.add(k)
-                        cursor.execute("INSERT IGNORE INTO log_sent_notifications (notif_key) VALUES (%s)", (k,))
-            conn.commit()
-            print(f"[WA Notifier] Startup: Berhasil memproteksi {len(existing_nl_ids)} Info Mase lama agar tidak dikirim ulang.")
+                for nl_id in existing_nl_ids:
+                    for rid in all_r_ids:
+                        for t_wa in all_targets:
+                            k = f"info_mase_nl_{nl_id}_{rid}_{t_wa}"
+                            sent_notifications.add(k)
+                            cursor.execute("INSERT IGNORE INTO log_sent_notifications (notif_key) VALUES (%s)", (k,))
+                conn.commit()
+                print(f"[WA Notifier] Startup: Berhasil memproteksi {len(existing_nl_ids)} Info Mase lama agar tidak dikirim ulang.")
     except Exception as e:
         print(f"[WA Notifier] Startup init error: {e}")
     finally:
@@ -1432,19 +1434,16 @@ def get_info_mase(role: str = None, kampus: str = None, lab_saya: str = None):
                 if any(lab_kw in p_lower for lab_kw in ['labor', 'lab ']):
                     continue
             if t == 'PERUBAHAN':
+                # Abaikan perubahan ruangan di notifikasi chatbot (kebanyakan hanya komunikasi FO & dosen tanpa input sistem)
+                p_upper = p.upper()
+                if 'PINDAH RUANGAN' in p_upper or 'DIPINDAHKAN MASUK' in p_upper or 'DIPINDAHKAN KELUAR' in p_upper:
+                    continue
                 # Saring jika jadwal perubahan sudah lewat lebih dari 2 jam lalu
                 time_str = scraper.extract_time_from_notification(p) if hasattr(scraper, 'extract_time_from_notification') else ""
                 if time_str:
                     st_min = parse_jam_to_minutes(time_str)
                     if st_min > 0 and (st_min + 135) <= current_total_min:
                         continue
-                # Deduplikasi pindah ruangan (jangan dobel MASUK dan KELUAR untuk mk & kelas yang sama)
-                mk_match = re.search(r'Kelas\s+([^(\n\r]+?)\s*\(([^)]+)\)', p, re.I)
-                if mk_match and 'PINDAH RUANGAN' in p.upper():
-                    move_key = f"{mk_match.group(1).strip()}_{mk_match.group(2).strip()}".lower()
-                    if move_key in seen_move_classes:
-                        continue
-                    seen_move_classes.add(move_key)
                 perubahan_list.append(p)
             elif t == 'TAMBAHAN':
                 # Saring jika kelas tambahan sudah selesai di masa lalu hari ini
@@ -4354,7 +4353,6 @@ def build_info_mase_grouped_body(items: list) -> str:
         ('ol', '*KULIAH DARING (OL)*'),
         ('tambahan', '*KELAS TAMBAHAN*'),
         ('kembali_tm', '*KEMBALI TATAP MUKA (TM)*'),
-        ('pindah', '*PERUBAHAN RUANGAN*'),
         ('lainnya', '*PERUBAHAN LAINNYA*')
     ]
 
@@ -4364,6 +4362,8 @@ def build_info_mase_grouped_body(items: list) -> str:
             cat, line = it
         else:
             cat, line = 'lainnya', str(it)
+        if cat == 'pindah':
+            continue
         if line not in grouped[cat]:
             grouped[cat].append(line)
 
@@ -4381,10 +4381,10 @@ def build_info_mase_grouped_body(items: list) -> str:
 
 def check_and_notify_info_mase():
     """
-    Memeriksa dan mengirimkan notifikasi perubahan jadwal & info mase hari ini (kelas tambahan, pindah ruangan, OL, CC/batal)
+    Memeriksa dan mengirimkan notifikasi perubahan jadwal & info mase hari ini (kelas tambahan, OL, CC/batal)
     secara presisi dan tertarget dengan format Pilihan 1 (kelompok kategori + garis pembatas):
     - Tidak mengirim di malam/dini hari (00:00 - 06:59). Pengiriman baru aktif mulai jam 07:00 pagi agar tidak mengganggu istirahat.
-    - Format dikelompokkan: BATAL (CC), KULIAH DARING (OL), KELAS TAMBAHAN, dst. dengan pembatas strip.
+    - Tidak menampilkan info perubahan/pindah ruangan di notifikasi chatbot.
     - Pengiriman di-batch per nomor penerima (Asmot / Aslab) sehingga tidak spam chat terpisah.
     - Penutup: 'Kondisikan AC mas' (Asmot) atau 'Kondisikan lab mas' (Aslab).
     """
@@ -4440,6 +4440,11 @@ def check_and_notify_info_mase():
         for nl in notifs:
             nl_id = nl['id']
             pesan_raw = nl['pesan']
+            pesan_upper = (pesan_raw or '').upper()
+
+            # Abaikan notifikasi perubahan/pindah ruangan agar tidak dimunculkan di chatbot notif
+            if any(kw in pesan_upper for kw in ('PINDAH RUANGAN', 'DIPINDAHKAN MASUK', 'DIPINDAHKAN KELUAR')):
+                continue
 
             # Ekstrak ruangan yang terkait di teks pesan
             affected_rooms = extract_affected_rooms(pesan_raw, all_rooms)
@@ -4453,6 +4458,8 @@ def check_and_notify_info_mase():
                 is_lab = r.get('is_lab', False)
 
                 cat_item = format_info_mase_item(pesan_raw, nama_r, kampus_r, is_lab=is_lab)
+                if cat_item[0] == 'pindah':
+                    continue
 
                 if is_lab:
                     # KASUS A: Laboratorium -> Kirim HANYA ke Aslab lab tersebut!
@@ -4499,10 +4506,139 @@ def check_and_notify_info_mase():
             if send_wa_message(target_wa, msg):
                 for k in batch['keys']:
                     mark_notification_sent(k)
+                # Tandai alert perubahan hari ini untuk target_wa ini sebagai SENT agar tidak double-notif
+                try:
+                    cursor.execute("""
+                        UPDATE log_notifikasi_perubahan
+                        SET status_kirim = 'SENT'
+                        WHERE tanggal_kuliah = %s
+                          AND no_wa_tujuan = %s
+                          AND status_kirim = 'PENDING'
+                    """, (today_str, target_wa))
+                    conn.commit()
+                except Exception:
+                    pass
                 log_chatbot("SUCCESS", f"Info Mase ({len(batch['items'])} item) terkirim ke {target_wa}", "INFO-MASE")
 
     except Exception as e:
         log_chatbot("ERROR", f"Error in check_and_notify_info_mase: {e}", "INFO-MASE")
+    finally:
+        if 'cursor' in locals() and cursor:
+            try: cursor.close()
+            except: pass
+        if 'conn' in locals() and conn and conn.is_connected():
+            try: conn.close()
+            except: pass
+
+def flush_pending_morning_alerts():
+    """
+    Mengirimkan notifikasi perubahan jadwal yang tertunda saat jam tenang malam/dini hari (00:00 - 06:59 WIB),
+    termasuk hasil scraper total jam 12 malam untuk perubahan hari ini maupun tanggal-tanggal ke depan.
+    Hanya mengirim mulai jam 07:00 pagi WIB dan TIDAK mengirim notifikasi perubahan/pindah ruangan.
+    """
+    now = get_wib_now()
+    if now.hour < 7:
+        return
+
+    today_date = now.date()
+    tomorrow_date = today_date + timedelta(days=1)
+    today_str = today_date.strftime("%Y-%m-%d")
+
+    try:
+        conn = scraper.get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT l.id_log, l.tanggal_kuliah, l.jam, l.id_ruangan, l.nama_mk, l.kelas, l.tipe_perubahan, l.no_wa_tujuan,
+                   r.nama_ruangan, r.kampus
+            FROM log_notifikasi_perubahan l
+            LEFT JOIN ruangan r ON l.id_ruangan = r.id_ruangan
+            WHERE l.status_kirim = 'PENDING'
+              AND l.tanggal_kuliah >= %s
+              AND l.tipe_perubahan NOT IN ('PINDAH_MASUK', 'PINDAH_KELUAR')
+              AND l.no_wa_tujuan IS NOT NULL AND l.no_wa_tujuan != '' AND l.no_wa_tujuan != '-'
+            ORDER BY l.tanggal_kuliah ASC, l.jam ASC, l.id_log ASC
+        """, (today_str,))
+        rows = cursor.fetchall()
+        if not rows:
+            return
+
+        by_recipient = collections.defaultdict(list)
+        for row in rows:
+            by_recipient[row['no_wa_tujuan']].append(row)
+
+        tipe_label_map = {
+            'CC': 'BATAL (CC)',
+            'OL': 'ONLINE (OL)',
+            'TM': 'TATAP MUKA (TM)',
+            'TAMBAHAN': 'KELAS TAMBAHAN'
+        }
+
+        for no_wa, items in by_recipient.items():
+            grouped_by_date = collections.defaultdict(list)
+            log_ids = []
+            for it in items:
+                log_ids.append(it['id_log'])
+                tgl_val = it['tanggal_kuliah']
+                if isinstance(tgl_val, datetime.datetime):
+                    d_obj = tgl_val.date()
+                elif hasattr(tgl_val, 'strftime'):
+                    d_obj = tgl_val
+                else:
+                    d_obj = datetime.datetime.strptime(str(tgl_val)[:10], "%Y-%m-%d").date()
+
+                if d_obj == today_date:
+                    date_lbl = "Hari Ini"
+                elif d_obj == tomorrow_date:
+                    date_lbl = f"Besok ({format_tanggal_indo(d_obj)})"
+                else:
+                    date_lbl = format_tanggal_indo(d_obj)
+
+                jam_raw = it['jam']
+                if hasattr(jam_raw, 'total_seconds'):
+                    tot_sec = int(jam_raw.total_seconds())
+                    jam_str = f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+                else:
+                    jam_str = str(jam_raw)[:5]
+
+                r_name = it.get('nama_ruangan') or f"Ruang #{it['id_ruangan']}"
+                kampus_r = it.get('kampus') or ''
+                room_tag = f"{r_name} ({kampus_r})" if kampus_r and kampus_r.lower() not in r_name.lower() else r_name
+                status_lbl = tipe_label_map.get(it['tipe_perubahan'], it['tipe_perubahan'])
+                mk_txt = it.get('nama_mk') or 'Mata Kuliah'
+                kelas_txt = it.get('kelas') or '-'
+
+                line = f"- {room_tag} jam {jam_str} | {mk_txt} ({kelas_txt}) -> *{status_lbl}*"
+                if line not in grouped_by_date[date_lbl]:
+                    grouped_by_date[date_lbl].append(line)
+
+            sections = []
+            for d_lbl, d_lines in grouped_by_date.items():
+                sections.append(f"*{d_lbl}*\n" + "\n".join(d_lines))
+
+            body = "\n------------------------------\n".join(sections)
+            msg = (
+                f"*INFO PERUBAHAN JADWAL*\n"
+                f"_Update pagi (hasil sinkronisasi sistem)_\n\n"
+                f"{body}\n\n"
+                f"Mohon disesuaikan ya mas."
+            )
+
+            is_sent = send_wa_message(no_wa, msg)
+            new_st = 'SENT' if is_sent else 'FAILED'
+            if log_ids:
+                placeholders = ", ".join(["%s"] * len(log_ids))
+                cursor.execute(
+                    f"UPDATE log_notifikasi_perubahan SET status_kirim = %s WHERE id_log IN ({placeholders})",
+                    [new_st] + log_ids
+                )
+                conn.commit()
+            if is_sent:
+                log_chatbot("SUCCESS", f"Morning alert ({len(items)} perubahan) terkirim ke {no_wa}", "MORNING-ALERT")
+                time.sleep(1.5)
+
+    except Exception as e:
+        log_chatbot("ERROR", f"Error in flush_pending_morning_alerts: {e}", "MORNING-ALERT")
     finally:
         if 'cursor' in locals() and cursor:
             try: cursor.close()
@@ -4959,9 +5095,36 @@ def test_send(id_aslab=None, action_type="test", ngrok_link=None):
             try: conn.close()
             except: pass
 
+def _get_full_sync_state_path():
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logs_dir = os.path.join(base_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    return os.path.join(logs_dir, "last_full_sync.txt")
+
+def _read_last_full_sync_date():
+    try:
+        p = _get_full_sync_state_path()
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
+def _write_last_full_sync_date(date_str: str):
+    try:
+        p = _get_full_sync_state_path()
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(str(date_str).strip())
+    except Exception:
+        pass
+
 async def wa_notifier_loop():
-    print("WA Notifier Loop Started. (Automatic notifications & Server Link Monitor ENABLED - Timezone: Asia/Jakarta)")
+    print("WA Notifier Loop Started. (Automatic notifications, Midnight Full Scrape & Morning Alert Scheduler ENABLED - Timezone: Asia/Jakarta)")
     last_auto_sync_ts = 0.0
+    last_full_sync_attempt_ts = 0.0
+    last_full_sync_date = _read_last_full_sync_date()
+
     while True:
         try:
             # Optimasi P0-3: Jalankan pengecekan jadwal di worker thread agar tidak memblokir event loop FastAPI
@@ -4970,10 +5133,16 @@ async def wa_notifier_loop():
             print(f"[WA Notifier Error in loop] {loop_err}")
 
         try:
-            # Otomatis pantau perubahan jadwal & info mase tertarget (Aslab & Asmot) via worker thread
+            # Otomatis pantau perubahan jadwal & info mase tertarget (Aslab & Asmot) via worker thread (mulai 07:00 WIB)
             await asyncio.to_thread(check_and_notify_info_mase)
         except Exception as info_err:
             print(f"[Info Mase Error in loop] {info_err}")
+
+        try:
+            # Kirimkan notifikasi perubahan jadwal masa depan / hasil full scrape jam 12 malam mulai jam 07:00 WIB
+            await asyncio.to_thread(flush_pending_morning_alerts)
+        except Exception as morning_err:
+            print(f"[Morning Alert Flush Error] {morning_err}")
 
         try:
             # Otomatis pantau apakah link Cloudflare Tunnel / Server berganti via worker thread
@@ -4982,14 +5151,36 @@ async def wa_notifier_loop():
             print(f"[Server Link Checker Error] {link_err}")
             
         now = get_wib_now()
+        today_str = now.strftime("%Y-%m-%d")
 
-        # Optimasi P0-2: Auto-sync jadwal hari ini berkala dari server tiap 15 menit pada jam operasional (06:00 - 21:00 WIB)
-        # Menggantikan interval auto-sync client-side browser sehingga server tidak diserbu request scraping
+        # 1. FULL SCRAPE TOTAL JAM 12 MALAM (00:00 - 05:59 WIB):
+        # Tarik seluruh halaman jadwal dari awal hingga akhir untuk mendeteksi perubahan hari ini maupun hari-hari mendatang.
+        # Notifikasi perubahan tidak dikirim tengah malam, melainkan ditahan hingga jam 07:00 pagi WIB.
+        if 0 <= now.hour < 6 and last_full_sync_date != today_str:
+            if (time.time() - last_full_sync_attempt_ts) >= 30 * 60:
+                last_full_sync_attempt_ts = time.time()
+                print(f"[Midnight Full Scrape] Memulai scraper total seluruh jadwal semester dari BAAK ({today_str} {now.strftime('%H:%M')} WIB)...")
+                try:
+                    success, count, msg = await asyncio.to_thread(scraper.scrape_baak_direct, None, None)
+                    if success:
+                        last_full_sync_date = today_str
+                        _write_last_full_sync_date(today_str)
+                        print(f"[Midnight Full Scrape] Selesai sukses ({count} total jadwal): {msg}")
+                        try:
+                            import performance_optimizer as perf_opt
+                            perf_opt.invalidate_schedule_cache()
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[Midnight Full Scrape] Gagal/Tertunda ({msg}). Akan dicoba ulang bila masih di jendela malam.")
+                except Exception as full_err:
+                    print(f"[Midnight Full Scrape Error] {full_err}")
+
+        # 2. Optimasi P0-2: Auto-sync jadwal hari ini berkala dari server tiap 15 menit pada jam operasional (06:00 - 21:00 WIB)
         if 6 <= now.hour <= 21:
             if (time.time() - last_auto_sync_ts) >= 15 * 60:
                 last_auto_sync_ts = time.time()
                 try:
-                    today_str = now.strftime("%Y-%m-%d")
                     success, count, msg = await asyncio.to_thread(scraper.scrape_baak_direct, today_str, None)
                     if success:
                         print(f"[Auto-Sync Server] Berhasil sinkronisasi jadwal otomatis ({count} data): {msg}")
@@ -5004,7 +5195,7 @@ async def wa_notifier_loop():
                     print(f"[Auto-Sync Server Error] {sync_err}")
 
         # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak
-        today_prefix = now.strftime("%Y-%m-%d")
+        today_prefix = today_str
         stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix) and not k.startswith("info_mase_")}
         sent_notifications.difference_update(stale_keys)
         sleep_seconds = 60 - now.second

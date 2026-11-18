@@ -1467,27 +1467,38 @@ def format_tanggal_indo_scraper(tgl_val):
 
 def dispatch_schedule_change_alerts(conn, cursor, detected_events):
     """
-    Mengirimkan notifikasi WhatsApp otomatis kepada aslab yang ruangannya terdampak perubahan jadwal.
+    Mengirimkan notifikasi WhatsApp otomatis kepada aslab/asmot yang ruangannya terdampak perubahan jadwal.
     Fitur & Proteksi:
     1. Safety Circuit Breaker: Jika >15 perubahan dalam 1 tanggal, hold WA blast (status CIRCUIT_BREAK).
-    2. Jendela Waktu: Hanya kirim WA untuk Hari Ini (H+0) dan Besok (H+1). Tanggal lain: SKIPPED_FUTURE.
-    3. Deduplikasi: Berdasarkan fingerprint MD5 unik agar aslab tidak di-spam berulang kali.
-    4. Anti-Spam Pacing: Delay 2 detik antar pesan WA.
-    5. Strict 0 emoji format.
+    2. Quiet Hours Guard: Pada dini hari (00:00 - 06:59 WIB), notifikasi ditahan sebagai PENDING dan baru dikirim jam 07:00 pagi.
+    3. Filter Perubahan Ruangan: Event PINDAH_MASUK & PINDAH_KELUAR TIDAK dikirim ke notifikasi chatbot WA.
+    4. Jendela Waktu: Mencakup Hari Ini (H+0) hingga tanggal-tanggal mendatang (H+N) hasil scraper total malam hari.
+    5. Deduplikasi: Berdasarkan fingerprint MD5 unik agar penerima tidak di-spam berulang kali.
+    6. Strict 0 emoji format.
     """
     if not detected_events:
         return
 
+    # Filter keluar perpindahan ruangan agar tidak dimunculkan di notifikasi chatbot WA
+    filtered_events = [
+        ev for ev in detected_events
+        if ev.get('tipe_perubahan') not in ('PINDAH_MASUK', 'PINDAH_KELUAR')
+    ]
+    if not filtered_events:
+        return
+
     events_by_date = collections.defaultdict(list)
-    for ev in detected_events:
+    for ev in filtered_events:
         events_by_date[ev['tanggal']].append(ev)
 
     try:
         from zoneinfo import ZoneInfo
-        today = datetime.now(ZoneInfo("Asia/Jakarta")).date()
+        now_wib = datetime.now(ZoneInfo("Asia/Jakarta"))
     except Exception:
-        today = (datetime.utcnow() + timedelta(hours=7)).date()
+        now_wib = datetime.utcnow() + timedelta(hours=7)
+    today = now_wib.date()
     tomorrow = today + timedelta(days=1)
+    is_quiet_hours = (now_wib.hour < 7)  # Jam 00:00 - 06:59 WIB ditahan hingga jam 07:00 pagi
 
     for t_date, ev_list in events_by_date.items():
         try:
@@ -1503,12 +1514,18 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
         if is_circuit_break:
             print(f"[Alert Circuit Breaker] Terdeteksi {len(ev_list)} perubahan pada tanggal {t_date}. Pengiriman WA ditahan demi keamanan.")
 
-        # 2. Jendela waktu guard: hanya H+0 dan H+1
-        is_active_window = (d_obj == today or d_obj == tomorrow) if d_obj else False
+        # 2. Jendela waktu: Hari ini ke depan (>= today) pada jam tenang / full scrape; siang hari tetap tangkap perubahan mendatang
+        is_active_window = (d_obj >= today) if d_obj else False
 
         for ev in ev_list:
             id_ruangan = ev.get('id_ruangan')
             if not id_ruangan:
+                continue
+
+            nama_ruang_ev = ev.get('nama_ruangan') or ''
+            kampus_ev = ev.get('kampus') or ''
+            # Abaikan gedung Pasca/S2 karena tidak dipegang Aslab/Asmot
+            if 'pasca' in (nama_ruang_ev + ' ' + kampus_ev).lower() or 's2' in nama_ruang_ev.lower():
                 continue
 
             cursor.execute("""
@@ -1519,6 +1536,18 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                     OR (wa_lid IS NOT NULL AND wa_lid != ''))
             """, (id_ruangan,))
             aslab_rows = cursor.fetchall()
+
+            # Jika ruang kelas teori (bukan lab) dan belum ada penanggung jawab per ruangan, arahkan ke Asmot kampus terkait
+            if not aslab_rows and not is_lab(nama_ruang_ev):
+                cursor.execute("""
+                    SELECT id_aslab, nama_aslab, no_wa, wa_lid
+                    FROM asisten_lab
+                    WHERE LOWER(role) = 'asmot'
+                      AND (LOWER(kampus_tugas) = LOWER(%s) OR LOWER(kampus_tugas) = 'semua')
+                      AND ((no_wa IS NOT NULL AND no_wa != '' AND no_wa != '-')
+                        OR (wa_lid IS NOT NULL AND wa_lid != ''))
+                """, (kampus_ev,))
+                aslab_rows = cursor.fetchall()
 
             if not aslab_rows:
                 aslab_targets = [(None, 'Sistem (Tanpa Aslab)', '-')]
@@ -1558,7 +1587,7 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                         f"Ruangan: {ruang_lengkap}\n"
                         f"Waktu: {hari_label} ({jam_str})\n\n"
                         f"Kelas *{nama_mk} ({kelas})* DIBATALKAN (CC) oleh dosen/BAAK.\n"
-                        f"Status Lab: Ruangan kosong pada jam tersebut, lab tidak perlu dibuka/disiapkan."
+                        f"Status Ruangan: Ruangan kosong pada jam tersebut."
                     )
                 elif tipe == 'OL':
                     wa_text = (
@@ -1566,7 +1595,7 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                         f"Ruangan: {ruang_lengkap}\n"
                         f"Waktu: {hari_label} ({jam_str})\n\n"
                         f"Kelas *{nama_mk} ({kelas})* dialihkan ke ONLINE (OL).\n"
-                        f"Status Lab: Mahasiswa tidak menggunakan lab fisik."
+                        f"Status Ruangan: Mahasiswa tidak menggunakan ruangan fisik."
                     )
                 elif tipe == 'TM':
                     wa_text = (
@@ -1575,24 +1604,7 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                         f"Waktu: {hari_label} ({jam_str})\n\n"
                         f"Kelas *{nama_mk} ({kelas})* kembali TATAP MUKA (TM).\n"
                         f"Dosen: {dosen_str}\n"
-                        f"Status Lab: Tolong persiapkan dan buka lab sesuai jadwal."
-                    )
-                elif tipe == 'PINDAH_MASUK':
-                    wa_text = (
-                        f"*PERINGATAN: KELAS PINDAH MASUK*\n"
-                        f"Ruangan: {ruang_lengkap}\n"
-                        f"Waktu: {hari_label} ({jam_str})\n\n"
-                        f"Kelas *{nama_mk} ({kelas})* dipindahkan MASUK ke ruangan kamu (sebelumnya di {ruang_asal_tujuan}).\n"
-                        f"Dosen: {dosen_str}\n"
-                        f"Status Lab: Tolong persiapkan dan buka lab sebelum perkuliahan dimulai."
-                    )
-                elif tipe == 'PINDAH_KELUAR':
-                    wa_text = (
-                        f"*PEMBERITAHUAN PERUBAHAN JADWAL*\n"
-                        f"Ruangan: {ruang_lengkap}\n"
-                        f"Waktu: {hari_label} ({jam_str})\n\n"
-                        f"Kelas *{nama_mk} ({kelas})* dipindahkan KELUAR ke {ruang_asal_tujuan}.\n"
-                        f"Status Lab: Ruangan kamu kosong pada jam tersebut."
+                        f"Status Ruangan: Tolong persiapkan ruangan sesuai jadwal."
                     )
                 elif tipe == 'TAMBAHAN':
                     wa_text = (
@@ -1601,7 +1613,7 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                         f"Waktu: {hari_label} ({jam_str})\n\n"
                         f"Kelas TAMBAHAN: *{nama_mk} ({kelas})*.\n"
                         f"Dosen: {dosen_str}\n"
-                        f"Status Lab: Lab akan digunakan, tolong persiapkan lab tepat waktu."
+                        f"Status Ruangan: Ruangan akan digunakan, tolong persiapkan tepat waktu."
                     )
                 else:
                     wa_text = (
@@ -1636,7 +1648,15 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                     print(f"[Log Error] Gagal catat log perubahan jadwal: {db_err}")
                     continue
 
-                if status_kirim == 'PENDING' and clean_no_wa != '-':
+                # Hanya kirim langsung jika SUDAH masuk jam operasional (>= 07:00 WIB) dan untuk H+0/H+1;
+                # jika jam 00:00-06:59 WIB atau perubahan masa depan (>H+1), biarkan status PENDING untuk dikirim batch jam 07:00 WIB.
+                should_send_now = (
+                    status_kirim == 'PENDING'
+                    and clean_no_wa != '-'
+                    and not is_quiet_hours
+                    and d_obj in (today, tomorrow)
+                )
+                if should_send_now:
                     try:
                         from backend.wa_notifier import send_wa_message
                     except Exception:
@@ -1672,6 +1692,7 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             sem_final = row[0] if row else get_active_semester(conn, cursor)
             
         ensure_semester_exists(sem_final, conn=conn, cursor=cursor)
+        ensure_permanent_table_exists(cursor)
 
         if target_date:
             target_dates = [target_date]
@@ -1958,43 +1979,42 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
             """, (t_date, sem_final))
 
             # Selaraskan juga arsip permanen untuk tanggal ini agar ruangan lama yang berubah tidak tersisa sebagai duplikat
-            ensure_permanent_table_exists(cursor)
             cursor.execute("DELETE FROM jadwal_permanent WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             cursor.execute("""
                 INSERT INTO jadwal_permanent (tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester)
                 SELECT DISTINCT tanggal, hari, jam, id_dosen, kode_mk, nama_mk, kelas, id_ruangan, status_jadwal, metode_pembelajaran, semester
                 FROM jadwal_temp WHERE tanggal = %s AND semester = %s
             """, (t_date, sem_final))
-            
-            # Auto-healing dosen: Jika ada baris dengan id_dosen NULL, pulihkan dari jadwal valid untuk kelas yang sama
-            try:
-                cursor.execute("""
-                    UPDATE jadwal j
-                    JOIN (
-                        SELECT kelas, MAX(id_dosen) AS id_dosen, semester
-                        FROM jadwal
-                        WHERE id_dosen IS NOT NULL
-                        GROUP BY kelas, semester
-                    ) valid ON j.kelas = valid.kelas AND j.semester = valid.semester
-                    SET j.id_dosen = valid.id_dosen
-                    WHERE j.id_dosen IS NULL AND j.semester = %s
-                """, (sem_final,))
-                cursor.execute("""
-                    UPDATE jadwal_permanent jp
-                    JOIN (
-                        SELECT kelas, MAX(id_dosen) AS id_dosen, semester
-                        FROM jadwal_permanent
-                        WHERE id_dosen IS NOT NULL
-                        GROUP BY kelas, semester
-                    ) valid ON jp.kelas = valid.kelas AND jp.semester = valid.semester
-                    SET jp.id_dosen = valid.id_dosen
-                    WHERE jp.id_dosen IS NULL AND jp.semester = %s
-                """, (sem_final,))
-            except Exception as e_heal:
-                print(f"[Auto-Heal Dosen Notice] {e_heal}")
-            
+
             cursor.execute("DELETE FROM jadwal_temp WHERE tanggal = %s AND semester = %s", (t_date, sem_final))
             calculate_and_save_gaps(conn, cursor, t_date, sem_final)
+
+        # Auto-healing dosen (sekali per finalisasi semester agar hemat query saat full scrape)
+        try:
+            cursor.execute("""
+                UPDATE jadwal j
+                JOIN (
+                    SELECT kelas, MAX(id_dosen) AS id_dosen, semester
+                    FROM jadwal
+                    WHERE id_dosen IS NOT NULL
+                    GROUP BY kelas, semester
+                ) valid ON j.kelas = valid.kelas AND j.semester = valid.semester
+                SET j.id_dosen = valid.id_dosen
+                WHERE j.id_dosen IS NULL AND j.semester = %s
+            """, (sem_final,))
+            cursor.execute("""
+                UPDATE jadwal_permanent jp
+                JOIN (
+                    SELECT kelas, MAX(id_dosen) AS id_dosen, semester
+                    FROM jadwal_permanent
+                    WHERE id_dosen IS NOT NULL
+                    GROUP BY kelas, semester
+                ) valid ON jp.kelas = valid.kelas AND jp.semester = valid.semester
+                SET jp.id_dosen = valid.id_dosen
+                WHERE jp.id_dosen IS NULL AND jp.semester = %s
+            """, (sem_final,))
+        except Exception as e_heal:
+            print(f"[Auto-Heal Dosen Notice] {e_heal}")
 
         # Bersihkan sisa data temp tanpa tanggal jika ada (menggunakan IS NULL yang aman untuk tipe DATE)
         cursor.execute("DELETE FROM jadwal_temp WHERE semester = %s AND tanggal IS NULL", (sem_final,))
@@ -2382,6 +2402,8 @@ def scrape_baak_direct(target_date=None, target_semester=None):
     sem_to_use = target_semester
     semester_ensured = False
     current_url = first_page_url
+    max_pages = 300 if not target_date else 50
+    log_tgl_label = target_date or "ALL"
 
     try:
         while True:
@@ -2390,11 +2412,18 @@ def scrape_baak_direct(target_date=None, target_semester=None):
             else:
                 # Jeda sopan antar-halaman agar tidak memicu WAF rate-limit BAAK
                 time.sleep(0.35)
-                print(f"[Direct Scraper] [{eng_name}] Mengambil halaman {page}: {current_url}")
-                ok, code, html, err, durasi = _execute_http_engine(
-                    eng_key, current_url, timeout=12, session=chosen_session, referer=prev_url
-                )
-                status_pg, msg_pg = _classify_baak_response(ok, code, html, err)
+                if page == 2 or page % 25 == 0:
+                    print(f"[Direct Scraper] [{eng_name}] Mengambil halaman {page}: {current_url}")
+                status_pg, msg_pg, ok, code, html = None, "", False, 0, ""
+                for attempt in range(2):
+                    ok, code, html, err, durasi = _execute_http_engine(
+                        eng_key, current_url, timeout=15, session=chosen_session, referer=prev_url
+                    )
+                    status_pg, msg_pg = _classify_baak_response(ok, code, html, err)
+                    if status_pg == 'SUCCESS':
+                        break
+                    if attempt == 0:
+                        time.sleep(1.5)
                 if status_pg != 'SUCCESS':
                     print(f"[Direct Scraper] [{eng_name}] Halaman {page} berhenti ({status_pg}: {msg_pg})")
                     break
@@ -2447,7 +2476,7 @@ def scrape_baak_direct(target_date=None, target_semester=None):
                     qs['tanggal'] = [target_date]
                 current_url = urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
                 page += 1
-                if page > 50:
+                if page > max_pages:
                     break
             else:
                 break
@@ -2455,18 +2484,19 @@ def scrape_baak_direct(target_date=None, target_semester=None):
         if total_scraped > 0:
             final_sem = sem_to_use or (all_data[0].get('semester') if all_data else None) or get_active_semester()
             compare_and_finalize_sync(target_date, final_sem)
-            succ_msg = f"Berhasil sinkronisasi {total_scraped} jadwal ({final_sem}) dari BAAK via {eng_name}."
-            record_scraping_log(eng_name, first_page_url, target_date, 200, 'SUCCESS', succ_msg, 0, total_scraped)
+            scope_txt = "Full Scrape Total" if not target_date else f"Tanggal {target_date}"
+            succ_msg = f"Berhasil sinkronisasi {total_scraped} jadwal ({scope_txt}, {final_sem}) dari BAAK via {eng_name}."
+            record_scraping_log(eng_name, first_page_url, log_tgl_label, 200, 'SUCCESS', succ_msg, 0, total_scraped)
             print(f"[Direct Scraper] {succ_msg}")
             return True, total_scraped, succ_msg
         else:
-            msg = f"Tidak ada data jadwal ditemukan di BAAK untuk tanggal {target_date}."
-            record_scraping_log(eng_name, first_page_url, target_date, 200, 'EMPTY', msg, 0, 0)
+            msg = f"Tidak ada data jadwal ditemukan di BAAK untuk {log_tgl_label}."
+            record_scraping_log(eng_name, first_page_url, log_tgl_label, 200, 'EMPTY', msg, 0, 0)
             return False, 0, msg
 
     except Exception as e:
         err_msg = f"Error saat pagination scraping: {e}"
-        record_scraping_log(eng_name, first_page_url, target_date, 0, 'ERROR', err_msg, 0, 0)
+        record_scraping_log(eng_name, first_page_url, log_tgl_label, 0, 'ERROR', err_msg, 0, 0)
         print(f"[Direct Scraper Error] {err_msg}")
         return False, 0, err_msg
     finally:
