@@ -1742,13 +1742,16 @@ def dispatch_schedule_change_alerts(conn, cursor, detected_events):
                     print(f"[Log Error] Gagal catat log perubahan jadwal: {db_err}")
                     continue
 
-                # Hanya kirim langsung jika SUDAH masuk jam operasional (>= 07:00 WIB) dan untuk H+0/H+1;
-                # jika jam 00:00-06:59 WIB atau perubahan masa depan (>H+1), biarkan status PENDING untuk dikirim batch jam 07:00 WIB.
+                # Untuk HARI INI (d_obj == today), pengiriman operasional dilakukan terpadu melalui
+                # check_and_notify_info_mase() dalam format standar '*INFO MASE - OPERASIONAL KELAS*' / '*INFO MASE - JADWAL LAB*'
+                # agar tidak terjadi pesan dobel dengan format berbeda.
+                # Untuk BESOK (d_obj == tomorrow) pada jam operasional (>= 07:00 WIB), kirim langsung jika mendadak;
+                # sedangkan pada jam tenang (< 07:00 WIB) atau >H+1, biarkan PENDING untuk batch jam 07:00 WIB.
                 should_send_now = (
                     status_kirim == 'PENDING'
                     and clean_no_wa != '-'
                     and not is_quiet_hours
-                    and d_obj in (today, tomorrow)
+                    and d_obj == tomorrow
                 )
                 if should_send_now:
                     try:
@@ -2142,6 +2145,25 @@ def compare_and_finalize_sync(target_date=None, target_semester=None):
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
             conn.close()
+
+    # Setelah jadwal & notifikasi_lab ter-commit sempurna ke DB, segera picu check_and_notify_info_mase()
+    # bila saat ini sudah masuk jam operasional (>= 07:00 WIB) agar notif perubahan mendadak (CC/OL/Tambahan/TM) langsung terkirim!
+    try:
+        try:
+            from zoneinfo import ZoneInfo
+            now_wib_fin = datetime.now(ZoneInfo("Asia/Jakarta"))
+        except Exception:
+            now_wib_fin = datetime.utcnow() + timedelta(hours=7)
+        if now_wib_fin.hour >= 7:
+            today_fin = now_wib_fin.strftime("%Y-%m-%d")
+            if not target_date or str(target_date)[:10] == today_fin:
+                try:
+                    from backend.wa_notifier import check_and_notify_info_mase
+                except Exception:
+                    from wa_notifier import check_and_notify_info_mase
+                check_and_notify_info_mase()
+    except Exception as im_post_err:
+        print(f"[Post-Finalize Info Mase Notice] {im_post_err}")
 
 # ══════════════════════════════════════════════════════════════════
 # LOGGING & MULTI-ENGINE SCRAPER UNAMA

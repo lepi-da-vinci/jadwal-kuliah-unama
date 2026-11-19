@@ -4379,17 +4379,47 @@ def build_info_mase_grouped_body(items: list) -> str:
     divider = "\n------------------------------\n"
     return divider.join(sections)
 
+def _normalize_kampus_key(kampus_raw: str) -> str:
+    low = (kampus_raw or "").strip().lower()
+    if "kobar" in low:
+        return "kobar"
+    if "thehok" in low:
+        return "thehok"
+    if "semua" in low or "all" in low:
+        return "semua"
+    return low
+
+
+def _format_jam_hhmm(jam_val) -> str:
+    if jam_val is None:
+        return ""
+    if hasattr(jam_val, "total_seconds"):
+        tot_sec = int(jam_val.total_seconds())
+        return f"{tot_sec // 3600:02d}:{(tot_sec % 3600) // 60:02d}"
+    if hasattr(jam_val, "hour"):
+        return f"{jam_val.hour:02d}:{jam_val.minute:02d}"
+    s = str(jam_val).strip()
+    m = re.search(r'(\d{1,2})[:.](\d{2})', s)
+    if m:
+        return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}"
+    return s[:5]
+
+
 def check_and_notify_info_mase():
     """
-    Memeriksa dan mengirimkan notifikasi perubahan jadwal & info mase hari ini (kelas tambahan, OL, CC/batal)
-    secara presisi dan tertarget dengan format Pilihan 1 (kelompok kategori + garis pembatas):
-    - Tidak mengirim di malam/dini hari (00:00 - 06:59). Pengiriman baru aktif mulai jam 07:00 pagi agar tidak mengganggu istirahat.
-    - Tidak menampilkan info perubahan/pindah ruangan di notifikasi chatbot.
-    - Pengiriman di-batch per nomor penerima (Asmot / Aslab) sehingga tidak spam chat terpisah.
-    - Penutup: 'Kondisikan AC mas' (Asmot) atau 'Kondisikan lab mas' (Aslab).
+    Mengirimkan notifikasi operasional harian & perubahan mendadak (BATAL/CC, DARING/OL, KELAS TAMBAHAN, KEMBALI TM):
+    1. Rekap Wajib Pagi Jam 07:00 WIB untuk Asmot:
+       - Mulai pukul 07:00 WIB setiap hari kuliah, WAJIB mengirim '*INFO MASE - OPERASIONAL KELAS*' berisi seluruh
+         kelas CC, OL, dan Kelas Tambahan hari ini dari tabel jadwal & notifikasi_lab (TANPA PERUBAHAN RUANGAN).
+       - Jika hari ini ada jadwal kuliah namun semuanya berjalan normal (0 CC/OL/Tambahan), tetap mengirim ringkasan normal.
+    2. Notifikasi Operasional Perubahan Mendadak (real-time >= 07:00 WIB):
+       - Jika setelah jam 07:00 WIB muncul perubahan mendadak (CC, OL, Kelas Tambahan, atau kembali TM) pada jadwal hari ini,
+         langsung mengirimkan '*INFO MASE - OPERASIONAL KELAS*' (Asmot) / '*INFO MASE - JADWAL LAB*' (Aslab).
+    3. Filter Perubahan Ruangan:
+       - Event pindah ruangan (PINDAH RUANGAN / PINDAH_MASUK / PINDAH_KELUAR) TIDAK dimunculkan di notifikasi chatbot.
     """
     now = get_wib_now()
-    # Jangan kirim notifikasi Info Mase di malam/dini hari (00:00 - 06:59) karena mengganggu istirahat, kirim mulai jam 07:00 pagi
+    # Jangan kirim notifikasi Info Mase di malam/dini hari (00:00 - 06:59), mulai kirim tepat jam 07:00 WIB
     if now.hour < 7:
         return
 
@@ -4399,8 +4429,14 @@ def check_and_notify_info_mase():
         cursor = conn.cursor(dictionary=True)
 
         # 1. Ambil seluruh data master ruangan (Eksklusikan Gedung Pasca / S2 karena tidak dipegang Aslab/Asmot)
-        cursor.execute("SELECT id_ruangan, nama_ruangan, kampus FROM ruangan WHERE INSTR(LOWER(nama_ruangan), 'pasca') = 0 AND INSTR(LOWER(nama_ruangan), 's2') = 0")
+        cursor.execute("""
+            SELECT id_ruangan, nama_ruangan, kampus
+            FROM ruangan
+            WHERE INSTR(LOWER(nama_ruangan), 'pasca') = 0
+              AND INSTR(LOWER(nama_ruangan), 's2') = 0
+        """)
         all_rooms = cursor.fetchall()
+        rooms_by_id = {r['id_ruangan']: r for r in all_rooms}
 
         # 2. Ambil seluruh data Aslab & Asmot yang terdaftar
         cursor.execute("""
@@ -4414,18 +4450,96 @@ def check_and_notify_info_mase():
 
         aslab_by_room = collections.defaultdict(list)
         asmot_by_campus = collections.defaultdict(list)
+        asmot_campus_map = {}  # target_wa -> set of campus keys ('kobar', 'thehok')
 
         for u in users:
             target_wa = u['wa_lid'] or u['no_wa']
             role = (u.get('role') or '').lower()
             if role == 'asmot':
-                k_tugas = (u.get('kampus_tugas') or 'Kobar').strip()
-                asmot_by_campus[k_tugas.lower()].append(target_wa)
-                asmot_by_campus['semua'].append(target_wa)
+                k_key = _normalize_kampus_key(u.get('kampus_tugas') or 'Kobar')
+                if k_key == 'semua':
+                    asmot_by_campus['kobar'].append(target_wa)
+                    asmot_by_campus['thehok'].append(target_wa)
+                    asmot_by_campus['semua'].append(target_wa)
+                    asmot_campus_map.setdefault(target_wa, set()).update(['kobar', 'thehok'])
+                else:
+                    asmot_by_campus[k_key].append(target_wa)
+                    asmot_by_campus['semua'].append(target_wa)
+                    asmot_campus_map.setdefault(target_wa, set()).add(k_key)
             elif u.get('id_ruangan'):
                 aslab_by_room[u['id_ruangan']].append(target_wa)
 
-        # 3. Ambil notifikasi_lab hari ini (TAMBAHAN & PERUBAHAN)
+        # Struktur batching: target_wa -> {'role': str, 'items': [(cat, line)], 'keys': [str], 'seen_dedup': set}
+        pending_batches = collections.defaultdict(lambda: {'role': 'asmot', 'items': [], 'keys': [], 'seen_dedup': set()})
+
+        # 3. Scan langsung kondisi aktual tabel jadwal HARI INI (agar rekap wajib jam 07:00 WIB & perubahan mendadak selalu akurat)
+        cursor.execute("""
+            SELECT j.id_jadwal, j.jam, j.id_ruangan, j.nama_mk, j.kelas, j.metode_pembelajaran, j.status_jadwal,
+                   r.nama_ruangan, r.kampus
+            FROM jadwal j
+            JOIN ruangan r ON j.id_ruangan = r.id_ruangan
+            WHERE j.tanggal = %s
+              AND INSTR(LOWER(r.nama_ruangan), 'pasca') = 0
+              AND INSTR(LOWER(r.nama_ruangan), 's2') = 0
+            ORDER BY j.jam ASC, r.nama_ruangan ASC
+        """, (today_str,))
+        today_schedules = cursor.fetchall()
+
+        has_class_schedule_by_campus = collections.defaultdict(bool)
+
+        for row in today_schedules:
+            id_r = row['id_ruangan']
+            nama_r = (row['nama_ruangan'] or '').strip()
+            kampus_r = (row['kampus'] or '').strip()
+            kampus_key = _normalize_kampus_key(kampus_r)
+            is_lab_room = scraper.is_lab(nama_r)
+
+            if not is_lab_room and kampus_key in ('kobar', 'thehok'):
+                has_class_schedule_by_campus[kampus_key] = True
+
+            metode_up = (row.get('metode_pembelajaran') or '').strip().upper()
+            status_low = (row.get('status_jadwal') or '').strip().lower()
+            jam_hhmm = _format_jam_hhmm(row.get('jam'))
+            jam_str = f"jam {jam_hhmm}" if jam_hhmm else ""
+
+            room_tag = f"{nama_r} ({kampus_r})" if kampus_r and kampus_r.lower() not in nama_r.lower() else nama_r
+            target_entitas = "lab" if is_lab_room else "ruangan"
+            target_entitas_short = "lab" if is_lab_room else "ruang"
+
+            cat = None
+            line = None
+            if metode_up == 'CC' or 'cancel' in status_low or 'batal' in status_low:
+                cat = 'batal'
+                line = f"• {room_tag} {jam_str} ({target_entitas_short} kosong)".replace("  ", " ").strip()
+            elif metode_up == 'OL' or 'online' in status_low or 'daring' in status_low:
+                cat = 'ol'
+                line = f"• {room_tag} {jam_str} ({target_entitas_short} kosong)".replace("  ", " ").strip()
+            elif 'tambahan' in status_low or 'pengganti' in status_low:
+                cat = 'tambahan'
+                line = f"• {room_tag} {jam_str} ({target_entitas} digunakan)".replace("  ", " ").strip()
+
+            if not cat or not line:
+                continue
+
+            dedup_sig = (id_r, jam_hhmm, cat)
+            if is_lab_room:
+                for target_wa in set(aslab_by_room.get(id_r, [])):
+                    sched_key = f"info_mase_sched_{today_str}_{id_r}_{jam_hhmm}_{cat}_{target_wa}"
+                    if not is_notification_sent(sched_key) and dedup_sig not in pending_batches[target_wa]['seen_dedup']:
+                        pending_batches[target_wa]['role'] = 'aslab'
+                        pending_batches[target_wa]['items'].append((cat, line))
+                        pending_batches[target_wa]['keys'].append(sched_key)
+                        pending_batches[target_wa]['seen_dedup'].add(dedup_sig)
+            else:
+                for target_wa in set(asmot_by_campus.get(kampus_key, [])):
+                    sched_key = f"info_mase_sched_{today_str}_{id_r}_{jam_hhmm}_{cat}_{target_wa}"
+                    if not is_notification_sent(sched_key) and dedup_sig not in pending_batches[target_wa]['seen_dedup']:
+                        pending_batches[target_wa]['role'] = 'asmot'
+                        pending_batches[target_wa]['items'].append((cat, line))
+                        pending_batches[target_wa]['keys'].append(sched_key)
+                        pending_batches[target_wa]['seen_dedup'].add(dedup_sig)
+
+        # 4. Ambil juga notifikasi_lab hari ini (TAMBAHAN & PERUBAHAN) untuk menangkap kelas tambahan/kembali TM/perubahan mendadak
         cursor.execute("""
             SELECT id, tanggal, tipe_notif, pesan, semester, created_at
             FROM notifikasi_lab
@@ -4433,9 +4547,6 @@ def check_and_notify_info_mase():
             ORDER BY id ASC
         """, (today_str,))
         notifs = cursor.fetchall()
-
-        # Struktur batching: target_wa -> {'role': str, 'items': [(cat, line)], 'keys': [str]}
-        pending_batches = collections.defaultdict(lambda: {'role': 'asmot', 'items': [], 'keys': []})
 
         for nl in notifs:
             nl_id = nl['id']
@@ -4446,42 +4557,58 @@ def check_and_notify_info_mase():
             if any(kw in pesan_upper for kw in ('PINDAH RUANGAN', 'DIPINDAHKAN MASUK', 'DIPINDAHKAN KELUAR')):
                 continue
 
-            # Ekstrak ruangan yang terkait di teks pesan
             affected_rooms = extract_affected_rooms(pesan_raw, all_rooms)
             if not affected_rooms:
                 continue
+
+            jam_m = re.search(r'\b(?:jam|pada|pukul)\s+([0-2]?[0-9][:.]\d{2})\b', pesan_raw or '', re.IGNORECASE)
+            if not jam_m:
+                jam_m = re.search(r'\b([0-2]?[0-9][:.]\d{2})\b', pesan_raw or '')
+            jam_hhmm = _format_jam_hhmm(jam_m.group(1)) if jam_m else ""
 
             for r in affected_rooms:
                 id_r = r['id_ruangan']
                 nama_r = r['nama_ruangan']
                 kampus_r = r['kampus']
-                is_lab = r.get('is_lab', False)
+                kampus_key = _normalize_kampus_key(kampus_r)
+                is_lab_room = r.get('is_lab', False)
 
-                cat_item = format_info_mase_item(pesan_raw, nama_r, kampus_r, is_lab=is_lab)
-                if cat_item[0] == 'pindah':
+                cat_item = format_info_mase_item(pesan_raw, nama_r, kampus_r, is_lab=is_lab_room)
+                cat = cat_item[0]
+                if cat == 'pindah':
                     continue
 
-                if is_lab:
-                    # KASUS A: Laboratorium -> Kirim HANYA ke Aslab lab tersebut!
-                    target_aslabs = aslab_by_room.get(id_r, [])
-                    for target_wa in set(target_aslabs):
-                        notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
-                        if not is_notification_sent(notif_key):
-                            pending_batches[target_wa]['role'] = 'aslab'
-                            pending_batches[target_wa]['items'].append(cat_item)
-                            pending_batches[target_wa]['keys'].append(notif_key)
+                dedup_sig = (id_r, jam_hhmm, cat)
+                if is_lab_room:
+                    targets = set(aslab_by_room.get(id_r, []))
+                    role_label = 'aslab'
                 else:
-                    # KASUS B: Ruang Kelas Teori -> Kirim ke ASMOT kampus tersebut!
-                    camp_key = kampus_r.lower()
-                    target_asmots = asmot_by_campus.get(camp_key, [])
-                    for target_wa in set(target_asmots):
-                        notif_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
-                        if not is_notification_sent(notif_key):
-                            pending_batches[target_wa]['role'] = 'asmot'
-                            pending_batches[target_wa]['items'].append(cat_item)
-                            pending_batches[target_wa]['keys'].append(notif_key)
+                    targets = set(asmot_by_campus.get(kampus_key, []))
+                    role_label = 'asmot'
 
-        # Kirim batch per target_wa
+                for target_wa in targets:
+                    nl_key = f"info_mase_nl_{nl_id}_{id_r}_{target_wa}"
+                    sched_key = f"info_mase_sched_{today_str}_{id_r}_{jam_hhmm}_{cat}_{target_wa}"
+                    if is_notification_sent(nl_key):
+                        continue
+                    if jam_hhmm and is_notification_sent(sched_key):
+                        # Sudah diberitahukan via scan jadwal aktual -> tandai nl_key agar tidak diproses ulang
+                        mark_notification_sent(nl_key)
+                        continue
+                    if dedup_sig in pending_batches[target_wa]['seen_dedup']:
+                        # Sudah ada di batch pengiriman saat ini -> ikut tandai nl_key saat terkirim
+                        pending_batches[target_wa]['keys'].append(nl_key)
+                        continue
+
+                    pending_batches[target_wa]['role'] = role_label
+                    pending_batches[target_wa]['items'].append(cat_item)
+                    pending_batches[target_wa]['keys'].append(nl_key)
+                    if jam_hhmm:
+                        pending_batches[target_wa]['keys'].append(sched_key)
+                    pending_batches[target_wa]['seen_dedup'].add(dedup_sig)
+
+        # 5. Kirim batch per target_wa (Rekap wajib 07:00 WIB maupun perubahan mendadak sepanjang hari)
+        sent_asmot_today = set()
         for target_wa, batch in pending_batches.items():
             if not batch['items']:
                 continue
@@ -4504,8 +4631,12 @@ def check_and_notify_info_mase():
                 )
 
             if send_wa_message(target_wa, msg):
-                for k in batch['keys']:
+                for k in set(batch['keys']):
                     mark_notification_sent(k)
+                if batch['role'] == 'asmot':
+                    daily_key = f"asmot_daily_0700_{today_str}_{target_wa}"
+                    mark_notification_sent(daily_key)
+                    sent_asmot_today.add(target_wa)
                 # Tandai alert perubahan hari ini untuk target_wa ini sebagai SENT agar tidak double-notif
                 try:
                     cursor.execute("""
@@ -4519,6 +4650,28 @@ def check_and_notify_info_mase():
                 except Exception:
                     pass
                 log_chatbot("SUCCESS", f"Info Mase ({len(batch['items'])} item) terkirim ke {target_wa}", "INFO-MASE")
+
+        # 6. Jaminan Notif Wajib Jam 07:00 WIB untuk Asmot:
+        # Jika hari ini ada jadwal kuliah di kampus tugas Asmot namun 0 kelas CC/OL/Tambahan dan notif pagi 07:00 belum pernah terkirim
+        if 7 <= now.hour < 17:
+            for target_wa, campuses in asmot_campus_map.items():
+                if target_wa in sent_asmot_today:
+                    continue
+                daily_key = f"asmot_daily_0700_{today_str}_{target_wa}"
+                if is_notification_sent(daily_key):
+                    continue
+                has_any_schedule = any(has_class_schedule_by_campus.get(ck, False) for ck in campuses)
+                if not has_any_schedule:
+                    continue
+                msg_normal = (
+                    f"*INFO MASE - OPERASIONAL KELAS*\n\n"
+                    f"Semua jadwal kelas hari ini berjalan normal (Tatap Muka). "
+                    f"Tidak ada kelas batal (CC), kuliah daring (OL), atau kelas tambahan.\n\n"
+                    f"Kondisikan AC mas"
+                )
+                if send_wa_message(target_wa, msg_normal):
+                    mark_notification_sent(daily_key)
+                    log_chatbot("SUCCESS", f"Info Mase Pagi Wajib (normal) terkirim ke Asmot {target_wa}", "INFO-MASE")
 
     except Exception as e:
         log_chatbot("ERROR", f"Error in check_and_notify_info_mase: {e}", "INFO-MASE")
@@ -4550,13 +4703,28 @@ def flush_pending_morning_alerts(force_now: bool = False):
         conn = scraper.get_db()
         cursor = conn.cursor(dictionary=True)
 
+        # Untuk tanggal HARI INI (today_str), pengiriman sudah ditangani dalam format standar
+        # '*INFO MASE - OPERASIONAL KELAS*' / '*INFO MASE - JADWAL LAB*' oleh check_and_notify_info_mase().
+        # Maka flush_pending_morning_alerts memfokuskan pengiriman pada tanggal MENDATANG (> today_str) agar tidak dobel.
+        if not force_now:
+            try:
+                cursor.execute("""
+                    UPDATE log_notifikasi_perubahan
+                    SET status_kirim = 'SENT'
+                    WHERE status_kirim = 'PENDING'
+                      AND tanggal_kuliah = %s
+                """, (today_str,))
+                conn.commit()
+            except Exception:
+                pass
+
         cursor.execute("""
             SELECT l.id_log, l.tanggal_kuliah, l.jam, l.id_ruangan, l.nama_mk, l.kelas, l.tipe_perubahan, l.no_wa_tujuan,
                    r.nama_ruangan, r.kampus
             FROM log_notifikasi_perubahan l
             LEFT JOIN ruangan r ON l.id_ruangan = r.id_ruangan
             WHERE l.status_kirim = 'PENDING'
-              AND l.tanggal_kuliah >= %s
+              AND l.tanggal_kuliah > %s
               AND l.tipe_perubahan NOT IN ('PINDAH_MASUK', 'PINDAH_KELUAR')
               AND l.no_wa_tujuan IS NOT NULL AND l.no_wa_tujuan != '' AND l.no_wa_tujuan != '-'
             ORDER BY l.tanggal_kuliah ASC, l.jam ASC, l.id_log ASC
@@ -5348,6 +5516,12 @@ async def wa_notifier_loop():
                             perf_opt.invalidate_schedule_cache()
                         except Exception:
                             pass
+                        # Segera kirim notifikasi operasional perubahan mendadak (CC/OL/Tambahan/TM) bila sudah >= 07:00 WIB
+                        if now.hour >= 7:
+                            try:
+                                await asyncio.to_thread(check_and_notify_info_mase)
+                            except Exception as im_err:
+                                print(f"[Post-Sync Info Mase Error] {im_err}")
                     else:
                         print(f"[Auto-Sync Server] Status sync berkala: {msg}")
                 except Exception as sync_err:
@@ -5355,7 +5529,10 @@ async def wa_notifier_loop():
 
         # BUG-10 FIX: Bersihkan sent_notifications dari hari-hari sebelumnya untuk mencegah memory leak
         today_prefix = today_str
-        stale_keys = {k for k in sent_notifications if not k.startswith(today_prefix) and not k.startswith("info_mase_")}
+        stale_keys = {
+            k for k in sent_notifications
+            if today_prefix not in k and not k.startswith("info_mase_nl_")
+        }
         sent_notifications.difference_update(stale_keys)
         sleep_seconds = 60 - now.second
         if sleep_seconds <= 0:
