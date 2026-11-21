@@ -189,20 +189,6 @@
         <span id="setting-active-semester-pill" class="badge-mini-sem" style="margin-left: 6px;">Ganjil 2026</span>
       </button>
 
-            <!-- Tombol Akses Log & Diagnostik Engine Scraping BAAK -->
-      <button class="btn btn-secondary" id="btn-show-scraper-logs" onclick="closeSettingAndOpenScraperLogs()"
-        style="padding: 14px; font-size: 1.02em; width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px; background: rgba(99, 102, 241, 0.05); border: 1.2px solid rgba(99, 102, 241, 0.3); border-radius: 10px; cursor: pointer;">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-          <line x1="6" y1="6" x2="6.01" y2="6"></line>
-          <line x1="6" y1="18" x2="6.01" y2="18"></line>
-        </svg>
-        <span>Log & Diagnostik Engine Scraping</span>
-        <span class="badge-mini-sem" style="margin-left: auto; background: rgba(99, 102, 241, 0.15); color: var(--primary);">MULTI-ENGINE</span>
-      </button>
-
       <!-- Kategori 3: Master Data Admin -->
       <div class="admin-only"
         style="display:none; text-align: left; font-size: 0.85em; font-weight: 600; color: var(--primary); margin-bottom: -5px; margin-top: 10px; text-transform: uppercase;">
@@ -217,6 +203,19 @@
           <div style="font-weight: 700; color: var(--text);">Pusat Kendali Admin (Control Center)</div>
           <div style="font-size: 0.78em; color: var(--text-muted);">Status WA Bot, Jadwal Manual (Lock), Auto-Backup SQL &amp; Audit Log</div>
         </div>
+      </button>
+      <!-- Tombol Akses Log & Diagnostik Engine Scraping BAAK (Khusus Admin / Super Admin) -->
+      <button class="btn btn-secondary admin-only" id="btn-show-scraper-logs" onclick="closeSettingAndOpenScraperLogs()"
+        style="display: none; padding: 14px; font-size: 1.02em; width: 100%; align-items: center; justify-content: flex-start; gap: 10px; background: rgba(99, 102, 241, 0.05); border: 1.2px solid rgba(99, 102, 241, 0.3); border-radius: 10px; cursor: pointer;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+          <line x1="6" y1="6" x2="6.01" y2="6"></line>
+          <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        <span>Log &amp; Sumber Link Scraping BAAK</span>
+        <span class="badge-mini-sem" style="margin-left: auto; background: rgba(99, 102, 241, 0.15); color: var(--primary);">ADMIN</span>
       </button>
       <button class="btn btn-secondary admin-only" id="btn-show-absensi-config-menu" onclick="window.openAbsensiConfigDirectly()"
         style="display:none; padding: 14px; font-size: 1.05em; width: 100%; border: 1.5px solid var(--primary); color: var(--text); background: rgba(99, 102, 241, 0.08); align-items: center; justify-content: flex-start; gap: 12px; cursor: pointer; border-radius: 12px;">

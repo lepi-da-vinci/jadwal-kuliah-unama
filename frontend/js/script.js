@@ -22911,7 +22911,8 @@ window.filterDetailKelasDay = filterDetailKelasDay;
 function closeSettingAndOpenScraperLogs() {
   if (typeof closeSettingModal === 'function') {
     try {
-      closeSettingModal(false, true);
+      // Pertahankan sesi admin saat berpindah dari Setting ke Modal Log Scraping
+      closeSettingModal(true, true);
     } catch (e) {}
   }
   const testModal = document.getElementById('test-wa-modal');
@@ -22924,7 +22925,11 @@ function closeSettingAndOpenScraperLogs() {
   }, 120);
 }
 
-function openScraperLogsModal() {
+async function openScraperLogsModal() {
+  // Wajib mode Admin / Super Admin untuk membuka panel input link & log scraping
+  const tok = await ensureAdminSessionOrPrompt();
+  if (!tok) return;
+
   // Pastikan modal setting tertutup rapat
   const testModal = document.getElementById('test-wa-modal');
   if (testModal) {
@@ -22956,7 +22961,9 @@ async function fetchScraperLogs() {
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/scraper/logs?limit=100&_t=${Date.now()}`);
+    const res = await fetch(`${API_BASE_URL}/api/scraper/logs?limit=100&_t=${Date.now()}`, {
+      headers: getAdminHeaders()
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.status === 'success') {
@@ -23063,7 +23070,7 @@ async function runScraperEngineTest() {
     const tgl = document.getElementById('filter-tanggal')?.value || '';
     const res = await fetch(`${API_BASE_URL}/api/scraper/test`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ tanggal: tgl || null })
     });
     if (!res.ok) {
@@ -23145,7 +23152,7 @@ function showScraper403Notification(msg) {
     </div>
     <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px;">
       <button type="button" class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()" style="padding: 5px 10px; font-size: 0.78rem; border-radius: 6px;">Tutup</button>
-      <button type="button" class="btn btn-primary" onclick="this.parentElement.parentElement.remove(); openScraperLogsModal();" style="padding: 5px 12px; font-size: 0.78rem; border-radius: 6px; background: #ef4444; border-color: #ef4444; color: #fff;">Buka Log Scraping</button>
+      ${isAslabAdmin ? `<button type="button" class="btn btn-primary" onclick="this.parentElement.parentElement.remove(); openScraperLogsModal();" style="padding: 5px 12px; font-size: 0.78rem; border-radius: 6px; background: #ef4444; border-color: #ef4444; color: #fff;">Buka Log Scraping</button>` : ''}
     </div>
   `;
   document.body.appendChild(toast);

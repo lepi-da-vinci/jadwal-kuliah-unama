@@ -2411,8 +2411,8 @@ def clear_pending_sync(req: ClearPendingRequest = None):
     return {"status": "success"}
 
 @app.get("/api/scraper/logs")
-def get_scraper_logs(limit: int = 50):
-    """Mengambil riwayat log percobaan setiap scraping engine, ringkasan status, dan konfigurasi URL aktif."""
+def get_scraper_logs(limit: int = 50, admin: str = Depends(verify_admin_token)):
+    """Mengambil riwayat log percobaan setiap scraping engine, ringkasan status, dan konfigurasi URL aktif (Khusus Admin)."""
     try:
         logs = scraper.get_scraping_engine_logs(limit)
         summary = scraper.get_scraping_engine_summary()
@@ -2427,8 +2427,8 @@ def get_scraper_logs(limit: int = 50):
         return {"status": "error", "message": str(e), "logs": [], "summary": {}, "config": {}}
 
 @app.get("/api/scraper/config")
-def get_scraper_config_endpoint():
-    """Mengambil konfigurasi URL scraper BAAK dan pengaturan sinkronisasi otomatis."""
+def get_scraper_config_endpoint(admin: str = Depends(verify_admin_token)):
+    """Mengambil konfigurasi URL scraper BAAK dan pengaturan sinkronisasi otomatis (Khusus Admin)."""
     return {"status": "success", "config": scraper.get_scraper_config()}
 
 class ScraperUrlValidateRequest(BaseModel):
@@ -2458,8 +2458,8 @@ class RawHtmlParseRequest(BaseModel):
     full_sync: bool = False
 
 @app.post("/api/admin/scraper/validate-url")
-async def validate_scraper_url_endpoint(req: ScraperUrlValidateRequest):
-    """Menguji dan menampilkan preview hasil parsing dari link BAAK yang di-paste (dry-run tanpa mengubah DB)."""
+async def validate_scraper_url_endpoint(req: ScraperUrlValidateRequest, admin: str = Depends(verify_admin_token)):
+    """Menguji dan menampilkan preview hasil parsing dari link BAAK yang di-paste (dry-run tanpa mengubah DB, Khusus Admin)."""
     try:
         res = await asyncio.to_thread(scraper.validate_custom_scraper_url, req.url, req.tanggal)
         return res
@@ -2550,8 +2550,8 @@ async def parse_raw_html_endpoint(req: RawHtmlParseRequest, request: Request, to
         return {"status": "error", "count": 0, "message": str(e)}
 
 @app.post("/api/scraper/test")
-async def test_scraper_engines(req: SyncRequest = None):
-    """Menjalankan probe test ke seluruh engine secara non-blocking via asyncio.to_thread."""
+async def test_scraper_engines(req: SyncRequest = None, admin: str = Depends(verify_admin_token)):
+    """Menjalankan probe test ke seluruh engine secara non-blocking via asyncio.to_thread (Khusus Admin)."""
     try:
         target_tgl = req.tanggal if req else None
         results = await asyncio.to_thread(scraper.test_all_scraping_engines, target_tgl)
