@@ -2778,6 +2778,26 @@ def update_admin_account(req: AdminAccountUpdateRequest, request: Request, token
     if info["role"] != "SUPER_ADMIN":
         raise HTTPException(status_code=403, detail="Hanya SUPER_ADMIN yang dapat mengubah kredensial akun.")
 
+    # Verifikasi Password Master saat ini jika dikirim dari UI
+    if req.current_master_password is not None:
+        expected_master_pass = os.getenv("MASTER_PASSWORD", "masterunama2026")
+        input_m_hash = _hash_master_pwd(req.current_master_password.strip())
+        master_ok = hmac.compare_digest(req.current_master_password.strip(), expected_master_pass)
+        if not master_ok:
+            try:
+                conn_chk = get_db()
+                cur_chk = conn_chk.cursor(dictionary=True)
+                cur_chk.execute("SELECT master_hash FROM admin_users WHERE LOWER(username) = 'admin' LIMIT 1")
+                row_chk = cur_chk.fetchone()
+                cur_chk.close()
+                conn_chk.close()
+                if row_chk and row_chk.get("master_hash") and hmac.compare_digest(input_m_hash, row_chk["master_hash"]):
+                    master_ok = True
+            except Exception:
+                pass
+        if not master_ok:
+            raise HTTPException(status_code=401, detail="Password Master saat ini salah!")
+
     target_user = (req.target_username or "admin").strip().lower()
     conn = get_db()
     cursor = conn.cursor()

@@ -1,27 +1,34 @@
 <!-- ==================== MODAL LOG AKTIVITAS SCRAPING ==================== -->
 <div id="scraper-logs-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Log Scraping" style="display: none; z-index: 100002;">
-  <div class="modal-box setting-modal-box" style="max-width: 860px; width: 95%;">
+  <div class="modal-box setting-modal-box" style="max-width: 880px; width: 95%; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;">
     <!-- Drag Handle / Dismiss bar -->
-    <div class="modal-drag-handle-zone" id="scraper-logs-drag-handle" role="button" tabindex="0" onclick="closeScraperLogsModal()">
+    <div class="modal-drag-handle-zone" id="scraper-logs-drag-handle" role="button" tabindex="0" onclick="backToSettingFromScraperLogs()" style="flex-shrink: 0;">
       <div class="modal-drag-handle-bar"></div>
     </div>
 
     <!-- Header Modal -->
-    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); display: flex; align-items: center; justify-content: center; color: var(--primary);">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 12px; flex-shrink: 0; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+        <button type="button" onclick="backToSettingFromScraperLogs()" title="Kembali ke Menu Setting (Tetap Mode Admin)"
+          style="background: var(--bg-elevated, rgba(148, 163, 184, 0.15)); border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 0.8rem; font-weight: 600; cursor: pointer; flex-shrink: 0;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          <span>Kembali</span>
+        </button>
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(99, 102, 241, 0.12); display: flex; align-items: center; justify-content: center; color: var(--primary); flex-shrink: 0;">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="4 17 10 11 4 5"></polyline>
             <line x1="12" y1="19" x2="20" y2="19"></line>
           </svg>
         </div>
-        <div>
-          <h2 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text);">Log Aktivitas Scraping BAAK</h2>
-          <span style="font-size: 0.82rem; color: var(--text-muted);">Riwayat kejadian saat sistem mengambil data jadwal</span>
+        <div style="min-width: 0; text-align: left;">
+          <h2 style="margin: 0; font-size: 1.08rem; font-weight: 700; color: var(--text);">Log Aktivitas Scraping BAAK</h2>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Sumber link dinamis &amp; riwayat kejadian saat sistem mengambil data jadwal</span>
         </div>
       </div>
       <button type="button" class="modal-close-header-btn" aria-label="Tutup" onclick="closeScraperLogsModal()"
-        style="background: var(--bg-elevated, rgba(148, 163, 184, 0.15)); border: 1px solid var(--border); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer;">
+        style="background: var(--bg-elevated, rgba(148, 163, 184, 0.15)); border: 1px solid var(--border); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; flex-shrink: 0;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -29,11 +36,11 @@
       </button>
     </div>
 
-    <!-- Modal Body -->
-    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 120px); overflow-y: auto; padding-right: 2px;">
+    <!-- Modal Body (Scrollable penuh) -->
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 4px; text-align: left;">
 
       <!-- Panel Sumber & Link Scraper Dinamis + Fallback Raw HTML -->
-      <div style="border: 1.5px solid rgba(99, 102, 241, 0.28); border-radius: 12px; padding: 14px; background: var(--bg-elevated, rgba(99, 102, 241, 0.04)); display: flex; flex-direction: column; gap: 10px;">
+      <div style="flex-shrink: 0; border: 1.5px solid rgba(99, 102, 241, 0.28); border-radius: 12px; padding: 14px; background: var(--bg-elevated, rgba(99, 102, 241, 0.04)); display: flex; flex-direction: column; gap: 10px;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
@@ -109,7 +116,7 @@
       </div>
 
       <!-- Toolbar Tombol Aksi -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <div style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <button type="button" class="btn btn-primary" id="btn-run-scraper-test" onclick="runScraperEngineTest()"
             style="padding: 8px 14px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;">
@@ -135,15 +142,15 @@
         </div>
       </div>
 
-      <!-- Tabel Riwayat Log Kejadian Scraping -->
-      <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card, #fff);">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.84rem; text-align: left;">
-          <thead>
-            <tr style="background: var(--bg-elevated, rgba(148, 163, 184, 0.08)); border-bottom: 1px solid var(--border); color: var(--text-muted);">
+      <!-- Tabel Riwayat Log Kejadian Scraping (Lega & Scrollable) -->
+      <div style="flex-shrink: 0; min-height: 240px; max-height: 380px; overflow: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card, #fff);">
+        <table style="width: 100%; min-width: 680px; border-collapse: collapse; font-size: 0.83rem; text-align: left;">
+          <thead style="position: sticky; top: 0; z-index: 2; background: var(--bg-card, #fff);">
+            <tr style="background: var(--bg-elevated, rgba(148, 163, 184, 0.12)); border-bottom: 1px solid var(--border); color: var(--text-muted);">
               <th style="padding: 10px 12px; font-weight: 600; width: 140px;">Waktu</th>
-              <th style="padding: 10px 12px; font-weight: 600; width: 170px;">Engine</th>
-              <th style="padding: 10px 12px; font-weight: 600; width: 95px;">HTTP</th>
-              <th style="padding: 10px 12px; font-weight: 600; width: 125px;">Status</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 165px;">Engine</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 70px;">HTTP</th>
+              <th style="padding: 10px 12px; font-weight: 600; width: 115px;">Status</th>
               <th style="padding: 10px 12px; font-weight: 600;">Kejadian / Diagnosa Log</th>
               <th style="padding: 10px 12px; font-weight: 600; width: 75px; text-align: right;">Durasi</th>
             </tr>
@@ -158,6 +165,21 @@
         </table>
       </div>
 
+    </div>
+
+    <!-- Footer Modal dengan Tombol Kembali ke Setting -->
+    <div style="flex-shrink: 0; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+      <button type="button" class="btn btn-secondary" onclick="backToSettingFromScraperLogs()"
+        style="flex: 1; padding: 10px 14px; font-size: 0.88rem; font-weight: 600; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+        <span>Kembali ke Menu Setting</span>
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="closeScraperLogsModal()"
+        style="padding: 10px 18px; font-size: 0.88rem; font-weight: 600; border-radius: 10px; cursor: pointer;">
+        Tutup
+      </button>
     </div>
   </div>
 </div>

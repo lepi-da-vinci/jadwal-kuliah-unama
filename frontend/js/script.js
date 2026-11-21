@@ -8873,14 +8873,19 @@ document.getElementById('test-wa-btn').addEventListener('click', async () => {
     document.getElementById('btn-show-data-wa').onclick = async () => {
       menuView.style.display = 'none';
       addView.style.display = 'none';
+      if (editView) editView.style.display = 'none';
+      if (testView) testView.style.display = 'none';
       if (document.getElementById('wa-modal-data-ruangan')) document.getElementById('wa-modal-data-ruangan').style.display = 'none';
       if (document.getElementById('wa-modal-add-ruangan')) document.getElementById('wa-modal-add-ruangan').style.display = 'none';
+      if (document.getElementById('wa-modal-admin-center')) document.getElementById('wa-modal-admin-center').style.display = 'none';
       dataView.style.display = 'flex';
       modalTitle.innerText = "Daftar Nomor WA";
       modalIcon.innerHTML = SVG_WA_ICONS.list;
-      // Fetch latest Aslab data to ensure foreign key safety
+      // Fetch latest Aslab data dengan header admin agar nomor WA lengkap saat mode Admin aktif
       try {
-        const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`);
+        const resAslab = await fetch(`${API_BASE_URL}/api/aslab?_t=${Date.now()}`, {
+          headers: getAdminHeaders()
+        });
         const dataAslab = await resAslab.json();
         if (dataAslab.status === 'success') {
           globalAslabData = dataAslab.data;
@@ -22954,6 +22959,21 @@ function closeScraperLogsModal() {
   document.body.style.overflow = '';
 }
 
+function backToSettingFromScraperLogs() {
+  closeScraperLogsModal();
+  const settingBtn = document.getElementById('test-wa-btn');
+  if (settingBtn) {
+    // Sesi admin tetap aktif di sessionStorage, jadi Setting langsung terbuka dalam mode Admin: ON
+    settingBtn.click();
+  } else {
+    const testModal = document.getElementById('test-wa-modal');
+    if (testModal) {
+      testModal.style.removeProperty('display');
+      testModal.classList.add('open');
+    }
+  }
+}
+
 async function fetchScraperLogs() {
   const tbody = document.getElementById('scraper-logs-table-body');
   if (tbody) {
@@ -23093,19 +23113,15 @@ async function runScraperEngineTest() {
 async function clearScraperLogsAction() {
   if (!confirm("Bersihkan seluruh riwayat log engine scraping?")) return;
   try {
-    const token = typeof getAdminToken === 'function' ? getAdminToken() : (localStorage.getItem('admin_token') || '');
     const res = await fetch(`${API_BASE_URL}/api/scraper/clear-logs`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+      headers: getAdminHeaders({ 'Content-Type': 'application/json' })
     });
     const data = await res.json();
     if (data.status === 'success') {
       await fetchScraperLogs();
     } else {
-      alert(data.message || "Gagal membersihkan log");
+      alert(data.detail || data.message || "Gagal membersihkan log");
     }
   } catch (err) {
     alert(`Error: ${err.message}`);
@@ -23164,6 +23180,7 @@ function showScraper403Notification(msg) {
 window.closeSettingAndOpenScraperLogs = closeSettingAndOpenScraperLogs;
 window.openScraperLogsModal = openScraperLogsModal;
 window.closeScraperLogsModal = closeScraperLogsModal;
+window.backToSettingFromScraperLogs = backToSettingFromScraperLogs;
 window.fetchScraperLogs = fetchScraperLogs;
 window.runScraperEngineTest = runScraperEngineTest;
 window.clearScraperLogsAction = clearScraperLogsAction;
